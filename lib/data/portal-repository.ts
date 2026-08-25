@@ -256,7 +256,12 @@ function createPool(connectionUrl: string) {
     uri: connectionUrl,
     connectionLimit: 5,
     enableKeepAlive: true,
-    namedPlaceholders: false
+    namedPlaceholders: false,
+    // SteamID64 values exceed JavaScript's safe integer range. mysql2 must
+    // return BIGINT columns as strings so IDs are never rounded to a nearby
+    // account when rendered or sent to the server bridge.
+    supportBigNumbers: true,
+    bigNumberStrings: true
   });
 }
 

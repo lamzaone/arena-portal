@@ -7,6 +7,7 @@ import { formatDate, isActiveSanction } from "@/components/formatters";
 import { SignInRequired } from "@/components/sign-in-required";
 import { SiteHeader } from "@/components/site-header";
 import { getStaffModeration, type StaffSanction } from "@/lib/data/portal-repository";
+import { getSteamProfiles } from "@/lib/steam/profiles";
 
 type AdminPageProps = { searchParams: Promise<{ page?: string; q?: string; notice?: string; error?: string }> };
 
@@ -19,6 +20,14 @@ function moderationLink(page: number, query: string) {
   const parameters = new URLSearchParams({ page: String(page) });
   if (query) parameters.set("q", query);
   return `/admin?${parameters.toString()}`;
+}
+
+function avatarInitial(name: string) {
+  return name.trim().slice(0, 1).toUpperCase() || "?";
+}
+
+function isSteamId(value: string) {
+  return /^7656119\d{10}$/.test(value);
 }
 
 function getSanctionEvents(sanctions: StaffSanction[]) {
@@ -52,6 +61,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const page = getPageNumber(params.page);
   const query = (params.q ?? "").trim().slice(0, 64);
   const [moderation] = await Promise.all([getStaffModeration(page, query)]);
+  const steamProfiles = await getSteamProfiles(moderation.bans.map((ban) => ban.steamId));
   const totalPages = Math.max(1, Math.ceil(Math.max(moderation.banTotal, moderation.sanctionTotal) / moderation.pageSize));
   const currentPage = Math.min(moderation.page, totalPages);
   const csrf = createAdminActionToken(session);
@@ -69,7 +79,11 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 
       {access.canBan ? <section className="staff-ban-form"><div><p className="tapped-kicker"><Ban aria-hidden="true" /> Ban player</p><h2>Queue an offline SteamID ban.</h2><p>Normal server ban only. The portal validates staff permissions first; Swiftly then applies the queued request through its own bans API.</p></div><form action="/api/admin/moderation" method="post"><input type="hidden" name="csrf" value={csrf} /><input type="hidden" name="action" value="ban" /><label>SteamID64<input name="steamId" inputMode="numeric" pattern="7656119[0-9]{10}" required placeholder="7656119..." /></label><label>Player name<input name="playerName" maxLength={128} placeholder="Optional display name" /></label><label>Duration<select name="durationMinutes" defaultValue="1440"><option value="5">5 minutes</option><option value="60">1 hour</option><option value="1440">1 day</option><option value="10080">7 days</option><option value="43200">30 days</option><option value="0">Permanent</option></select></label><label>Reason<input name="reason" minLength={2} maxLength={200} required placeholder="Reason for ban" /></label><button className="button button-primary" type="submit" disabled={!actionsReady}><Gavel aria-hidden="true" /> Queue ban</button></form></section> : <section className="staff-permission-note"><LockKeyhole aria-hidden="true" /><span>Your current group can view moderation records but does not include <code>admins.commands.ban</code>.</span></section>}
 
-      <section className="staff-record-section"><div className="staff-section-heading"><div><p className="tapped-kicker"><Ban aria-hidden="true" /> Live records</p><h2>Ban list</h2></div><span>{moderation.banTotal.toLocaleString()} records</span></div>{moderation.bans.length ? <div className="staff-table-scroll"><table className="staff-table"><thead><tr><th>Player</th><th>Reason</th><th>Issued by</th><th>Status</th><th>Action</th></tr></thead><tbody>{moderation.bans.map((ban) => <tr key={ban.id}><td><strong>{ban.playerName}</strong><small>{ban.steamId}</small></td><td><strong>{ban.reason}</strong><small>{formatDate(ban.createdAt)}{ban.global ? " - Global" : ""}</small></td><td>{ban.adminName}</td><td><span className={isActiveSanction(ban.expiresAt) ? "staff-status active" : "staff-status"}>{isActiveSanction(ban.expiresAt) ? "Active" : "Expired"}<small>{ban.expiresAt ? formatDate(ban.expiresAt) : "Permanent"}</small></span></td><td>{access.canUnban && isActiveSanction(ban.expiresAt) ? <form action="/api/admin/moderation" method="post"><input type="hidden" name="csrf" value={csrf} /><input type="hidden" name="action" value="unban" /><input type="hidden" name="steamId" value={ban.steamId} /><button className="staff-unban-button" type="submit" disabled={!actionsReady}>Unban</button></form> : <span className="staff-no-action">-</span>}</td></tr>)}</tbody></table></div> : <p className="empty-copy">No bans match this search.</p>}</section>
+      <section className="staff-record-section"><div className="staff-section-heading"><div><p className="tapped-kicker"><Ban aria-hidden="true" /> Live records</p><h2>Ban list</h2></div><span>{moderation.banTotal.toLocaleString()} records</span></div>{moderation.bans.length ? <div className="staff-table-scroll"><table className="staff-table"><thead><tr><th>Player</th><th>Reason</th><th>Issued by</th><th>Status</th><th>Action</th></tr></thead><tbody>{moderation.bans.map((ban) => {
+        const steamProfile = steamProfiles.get(ban.steamId);
+        const displayName = steamProfile?.name || ban.playerName;
+        return <tr key={ban.id}><td><Link className="leaderboard-player staff-player" href={`/players/${ban.steamId}`}>{steamProfile?.avatarFull ? <img src={steamProfile.avatarFull} alt={`${displayName}'s Steam avatar`} referrerPolicy="no-referrer" /> : <span className="player-avatar-fallback" aria-hidden="true">{avatarInitial(displayName)}</span>}<div><strong>{displayName}</strong><small>SteamID64 {ban.steamId}</small></div></Link></td><td><strong>{ban.reason}</strong><small>{formatDate(ban.createdAt)}{ban.global ? " - Global" : ""}</small></td><td>{isSteamId(ban.adminSteamId) ? <Link className="staff-admin-link" href={`/players/${ban.adminSteamId}`}>{ban.adminName}</Link> : ban.adminName}</td><td><span className={isActiveSanction(ban.expiresAt) ? "staff-status active" : "staff-status"}>{isActiveSanction(ban.expiresAt) ? "Active" : "Expired"}<small>{ban.expiresAt ? formatDate(ban.expiresAt) : "Permanent"}</small></span></td><td>{access.canUnban && isActiveSanction(ban.expiresAt) ? <form action="/api/admin/moderation" method="post"><input type="hidden" name="csrf" value={csrf} /><input type="hidden" name="action" value="unban" /><input type="hidden" name="steamId" value={ban.steamId} /><button className="staff-unban-button" type="submit" disabled={!actionsReady}>Unban</button></form> : <span className="staff-no-action">-</span>}</td></tr>;
+      })}</tbody></table></div> : <p className="empty-copy">No bans match this search.</p>}</section>
 
       <section className="staff-record-section"><div className="staff-section-heading"><div><p className="tapped-kicker"><VolumeX aria-hidden="true" /> Communication record</p><h2>Gag, mute and silence history</h2></div><span>{moderation.sanctionTotal.toLocaleString()} raw records</span></div>{sanctionEvents.length ? <div className="staff-table-scroll"><table className="staff-table"><thead><tr><th>Player</th><th>Type</th><th>Reason</th><th>Issued by</th><th>Status</th></tr></thead><tbody>{sanctionEvents.map((sanction) => <tr key={`${sanction.id}-${sanction.kind}`}><td><strong>{sanction.playerName}</strong><small>{sanction.steamId}</small></td><td><span className={`sanction-type ${sanction.kind.toLowerCase()}`}>{sanction.kind}</span></td><td><strong>{sanction.reason}</strong><small>{formatDate(sanction.createdAt)}{sanction.global ? " - Global" : ""}</small></td><td>{sanction.adminName}</td><td><span className={isActiveSanction(sanction.expiresAt) ? "staff-status active" : "staff-status"}>{isActiveSanction(sanction.expiresAt) ? "Active" : "Expired"}<small>{sanction.expiresAt ? formatDate(sanction.expiresAt) : "Permanent"}</small></span></td></tr>)}</tbody></table></div> : <p className="empty-copy">No communication sanctions match this search.</p>}</section>
       <nav className="pagination staff-pagination" aria-label="Moderation pages"><Link className={currentPage <= 1 ? "is-disabled" : ""} aria-disabled={currentPage <= 1} href={currentPage <= 1 ? moderationLink(1, query) : moderationLink(currentPage - 1, query)}>Previous</Link><span>Page {currentPage} of {totalPages}</span><Link className={currentPage >= totalPages ? "is-disabled" : ""} aria-disabled={currentPage >= totalPages} href={currentPage >= totalPages ? moderationLink(currentPage, query) : moderationLink(currentPage + 1, query)}>Next</Link></nav>

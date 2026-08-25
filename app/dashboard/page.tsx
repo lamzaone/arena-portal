@@ -40,7 +40,10 @@ export default async function DashboardPage() {
 
         <section className="page-heading">
           <div className="profile-identity">
-            {steamProfile?.avatarFull ? <img className="profile-steam-avatar" src={steamProfile.avatarFull} alt={`${displayName}'s Steam avatar`} referrerPolicy="no-referrer" /> : <span className="profile-steam-avatar profile-steam-avatar-fallback" aria-hidden="true">{avatarInitial(displayName)}</span>}
+            <div className={`profile-steam-avatar-wrap${activeBan ? " is-banned" : ""}`}>
+              {steamProfile?.avatarFull ? <img className="profile-steam-avatar" src={steamProfile.avatarFull} alt={`${displayName}'s Steam avatar`} referrerPolicy="no-referrer" /> : <span className="profile-steam-avatar profile-steam-avatar-fallback" aria-hidden="true">{avatarInitial(displayName)}</span>}
+              {activeBan ? <span className="banned-avatar-overlay">BANNED</span> : null}
+            </div>
             <div>
               <p className="eyebrow"><UserRound aria-hidden="true" /> Steam account</p>
               <h1>{displayName}</h1>
