@@ -68,7 +68,7 @@ export default async function DashboardPage() {
           <article className="panel">
             <div className="panel-heading"><h2>Groups</h2><p>Synced from VIPCore and Admins.</p></div>
             <div className="group-block"><span>VIP groups</span><div className="tag-list">{profile.vipGroups.length ? profile.vipGroups.map((group) => <b key={group} className="tag tag-vip">{group}</b>) : <em>None</em>}</div></div>
-            <div className="group-block"><span>Admin groups</span><div className="tag-list">{profile.adminGroups.length ? profile.adminGroups.map((group) => <b key={group} className="tag tag-admin">{group}</b>) : <em>None</em>}</div>{profile.adminGroups.length ? <Link className="staff-panel-link" href="/admin">Open staff panel <ArrowRight aria-hidden="true" /></Link> : null}</div>
+            <div className="group-block"><span>Admin groups</span><div className="tag-list">{profile.adminGroups.length ? profile.adminGroups.map((group) => <b key={group} className="tag tag-admin">{group}</b>) : <em>None</em>}</div></div>
           </article>
           <article className="panel combat-panel">
             <div className="panel-heading"><h2>Combat profile</h2><p>From K4 LevelRanks.</p></div>

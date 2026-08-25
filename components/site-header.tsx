@@ -2,6 +2,7 @@ import Link from "next/link";
 import { LogIn, LogOut, ShieldCheck, UserRound } from "lucide-react";
 
 import { getSession } from "@/lib/auth/session";
+import { getAdminAccess } from "@/lib/admin/access";
 import { getSteamProfiles } from "@/lib/steam/profiles";
 
 type SiteHeaderProps = {
@@ -11,6 +12,7 @@ type SiteHeaderProps = {
 export async function SiteHeader({ authenticated = false }: SiteHeaderProps) {
   const session = authenticated ? await getSession() : null;
   const steamProfile = session ? (await getSteamProfiles([session.steamId])).get(session.steamId) : null;
+  const staffAccess = session ? await getAdminAccess(session.steamId) : null;
   const displayName = steamProfile?.name ?? "Steam account";
 
   return (
@@ -31,6 +33,7 @@ export async function SiteHeader({ authenticated = false }: SiteHeaderProps) {
             {steamProfile?.avatarFull ? <img src={steamProfile.avatarFull} alt="" referrerPolicy="no-referrer" /> : <span className="header-account-avatar-fallback" aria-hidden="true"><UserRound /></span>}
             <span className="header-account-copy"><strong>{displayName}</strong><small>SteamID64 {session.steamId}</small></span>
           </Link>
+          {staffAccess?.isAdmin ? <Link className="button button-quiet header-staff-link" href="/admin">Staff panel</Link> : null}
           <form action="/api/auth/logout" method="post">
             <button className="button button-quiet" type="submit"><LogOut aria-hidden="true" /> Sign out</button>
           </form>

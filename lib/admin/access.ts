@@ -15,7 +15,7 @@ const currentGroups: AdminGroupConfig[] = [
   { name: "Guardian", immunity: 20, permissions: ["admins.notify"] },
   { name: "Enforcer", immunity: 30, permissions: ["admins.notify", "admins.commands.ban"] },
   { name: "Overseer", immunity: 40, permissions: ["admins.notify", "admins.commands.ban", "admins.commands.unban"] },
-  { name: "Director", immunity: 50, permissions: ["admins.notify", "admins.commands.ban", "admins.commands.unban"] },
+  { name: "Director", immunity: 50, permissions: ["admins.notify", "admins.commands.ban", "admins.commands.unban", "admins.commands.admin"] },
   { name: "Founder", immunity: 100, permissions: ["*"] }
 ];
 
@@ -27,10 +27,13 @@ export type AdminAccess = {
   groups: string[];
   immunity: number;
   permissions: Set<string>;
+  serverGuids: string[];
   isAdmin: boolean;
   isAssignedToServer: boolean;
   canBan: boolean;
   canUnban: boolean;
+  canManageAdmins: boolean;
+  canManageVips: boolean;
 };
 
 async function getConfiguredGroups() {
@@ -72,11 +75,21 @@ export async function getAdminAccess(steamId: string): Promise<AdminAccess> {
     groups: matchedGroups.map((group) => String(group.name)),
     immunity,
     permissions,
+    serverGuids: admin?.serverGuids ?? [],
     isAdmin,
     isAssignedToServer,
     canBan: isAdmin && hasPermission(permissions, "admins.commands.ban"),
-    canUnban: isAdmin && hasPermission(permissions, "admins.commands.unban")
+    canUnban: isAdmin && hasPermission(permissions, "admins.commands.unban"),
+    canManageAdmins: isAdmin && hasPermission(permissions, "admins.commands.admin"),
+    canManageVips: isAdmin && (hasPermission(permissions, "vipcore.manage") || hasPermission(permissions, "vipcore.adduser"))
   };
+}
+
+export function getStaffGroupDefinitions() {
+  return currentGroups.map((group) => ({
+    name: typeof group.name === "string" ? group.name : "",
+    immunity: typeof group.immunity === "number" ? group.immunity : 0
+  })).filter((group) => group.name);
 }
 
 export function canActOnTarget(actor: AdminAccess, target: AdminAccess) {

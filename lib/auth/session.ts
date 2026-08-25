@@ -75,6 +75,21 @@ export function verifyAdminActionToken(session: PortalSession, token: string) {
   return timingSafeEqual(Buffer.from(token), Buffer.from(expected));
 }
 
+// State-changing player endpoints use a separate, session-bound token. It is
+// intentionally scoped away from staff actions so a token from the cosmetic UI
+// cannot be replayed against moderation routes.
+export function createLoadoutActionToken(session: PortalSession) {
+  const secret = getSecret();
+  if (!secret) return "";
+  return sign(`loadout-action:${session.steamId}:${session.expiresAt}:${session.tokenHash}`, secret);
+}
+
+export function verifyLoadoutActionToken(session: PortalSession, token: string) {
+  const expected = createLoadoutActionToken(session);
+  if (!token || !expected || token.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+}
+
 export function sessionCookieOptions() {
   return {
     httpOnly: true,
