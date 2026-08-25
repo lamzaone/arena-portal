@@ -1,7 +1,9 @@
 import "server-only";
 
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+
+import { createPortalSession, getPortalSession, revokePortalSession } from "@/lib/data/portal-repository";
 
 const COOKIE_NAME = "arena_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 14;
@@ -9,59 +11,74 @@ const SESSION_TTL_SECONDS = 60 * 60 * 24 * 14;
 export type PortalSession = {
   steamId: string;
   expiresAt: number;
+  tokenHash: string;
 };
 
 function getSecret() {
   return process.env.SESSION_SECRET;
 }
 
+function useSecureSessionCookie() {
+  try {
+    const siteUrl = new URL(process.env.SITE_URL ?? "");
+    if (siteUrl.protocol === "https:") return true;
+    if (["localhost", "127.0.0.1", "::1"].includes(siteUrl.hostname)) return false;
+  } catch {
+    // Fall back to the deployment mode if SITE_URL is not configured yet.
+  }
+  return process.env.NODE_ENV === "production";
+}
+
 function sign(payload: string, secret: string) {
   return createHmac("sha256", secret).update(payload).digest("base64url");
 }
 
-export function createSessionToken(steamId: string) {
-  const secret = getSecret();
-  if (!secret) {
-    throw new Error("SESSION_SECRET is not configured.");
-  }
-
-  const session: PortalSession = {
-    steamId,
-    expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000
-  };
-  const payload = Buffer.from(JSON.stringify(session)).toString("base64url");
-  return `${payload}.${sign(payload, secret)}`;
+function hashToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
 }
 
-function parseSession(value: string | undefined): PortalSession | null {
-  const secret = getSecret();
-  if (!value || !secret) return null;
+export async function createSessionToken(steamId: string) {
+  if (!/^7656119\d{10}$/.test(steamId)) throw new Error("Invalid SteamID64.");
 
-  const [payload, signature] = value.split(".");
-  if (!payload || !signature) return null;
-
-  const expected = sign(payload, secret);
-  if (signature.length !== expected.length) return null;
-  if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
-
-  try {
-    const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as PortalSession;
-    if (!/^7656119\d{10}$/.test(session.steamId) || session.expiresAt <= Date.now()) return null;
-    return session;
-  } catch {
-    return null;
-  }
+  const token = randomBytes(32).toString("base64url");
+  const expiresAt = Date.now() + SESSION_TTL_SECONDS * 1_000;
+  await createPortalSession({ tokenHash: hashToken(token), steamId, expiresAt });
+  return token;
 }
 
 export async function getSession() {
   const cookieStore = await cookies();
-  return parseSession(cookieStore.get(COOKIE_NAME)?.value);
+  const token = cookieStore.get(COOKIE_NAME)?.value;
+  if (!token || token.length < 32) return null;
+
+  const tokenHash = hashToken(token);
+  const storedSession = await getPortalSession(tokenHash);
+  if (!storedSession || storedSession.expiresAt <= Date.now()) return null;
+  return { ...storedSession, tokenHash };
+}
+
+export async function revokeCurrentSession() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(COOKIE_NAME)?.value;
+  if (token) await revokePortalSession(hashToken(token));
+}
+
+export function createAdminActionToken(session: PortalSession) {
+  const secret = getSecret();
+  if (!secret) return "";
+  return sign(`admin-action:${session.steamId}:${session.expiresAt}:${session.tokenHash}`, secret);
+}
+
+export function verifyAdminActionToken(session: PortalSession, token: string) {
+  const expected = createAdminActionToken(session);
+  if (!token || !expected || token.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(token), Buffer.from(expected));
 }
 
 export function sessionCookieOptions() {
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: useSecureSessionCookie(),
     sameSite: "lax" as const,
     path: "/",
     maxAge: SESSION_TTL_SECONDS

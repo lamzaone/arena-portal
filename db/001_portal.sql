@@ -7,6 +7,16 @@ CREATE TABLE IF NOT EXISTS portal_steam_accounts (
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS portal_sessions (
+  token_hash CHAR(64) NOT NULL,
+  steam_id VARCHAR(17) NOT NULL,
+  expires_at BIGINT UNSIGNED NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (token_hash),
+  KEY portal_sessions_steam_expiry (steam_id, expires_at)
+);
+
 CREATE TABLE IF NOT EXISTS portal_discord_links (
   steam_id VARCHAR(17) NOT NULL,
   discord_user_id VARCHAR(32) NOT NULL,

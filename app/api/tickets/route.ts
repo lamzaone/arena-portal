@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { createTicket } from "@/lib/data/portal-repository";
 
-const categories = new Set(["player-report", "admin-report", "bug", "account", "other"]);
+const categories = new Set(["player-report", "admin-report", "bug", "account", "vip", "other"]);
 
 export async function POST(request: Request) {
   const session = await getSession();
