@@ -2,6 +2,8 @@ import "server-only";
 
 import mysql, { type Pool, type ResultSetHeader, type RowDataPacket } from "mysql2/promise";
 
+import { normalizeVipGroup } from "@/lib/content/group-presentation";
+
 type StatRow = RowDataPacket & {
   name: string;
   value: number;
@@ -14,6 +16,19 @@ type StatRow = RowDataPacket & {
   game_wins: number;
   game_losses: number;
   games_played: number;
+};
+
+type HitStatsRow = RowDataPacket & {
+  DmgHealth: number;
+  DmgArmor: number;
+  Head: number;
+  Chest: number;
+  Belly: number;
+  LeftArm: number;
+  RightArm: number;
+  LeftLeg: number;
+  RightLeg: number;
+  Neak: number;
 };
 
 type LeaderboardRow = RowDataPacket & {
@@ -59,6 +74,7 @@ type StaffSanctionRow = RowDataPacket & {
   ExpiresAt: number;
   Length: number;
   Reason: string;
+  AdminSteamId64: string;
   AdminName: string;
   Server: string;
   GlobalSanction: number | boolean;
@@ -68,6 +84,7 @@ type StaffSanctionRow = RowDataPacket & {
 type BanRow = RowDataPacket & {
   Id: number;
   Reason: string;
+  AdminSteamId64: string | null;
   AdminName: string;
   Server: string;
   ExpiresAt: number;
@@ -79,6 +96,7 @@ type SanctionRow = RowDataPacket & {
   Id: number;
   SanctionKind: number;
   Reason: string;
+  AdminSteamId64: string | null;
   AdminName: string;
   ExpiresAt: number;
   Length: number;
@@ -293,10 +311,30 @@ export type PlayerLoadout = {
 export type ModerationRecord = {
   id: number;
   reason: string;
+  adminSteamId: string | null;
   adminName: string;
   expiresAt: number;
   length: number;
   createdAt: number;
+};
+
+export type GroupMembership = {
+  name: string;
+  expiresAt: number | null;
+};
+
+export type HitboxStats = {
+  totalHits: number;
+  healthDamage: number;
+  armorDamage: number;
+  head: number;
+  chest: number;
+  stomach: number;
+  leftArm: number;
+  rightArm: number;
+  leftLeg: number;
+  rightLeg: number;
+  neck: number;
 };
 
 export type PlayerDashboard = {
@@ -306,16 +344,18 @@ export type PlayerDashboard = {
   points: number;
   rank: number;
   leaderboardPosition: number | null;
+  leaderboardTotal: number;
   playtimeSeconds: number;
   kills: number;
   deaths: number;
   headshots: number;
   noscopes: number;
+  hitStats: HitboxStats;
   gamesPlayed: number;
   gameWins: number;
   gameLosses: number;
-  vipGroups: string[];
-  adminGroups: string[];
+  vipGroups: GroupMembership[];
+  adminGroups: GroupMembership[];
   bans: ModerationRecord[];
   sanctions: Array<ModerationRecord & { kind: "Gag" | "Mute" }>;
   kickHistoryAvailable: boolean;
@@ -342,13 +382,15 @@ export type PublicPlayerProfile = {
   displayName: string;
   points: number;
   leaderboardPosition: number;
+  leaderboardTotal: number;
   playtimeSeconds: number;
   kills: number;
   deaths: number;
   headshots: number;
   noscopes: number;
-  vipGroups: string[];
-  adminGroups: string[];
+  hitStats: HitboxStats;
+  vipGroups: GroupMembership[];
+  adminGroups: GroupMembership[];
   isBanned: boolean;
 };
 
@@ -366,11 +408,21 @@ export type PortalTicket = {
 export type BanAppeal = {
   id: number;
   banId: number | null;
+  ban: AppealBan | null;
   body: string;
   status: string;
   createdAt: string;
   updatedAt: string;
   messages: CaseMessage[];
+};
+
+export type AppealBan = {
+  id: number;
+  reason: string;
+  adminSteamId: string | null;
+  adminName: string;
+  expiresAt: number;
+  createdAt: number;
 };
 
 export type CaseAttachment = {
@@ -408,8 +460,12 @@ export type StaffVip = {
   serverId: number;
 };
 
+export type VipRosterEntry = StaffVip & {
+  adminGroups: GroupMembership[];
+};
+
 export type VipRosterPage = {
-  vips: StaffVip[];
+  vips: VipRosterEntry[];
   total: number;
   page: number;
   pageSize: number;
@@ -435,6 +491,8 @@ export type LeaderboardPlayer = {
   kills: number;
   deaths: number;
   mvps: number;
+  vipGroups: GroupMembership[];
+  adminGroups: GroupMembership[];
 };
 
 export type LeaderboardPage = {
@@ -466,6 +524,7 @@ export type StaffSanction = {
   expiresAt: number;
   length: number;
   reason: string;
+  adminSteamId: string | null;
   adminName: string;
   server: string;
   global: boolean;
@@ -526,13 +585,40 @@ function toAccountId(steamId: string) {
 
 function toGroups(value: unknown) {
   if (typeof value !== "string" || !value.trim()) return [];
+  let groups: string[];
   try {
     const parsed = JSON.parse(value) as unknown;
-    if (Array.isArray(parsed)) return parsed.filter((group): group is string => typeof group === "string");
+    if (Array.isArray(parsed)) groups = parsed.filter((group): group is string => typeof group === "string");
+    else groups = [];
   } catch {
     // Legacy Swiftly group fields can be comma-separated strings.
+    groups = value.split(",");
   }
-  return value.split(",").map((group) => group.trim()).filter(Boolean);
+  const unique = new Map<string, string>();
+  for (const group of groups.map((group) => group.trim()).filter(Boolean)) {
+    const groupKey = group.toLowerCase();
+    if (!unique.has(groupKey)) unique.set(groupKey, group);
+  }
+  return [...unique.values()];
+}
+
+function toAdminMemberships(value: unknown): GroupMembership[] {
+  return toGroups(value).map((name) => ({ name, expiresAt: null }));
+}
+
+function toVipMemberships(rows: Array<Pick<VipUserRow, "group" | "expires">>): GroupMembership[] {
+  const memberships = new Map<string, GroupMembership>();
+  for (const row of rows) {
+    const name = normalizeVipGroup(String(row.group ?? ""));
+    if (!name) continue;
+    const expiresAt = Number(row.expires ?? 0);
+    const groupKey = name.toLowerCase();
+    const existing = memberships.get(groupKey);
+    if (!existing || (existing.expiresAt !== 0 && (expiresAt === 0 || expiresAt > (existing.expiresAt ?? 0)))) {
+      memberships.set(groupKey, { name, expiresAt: expiresAt || 0 });
+    }
+  }
+  return [...memberships.values()].sort((left, right) => left.name.localeCompare(right.name));
 }
 
 async function safeGameQuery<T extends RowDataPacket>(sql: string, values: unknown[]) {
@@ -555,6 +641,57 @@ async function safeAdminQuery<T extends RowDataPacket>(sql: string, values: unkn
 function normalizeUnixTime(value: unknown) {
   const timestamp = Number(value ?? 0);
   return timestamp > 10_000_000_000 ? Math.floor(timestamp / 1_000) : timestamp;
+}
+
+function isSteamId(value: string) {
+  return /^7656119\d{10}$/.test(value);
+}
+
+function toAppealBan(row: BanRow): AppealBan {
+  const adminSteamId = String(row.AdminSteamId64 ?? "");
+  return {
+    id: Number(row.Id),
+    reason: row.Reason,
+    adminSteamId: isSteamId(adminSteamId) ? adminSteamId : null,
+    adminName: row.AdminName || "Console",
+    expiresAt: normalizeUnixTime(row.ExpiresAt),
+    createdAt: normalizeUnixTime(row.CreatedAt)
+  };
+}
+
+async function getAppealBans(banIds: Array<number | null>) {
+  const ids = [...new Set(banIds.filter((id): id is number => typeof id === "number" && Number.isSafeInteger(id) && id > 0))];
+  if (!ids.length) return new Map<number, AppealBan>();
+  const rows = await safeAdminQuery<BanRow>(
+    `SELECT Id, Reason, AdminSteamId64, AdminName, ExpiresAt, Length, CreatedAt FROM bans WHERE Id IN (${ids.map(() => "?").join(", ")})`,
+    ids
+  );
+  return new Map(rows.map((row) => {
+    const ban = toAppealBan(row);
+    return [ban.id, ban] as const;
+  }));
+}
+
+function emptyHitboxStats(): HitboxStats {
+  return { totalHits: 0, healthDamage: 0, armorDamage: 0, head: 0, chest: 0, stomach: 0, leftArm: 0, rightArm: 0, leftLeg: 0, rightLeg: 0, neck: 0 };
+}
+
+function toHitboxStats(row: HitStatsRow | undefined): HitboxStats {
+  if (!row) return emptyHitboxStats();
+  const head = Number(row.Head ?? 0);
+  const chest = Number(row.Chest ?? 0);
+  const stomach = Number(row.Belly ?? 0);
+  const leftArm = Number(row.LeftArm ?? 0);
+  const rightArm = Number(row.RightArm ?? 0);
+  const leftLeg = Number(row.LeftLeg ?? 0);
+  const rightLeg = Number(row.RightLeg ?? 0);
+  const neck = Number(row.Neak ?? 0);
+  return {
+    totalHits: head + chest + stomach + leftArm + rightArm + leftLeg + rightLeg + neck,
+    healthDamage: Number(row.DmgHealth ?? 0),
+    armorDamage: Number(row.DmgArmor ?? 0),
+    head, chest, stomach, leftArm, rightArm, leftLeg, rightLeg, neck
+  };
 }
 
 async function getMvpColumn(pool: Pool) {
@@ -835,6 +972,11 @@ async function getLeaderboardPosition(steamId: string) {
   return Number(rows[0]?.total ?? 1);
 }
 
+async function getLeaderboardTotal() {
+  const rows = await safeGameQuery<CountRow>("SELECT COUNT(*) AS total FROM lvl_base", []);
+  return Number(rows[0]?.total ?? 0);
+}
+
 export async function getPlayerDashboard(steamId: string): Promise<PlayerDashboard> {
   const pool = getGamePool();
   const empty: PlayerDashboard = {
@@ -844,11 +986,13 @@ export async function getPlayerDashboard(steamId: string): Promise<PlayerDashboa
     points: 0,
     rank: 0,
     leaderboardPosition: null,
+    leaderboardTotal: 0,
     playtimeSeconds: 0,
     kills: 0,
     deaths: 0,
     headshots: 0,
     noscopes: 0,
+    hitStats: emptyHitboxStats(),
     gamesPlayed: 0,
     gameWins: 0,
     gameLosses: 0,
@@ -863,33 +1007,34 @@ export async function getPlayerDashboard(steamId: string): Promise<PlayerDashboa
 
   const noscopeColumn = await getNoscopeColumn(pool);
   const noscopeSelection = noscopeColumn ? `\`${noscopeColumn}\` AS noscopes` : "0 AS noscopes";
-  const [stats, vipRows, adminRows, banRows, sanctionRows, skinRows, knifeRows, gloveRows, agentRows, musicRows] = await Promise.all([
+  const [stats, vipRows, adminRows, banRows, sanctionRows, skinRows, knifeRows, gloveRows, agentRows, musicRows, hitRows] = await Promise.all([
     safeGameQuery<StatRow>(
       `SELECT name, value, rank, kills, deaths, headshots, ${noscopeSelection}, playtime, game_wins, game_losses, games_played FROM lvl_base WHERE steam = ? LIMIT 1`,
       [steamId]
     ),
-    safeGameQuery<RowDataPacket & { group: string }>(
-      "SELECT `group` FROM vip_users WHERE account_id = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) ORDER BY `group`",
-      [toAccountId(steamId)]
+    safeGameQuery<VipUserRow>(
+      "SELECT account_id, name, lastvisit, sid, `group`, expires FROM vip_users WHERE account_id = ? AND sid = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) ORDER BY `group`",
+      [toAccountId(steamId), getVipServerId()]
     ),
     safeAdminQuery<RowDataPacket & { Groups: string }>("SELECT Groups FROM admins WHERE SteamId64 = ? LIMIT 1", [steamId]),
     safeAdminQuery<BanRow>(
-      "SELECT Id, Reason, AdminName, Server, ExpiresAt, Length, CreatedAt FROM bans WHERE SteamId64 = ? ORDER BY CreatedAt DESC LIMIT 25",
+      "SELECT Id, Reason, AdminSteamId64, AdminName, Server, ExpiresAt, Length, CreatedAt FROM bans WHERE SteamId64 = ? ORDER BY CreatedAt DESC LIMIT 25",
       [steamId]
     ),
     safeAdminQuery<SanctionRow>(
-      "SELECT Id, SanctionKind, Reason, AdminName, ExpiresAt, Length, CreatedAt FROM sanctions WHERE SteamId64 = ? ORDER BY CreatedAt DESC LIMIT 25",
+      "SELECT Id, SanctionKind, Reason, AdminSteamId64, AdminName, ExpiresAt, Length, CreatedAt FROM sanctions WHERE SteamId64 = ? ORDER BY CreatedAt DESC LIMIT 25",
       [steamId]
     ),
     safeGameQuery<RowDataPacket & { total: number }>("SELECT COUNT(*) AS total FROM wp_player_skins WHERE steamid = ? AND weapon_defindex > 0 AND weapon_defindex < 100 AND weapon_defindex NOT IN (42, 59)", [steamId]),
     safeGameQuery<RowDataPacket & { total: number }>("SELECT COUNT(*) AS total FROM wp_player_knife WHERE steamid = ?", [steamId]),
     safeGameQuery<RowDataPacket & { total: number }>("SELECT COUNT(*) AS total FROM wp_player_gloves WHERE steamid = ?", [steamId]),
     safeGameQuery<RowDataPacket & { total: number }>("SELECT COUNT(*) AS total FROM wp_player_agents WHERE steamid = ?", [steamId]),
-    safeGameQuery<RowDataPacket & { total: number }>("SELECT COUNT(DISTINCT music_id) AS total FROM wp_player_music WHERE steamid = ?", [steamId])
+    safeGameQuery<RowDataPacket & { total: number }>("SELECT COUNT(DISTINCT music_id) AS total FROM wp_player_music WHERE steamid = ?", [steamId]),
+    safeGameQuery<HitStatsRow>("SELECT DmgHealth, DmgArmor, Head, Chest, Belly, LeftArm, RightArm, LeftLeg, RightLeg, Neak FROM lvl_base_hits WHERE SteamID = ? LIMIT 1", [steamId])
   ]);
 
   const player = stats[0];
-  const leaderboardPosition = player ? await getLeaderboardPosition(steamId) : null;
+  const [leaderboardPosition, leaderboardTotal] = player ? await Promise.all([getLeaderboardPosition(steamId), getLeaderboardTotal()]) : [null, 0];
 
   return {
     ...empty,
@@ -898,22 +1043,24 @@ export async function getPlayerDashboard(steamId: string): Promise<PlayerDashboa
     points: Number(player?.value ?? 0),
     rank: Number(player?.rank ?? 0),
     leaderboardPosition,
+    leaderboardTotal,
     playtimeSeconds: Number(player?.playtime ?? 0),
     kills: Number(player?.kills ?? 0),
     deaths: Number(player?.deaths ?? 0),
     headshots: Number(player?.headshots ?? 0),
     noscopes: Number(player?.noscopes ?? 0),
+    hitStats: toHitboxStats(hitRows[0]),
     gamesPlayed: Number(player?.games_played ?? 0),
     gameWins: Number(player?.game_wins ?? 0),
     gameLosses: Number(player?.game_losses ?? 0),
-    vipGroups: vipRows.map((row) => row.group),
-    adminGroups: toGroups(adminRows[0]?.Groups),
+    vipGroups: toVipMemberships(vipRows),
+    adminGroups: toAdminMemberships(adminRows[0]?.Groups),
     bans: banRows.map((row) => ({
-      id: Number(row.Id), reason: row.Reason, adminName: row.AdminName,
+      id: Number(row.Id), reason: row.Reason, adminSteamId: isSteamId(String(row.AdminSteamId64)) ? String(row.AdminSteamId64) : null, adminName: row.AdminName,
       expiresAt: normalizeUnixTime(row.ExpiresAt), length: Number(row.Length), createdAt: normalizeUnixTime(row.CreatedAt)
     })),
     sanctions: sanctionRows.map((row) => ({
-      id: Number(row.Id), reason: row.Reason, adminName: row.AdminName,
+      id: Number(row.Id), reason: row.Reason, adminSteamId: isSteamId(String(row.AdminSteamId64)) ? String(row.AdminSteamId64) : null, adminName: row.AdminName,
       expiresAt: normalizeUnixTime(row.ExpiresAt), length: Number(row.Length), createdAt: normalizeUnixTime(row.CreatedAt),
       kind: row.SanctionKind === 1 ? "Gag" : "Mute"
     })),
@@ -933,17 +1080,18 @@ export async function getPublicPlayerProfile(steamId: string): Promise<PublicPla
 
   const noscopeColumn = await getNoscopeColumn(pool);
   const noscopeSelection = noscopeColumn ? `\`${noscopeColumn}\` AS noscopes` : "0 AS noscopes";
-  const [rows, vipRows, adminRows, banRows] = await Promise.all([
+  const [rows, vipRows, adminRows, banRows, hitRows] = await Promise.all([
     safeGameQuery<StatRow>(
       `SELECT name, value, rank, kills, deaths, headshots, ${noscopeSelection}, playtime, game_wins, game_losses, games_played FROM lvl_base WHERE steam = ? LIMIT 1`,
       [steamId]
     ),
-    safeGameQuery<RowDataPacket & { group: string }>(
-      "SELECT `group` FROM vip_users WHERE account_id = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) ORDER BY `group`",
-      [toAccountId(steamId)]
+    safeGameQuery<VipUserRow>(
+      "SELECT account_id, name, lastvisit, sid, `group`, expires FROM vip_users WHERE account_id = ? AND sid = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) ORDER BY `group`",
+      [toAccountId(steamId), getVipServerId()]
     ),
     safeAdminQuery<RowDataPacket & { Groups: string }>("SELECT Groups FROM admins WHERE SteamId64 = ? LIMIT 1", [steamId]),
-    safeAdminQuery<RowDataPacket & { ExpiresAt: number }>("SELECT ExpiresAt FROM bans WHERE SteamId64 = ? ORDER BY CreatedAt DESC LIMIT 25", [steamId])
+    safeAdminQuery<RowDataPacket & { ExpiresAt: number }>("SELECT ExpiresAt FROM bans WHERE SteamId64 = ? ORDER BY CreatedAt DESC LIMIT 25", [steamId]),
+    safeGameQuery<HitStatsRow>("SELECT DmgHealth, DmgArmor, Head, Chest, Belly, LeftArm, RightArm, LeftLeg, RightLeg, Neak FROM lvl_base_hits WHERE SteamID = ? LIMIT 1", [steamId])
   ]);
   const player = rows[0];
   if (!player) return null;
@@ -952,20 +1100,54 @@ export async function getPublicPlayerProfile(steamId: string): Promise<PublicPla
     return expiresAt === 0 || expiresAt > Math.floor(Date.now() / 1_000);
   });
 
+  const [leaderboardPosition, leaderboardTotal] = await Promise.all([getLeaderboardPosition(steamId), getLeaderboardTotal()]);
+
   return {
     steamId,
     displayName: player.name || "Unknown player",
     points: Number(player.value ?? 0),
-    leaderboardPosition: await getLeaderboardPosition(steamId),
+    leaderboardPosition,
+    leaderboardTotal,
     playtimeSeconds: Number(player.playtime ?? 0),
     kills: Number(player.kills ?? 0),
     deaths: Number(player.deaths ?? 0),
     headshots: Number(player.headshots ?? 0),
     noscopes: Number(player.noscopes ?? 0),
-    vipGroups: vipRows.map((row) => row.group),
-    adminGroups: toGroups(adminRows[0]?.Groups),
+    hitStats: toHitboxStats(hitRows[0]),
+    vipGroups: toVipMemberships(vipRows),
+    adminGroups: toAdminMemberships(adminRows[0]?.Groups),
     isBanned
   };
+}
+
+async function getGroupMembershipsForPlayers(steamIds: string[]) {
+  const uniqueSteamIds = [...new Set(steamIds.filter((steamId) => /^7656119\d{10}$/.test(steamId)))];
+  const result = new Map<string, { vipGroups: GroupMembership[]; adminGroups: GroupMembership[] }>();
+  if (!uniqueSteamIds.length) return result;
+
+  const accountIds = uniqueSteamIds.map(toAccountId);
+  const accountPlaceholders = accountIds.map(() => "?").join(", ");
+  const steamPlaceholders = uniqueSteamIds.map(() => "?").join(", ");
+  const [vipRows, adminRows] = await Promise.all([
+    safeGameQuery<VipUserRow>(
+      `SELECT account_id, name, lastvisit, sid, \`group\`, expires FROM vip_users WHERE sid = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) AND account_id IN (${accountPlaceholders})`,
+      [getVipServerId(), ...accountIds]
+    ),
+    safeAdminQuery<AdminListRow>(
+      `SELECT Id, SteamId64, Username, Permissions, Groups, Immunity, Servers FROM admins WHERE SteamId64 IN (${steamPlaceholders})`,
+      uniqueSteamIds
+    )
+  ]);
+
+  for (const steamId of uniqueSteamIds) result.set(steamId, { vipGroups: [], adminGroups: [] });
+  for (const steamId of uniqueSteamIds) {
+    const accountId = toAccountId(steamId);
+    result.set(steamId, {
+      vipGroups: toVipMemberships(vipRows.filter((row) => String(row.account_id) === accountId)),
+      adminGroups: toAdminMemberships(adminRows.find((row) => String(row.SteamId64) === steamId)?.Groups)
+    });
+  }
+  return result;
 }
 
 function leaderboardFilter(query: string) {
@@ -991,11 +1173,14 @@ export async function getLeaderboard(pageInput: number, pageSize = 25, query = "
       [...filter.values, pageSize, offset]
     )
   ]);
+  const groupMemberships = await getGroupMembershipsForPlayers(rows.map((row) => String(row.steam)));
 
   return {
     players: rows.map((row) => ({
       steamId: String(row.steam), name: row.name || "Unknown player", rank: Number(row.rank), points: Number(row.value),
-      kills: Number(row.kills), deaths: Number(row.deaths), mvps: Number(row.mvps)
+      kills: Number(row.kills), deaths: Number(row.deaths), mvps: Number(row.mvps),
+      vipGroups: groupMemberships.get(String(row.steam))?.vipGroups ?? [],
+      adminGroups: groupMemberships.get(String(row.steam))?.adminGroups ?? []
     })),
     total: Number(totalRows[0]?.total ?? 0),
     page,
@@ -1022,7 +1207,7 @@ export async function getStaffModeration(pageInput: number, query = "", pageSize
     ),
     safeGameQuery<CountRow>(`SELECT COUNT(*) AS total FROM sanctions ${filter.sql}`, filter.values),
     safeGameQuery<StaffSanctionRow>(
-      `SELECT Id, SteamId64, PlayerName, SanctionKind, ExpiresAt, Length, Reason, AdminName, Server, GlobalSanction, CreatedAt FROM sanctions ${filter.sql} ORDER BY CreatedAt DESC LIMIT ? OFFSET ?`,
+      `SELECT Id, SteamId64, PlayerName, SanctionKind, ExpiresAt, Length, Reason, AdminSteamId64, AdminName, Server, GlobalSanction, CreatedAt FROM sanctions ${filter.sql} ORDER BY CreatedAt DESC LIMIT ? OFFSET ?`,
       [...filter.values, pageSize, offset]
     )
   ]);
@@ -1036,7 +1221,7 @@ export async function getStaffModeration(pageInput: number, query = "", pageSize
     banTotal: Number(banCount[0]?.total ?? 0),
     sanctions: sanctions.map((row) => ({
       id: Number(row.Id), steamId: String(row.SteamId64), playerName: row.PlayerName || "Unknown player", kind: row.SanctionKind === 1 ? "Gag" : "Mute",
-      expiresAt: normalizeUnixTime(row.ExpiresAt), length: Number(row.Length), reason: row.Reason, adminName: row.AdminName || "Console",
+      expiresAt: normalizeUnixTime(row.ExpiresAt), length: Number(row.Length), reason: row.Reason, adminSteamId: isSteamId(String(row.AdminSteamId64)) ? String(row.AdminSteamId64) : null, adminName: row.AdminName || "Console",
       server: row.Server, global: Boolean(row.GlobalSanction), createdAt: normalizeUnixTime(row.CreatedAt)
     })),
     sanctionTotal: Number(sanctionCount[0]?.total ?? 0),
@@ -1075,7 +1260,7 @@ function getVipServerId() {
 
 export async function getStaffVips(): Promise<StaffVip[]> {
   const rows = await safeGameQuery<VipUserRow>(
-    "SELECT account_id, name, lastvisit, sid, `group`, expires FROM vip_users WHERE sid = ? ORDER BY `group` ASC, name ASC",
+    "SELECT account_id, MAX(name) AS name, MAX(lastvisit) AS lastvisit, sid, `group`, CASE WHEN SUM(expires = 0) > 0 THEN 0 ELSE MAX(expires) END AS expires FROM vip_users WHERE sid = ? GROUP BY account_id, sid, `group` ORDER BY `group` ASC, name ASC",
     [getVipServerId()]
   );
   return rows.map((row) => ({
@@ -1097,17 +1282,19 @@ export async function getVipRoster(pageInput: number, pageSize = 25): Promise<Vi
   const offset = (page - 1) * pageSize;
   try {
     const [[countRows], [rows]] = await Promise.all([
-      pool.query<CountRow[]>("SELECT COUNT(*) AS total FROM vip_users WHERE sid = ? AND (`group` IS NOT NULL) AND (expires = 0 OR expires > ?)", [getVipServerId(), now]),
+      pool.query<CountRow[]>("SELECT COUNT(*) AS total FROM (SELECT account_id, `group` FROM vip_users WHERE sid = ? AND (`group` IS NOT NULL) AND (expires = 0 OR expires > ?) GROUP BY account_id, `group`) AS unique_vips", [getVipServerId(), now]),
       pool.query<VipUserRow[]>(
-        "SELECT account_id, name, lastvisit, sid, `group`, expires FROM vip_users WHERE sid = ? AND (`group` IS NOT NULL) AND (expires = 0 OR expires > ?) ORDER BY FIELD(`group`, 'ULTIMATE', 'DIAMOND', 'GOLD', 'SILVER', 'STANDARD'), name ASC LIMIT ? OFFSET ?",
+        "SELECT account_id, MAX(name) AS name, MAX(lastvisit) AS lastvisit, sid, `group`, CASE WHEN SUM(expires = 0) > 0 THEN 0 ELSE MAX(expires) END AS expires FROM vip_users WHERE sid = ? AND (`group` IS NOT NULL) AND (expires = 0 OR expires > ?) GROUP BY account_id, sid, `group` ORDER BY FIELD(`group`, 'ULTIMATE', 'DIAMOND', 'GOLD', 'SILVER', 'STANDARD'), name ASC LIMIT ? OFFSET ?",
         [getVipServerId(), now, pageSize, offset]
       )
     ]);
-    return {
-      vips: rows.map((row) => ({
+    const vips = rows.map((row) => ({
         steamId: vipAccountToSteamId(String(row.account_id)), accountId: String(row.account_id), name: row.name || "Unknown player",
         group: row.group, expiresAt: Number(row.expires ?? 0), serverId: Number(row.sid ?? 0)
-      })),
+      }));
+    const memberships = await getGroupMembershipsForPlayers(vips.map((vip) => vip.steamId));
+    return {
+      vips: vips.map((vip) => ({ ...vip, adminGroups: memberships.get(vip.steamId)?.adminGroups ?? [] })),
       total: Number(countRows[0]?.total ?? 0),
       page,
       pageSize
@@ -1166,8 +1353,10 @@ export async function getStaffAppeals(pageInput: number, pageSize = 25) {
       pool.query<CountRow[]>("SELECT COUNT(*) AS total FROM portal_ban_appeals"),
       pool.query<StaffAppealRow[]>("SELECT id, steam_id, ban_id, body, status, created_at, updated_at, closed_by, closed_at FROM portal_ban_appeals ORDER BY updated_at DESC LIMIT ? OFFSET ?", [pageSize, offset])
     ]);
+    const appealBans = await getAppealBans(rows.map((row) => row.ban_id == null ? null : Number(row.ban_id)));
     const appeals = await Promise.all(rows.map(async (row) => ({
       id: Number(row.id), steamId: String(row.steam_id), banId: row.ban_id == null ? null : Number(row.ban_id), body: row.body,
+      ban: row.ban_id == null ? null : appealBans.get(Number(row.ban_id)) ?? null,
       status: row.status, createdAt: dateToIso(row.created_at), updatedAt: dateToIso(row.updated_at),
       closedBy: row.closed_by ? String(row.closed_by) : null, closedAt: row.closed_at ? dateToIso(row.closed_at) : null,
       messages: await getCaseMessages(pool, "appeal", Number(row.id))
@@ -1310,8 +1499,10 @@ export async function getAppeals(steamId: string): Promise<BanAppeal[]> {
       "SELECT id, ban_id, body, status, created_at, updated_at FROM portal_ban_appeals WHERE steam_id = ? ORDER BY updated_at DESC",
       [steamId]
     );
+    const appealBans = await getAppealBans(rows.map((row) => row.ban_id == null ? null : Number(row.ban_id)));
     return Promise.all(rows.map(async (row) => ({
       id: row.id, banId: row.ban_id, body: row.body, status: row.status,
+      ban: row.ban_id == null ? null : appealBans.get(Number(row.ban_id)) ?? null,
       createdAt: dateToIso(row.created_at), updatedAt: dateToIso(row.updated_at),
       messages: await getCaseMessages(pool, "appeal", Number(row.id))
     })));

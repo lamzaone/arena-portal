@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import type { CaseMessage } from "@/lib/data/portal-repository";
 import type { SteamProfile } from "@/lib/steam/profiles";
 
@@ -21,6 +23,10 @@ function avatarInitial(name: string) {
   return name.trim().slice(0, 1).toUpperCase() || "?";
 }
 
+function isSteamId(value: string) {
+  return /^7656119\d{10}$/.test(value);
+}
+
 function MessageCard({ authorId, authorType, body, createdAt, attachments, steamProfiles, viewerSteamId, opening = false }: {
   authorId: string;
   authorType: "player" | "staff";
@@ -35,12 +41,11 @@ function MessageCard({ authorId, authorType, body, createdAt, attachments, steam
   const name = authorName(authorId, authorType, steamProfiles, viewerSteamId);
   const role = authorId === viewerSteamId ? "You" : authorType === "staff" ? "Staff" : "Player";
 
+  const author = <>{profile?.avatarFull ? <img src={profile.avatarFull} alt="" referrerPolicy="no-referrer" /> : <span aria-hidden="true">{avatarInitial(name)}</span>}<div><b>{name}</b><small>{opening ? "Original message" : role}</small></div></>;
+
   return <article className={`case-message case-conversation-message ${authorType}${opening ? " opening" : ""}`}>
     <header className="case-message-header">
-      <div className="case-message-author">
-        {profile?.avatarFull ? <img src={profile.avatarFull} alt="" referrerPolicy="no-referrer" /> : <span aria-hidden="true">{avatarInitial(name)}</span>}
-        <div><b>{name}</b><small>{opening ? "Original message" : role}</small></div>
-      </div>
+      {isSteamId(authorId) ? <Link className="case-message-author" href={`/players/${authorId}`}>{author}</Link> : <div className="case-message-author">{author}</div>}
       <time dateTime={createdAt}>{formatPortalDate(createdAt)}</time>
     </header>
     <p>{body}</p>
@@ -55,4 +60,3 @@ export function CaseConversation({ openingBody, openingAt, openingAuthorId, mess
     {messages.map((message) => <MessageCard key={message.id} authorId={message.authorId} authorType={message.authorType} body={message.body} createdAt={message.createdAt} attachments={message.attachments} steamProfiles={steamProfiles} viewerSteamId={viewerSteamId} />)}
   </section>;
 }
-

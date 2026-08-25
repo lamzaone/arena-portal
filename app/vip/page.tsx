@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { Check, Crown, LockKeyhole, ShieldCheck, Sparkles, UsersRound } from "lucide-react";
+import type { CSSProperties } from "react";
 
 import { formatDate } from "@/components/formatters";
+import { GroupBadge } from "@/components/group-badge";
 import { SiteHeader } from "@/components/site-header";
 import { getSession } from "@/lib/auth/session";
 import { getVipTiers, type VipTier } from "@/lib/content/game-catalogue";
+import { getGroupPresentation } from "@/lib/content/group-presentation";
 import { getPlayerDashboard, getVipRoster } from "@/lib/data/portal-repository";
 import { getSteamProfiles } from "@/lib/steam/profiles";
 
@@ -38,8 +41,9 @@ export default async function VipPage({ searchParams }: VipPageProps) {
     getVipRoster(requestedPage)
   ]);
   const steamProfiles = await getSteamProfiles(vipRoster.vips.map((vip) => vip.steamId));
-  const ownedNames = new Set((player?.vipGroups ?? []).map((group) => group.toUpperCase()));
+  const ownedNames = new Set((player?.vipGroups ?? []).map((group) => group.name.toUpperCase()));
   const currentTier = tiers.find((tier) => ownedNames.has(tier.name.toUpperCase())) ?? null;
+  const currentVipPresentation = currentTier ? getGroupPresentation("vip", currentTier.name) : null;
   const totalPages = Math.max(1, Math.ceil(vipRoster.total / vipRoster.pageSize));
   const currentPage = Math.min(vipRoster.page, totalPages);
 
@@ -56,7 +60,7 @@ export default async function VipPage({ searchParams }: VipPageProps) {
           </div>
           <aside className="catalog-signal">
             <span className="signal-label">CURRENT VIP</span>
-            <strong>{currentTier?.name ?? (session ? "No active tier" : "Steam login required")}</strong>
+            <strong style={currentVipPresentation ? { color: currentVipPresentation.softColor, textShadow: `0 0 18px ${currentVipPresentation.color}66` } : undefined}>{currentTier?.name ?? (session ? "No active tier" : "Steam login required")}</strong>
             <small>{currentTier ? "Higher tiers stay available as upgrades." : "Five tiers. EUR 5 steps. Permanent access is 3x."}</small>
           </aside>
         </section>
@@ -74,10 +78,11 @@ export default async function VipPage({ searchParams }: VipPageProps) {
                 const includedByHigherTier = Boolean(currentTier && currentTier.weight > tier.weight);
                 const canUpgrade = Boolean(currentTier && currentTier.weight < tier.weight);
                 const upgradePrice = canUpgrade ? price - basePrice(tiers, currentTier!) : price;
+                const presentation = getGroupPresentation("vip", tier.name);
 
-                return <article className={`vip-card ${tier.name === "ULTIMATE" ? "vip-card-ultimate" : ""}`} key={tier.name}>
+                return <article className={`vip-card ${tier.name === "ULTIMATE" ? "vip-card-ultimate" : ""}`} key={tier.name} style={{ "--vip-tier-color": presentation.color, "--vip-tier-soft": presentation.softColor } as CSSProperties}>
                   <div className="vip-card-topline"><span>VIP {String(tier.weight).padStart(2, "0")}</span>{isOwned && <span className="owned-badge"><Check aria-hidden="true" /> Owned</span>}</div>
-                  <h2>{tier.name}</h2>
+                  <h2><GroupBadge kind="vip" group={tier.name} /></h2>
                   <p className="vip-price">EUR {price}<small>access price</small></p>
                   <ul className="vip-benefit-list">
                     {tier.benefits.map((benefit) => <li key={benefit.name}><Check aria-hidden="true" /><span><strong>{benefit.name}</strong><small>{benefit.detail}</small></span></li>)}
@@ -100,10 +105,10 @@ export default async function VipPage({ searchParams }: VipPageProps) {
             <div><p className="tapped-kicker"><UsersRound aria-hidden="true" /> VIPCore roster</p><h2 id="vip-roster-title">Current VIPs.</h2></div>
             <p>{vipRoster.total.toLocaleString()} active VIP{vipRoster.total === 1 ? "" : "s"} on ARENA.TAPPED.RO. Profiles open publicly from the roster.</p>
           </div>
-          {vipRoster.vips.length ? <div className="leaderboard-scroll vip-roster-scroll"><table className="leaderboard-table vip-roster-table"><thead><tr><th>Player</th><th>VIP tier</th><th>Access</th></tr></thead><tbody>{vipRoster.vips.map((vip) => {
+          {vipRoster.vips.length ? <div className="leaderboard-scroll vip-roster-scroll"><table className="leaderboard-table vip-roster-table"><thead><tr><th>Player</th><th>VIP tier</th><th>Admin rank</th><th>Access</th></tr></thead><tbody>{vipRoster.vips.map((vip) => {
             const profile = steamProfiles.get(vip.steamId);
             const name = profile?.name || vip.name;
-            return <tr key={`${vip.steamId}-${vip.group}`}><td><Link className="leaderboard-player" href={`/players/${vip.steamId}`}>{profile?.avatarFull ? <img src={profile.avatarFull} alt={`${name}'s Steam avatar`} referrerPolicy="no-referrer" /> : <span className="player-avatar-fallback" aria-hidden="true">{avatarInitial(name)}</span>}<div><strong>{name}</strong><small>SteamID64 {vip.steamId}</small></div></Link></td><td><span className="tag tag-vip">{vip.group}</span></td><td><strong>{vip.expiresAt === 0 ? "Permanent" : `Until ${formatDate(vip.expiresAt)}`}</strong></td></tr>;
+            return <tr key={`${vip.steamId}-${vip.group}`}><td><Link className="leaderboard-player" href={`/players/${vip.steamId}`}>{profile?.avatarFull ? <img src={profile.avatarFull} alt={`${name}'s Steam avatar`} referrerPolicy="no-referrer" /> : <span className="player-avatar-fallback" aria-hidden="true">{avatarInitial(name)}</span>}<div><strong>{name}</strong><small>SteamID64 {vip.steamId}</small></div></Link></td><td><GroupBadge kind="vip" group={vip.group} /></td><td>{vip.adminGroups.length ? <span className="vip-roster-role-badges">{vip.adminGroups.map((group) => <GroupBadge key={group.name} kind="admin" group={group.name} />)}</span> : <span className="role-empty">—</span>}</td><td><strong>{vip.expiresAt === 0 ? "Permanent" : `Until ${formatDate(vip.expiresAt)}`}</strong></td></tr>;
           })}</tbody></table></div> : <section className="vip-roster-empty"><UsersRound aria-hidden="true" /><h3>No active VIPs yet.</h3><p>VIPs with active or permanent access will appear here.</p></section>}
           <nav className="pagination vip-roster-pagination" aria-label="VIP roster pages"><Link className={currentPage <= 1 ? "is-disabled" : ""} aria-disabled={currentPage <= 1} href={`/vip?page=${Math.max(1, currentPage - 1)}`}>Previous</Link><span>Page {currentPage} of {totalPages}</span><Link className={currentPage >= totalPages ? "is-disabled" : ""} aria-disabled={currentPage >= totalPages} href={`/vip?page=${Math.min(totalPages, currentPage + 1)}`}>Next</Link></nav>
         </section>

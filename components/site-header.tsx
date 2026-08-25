@@ -31,7 +31,7 @@ export async function SiteHeader({ authenticated = false }: SiteHeaderProps) {
         <>
           <Link className="header-account" href="/dashboard" aria-label={`Open ${displayName}'s profile`}>
             {steamProfile?.avatarFull ? <img src={steamProfile.avatarFull} alt="" referrerPolicy="no-referrer" /> : <span className="header-account-avatar-fallback" aria-hidden="true"><UserRound /></span>}
-            <span className="header-account-copy"><strong>{displayName}</strong><small>SteamID64 {session.steamId}</small></span>
+            <span className="header-account-copy"><strong>{displayName}</strong><small>{session.steamId}</small></span>
           </Link>
           {staffAccess?.isAdmin ? <Link className="button button-quiet header-staff-link" href="/admin">Staff panel</Link> : null}
           <form action="/api/auth/logout" method="post">

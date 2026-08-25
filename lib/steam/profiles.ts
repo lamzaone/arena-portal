@@ -4,6 +4,7 @@ export type SteamProfile = {
   steamId: string;
   name: string;
   avatarFull: string;
+  presence: "online" | "offline" | "unknown";
 };
 
 type SteamSummaryResponse = {
@@ -12,6 +13,7 @@ type SteamSummaryResponse = {
       steamid?: string;
       personaname?: string;
       avatarfull?: string;
+      personastate?: number;
     }>;
   };
 };
@@ -20,6 +22,7 @@ type CompleteSteamPlayer = {
   steamid: string;
   personaname: string;
   avatarfull: string;
+  personastate?: number;
 };
 
 export async function getSteamProfiles(steamIds: string[]) {
@@ -30,14 +33,19 @@ export async function getSteamProfiles(steamIds: string[]) {
   try {
     const response = await fetch(
       `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=${encodeURIComponent(apiKey)}&steamids=${uniqueIds.join(",")}`,
-      { next: { revalidate: 3_600 } }
+      { next: { revalidate: 60 } }
     );
     if (!response.ok) return new Map<string, SteamProfile>();
 
     const payload = await response.json() as SteamSummaryResponse;
     return new Map((payload.response?.players ?? [])
       .filter((player): player is CompleteSteamPlayer => Boolean(player.steamid && player.personaname && player.avatarfull))
-      .map((player) => [player.steamid, { steamId: player.steamid, name: player.personaname, avatarFull: player.avatarfull }]));
+      .map((player): [string, SteamProfile] => [player.steamid, {
+        steamId: player.steamid,
+        name: player.personaname,
+        avatarFull: player.avatarfull,
+        presence: typeof player.personastate === "number" ? player.personastate > 0 ? "online" : "offline" : "unknown"
+      }]));
   } catch {
     return new Map<string, SteamProfile>();
   }
