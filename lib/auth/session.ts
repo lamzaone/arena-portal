@@ -90,6 +90,21 @@ export function verifyLoadoutActionToken(session: PortalSession, token: string) 
   return timingSafeEqual(Buffer.from(token), Buffer.from(expected));
 }
 
+// Economy mutations have their own session-bound CSRF scope.  Keeping it
+// separate from both legacy loadout and staff actions prevents a token issued
+// for one surface from being replayed against a wallet or inventory action.
+export function createEconomyActionToken(session: PortalSession) {
+  const secret = getSecret();
+  if (!secret) return "";
+  return sign(`economy-action:${session.steamId}:${session.expiresAt}:${session.tokenHash}`, secret);
+}
+
+export function verifyEconomyActionToken(session: PortalSession, token: string) {
+  const expected = createEconomyActionToken(session);
+  if (!token || !expected || token.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+}
+
 export function sessionCookieOptions() {
   return {
     httpOnly: true,

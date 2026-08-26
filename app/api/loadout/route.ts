@@ -107,6 +107,11 @@ function advancedSkinPayload(body: LoadoutRequest, category: "weapon" | "knife" 
 }
 
 export async function POST(request: Request) {
+  // Keep this endpoint as a rollback-only backup.  The replacement economy
+  // validates owned item instances rather than accepting a raw paintkit.
+  if (process.env.LEGACY_WEAPONSKINS_ENABLED !== "true") {
+    return jsonError("The legacy WeaponSkins loadout is disabled. Use the Token Inventory instead.", 410);
+  }
   const session = await getSession();
   if (!session) return jsonError("Sign in with Steam before changing your loadout.", 401);
 

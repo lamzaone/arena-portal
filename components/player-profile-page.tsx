@@ -137,7 +137,7 @@ export function PlayerProfilePage({ profile, steamId, steamProfile, isOwnProfile
             <strong>#{profile.leaderboardPosition ?? "-"}</strong>
             <small>Top player ranking</small>
             <div><span>K4 rank</span><b style={{ color: levelRank.hex }}>{levelRank.tag}</b><small>{levelRank.name}</small></div>
-            {isOwnProfile ? <Link className="button button-secondary profile-loadout-link" href="/skins">Open loadout <ArrowRight aria-hidden="true" /></Link> : null}
+            {isOwnProfile ? <Link className="button button-secondary profile-loadout-link" href="/inventory">Open inventory <ArrowRight aria-hidden="true" /></Link> : null}
           </aside>
         </section>
 

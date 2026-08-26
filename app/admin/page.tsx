@@ -162,7 +162,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 
   return <main className="tapped-page staff-page"><div className="shell"><SiteHeader authenticated />
     <section className="staff-hero"><div><p className="tapped-kicker"><ShieldCheck aria-hidden="true" /> Staff operations</p><h1>Command<br /><span>centre.</span></h1><p>Moderate the server, manage access, and respond to player cases from one protected control room.</p></div><aside className="staff-access-card"><span>ACTIVE ROLE</span><strong>{access.groups.join(" + ")}</strong><small>Immunity {access.immunity} · Ban {access.canBan ? "allowed" : "no"} · Unban {access.canUnban ? "allowed" : "no"}</small></aside></section>
-    <nav className="staff-tabs" aria-label="Staff panel sections">{tabs.filter((item) => item.id !== "appeals" || access.canUnban).map((item) => <Link key={item.id} className={tab === item.id ? "active" : ""} href={staffLink(item.id)}>{item.label}</Link>)}</nav>
+    <nav className="staff-tabs" aria-label="Staff panel sections">{tabs.filter((item) => item.id !== "appeals" || access.canUnban).map((item) => <Link key={item.id} className={tab === item.id ? "active" : ""} href={staffLink(item.id)}>{item.label}</Link>)}{access.canViewEconomy ? <Link href="/admin/items">Items</Link> : null}</nav>
     {notice ? <div className="notice notice-success"><CheckCircle2 aria-hidden="true" /> {notice}</div> : null}
     {error ? <div className="notice notice-danger"><AlertTriangle aria-hidden="true" /> {error}</div> : null}
 

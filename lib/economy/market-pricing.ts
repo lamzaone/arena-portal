@@ -1,0 +1,374 @@
+import "server-only";
+
+import {
+  getSkinportHistoricalPrices,
+  type SkinportHistoricalPrice,
+} from "@/lib/economy/skinport-prices";
+
+const defaultMarketplaceFloat = 0.15;
+export const maximumMarketplaceFloatDiscountBps = 1_500;
+const floatPrecision = 1_000_000;
+
+export type MarketplaceFloatRange = {
+  minFloat: number;
+  maxFloat: number;
+};
+
+export type MarketplacePriceCandidate = {
+  marketHashName: string;
+  marketVersion: string | null;
+};
+
+export type MarketplacePriceIdentityInput = {
+  itemType: string;
+  displayName: string;
+  marketHashName: string | null | undefined;
+  metadata: Record<string, unknown> | null | undefined;
+  minFloat: number | null | undefined;
+  maxFloat: number | null | undefined;
+  floatValue?: number | null | undefined;
+};
+
+export type MarketplacePriceIdentity = {
+  floatRange: MarketplaceFloatRange | null;
+  floatValue: number | null;
+  wear: string | null;
+  marketVersion: string | null;
+  candidates: readonly MarketplacePriceCandidate[];
+};
+
+export type MarketplacePriceFallback = {
+  eurCents: number;
+  source: string;
+  sourceReference?: string | null | undefined;
+};
+
+export type MarketplacePriceInput = MarketplacePriceIdentityInput & {
+  // A non-Steam, staff-maintained last-known quote may be supplied by the
+  // caller when the public database does not have this exact market identity.
+  // It is intentionally only a fallback; Skinport is always preferred.
+  fallbackPrice?: MarketplacePriceFallback | null | undefined;
+};
+
+export type MarketplacePriceQuote = {
+  // The public-price value before a selected item's exact float adjustment.
+  baseEuroCents: number;
+  // The amount to translate to Tokens for this selected float.
+  eurCents: number;
+  source: SkinportHistoricalPrice["source"] | string;
+  sourceReference: string | null;
+  marketHashName: string | null;
+  marketVersion: string | null;
+  floatValue: number | null;
+  wear: string | null;
+  // Basis points discounted from the selected exterior/base price. 1,500 is
+  // 15%, reached only at the highest allowed float for that item.
+  floatDiscountBps: number;
+  fromFallback: boolean;
+};
+
+function normalizedText(value: unknown) {
+  return typeof value === "string"
+    ? value.normalize("NFKC").replace(/\s+/g, " ").trim()
+    : "";
+}
+
+function normalizedKey(value: string | null | undefined) {
+  return normalizedText(value).toLocaleLowerCase("en-US");
+}
+
+function metadataText(
+  metadata: Record<string, unknown> | null | undefined,
+  keys: readonly string[],
+) {
+  if (!metadata) return null;
+  for (const key of keys) {
+    const value = normalizedText(metadata[key]);
+    if (value) return value;
+  }
+  return null;
+}
+
+function boundedFloat(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1
+    ? Math.round(value * floatPrecision) / floatPrecision
+    : null;
+}
+
+function withinRange(value: number, range: MarketplaceFloatRange) {
+  return Math.min(range.maxFloat, Math.max(range.minFloat, value));
+}
+
+function addCandidate(
+  candidates: MarketplacePriceCandidate[],
+  marketHashName: string | null | undefined,
+  marketVersion: string | null,
+) {
+  const value = normalizedText(marketHashName);
+  if (!value || value.length > 255) return;
+  const key = `${normalizedKey(value)}\u0000${normalizedKey(marketVersion)}`;
+  if (
+    candidates.some(
+      (candidate) =>
+        `${normalizedKey(candidate.marketHashName)}\u0000${normalizedKey(candidate.marketVersion)}` === key,
+    )
+  ) {
+    return;
+  }
+  candidates.push({ marketHashName: value, marketVersion });
+}
+
+function stripWearSuffix(value: string) {
+  return value.replace(
+    /\s*\((?:Factory New|Minimal Wear|Field-Tested|Well-Worn|Battle-Scarred)\)\s*$/iu,
+    "",
+  );
+}
+
+function stripStarPrefix(value: string) {
+  return value.replace(/^\s*\u2605\s*/u, "").trim();
+}
+
+function validEuroCents(value: unknown) {
+  return typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value > 0 &&
+    value <= 1_000_000_000
+    ? value
+    : null;
+}
+
+/** Whether this catalogue item has an exterior float that affects its price. */
+export function isFloatPricedMarketplaceItem(itemType: string | null | undefined) {
+  return ["skin", "knife", "glove"].includes(normalizedKey(itemType));
+}
+
+/**
+ * Returns the item's valid float range. Missing legacy bounds mean the normal
+ * CS2 0.000000–1.000000 range; reversed data is safely normalized.
+ */
+export function normalizeMarketplaceFloatRange(
+  input: Pick<
+    MarketplacePriceIdentityInput,
+    "itemType" | "minFloat" | "maxFloat"
+  >,
+): MarketplaceFloatRange | null {
+  if (!isFloatPricedMarketplaceItem(input.itemType)) return null;
+
+  const configuredMin = boundedFloat(input.minFloat);
+  const configuredMax = boundedFloat(input.maxFloat);
+  let minFloat = configuredMin ?? 0;
+  let maxFloat = configuredMax ?? 1;
+  if (minFloat > maxFloat) [minFloat, maxFloat] = [maxFloat, minFloat];
+  return { minFloat, maxFloat };
+}
+
+/**
+ * Normalizes a requested float to an item's actual range. A missing or invalid
+ * value starts at 0.15 (Minimal Wear), then is clamped for constrained items.
+ */
+export function normalizeMarketplaceFloatValue(
+  input: Pick<
+    MarketplacePriceIdentityInput,
+    "itemType" | "minFloat" | "maxFloat" | "floatValue"
+  >,
+) {
+  const floatRange = normalizeMarketplaceFloatRange(input);
+  if (!floatRange) return null;
+  const requested = boundedFloat(input.floatValue) ?? defaultMarketplaceFloat;
+  return Math.round(withinRange(requested, floatRange) * floatPrecision) / floatPrecision;
+}
+
+export function marketplaceWearLabel(floatValue: number | null | undefined) {
+  const value = boundedFloat(floatValue);
+  if (value === null) return null;
+  if (value <= 0.07) return "Factory New";
+  if (value <= 0.15) return "Minimal Wear";
+  if (value <= 0.38) return "Field-Tested";
+  if (value <= 0.45) return "Well-Worn";
+  return "Battle-Scarred";
+}
+
+/**
+ * Builds the precise public-market identities for an item. For weapon
+ * finishes this derives an exterior-specific name from `marketBaseName`; for
+ * knives and gloves it checks the Steam star-prefixed form first.
+ */
+export function deriveMarketplacePriceIdentity(
+  input: MarketplacePriceIdentityInput,
+): MarketplacePriceIdentity {
+  const marketVersion = metadataText(input.metadata, [
+    "marketVersion",
+    "skinportVersion",
+    "priceVersion",
+  ]);
+  const floatRange = normalizeMarketplaceFloatRange(input);
+  const floatValue = normalizeMarketplaceFloatValue(input);
+  const wear = marketplaceWearLabel(floatValue);
+  const candidates: MarketplacePriceCandidate[] = [];
+  const itemType = normalizedKey(input.itemType);
+  const baseName =
+    metadataText(input.metadata, ["marketBaseName"]) ||
+    normalizedText(input.displayName) ||
+    normalizedText(input.marketHashName);
+
+  if (floatRange && floatValue !== null && wear) {
+    // A legacy catalogue row usually has no market hash because the selected
+    // exterior is part of the public market identity. Prefer that exact
+    // exterior to any generic/hash stored by older imports.
+    const finishBase = stripWearSuffix(baseName);
+    if (finishBase) {
+      const bareFinishBase = stripStarPrefix(finishBase);
+      const exteriorName = `${bareFinishBase} (${wear})`;
+      if (itemType === "knife" || itemType === "glove")
+        addCandidate(candidates, `\u2605 ${exteriorName}`, marketVersion);
+      addCandidate(candidates, exteriorName, marketVersion);
+    }
+    addCandidate(candidates, input.marketHashName, marketVersion);
+  } else {
+    addCandidate(candidates, input.marketHashName, marketVersion);
+    addCandidate(candidates, baseName, marketVersion);
+  }
+
+  return {
+    floatRange,
+    floatValue,
+    wear,
+    marketVersion,
+    candidates,
+  };
+}
+
+export function marketplaceFloatDiscountBps(
+  floatRange: MarketplaceFloatRange | null,
+  floatValue: number | null,
+) {
+  if (!floatRange || floatValue === null) return 0;
+  const span = floatRange.maxFloat - floatRange.minFloat;
+  if (span <= Number.EPSILON) return 0;
+  const normalizedPosition = Math.min(
+    1,
+    Math.max(0, (floatValue - floatRange.minFloat) / span),
+  );
+  return Math.round(normalizedPosition * maximumMarketplaceFloatDiscountBps);
+}
+
+export function adjustedMarketplaceEuroCents(
+  baseEuroCents: number,
+  floatDiscountBps: number,
+) {
+  return Math.max(
+    1,
+    Math.floor((baseEuroCents * (10_000 - floatDiscountBps)) / 10_000),
+  );
+}
+
+function validFallback(value: MarketplacePriceFallback | null | undefined) {
+  if (!value) return null;
+  const eurCents = validEuroCents(value.eurCents);
+  const source = normalizedText(value.source);
+  if (eurCents === null || !source || source.length > 96) return null;
+  const sourceReference = normalizedText(value.sourceReference);
+  return {
+    eurCents,
+    source,
+    sourceReference: sourceReference && sourceReference.length <= 255
+      ? sourceReference
+      : null,
+  };
+}
+
+function quoteFromPrice(
+  price: Pick<
+    MarketplacePriceQuote,
+    "baseEuroCents" | "source" | "sourceReference" | "marketHashName" | "marketVersion" | "fromFallback"
+  >,
+  identity: MarketplacePriceIdentity,
+): MarketplacePriceQuote {
+  const floatDiscountBps = marketplaceFloatDiscountBps(
+    identity.floatRange,
+    identity.floatValue,
+  );
+  return {
+    baseEuroCents: price.baseEuroCents,
+    eurCents: adjustedMarketplaceEuroCents(price.baseEuroCents, floatDiscountBps),
+    source: price.source,
+    sourceReference: price.sourceReference,
+    marketHashName: price.marketHashName,
+    marketVersion: price.marketVersion,
+    floatValue: identity.floatValue,
+    wear: identity.wear,
+    floatDiscountBps,
+    fromFallback: price.fromFallback,
+  };
+}
+
+/**
+ * Resolves a batch of marketplace quotes from Skinport's public database.
+ * Results preserve input order. The item-specific selected float is applied
+ * only after locating the exact exterior quote, so this never mutates the
+ * shared catalogue price snapshot for a buyer-specific float.
+ */
+export async function getMarketplacePriceQuotes(
+  inputs: readonly MarketplacePriceInput[],
+): Promise<Array<MarketplacePriceQuote | null>> {
+  if (!inputs.length) return [];
+
+  const identities = inputs.map(deriveMarketplacePriceIdentity);
+  const lookups: MarketplacePriceCandidate[] = [];
+  const lookupIndexes = new Map<string, number>();
+  for (const identity of identities) {
+    for (const candidate of identity.candidates) {
+      const key = `${normalizedKey(candidate.marketHashName)}\u0000${normalizedKey(candidate.marketVersion)}`;
+      if (lookupIndexes.has(key)) continue;
+      lookupIndexes.set(key, lookups.length);
+      lookups.push(candidate);
+    }
+  }
+
+  const publicPrices = await getSkinportHistoricalPrices(lookups);
+  const publicPriceByCandidate = new Map<string, SkinportHistoricalPrice>();
+  for (let index = 0; index < lookups.length; index += 1) {
+    const quote = publicPrices[index];
+    if (!quote) continue;
+    const candidate = lookups[index];
+    publicPriceByCandidate.set(
+      `${normalizedKey(candidate.marketHashName)}\u0000${normalizedKey(candidate.marketVersion)}`,
+      quote,
+    );
+  }
+
+  return inputs.map((input, index) => {
+    const identity = identities[index];
+    for (const candidate of identity.candidates) {
+      const key = `${normalizedKey(candidate.marketHashName)}\u0000${normalizedKey(candidate.marketVersion)}`;
+      const publicPrice = publicPriceByCandidate.get(key);
+      if (!publicPrice) continue;
+      return quoteFromPrice(
+        {
+          baseEuroCents: publicPrice.eurCents,
+          source: publicPrice.source,
+          sourceReference: publicPrice.sourceReference,
+          marketHashName: publicPrice.marketHashName,
+          marketVersion: publicPrice.marketVersion,
+          fromFallback: false,
+        },
+        identity,
+      );
+    }
+
+    const fallback = validFallback(input.fallbackPrice);
+    if (!fallback) return null;
+    return quoteFromPrice(
+      {
+        baseEuroCents: fallback.eurCents,
+        source: fallback.source,
+        sourceReference: fallback.sourceReference,
+        marketHashName: identity.candidates[0]?.marketHashName ?? null,
+        marketVersion: identity.marketVersion,
+        fromFallback: true,
+      },
+      identity,
+    );
+  });
+}

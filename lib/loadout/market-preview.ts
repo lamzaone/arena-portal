@@ -64,6 +64,33 @@ async function fetchMarketImage(marketName: string) {
   }
 }
 
+/**
+ * Resolves official Steam Community Market art for one or more trusted market
+ * names. Callers must derive the names server-side; this function never
+ * accepts a browser-supplied URL.
+ */
+export async function getMarketPreviewForNames(marketNames: readonly string[]) {
+  for (const rawName of marketNames) {
+    const marketName = rawName.trim();
+    if (!marketName || marketName.length > 255) continue;
+    const cacheKey = marketName.toLowerCase();
+    const cached = previewCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      if (cached.imageUrl) return cached.imageUrl;
+      continue;
+    }
+
+    const imageUrl = await fetchMarketImage(marketName);
+    previewCache.set(cacheKey, {
+      imageUrl,
+      expiresAt: Date.now() + (imageUrl ? successfulPreviewTtl : failedPreviewTtl),
+    });
+    if (imageUrl) return imageUrl;
+  }
+
+  return null;
+}
+
 export async function getMarketPreview(catalogue: LoadoutCatalogue, request: PreviewRequest) {
   let marketNames: string[];
   if (request.category === "agent") {
@@ -76,18 +103,5 @@ export async function getMarketPreview(catalogue: LoadoutCatalogue, request: Pre
     marketNames = marketNamesForItem(selected.item, selected.finish, request.wear);
   }
 
-  for (const marketName of marketNames) {
-    const cacheKey = marketName.toLowerCase();
-    const cached = previewCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
-      if (cached.imageUrl) return cached.imageUrl;
-      continue;
-    }
-
-    const imageUrl = await fetchMarketImage(marketName);
-    previewCache.set(cacheKey, { imageUrl, expiresAt: Date.now() + (imageUrl ? successfulPreviewTtl : failedPreviewTtl) });
-    if (imageUrl) return imageUrl;
-  }
-
-  return null;
+  return getMarketPreviewForNames(marketNames);
 }

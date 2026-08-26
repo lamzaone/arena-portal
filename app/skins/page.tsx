@@ -8,6 +8,13 @@ import { createLoadoutActionToken, getSession } from "@/lib/auth/session";
 import { getLoadoutCatalogue, getPlayerDashboard, getPlayerLoadout } from "@/lib/data/portal-repository";
 
 export default async function SkinsPage() {
+  // The legacy editor is intentionally retained as a rollback path, but it is
+  // not reachable in normal operation while TAPPED.Inventory owns cosmetics.
+  if (process.env.LEGACY_WEAPONSKINS_ENABLED !== "true") {
+    return <main><div className="shell"><SiteHeader authenticated />
+      <section className="staff-denied"><ShieldCheck aria-hidden="true" /><p className="tapped-kicker">Legacy system retired</p><h1>The old loadout is disabled.</h1><p>Your cosmetic collection, crates, and equipped items now live in the Token Inventory.</p><a className="button button-primary" href="/inventory">Open inventory</a></section>
+    </div></main>;
+  }
   const session = await getSession();
   if (!session) return <SignInRequired title="Your WeaponSkins loadout" description="Sign in with Steam to review and change the cosmetics attached to your own server account." />;
 

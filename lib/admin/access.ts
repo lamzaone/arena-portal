@@ -15,7 +15,7 @@ const currentGroups: AdminGroupConfig[] = [
   { name: "Guardian", immunity: 20, permissions: ["admins.notify"] },
   { name: "Enforcer", immunity: 30, permissions: ["admins.notify", "admins.commands.ban"] },
   { name: "Overseer", immunity: 40, permissions: ["admins.notify", "admins.commands.ban", "admins.commands.unban"] },
-  { name: "Director", immunity: 50, permissions: ["admins.notify", "admins.commands.ban", "admins.commands.unban", "admins.commands.admin"] },
+  { name: "Director", immunity: 50, permissions: ["admins.notify", "admins.commands.ban", "admins.commands.unban", "admins.commands.admin", "tapped.tokens.admin", "tapped.inventory.admin", "tapped.inventory.grant", "tapped.inventory.manage-loadout"] },
   { name: "Founder", immunity: 100, permissions: ["*"] }
 ];
 
@@ -34,6 +34,11 @@ export type AdminAccess = {
   canUnban: boolean;
   canManageAdmins: boolean;
   canManageVips: boolean;
+  canViewEconomy: boolean;
+  canAdjustEconomyTokens: boolean;
+  canGrantEconomyItems: boolean;
+  canManageEconomy: boolean;
+  canManageEconomyLoadouts: boolean;
 };
 
 async function getConfiguredGroups() {
@@ -49,7 +54,7 @@ function hasPermission(permissions: Set<string>, permission: string) {
 }
 
 function isStaffPermission(permission: string) {
-  return permission === "*" || permission === "admins.*" || permission.startsWith("admins.");
+  return permission === "*" || permission === "admins.*" || permission.startsWith("admins.") || permission === "tapped.*" || permission.startsWith("tapped.");
 }
 
 export async function getAdminAccess(steamId: string): Promise<AdminAccess> {
@@ -81,7 +86,12 @@ export async function getAdminAccess(steamId: string): Promise<AdminAccess> {
     canBan: isAdmin && hasPermission(permissions, "admins.commands.ban"),
     canUnban: isAdmin && hasPermission(permissions, "admins.commands.unban"),
     canManageAdmins: isAdmin && hasPermission(permissions, "admins.commands.admin"),
-    canManageVips: isAdmin && (hasPermission(permissions, "vipcore.manage") || hasPermission(permissions, "vipcore.adduser"))
+    canManageVips: isAdmin && (hasPermission(permissions, "vipcore.manage") || hasPermission(permissions, "vipcore.adduser")),
+    canViewEconomy: isAdmin && ["tapped.tokens.admin", "tapped.inventory.admin", "tapped.inventory.grant", "tapped.inventory.manage-loadout"].some((permission) => hasPermission(permissions, permission)),
+    canAdjustEconomyTokens: isAdmin && (hasPermission(permissions, "tapped.tokens.admin") || hasPermission(permissions, "tapped.inventory.admin")),
+    canGrantEconomyItems: isAdmin && (hasPermission(permissions, "tapped.inventory.grant") || hasPermission(permissions, "tapped.inventory.admin")),
+    canManageEconomy: isAdmin && hasPermission(permissions, "tapped.inventory.admin"),
+    canManageEconomyLoadouts: isAdmin && (hasPermission(permissions, "tapped.inventory.admin") || hasPermission(permissions, "tapped.inventory.manage-loadout"))
   };
 }
 

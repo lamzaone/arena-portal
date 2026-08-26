@@ -112,36 +112,64 @@ function previewUrl(request: MarketPreviewRequest) {
   return `/api/loadout/preview?${params.toString()}`;
 }
 
+function previewImageUrlsFromResponse(body: unknown) {
+  if (typeof body !== "object" || body === null) return [];
+  const response = body as { imageUrl?: unknown; imageUrls?: unknown };
+  const values = [
+    ...(Array.isArray(response.imageUrls) ? response.imageUrls : []),
+    response.imageUrl,
+  ];
+  const seen = new Set<string>();
+  const imageUrls: string[] = [];
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    try {
+      const url = new URL(value);
+      if (url.protocol !== "https:" || seen.has(url.toString())) continue;
+      seen.add(url.toString());
+      imageUrls.push(url.toString());
+    } catch {
+      // Ignore malformed preview URLs instead of handing them to an image tag.
+    }
+  }
+  return imageUrls;
+}
+
 function MarketPreview({ request, category, alt }: { request: MarketPreviewRequest | null; category: EditorCategory; alt: string }) {
   const requestKey = request ? previewUrl(request) : "";
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [failedImageUrls, setFailedImageUrls] = useState<string[]>([]);
   const [state, setState] = useState<"idle" | "loading" | "ready" | "unavailable">("idle");
   const Icon = fallbackIcon(category);
+  const imageUrl = imageUrls.find((url) => !failedImageUrls.includes(url)) ?? null;
 
   useEffect(() => {
     let active = true;
+    setImageUrls([]);
+    setFailedImageUrls([]);
     if (!requestKey) {
-      setImageUrl(null);
       setState("idle");
       return () => { active = false; };
     }
 
-    setImageUrl(null);
     setState("loading");
     const delay = window.setTimeout(() => {
       void fetch(requestKey)
         .then(async (response) => {
-          const body = await response.json() as { imageUrl?: unknown };
-          if (!response.ok || typeof body.imageUrl !== "string") throw new Error("Preview unavailable");
-          return body.imageUrl;
+          const body: unknown = await response.json();
+          if (!response.ok) throw new Error("Preview unavailable");
+          const imageUrls = previewImageUrlsFromResponse(body);
+          if (!imageUrls.length) throw new Error("Preview unavailable");
+          return imageUrls;
         })
-        .then((nextImageUrl) => {
+        .then((nextImageUrls) => {
           if (!active) return;
-          setImageUrl(nextImageUrl);
+          setImageUrls(nextImageUrls);
           setState("ready");
         })
         .catch(() => {
           if (!active) return;
+          setImageUrls([]);
           setState("unavailable");
         });
     }, 250);
@@ -150,9 +178,13 @@ function MarketPreview({ request, category, alt }: { request: MarketPreviewReque
   }, [requestKey]);
 
   return <div className="loadout-market-preview" aria-busy={state === "loading"}>
-    {imageUrl ? <img src={imageUrl} alt={alt} referrerPolicy="no-referrer" onError={() => { setImageUrl(null); setState("unavailable"); }} /> : <div className="loadout-preview-fallback">
+    {imageUrl ? <img src={imageUrl} alt={alt} referrerPolicy="no-referrer" onError={() => {
+      const hasAnotherCandidate = imageUrls.some((candidate) => candidate !== imageUrl && !failedImageUrls.includes(candidate));
+      setFailedImageUrls((current) => current.includes(imageUrl) ? current : [...current, imageUrl]);
+      if (!hasAnotherCandidate) setState("unavailable");
+    }} /> : <div className="loadout-preview-fallback">
       {state === "loading" ? <LoaderCircle aria-hidden="true" className="loadout-preview-spinner" /> : state === "unavailable" && request ? <ImageOff aria-hidden="true" /> : <Icon aria-hidden="true" />}
-      <span>{state === "loading" ? "Loading official item art" : state === "unavailable" && request ? "Official preview unavailable" : "Select an item to preview"}</span>
+      <span>{state === "loading" ? "Loading item art" : state === "unavailable" && request ? "Item preview unavailable" : "Select an item to preview"}</span>
     </div>}
   </div>;
 }

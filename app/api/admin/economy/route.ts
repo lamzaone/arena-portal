@@ -1,0 +1,627 @@
+import { randomUUID } from "node:crypto";
+
+import { NextResponse } from "next/server";
+
+import { canActOnTarget, getAdminAccess } from "@/lib/admin/access";
+import { getSession, verifyAdminActionToken } from "@/lib/auth/session";
+import {
+  getEconomyCatalogueItem,
+  recordEconomyPrice,
+  staffAdjustTokens,
+  staffAttachStickerToEconomyItem,
+  staffClearEconomyLoadoutSlot,
+  staffDetachEconomySticker,
+  staffEquipEconomyItem,
+  staffGrantEconomyItem,
+  staffSetEconomyItemState,
+  staffTransferEconomyItem,
+  staffUpdateEconomyItem,
+  setEconomyCatalogueMarketHash,
+  type EconomyItemType,
+  type EconomyLoadoutSlotInput,
+  type StaffCustomEconomyItem,
+  type StaffEconomyItemCustomization,
+  type StaffStickerGrant,
+} from "@/lib/data/portal-repository";
+import { getSkinportHistoricalPrice } from "@/lib/economy/skinport-prices";
+
+const itemTypes: EconomyItemType[] = [
+  "skin",
+  "knife",
+  "glove",
+  "crate",
+  "capsule",
+  "nametag",
+  "sticker",
+  "agent",
+  "music_kit",
+  "keychain",
+  "patch",
+  "graffiti",
+];
+
+function redirect(
+  request: Request,
+  key: "notice" | "error",
+  value: string,
+  steamId?: string,
+) {
+  const url = new URL("/admin/items", request.url);
+  url.searchParams.set(key, value);
+  if (steamId && /^7656119\d{10}$/.test(steamId))
+    url.searchParams.set("steamId", steamId);
+  return NextResponse.redirect(url, 303);
+}
+
+function formText(formData: FormData, name: string, maximum = 256) {
+  const value = formData.get(name);
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed && trimmed.length <= maximum ? trimmed : null;
+}
+
+function optionalText(formData: FormData, name: string, maximum = 256) {
+  const value = formData.get(name);
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.length <= maximum ? trimmed : null;
+}
+
+function integer(
+  value: string | undefined | null,
+  minimum: number,
+  maximum = Number.MAX_SAFE_INTEGER,
+) {
+  if (!value) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum
+    ? parsed
+    : null;
+}
+
+function optionalInteger(
+  formData: FormData,
+  name: string,
+  minimum: number,
+  maximum = Number.MAX_SAFE_INTEGER,
+) {
+  const value = optionalText(formData, name, 32);
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  return integer(value, minimum, maximum);
+}
+
+function optionalFloat(formData: FormData, name: string) {
+  const value = optionalText(formData, name, 32);
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1
+    ? Number(parsed.toFixed(6))
+    : null;
+}
+
+function parseJsonRecord(value: string | undefined, maximum = 12_000) {
+  if (!value) return undefined;
+  if (value.length > maximum) return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function validSteamId(value: string | null) {
+  return value && /^7656119\d{10}$/.test(value) ? value : null;
+}
+
+function actionIdempotencyKey(formData: FormData, action: string) {
+  const supplied = formText(formData, "idempotencyKey", 128);
+  return supplied && /^[A-Za-z0-9_-]{16,128}$/.test(supplied)
+    ? supplied
+    : `admin-${action}-${randomUUID().replaceAll("-", "")}`;
+}
+
+function parseSlot(formData: FormData): EconomyLoadoutSlotInput | null {
+  const slotType = formText(formData, "slotType", 32);
+  const team = formText(formData, "slotTeam", 4);
+  if (slotType === "music_kit") return { slotType };
+  if (
+    (slotType === "knife" || slotType === "glove" || slotType === "agent") &&
+    (team === "T" || team === "CT")
+  )
+    return { slotType, team };
+  if (slotType === "weapon" && (team === "T" || team === "CT")) {
+    const definitionIndex = integer(
+      formText(formData, "slotDefinitionIndex", 16),
+      1,
+      65_535,
+    );
+    return definitionIndex === null
+      ? null
+      : { slotType, team, definitionIndex };
+  }
+  return null;
+}
+
+function parseCustomization(
+  formData: FormData,
+): StaffEconomyItemCustomization | null {
+  const seed = optionalInteger(formData, "seed", 0, 1000);
+  const floatValue = optionalFloat(formData, "floatValue");
+  const stattrakCount = optionalInteger(formData, "stattrakCount", 0);
+  const stattrakValue = optionalText(formData, "stattrak", 5);
+  const nametag = optionalText(formData, "nametag", 128);
+  const attributesText = optionalText(formData, "attributes", 12_000);
+  const attributes =
+    attributesText === undefined
+      ? undefined
+      : attributesText === null
+        ? null
+        : parseJsonRecord(attributesText);
+  if (
+    seed === null ||
+    floatValue === null ||
+    stattrakCount === null ||
+    nametag === null ||
+    attributes === null ||
+    stattrakValue === null ||
+    (stattrakValue !== undefined &&
+      stattrakValue !== "true" &&
+      stattrakValue !== "false")
+  )
+    return null;
+
+  const customization: StaffEconomyItemCustomization = {};
+  if (seed !== undefined) customization.seed = seed;
+  if (floatValue !== undefined) customization.floatValue = floatValue;
+  if (stattrakCount !== undefined) customization.stattrakCount = stattrakCount;
+  if (stattrakValue !== undefined)
+    customization.stattrak = stattrakValue === "true";
+  if (nametag !== undefined) customization.nametag = nametag;
+  if (formData.get("clearNametag") === "true") customization.nametag = null;
+  if (attributes !== undefined) customization.attributes = attributes;
+  return customization;
+}
+
+function parseCustomItem(
+  formData: FormData,
+  prefix = "",
+): StaffCustomEconomyItem | null {
+  const itemTypeValue = formText(formData, `${prefix}itemType`, 32);
+  const itemType = itemTypes.includes(itemTypeValue as EconomyItemType)
+    ? (itemTypeValue as EconomyItemType)
+    : null;
+  const displayName = formText(formData, `${prefix}displayName`, 180);
+  const definitionIndex = optionalInteger(
+    formData,
+    `${prefix}definitionIndex`,
+    0,
+    65_535,
+  );
+  const paintkit = optionalInteger(formData, `${prefix}paintkit`, 0, 2_000_000);
+  const rarityRank = optionalInteger(formData, `${prefix}rarityRank`, 0, 255);
+  const metadataText = optionalText(formData, `${prefix}metadata`, 12_000);
+  const metadata =
+    metadataText === undefined
+      ? undefined
+      : metadataText === null
+        ? null
+        : parseJsonRecord(metadataText);
+  if (
+    !itemType ||
+    !displayName ||
+    definitionIndex === null ||
+    paintkit === null ||
+    rarityRank === null ||
+    metadata === null
+  )
+    return null;
+  return {
+    itemType,
+    displayName,
+    definitionIndex:
+      definitionIndex === undefined ? undefined : definitionIndex,
+    paintkit: paintkit === undefined ? undefined : paintkit,
+    rarityRank: rarityRank === undefined ? undefined : rarityRank,
+    metadata: metadata === undefined ? undefined : metadata,
+  };
+}
+
+function parseInitialStickers(formData: FormData): StaffStickerGrant[] | null {
+  const raw = optionalText(formData, "initialStickers", 12_000);
+  if (raw === undefined) return [];
+  if (raw === null) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length > 6) return null;
+    const grants: StaffStickerGrant[] = [];
+    for (const entry of parsed) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry))
+        return null;
+      const record = entry as Record<string, unknown>;
+      const slot =
+        typeof record.slot === "number" &&
+        Number.isSafeInteger(record.slot) &&
+        record.slot >= 0 &&
+        record.slot <= 5
+          ? record.slot
+          : null;
+      const catalogueId =
+        typeof record.catalogueId === "number" &&
+        Number.isSafeInteger(record.catalogueId) &&
+        record.catalogueId > 0
+          ? record.catalogueId
+          : undefined;
+      const custom = record.customItem;
+      const customItem =
+        custom && typeof custom === "object" && !Array.isArray(custom)
+          ? (custom as StaffCustomEconomyItem)
+          : undefined;
+      const customization =
+        record.customization &&
+        typeof record.customization === "object" &&
+        !Array.isArray(record.customization)
+          ? (record.customization as StaffEconomyItemCustomization)
+          : undefined;
+      if (
+        slot === null ||
+        (catalogueId === undefined) === (customItem === undefined)
+      )
+        return null;
+      if (
+        customItem &&
+        (!itemTypes.includes(customItem.itemType) ||
+          customItem.itemType !== "sticker" ||
+          !customItem.displayName?.trim())
+      )
+        return null;
+      grants.push({ slot, catalogueId, customItem, customization });
+    }
+    return grants;
+  } catch {
+    return null;
+  }
+}
+
+function catalogueMarketVersion(metadata: Record<string, unknown>) {
+  for (const key of ["marketVersion", "skinportVersion", "priceVersion"]) {
+    const value = metadata[key];
+    if (typeof value === "string" && value.trim() && value.trim().length <= 120)
+      return value.trim();
+  }
+  return null;
+}
+
+async function ensureActorCanTarget(
+  actorSteamId: string,
+  targetSteamId: string,
+) {
+  const [actor, target] = await Promise.all([
+    getAdminAccess(actorSteamId),
+    getAdminAccess(targetSteamId),
+  ]);
+  return actor.isAdmin && (!target.isAdmin || canActOnTarget(actor, target));
+}
+
+export async function POST(request: Request) {
+  const session = await getSession();
+  if (!session)
+    return NextResponse.redirect(new URL("/api/auth/steam", request.url), 303);
+
+  const formData = await request.formData();
+  if (!verifyAdminActionToken(session, String(formData.get("csrf") ?? "")))
+    return redirect(request, "error", "verification");
+
+  const actor = await getAdminAccess(session.steamId);
+  if (!actor.isAdmin || !actor.canViewEconomy)
+    return redirect(request, "error", "permission");
+
+  const action = formText(formData, "action", 48);
+  const targetSteamId = validSteamId(formText(formData, "steamId", 17));
+  const idempotencyKey = actionIdempotencyKey(formData, action ?? "unknown");
+  const reason = formText(formData, "reason", 180);
+
+  try {
+    if (action === "market-name-set") {
+      if (!actor.canManageEconomy)
+        return redirect(request, "error", "manage-permission");
+      const catalogueId = integer(formText(formData, "catalogueId", 20), 1);
+      const marketHashName = formText(formData, "marketHashName", 255);
+      if (catalogueId === null || !marketHashName)
+        return redirect(request, "error", "market-name");
+      await setEconomyCatalogueMarketHash({
+        actorSteamId: actor.steamId,
+        catalogueId,
+        marketHashName,
+        idempotencyKey,
+      });
+      return redirect(
+        request,
+        "notice",
+        "market-name-saved",
+        targetSteamId ?? undefined,
+      );
+    }
+
+    if (action === "price-refresh") {
+      if (!actor.canManageEconomy)
+        return redirect(request, "error", "manage-permission");
+      const catalogueId = integer(formText(formData, "catalogueId", 20), 1);
+      if (catalogueId === null) return redirect(request, "error", "catalogue");
+      const catalogue = await getEconomyCatalogueItem(catalogueId, true);
+      if (!catalogue?.marketHashName)
+        return redirect(request, "error", "market-name");
+      const price = await getSkinportHistoricalPrice({
+        marketHashName: catalogue.marketHashName,
+        marketVersion: catalogueMarketVersion(catalogue.metadata),
+      });
+      if (!price) return redirect(request, "error", "price-unavailable");
+      await recordEconomyPrice({
+        actorSteamId: actor.steamId,
+        catalogueId,
+        eurCents: price.eurCents,
+        source: price.source,
+        sourceReference: price.sourceReference,
+        idempotencyKey,
+      });
+      return redirect(
+        request,
+        "notice",
+        "price-refreshed",
+        targetSteamId ?? undefined,
+      );
+    }
+
+    if (action === "price-set") {
+      if (!actor.canManageEconomy)
+        return redirect(request, "error", "manage-permission");
+      const catalogueId = integer(formText(formData, "catalogueId", 20), 1);
+      const eurCents = integer(
+        formText(formData, "eurCents", 20),
+        0,
+        10_000_000,
+      );
+      if (catalogueId === null || eurCents === null)
+        return redirect(request, "error", "price");
+      await recordEconomyPrice({
+        actorSteamId: actor.steamId,
+        catalogueId,
+        eurCents,
+        source: "staff-last-known",
+        sourceReference: "staff-panel",
+        idempotencyKey,
+      });
+      return redirect(
+        request,
+        "notice",
+        "price-saved",
+        targetSteamId ?? undefined,
+      );
+    }
+
+    if (
+      !targetSteamId ||
+      !(await ensureActorCanTarget(actor.steamId, targetSteamId))
+    )
+      return redirect(request, "error", "target", targetSteamId ?? undefined);
+
+    if (action === "tokens") {
+      if (!actor.canAdjustEconomyTokens)
+        return redirect(request, "error", "token-permission", targetSteamId);
+      const tokenAction = formText(formData, "tokenAction", 12);
+      const amount = integer(
+        formText(formData, "amount", 20),
+        0,
+        10_000_000_000,
+      );
+      if (
+        (tokenAction !== "award" &&
+          tokenAction !== "take" &&
+          tokenAction !== "set") ||
+        amount === null ||
+        !reason
+      )
+        return redirect(request, "error", "token-details", targetSteamId);
+      await staffAdjustTokens({
+        actorSteamId: actor.steamId,
+        targetSteamId,
+        action: tokenAction,
+        amount,
+        reason,
+        idempotencyKey,
+      });
+      return redirect(request, "notice", "tokens-updated", targetSteamId);
+    }
+
+    if (action === "grant") {
+      if (!actor.canGrantEconomyItems)
+        return redirect(request, "error", "grant-permission", targetSteamId);
+      const catalogueId = optionalInteger(formData, "catalogueId", 1);
+      const customization = parseCustomization(formData);
+      const stickers = parseInitialStickers(formData);
+      const parsedCustomItem =
+        catalogueId === undefined ? parseCustomItem(formData) : undefined;
+      if (
+        parsedCustomItem &&
+        (parsedCustomItem.itemType === "crate" ||
+          parsedCustomItem.itemType === "capsule")
+      ) {
+        return redirect(request, "error", "container-catalogue", targetSteamId);
+      }
+      if (
+        catalogueId === null ||
+        !customization ||
+        stickers === null ||
+        (catalogueId === undefined && !parsedCustomItem) ||
+        !reason
+      )
+        return redirect(request, "error", "item-details", targetSteamId);
+      const customItem = parsedCustomItem ?? undefined;
+      await staffGrantEconomyItem({
+        actorSteamId: actor.steamId,
+        targetSteamId,
+        catalogueId,
+        customItem,
+        customization,
+        stickers: stickers.length ? stickers : undefined,
+        reason,
+        idempotencyKey,
+      });
+      return redirect(request, "notice", "item-granted", targetSteamId);
+    }
+
+    if (action === "update") {
+      if (!actor.canManageEconomy)
+        return redirect(request, "error", "manage-permission", targetSteamId);
+      const itemId = formText(formData, "itemId", 64);
+      const customization = parseCustomization(formData);
+      if (
+        !itemId ||
+        !customization ||
+        !Object.keys(customization).length ||
+        !reason
+      )
+        return redirect(request, "error", "item-details", targetSteamId);
+      await staffUpdateEconomyItem({
+        actorSteamId: actor.steamId,
+        targetSteamId,
+        itemId,
+        customization,
+        reason,
+        idempotencyKey,
+      });
+      return redirect(request, "notice", "item-updated", targetSteamId);
+    }
+
+    if (action === "state") {
+      if (!actor.canManageEconomy)
+        return redirect(request, "error", "manage-permission", targetSteamId);
+      const itemId = formText(formData, "itemId", 64);
+      const state = formText(formData, "state", 16);
+      if (!itemId || (state !== "available" && state !== "revoked") || !reason)
+        return redirect(request, "error", "item-details", targetSteamId);
+      await staffSetEconomyItemState({
+        actorSteamId: actor.steamId,
+        targetSteamId,
+        itemId,
+        state,
+        reason,
+        idempotencyKey,
+      });
+      return redirect(request, "notice", "item-state-updated", targetSteamId);
+    }
+
+    if (action === "transfer") {
+      if (!actor.canManageEconomy)
+        return redirect(request, "error", "manage-permission", targetSteamId);
+      const itemId = formText(formData, "itemId", 64);
+      const toSteamId = validSteamId(formText(formData, "toSteamId", 17));
+      if (
+        !itemId ||
+        !toSteamId ||
+        !reason ||
+        !(await ensureActorCanTarget(actor.steamId, toSteamId))
+      )
+        return redirect(request, "error", "transfer-details", targetSteamId);
+      await staffTransferEconomyItem({
+        actorSteamId: actor.steamId,
+        fromSteamId: targetSteamId,
+        toSteamId,
+        itemId,
+        reason,
+        idempotencyKey,
+      });
+      return redirect(request, "notice", "item-transferred", targetSteamId);
+    }
+
+    if (action === "attach-sticker") {
+      if (!actor.canManageEconomy)
+        return redirect(request, "error", "manage-permission", targetSteamId);
+      const weaponItemId = formText(formData, "weaponItemId", 64);
+      const stickerItemId = optionalText(formData, "stickerItemId", 64);
+      const stickerCatalogueId = optionalInteger(
+        formData,
+        "stickerCatalogueId",
+        1,
+      );
+      const slot = integer(formText(formData, "stickerSlot", 8), 0, 5);
+      if (
+        !weaponItemId ||
+        stickerItemId === null ||
+        stickerCatalogueId === null ||
+        slot === null ||
+        !reason ||
+        (stickerItemId === undefined) === (stickerCatalogueId === undefined)
+      )
+        return redirect(request, "error", "sticker-details", targetSteamId);
+      await staffAttachStickerToEconomyItem({
+        actorSteamId: actor.steamId,
+        targetSteamId,
+        weaponItemId,
+        stickerItemId,
+        stickerCatalogueId,
+        slot,
+        reason,
+        idempotencyKey,
+      });
+      return redirect(request, "notice", "sticker-attached", targetSteamId);
+    }
+
+    if (action === "detach-sticker") {
+      if (!actor.canManageEconomy)
+        return redirect(request, "error", "manage-permission", targetSteamId);
+      const weaponItemId = formText(formData, "weaponItemId", 64);
+      const slot = integer(formText(formData, "stickerSlot", 8), 0, 5);
+      if (!weaponItemId || slot === null || !reason)
+        return redirect(request, "error", "sticker-details", targetSteamId);
+      await staffDetachEconomySticker({
+        actorSteamId: actor.steamId,
+        targetSteamId,
+        weaponItemId,
+        slot,
+        reason,
+        idempotencyKey,
+      });
+      return redirect(request, "notice", "sticker-detached", targetSteamId);
+    }
+
+    if (action === "equip" || action === "clear-slot") {
+      if (!actor.canManageEconomyLoadouts)
+        return redirect(request, "error", "loadout-permission", targetSteamId);
+      const slot = parseSlot(formData);
+      if (!slot || !reason)
+        return redirect(request, "error", "loadout-details", targetSteamId);
+      if (action === "equip") {
+        const itemId = formText(formData, "itemId", 64);
+        if (!itemId)
+          return redirect(request, "error", "loadout-details", targetSteamId);
+        await staffEquipEconomyItem({
+          actorSteamId: actor.steamId,
+          targetSteamId,
+          itemId,
+          slot,
+          reason,
+          idempotencyKey,
+        });
+        return redirect(request, "notice", "loadout-updated", targetSteamId);
+      }
+      await staffClearEconomyLoadoutSlot({
+        actorSteamId: actor.steamId,
+        targetSteamId,
+        slot,
+        reason,
+        idempotencyKey,
+      });
+      return redirect(request, "notice", "loadout-cleared", targetSteamId);
+    }
+
+    return redirect(request, "error", "action", targetSteamId);
+  } catch {
+    return redirect(request, "error", "database", targetSteamId ?? undefined);
+  }
+}
