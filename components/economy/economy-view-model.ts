@@ -122,6 +122,30 @@ function bool(value: unknown) {
   return value === true || value === 1 || value === "1" || value === "true";
 }
 
+function authoritativeCrateRarity(
+  attributes: UnknownRecord,
+  fallback: number,
+) {
+  // A container entry stores the actual tier it rolled at. This is more
+  // reliable than legacy catalogue ranks for knives, gloves, and cache-era
+  // finishes, and keeps inventory and trade cards aligned with crate odds.
+  if (bool(attributes.rareSpecial)) return 7;
+  switch (integer(attributes.rarityChanceBps)) {
+    case 7_992:
+      return 3;
+    case 1_598:
+      return 4;
+    case 320:
+      return 5;
+    case 64:
+      return 6;
+    case 26:
+      return 7;
+    default:
+      return fallback;
+  }
+}
+
 function stringArray(value: unknown) {
   return asArray(value)
     .map((entry) => text(entry))
@@ -243,11 +267,12 @@ export function toEconomyItem(value: unknown): EconomyItemView {
     ),
   );
   const stickersValue = firstDefined(record, ["stickers", "attachedStickers"]);
-  const rarityRank =
+  const storedRarityRank =
     integer(
       firstDefined(record, ["rarityRank", "rarityLevel"]),
       integer(firstDefined(catalogue, ["rarityRank", "rarityLevel"]), 0),
     ) ?? 0;
+  const rarityRank = authoritativeCrateRarity(attributes, storedRarityRank);
   const nestedPrice = isRecord(record.price)
     ? record.price
     : isRecord(catalogue.price)
@@ -342,7 +367,10 @@ export function toEconomyItem(value: unknown): EconomyItemView {
           "previewUrl",
         ]),
         text(
-          firstDefined(catalogue, [
+          // A historical unbox retains the exact official entry art in its
+          // attributes. Prefer it to an older cache thumbnail on catalogue
+          // rows so inventory and trade cards render the same item as crates.
+          firstDefined(attributes, [
             "imageUrl",
             "image_url",
             "image",
@@ -362,7 +390,19 @@ export function toEconomyItem(value: unknown): EconomyItemView {
               "steam_image_url",
               "previewUrl",
             ]),
-            "",
+            text(
+              firstDefined(catalogue, [
+                "imageUrl",
+                "image_url",
+                "image",
+                "iconUrl",
+                "icon_url",
+                "steamImageUrl",
+                "steam_image_url",
+                "previewUrl",
+              ]),
+              "",
+            ),
           ),
         ),
       ) || null,

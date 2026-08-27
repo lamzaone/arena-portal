@@ -47,9 +47,15 @@ export async function POST(request: Request) {
   const context = await readEconomyMutation(request);
   if (isEconomyError(context)) return context;
   const catalogueId = integerField(context.body.catalogueId, 1);
+  const quantity =
+    context.body.quantity === undefined
+      ? 1
+      : integerField(context.body.quantity, 1, 50);
   const floatValue = optionalFloat(context.body.floatValue);
   if (catalogueId === null)
     return economyJsonError("Choose a valid marketplace item.", 400);
+  if (quantity === null)
+    return economyJsonError("Choose an amount between 1 and 50.", 400);
   if (floatValue === null)
     return economyJsonError("Choose a float between 0 and 1.", 400);
 
@@ -157,6 +163,7 @@ export async function POST(request: Request) {
     const result = await purchaseEconomyItem({
       steamId: context.session.steamId,
       catalogueId,
+      quantity,
       ...(floatValue === undefined ? {} : { floatValue }),
       ...(resolvedMarketQuote === undefined ? {} : { resolvedMarketQuote }),
       idempotencyKey: context.body.idempotencyKey,
@@ -164,7 +171,10 @@ export async function POST(request: Request) {
     return economyJsonSuccess({
       ...result,
       balance: result.wallet.balance,
-      message: "Item purchased and added to your inventory.",
+      message:
+        quantity === 1
+          ? "Item purchased and added to your inventory."
+          : `${quantity} items purchased and added to your inventory.`,
     });
   } catch (error) {
     return economyMutationFailure(error);

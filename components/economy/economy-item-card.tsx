@@ -17,6 +17,7 @@ type EconomyItemCardProps = {
   selected?: boolean;
   onSelect?: () => void;
   selectionLabel?: string;
+  selectionControls?: string;
   enableMarketPreview?: boolean;
   previewFloat?: number | null;
 };
@@ -27,6 +28,7 @@ export function EconomyItemCard({
   selected = false,
   onSelect,
   selectionLabel,
+  selectionControls,
   enableMarketPreview = true,
   previewFloat = null,
 }: EconomyItemCardProps) {
@@ -58,7 +60,7 @@ export function EconomyItemCard({
 
   if (onSelect) {
     return (
-      <button type="button" className={`panel economy-item-card ${selected ? "is-selected" : ""}`} aria-pressed={selected} onClick={onSelect} aria-label={selectionLabel ?? `Select ${item.displayName}`}>
+      <button type="button" className={`panel economy-item-card ${selected ? "is-selected" : ""}`} aria-pressed={selected} aria-expanded={selectionControls ? selected : undefined} aria-controls={selected ? selectionControls : undefined} onClick={onSelect} aria-label={selectionLabel ?? `Select ${item.displayName}`}>
         {content}
       </button>
     );

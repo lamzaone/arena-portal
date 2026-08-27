@@ -5,8 +5,13 @@ export type EconomyActionResult = {
   message?: string;
   balance?: number;
   priceTokens?: number;
+  totalPriceTokens?: number;
+  quantity?: number;
+  itemIds?: string[];
+  globalAnnouncementQueued?: boolean;
   itemId?: string;
   catalogueId?: number;
+  rewardLootEntryId?: number;
   item?: unknown;
   trade?: unknown;
 };

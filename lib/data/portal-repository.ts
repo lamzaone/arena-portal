@@ -2579,6 +2579,21 @@ export type EconomyCratePage = {
   pageSize: number;
 };
 
+export type EconomyCrateDropPreview = {
+  lootEntryId: number;
+  catalogue: EconomyCatalogueItem;
+  weight: number;
+  minFloat: number | null;
+  maxFloat: number | null;
+  stattrakChanceBps: number;
+};
+
+export type EconomyCrateDropPreviewResult = {
+  containerCatalogueId: number;
+  totalWeight: number;
+  drops: EconomyCrateDropPreview[];
+};
+
 export type EconomyInventorySticker = {
   slot: number;
   stickerItemId: string;
@@ -2748,6 +2763,9 @@ export type EconomyTradePage = {
 export type PurchaseEconomyItemInput = {
   steamId: string;
   catalogueId: number;
+  // Direct container purchases may create a small batch in one atomic
+  // operation. Other marketplace items always remain a single purchase.
+  quantity?: number;
   floatValue?: number;
   // This is created by a server route after resolving the selected exterior
   // against the public price feed. The browser never submits it.
@@ -2770,8 +2788,12 @@ export type ResolvedMarketplacePurchaseQuote = {
 
 export type PurchaseEconomyItemResult = {
   itemId: string;
+  itemIds: string[];
   catalogueId: number;
+  quantity: number;
+  // Unit price is retained for existing marketplace callers.
   priceTokens: number;
+  totalPriceTokens: number;
   floatValue: number | null;
   wallet: TokenWallet;
 };
@@ -2787,6 +2809,10 @@ export type OpenEconomyCrateResult = {
   crateItemId: string;
   rewardItemId: string;
   rewardCatalogueId: number;
+  // The exact entry is returned with the reward. Catalogue IDs are not unique
+  // inside a staff-managed table, so the client must not guess the winning row
+  // from the catalogue item alone when rendering the opening reel.
+  rewardLootEntryId: number;
   rewardRarityRank: number;
   reward: {
     id: string;
@@ -3203,6 +3229,7 @@ type EconomyInventoryRow = RowDataPacket & {
   display_name: string | null;
   catalogue_metadata: unknown;
   catalogue_enabled: number | boolean | null;
+  catalogue_rarity_rank: number | string | null;
   price_id: number | string | null;
   market_price_eur_cents: number | string | null;
   token_price: number | string | null;
@@ -3241,6 +3268,7 @@ type EconomyLoadoutSlotRow = RowDataPacket & {
   nametag: string | null;
   stattrak: number | boolean | null;
   rarity_rank: number | string | null;
+  catalogue_rarity_rank: number | string | null;
   attributes: unknown;
 };
 
@@ -3276,6 +3304,15 @@ type EconomyLootEntryRow = RowDataPacket & {
   stattrak_chance_bps: number | string;
   attributes: unknown;
   enabled: number | boolean;
+};
+
+type EconomyCrateLootPreviewRow = EconomyCatalogueRow & {
+  loot_entry_id: number | string;
+  weight: number | string;
+  min_float: number | string | null;
+  max_float: number | string | null;
+  stattrak_chance_bps: number | string;
+  attributes: unknown;
 };
 
 type EconomyTradeRow = RowDataPacket & {
@@ -3714,6 +3751,31 @@ function economyRarityName(rarityRank: number) {
   return names[rarityRank] ?? `Rarity ${rarityRank}`;
 }
 
+function economyLootEntryRarityRank(
+  attributes: Record<string, unknown>,
+  fallback: number,
+) {
+  // Legacy catalogue imports sometimes assigned a knife/glove its finish
+  // rarity (or an old cache rank) rather than the case's Extraordinary tier.
+  // A loot entry is the authoritative source while showing or awarding a
+  // container result, so use its explicit odds tier when it has one.
+  if (economyMetadataBoolean(attributes, "rareSpecial")) return 7;
+  switch (economyMetadataInteger(attributes, "rarityChanceBps")) {
+    case 7_992:
+      return 3;
+    case 1_598:
+      return 4;
+    case 320:
+      return 5;
+    case 64:
+      return 6;
+    case 26:
+      return 7;
+    default:
+      return fallback;
+  }
+}
+
 function economyMetadataImageUrl(metadata: Record<string, unknown>) {
   for (const key of ["imageUrl", "image", "iconUrl", "steamImageUrl"]) {
     const value = economyMetadataString(metadata, key);
@@ -3836,6 +3898,15 @@ function toEconomyInventoryItem(
   const displayName = row.display_name
     ? String(row.display_name)
     : economyCustomDisplayName(attributes, itemType);
+  const storedRarityRank = economyNumber(row.rarity_rank, "inventory rarity");
+  const catalogueRarityRank =
+    row.catalogue_rarity_rank === null
+      ? storedRarityRank
+      : economyNumber(row.catalogue_rarity_rank, "catalogue rarity");
+  const rarityRank = economyLootEntryRarityRank(
+    attributes,
+    catalogueRarityRank,
+  );
   return {
     id: economyItemId(String(row.id)),
     ownerSteamId: String(row.owner_steam_id),
@@ -3855,7 +3926,7 @@ function toEconomyInventoryItem(
       "inventory StatTrak count",
     ),
     nametag: row.nametag ? String(row.nametag) : null,
-    rarityRank: economyNumber(row.rarity_rank, "inventory rarity"),
+    rarityRank,
     state: economyItemState(String(row.state)),
     attributes,
     source: economyRecord(row.source),
@@ -4317,7 +4388,7 @@ const economyCrateSelect =
 
 const economyInventorySelect =
   "SELECT i.id, i.owner_steam_id, i.catalogue_id, i.item_type, i.definition_index, i.paintkit, i.seed, i.float_value, i.stattrak, i.stattrak_count, i.nametag, i.rarity_rank, i.state, i.attributes, i.source, i.acquired_at, i.consumed_at, i.updated_at, " +
-  "c.catalogue_key, c.market_hash_name, c.display_name, c.metadata AS catalogue_metadata, c.enabled AS catalogue_enabled, " +
+  "c.catalogue_key, c.market_hash_name, c.display_name, c.rarity_rank AS catalogue_rarity_rank, c.metadata AS catalogue_metadata, c.enabled AS catalogue_enabled, " +
   "p.id AS price_id, p.market_price_eur_cents, p.token_price, p.price_source, p.source_reference, p.observed_at " +
   "FROM portal_inventory_items AS i " +
   "LEFT JOIN portal_economy_catalogue AS c ON c.id = i.catalogue_id " +
@@ -4901,6 +4972,83 @@ export async function getEconomyCrates(
   };
 }
 
+/**
+ * Returns the enabled possibilities for one container. We expose weights and
+ * their shared total, never the server's random roll, so the crate UI can
+ * present transparent odds without affecting the actual reward selection.
+ */
+export async function getEconomyCrateDropPreview(
+  containerCatalogueId: number,
+): Promise<EconomyCrateDropPreviewResult | null> {
+  const catalogueId = economyNumber(
+    containerCatalogueId,
+    "Container catalogue ID",
+    1,
+  );
+  const pool = getPortalPool();
+  if (!pool) return null;
+
+  const [rows] = await pool.query<EconomyCrateLootPreviewRow[]>(
+    "SELECT c.id, c.catalogue_key, c.market_hash_name, c.item_type, c.definition_index, c.paintkit, c.rarity_rank, c.display_name, c.metadata, c.enabled, c.created_at, c.updated_at, " +
+      "p.id AS price_id, p.market_price_eur_cents, p.token_price, p.price_source, p.source_reference, p.observed_at, " +
+      "e.id AS loot_entry_id, e.weight, e.min_float, e.max_float, e.stattrak_chance_bps, e.attributes " +
+      "FROM portal_loot_tables AS l " +
+      "INNER JOIN portal_loot_entries AS e ON e.loot_table_id = l.id AND e.enabled = TRUE " +
+      "INNER JOIN portal_economy_catalogue AS c ON c.id = e.catalogue_id " +
+      "LEFT JOIN portal_economy_catalogue_prices AS p ON p.catalogue_id = c.id AND p.is_current = TRUE " +
+      "WHERE l.container_catalogue_id = ? AND l.table_type = 'container' AND l.enabled = TRUE " +
+      "ORDER BY c.rarity_rank DESC, c.display_name ASC, e.id ASC",
+    [catalogueId],
+  );
+  if (!rows.length) return null;
+
+  const weights = rows.map((row) => economyNumber(row.weight, "loot weight", 1));
+  const totalWeight = weights.reduce((total, weight) => {
+    const next = total + weight;
+    if (!Number.isSafeInteger(next))
+      economyError("loot_table_invalid", "The loot table weight is too large.");
+    return next;
+  }, 0);
+  if (totalWeight < 1) return null;
+
+  return {
+    containerCatalogueId: catalogueId,
+    totalWeight,
+    drops: rows.map((row, index) => {
+      const catalogue = toEconomyCatalogueItem(row);
+      const attributes = economyRecord(row.attributes);
+      const minFloat = economyDecimal(row.min_float, "loot minimum float");
+      const maxFloat = economyDecimal(row.max_float, "loot maximum float");
+      const rarityRank = economyLootEntryRarityRank(
+        attributes,
+        catalogue.rarityRank,
+      );
+      // Exact container-entry metadata wins over cache-era catalogue metadata.
+      // It includes official art and float limits for real case outcomes, and
+      // lets two staff entries for the same catalogue item render separately.
+      return {
+        lootEntryId: economyNumber(row.loot_entry_id, "loot entry ID", 1),
+        catalogue: {
+          ...catalogue,
+          rarityRank,
+          rarityName: economyRarityName(rarityRank),
+          imageUrl: economyMetadataImageUrl(attributes) ?? catalogue.imageUrl,
+          minFloat: minFloat ?? catalogue.minFloat,
+          maxFloat: maxFloat ?? catalogue.maxFloat,
+          metadata: { ...catalogue.metadata, ...attributes },
+        },
+        weight: weights[index],
+        minFloat,
+        maxFloat,
+        stattrakChanceBps: economyNumber(
+          row.stattrak_chance_bps,
+          "loot StatTrak chance",
+        ),
+      };
+    }),
+  };
+}
+
 export async function getPlayerEconomyInventory(
   steamId: string,
   filter: EconomyInventoryFilter = {},
@@ -4934,7 +5082,7 @@ export async function getPlayerEconomyInventory(
   }
   if (rarityRanks.length) {
     where.push(
-      "i.rarity_rank IN (" + rarityRanks.map(() => "?").join(", ") + ")",
+      "COALESCE(c.rarity_rank, i.rarity_rank) IN (" + rarityRanks.map(() => "?").join(", ") + ")",
     );
     values.push(...rarityRanks);
   }
@@ -4976,7 +5124,7 @@ export async function getPlayerEconomyLoadout(
   if (!pool) return [];
   const [rows] = await pool.query<EconomyLoadoutSlotRow[]>(
     "SELECT l.owner_steam_id, l.slot_key, l.slot_type, l.team, l.definition_index, l.item_id, l.updated_at, " +
-      "i.item_type, c.display_name, i.definition_index AS item_definition_index, i.paintkit AS item_paintkit, i.float_value, i.nametag, i.stattrak, i.rarity_rank, i.attributes " +
+      "i.item_type, c.display_name, i.definition_index AS item_definition_index, i.paintkit AS item_paintkit, i.float_value, i.nametag, i.stattrak, i.rarity_rank, c.rarity_rank AS catalogue_rarity_rank, i.attributes " +
       "FROM portal_loadout_slots AS l " +
       "LEFT JOIN portal_inventory_items AS i ON i.id = l.item_id " +
       "LEFT JOIN portal_economy_catalogue AS c ON c.id = i.catalogue_id " +
@@ -5018,7 +5166,15 @@ export async function getPlayerEconomyLoadout(
             floatValue: economyDecimal(row.float_value, "loadout item float"),
             nametag: row.nametag ? String(row.nametag) : null,
             stattrak: economyBoolean(row.stattrak),
-            rarityRank: economyNumber(row.rarity_rank, "loadout item rarity"),
+            rarityRank: economyLootEntryRarityRank(
+              itemAttributes ?? {},
+              row.catalogue_rarity_rank === null
+                ? economyNumber(row.rarity_rank, "loadout item rarity")
+                : economyNumber(
+                    row.catalogue_rarity_rank,
+                    "loadout catalogue rarity",
+                  ),
+            ),
             attributes: itemAttributes ?? {},
           } satisfies EconomyLoadoutItem)
         : null;
@@ -5282,6 +5438,10 @@ function rollEconomyFloat(minimum: number | null, maximum: number | null) {
 type EconomyItemCreation = {
   ownerSteamId: string;
   catalogue: EconomyCatalogueItem | null;
+  // Container-entry rarity is intentionally separate from a reused catalogue
+  // row: knives and gloves are Extraordinary within a case regardless of any
+  // older finish-level rarity stored on that catalogue item.
+  rarityRank?: number;
   customItem?: StaffCustomEconomyItem;
   customization?: StaffEconomyItemCustomization;
   source: Record<string, unknown>;
@@ -5358,7 +5518,10 @@ async function createEconomyInventoryItem(
   const definitionIndex =
     catalogue?.definitionIndex ?? custom?.definitionIndex ?? null;
   const paintkit = catalogue?.paintkit ?? custom?.paintkit ?? null;
-  const rarityRank = catalogue?.rarityRank ?? custom?.rarityRank ?? 0;
+  const rarityRank =
+    input.rarityRank === undefined
+      ? catalogue?.rarityRank ?? custom?.rarityRank ?? 0
+      : economyNumber(input.rarityRank, "Item rarity rank");
   const displayName = catalogue?.displayName ?? custom?.displayName ?? itemType;
   const baseMetadata = catalogue?.metadata ?? custom?.metadata ?? {};
   const requested = input.customization ?? {};
@@ -5767,6 +5930,9 @@ export async function purchaseEconomyItem(
 ): Promise<PurchaseEconomyItemResult> {
   const steamId = economySteamId(input.steamId);
   const catalogueId = economyNumber(input.catalogueId, "Catalogue item ID", 1);
+  const quantity = input.quantity ?? 1;
+  if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 50)
+    economyError("invalid_input", "Choose a quantity between 1 and 50.");
   const requestedFloat =
     input.floatValue === undefined
       ? undefined
@@ -5781,13 +5947,23 @@ export async function purchaseEconomyItem(
     operationName: "marketplace.purchase",
     actorSteamId: steamId,
     idempotencyKey: input.idempotencyKey,
-    request: { catalogueId, floatValue: requestedFloat },
+    request: { catalogueId, quantity, floatValue: requestedFloat },
     work: async (context) => {
       const catalogue = await lockEconomyCatalogue(
         context.connection,
         catalogueId,
       );
       const skinLike = economyIsSkinLike(catalogue.itemType);
+      if (
+        quantity > 1 &&
+        catalogue.itemType !== "crate" &&
+        catalogue.itemType !== "capsule"
+      ) {
+        economyError(
+          "incompatible_item",
+          "Only crates and capsules can be purchased in a batch.",
+        );
+      }
       if (requestedFloat !== undefined) {
         const floatRange = economyCatalogueFloatRange(
           catalogue.itemType,
@@ -5845,6 +6021,9 @@ export async function purchaseEconomyItem(
           "price_unavailable",
           "That item has no current market or last-known price.",
         );
+      const totalPriceTokens = priceTokens * quantity;
+      if (!Number.isSafeInteger(totalPriceTokens))
+        economyError("invalid_input", "The total purchase price is too large.");
       if (catalogue.itemType === "crate" || catalogue.itemType === "capsule") {
         const table = await lockEconomyLootTable(context.connection, {
           containerCatalogueId: catalogue.id,
@@ -5852,12 +6031,12 @@ export async function purchaseEconomyItem(
         await lockEconomyLootEntries(context.connection, table.id);
       }
       const wallets = await lockTokenAccounts(context.connection, [steamId]);
-      if (priceTokens > 0) {
+      if (totalPriceTokens > 0) {
         await applyTokenDelta({
           connection: context.connection,
           wallets,
           steamId,
-          delta: -priceTokens,
+          delta: -totalPriceTokens,
           reason: "marketplace.purchase",
           referenceType: "catalogue-item",
           referenceId: String(catalogue.id),
@@ -5880,41 +6059,51 @@ export async function purchaseEconomyItem(
             floatDiscountBps: resolvedMarketQuote?.floatDiscountBps ?? null,
             floatPricingRule: resolvedMarketQuote?.pricingRule ?? null,
             itemType: catalogue.itemType,
+            quantity,
+            unitPriceTokens: priceTokens,
+            totalPriceTokens,
           },
         });
       }
-      const item = await createEconomyInventoryItem(context.connection, {
-        ownerSteamId: steamId,
-        catalogue,
-        customization:
-          requestedFloat === undefined
-            ? undefined
-            : { floatValue: requestedFloat },
-        source: {
-          type: "marketplace_purchase",
-          catalogueId: catalogue.id,
-          priceTokens,
-          priceEurCents:
-            resolvedMarketQuote?.euroCents ?? catalogue.price?.euroCents ?? null,
-          basePriceEurCents: resolvedMarketQuote?.baseEuroCents ?? null,
-          priceSource:
-            resolvedMarketQuote?.source ?? catalogue.price?.source ?? null,
-          priceSourceReference:
-            resolvedMarketQuote?.sourceReference ??
-            catalogue.price?.sourceReference ??
-            null,
-          quoteMarketHashName: resolvedMarketQuote?.marketHashName ?? null,
-          quoteMarketVersion: resolvedMarketQuote?.marketVersion ?? null,
-          quoteWear: resolvedMarketQuote?.wear ?? null,
-          floatDiscountBps: resolvedMarketQuote?.floatDiscountBps ?? null,
-          floatPricingRule: resolvedMarketQuote?.pricingRule ?? null,
-          requestedFloat: requestedFloat ?? null,
-        },
-        actorSteamId: steamId,
-        idempotencyKey: context.idempotencyKey,
-        lineKey: "purchase:item",
-        eventType: "marketplace.purchased",
-      });
+      const items = [];
+      for (let index = 0; index < quantity; index += 1) {
+        const item = await createEconomyInventoryItem(context.connection, {
+          ownerSteamId: steamId,
+          catalogue,
+          customization:
+            requestedFloat === undefined
+              ? undefined
+              : { floatValue: requestedFloat },
+          source: {
+            type: "marketplace_purchase",
+            catalogueId: catalogue.id,
+            priceTokens,
+            totalPriceTokens,
+            quantity,
+            itemPosition: index + 1,
+            priceEurCents:
+              resolvedMarketQuote?.euroCents ?? catalogue.price?.euroCents ?? null,
+            basePriceEurCents: resolvedMarketQuote?.baseEuroCents ?? null,
+            priceSource:
+              resolvedMarketQuote?.source ?? catalogue.price?.source ?? null,
+            priceSourceReference:
+              resolvedMarketQuote?.sourceReference ??
+                catalogue.price?.sourceReference ??
+                null,
+            quoteMarketHashName: resolvedMarketQuote?.marketHashName ?? null,
+            quoteMarketVersion: resolvedMarketQuote?.marketVersion ?? null,
+            quoteWear: resolvedMarketQuote?.wear ?? null,
+            floatDiscountBps: resolvedMarketQuote?.floatDiscountBps ?? null,
+            floatPricingRule: resolvedMarketQuote?.pricingRule ?? null,
+            requestedFloat: requestedFloat ?? null,
+          },
+          actorSteamId: steamId,
+          idempotencyKey: context.idempotencyKey,
+          lineKey: `purchase:item:${index + 1}`,
+          eventType: "marketplace.purchased",
+        });
+        items.push(item);
+      }
       const wallet = wallets.get(steamId);
       if (!wallet)
         economyError(
@@ -5922,10 +6111,13 @@ export async function purchaseEconomyItem(
           "The purchase wallet was not locked.",
         );
       return {
-        itemId: item.id,
+        itemId: items[0].id,
+        itemIds: items.map((item) => item.id),
         catalogueId: catalogue.id,
+        quantity,
         priceTokens,
-        floatValue: item.floatValue,
+        totalPriceTokens,
+        floatValue: items[0].floatValue,
         wallet,
       };
     },
@@ -5978,6 +6170,10 @@ export async function openEconomyCrate(
       const reward = await createEconomyInventoryItem(context.connection, {
         ownerSteamId: steamId,
         catalogue: rewardCatalogue,
+        rarityRank: economyLootEntryRarityRank(
+          roll.entry.attributes,
+          rewardCatalogue.rarityRank,
+        ),
         customization: {
           seed: rollEconomyInteger(roll.entry.seedMin, roll.entry.seedMax),
           floatValue: rollEconomyFloat(
@@ -6074,6 +6270,7 @@ export async function openEconomyCrate(
         crateItemId,
         rewardItemId: reward.id,
         rewardCatalogueId: rewardCatalogue.id,
+        rewardLootEntryId: roll.entry.id,
         rewardRarityRank: reward.rarityRank,
         reward: {
           id: reward.id,
@@ -6653,7 +6850,6 @@ function toEconomyTradeItemPreview(
   item: EconomyInventoryItem | undefined,
 ): EconomyTradeItemPreview | null {
   if (!item) return null;
-  const metadata = item.catalogue?.metadata ?? item.attributes;
   return {
     catalogueId: item.catalogueId,
     itemType: item.itemType,
@@ -6663,7 +6859,11 @@ function toEconomyTradeItemPreview(
     stattrak: item.stattrak,
     stattrakCount: item.stattrakCount,
     nametag: item.nametag,
-    imageUrl: economyMetadataImageUrl(metadata),
+    // Instance attributes preserve the exact crate-entry artwork. Prefer that
+    // official image over any cache-era catalogue thumbnail in trades too.
+    imageUrl:
+      economyMetadataImageUrl(item.attributes) ??
+      economyMetadataImageUrl(item.catalogue?.metadata ?? {}),
   };
 }
 
