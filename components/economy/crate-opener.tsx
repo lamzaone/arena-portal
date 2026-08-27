@@ -73,9 +73,12 @@ type CrateDropState =
   | { status: "ready"; totalWeight: number; drops: CrateDrop[] }
   | { status: "unavailable"; message: string };
 type OpeningState =
-  | { phase: "requesting"; crate: EconomyItemView; run: number }
+  // The server is authoritative for the roll. Keep a weighted filler reel
+  // moving while its transaction is in flight; it intentionally has no
+  // winner, so the UI can never imply a client-selected reward.
+  | { phase: "verifying"; crate: EconomyItemView; run: number }
   | {
-      phase: "reeling";
+      phase: "revealing";
       crate: EconomyItemView;
       reward: EconomyItemView;
       rewardLootEntryId: number | null;
@@ -86,6 +89,8 @@ const CATALOGUE_PAGE_SIZE = 50;
 const DROP_PAGE_SIZE = 50;
 const CRATE_RARITY_RANKS = [0, 1, 2, 3, 4, 5, 6, 7] as const;
 const MAX_CRATE_PURCHASE_QUANTITY = 50;
+const FINAL_REEL_DURATION_MS = 4_800;
+const REDUCED_MOTION_FINAL_REEL_DURATION_MS = 1_500;
 
 function isCrate(item: EconomyItemView) {
   return ["crate", "case", "capsule"].includes(item.itemType);
@@ -448,26 +453,27 @@ function CrateOpeningAnimation({
   drops: CrateDrop[];
 }) {
   const reel = useMemo(() => {
-    if (opening.phase !== "reeling") return [];
-    const fallback = opening.reward;
+    const fallback = opening.phase === "revealing" ? opening.reward : opening.crate;
     const winnerIndex = 24;
-    return Array.from({ length: 30 }, (_, index) =>
-      index === winnerIndex
+    const reelLength = opening.phase === "revealing" ? 30 : 18;
+    return Array.from({ length: reelLength }, (_, index) =>
+      opening.phase === "revealing" && index === winnerIndex
         ? rewardWithDropArtwork(opening.reward, drops, opening.rewardLootEntryId)
         : reelDropForIndex(drops, index, opening.run)?.item ?? fallback,
     );
   }, [drops, opening]);
 
-  if (opening.phase === "requesting") {
-    return <section className="crate-opening-animation requesting" aria-live="polite"><LoaderCircle aria-hidden="true" className="crate-opening-spinner" /><div><strong>Opening {opening.crate.displayName}</strong><span>Rolling your server-verified reward…</span></div></section>;
-  }
+  const isVerifying = opening.phase === "verifying";
 
-  return <section className={`crate-opening-animation reeling ${rarityRankClass(opening.reward.rarityRank)}`} aria-live="polite">
+  return <section className={`crate-opening-animation reeling ${isVerifying ? "is-verifying" : rarityRankClass(opening.reward.rarityRank)}`} aria-live="polite">
     <div className="crate-opening-pointer" aria-hidden="true" />
-    <div className="crate-opening-reel-window"><div className="crate-opening-reel-track" style={{ "--reel-translate": `${-(24 * 142)}px` } as CSSProperties}>
-      {reel.map((item, index) => <article key={`${opening.run}-${index}`} className={`crate-opening-reel-item ${index === 24 ? "winner" : ""} ${rarityRankClass(item.rarityRank)}`}><MarketplaceItemPreview item={item} enableMarketPreview={false} /><span>{item.displayName}</span></article>)}
+    <div className="crate-opening-reel-window"><div key={`${opening.run}-${opening.phase}`} className={`crate-opening-reel-track ${isVerifying ? "is-verifying" : "is-revealing"}`} style={{ "--reel-translate": `${-(24 * 142)}px` } as CSSProperties}>
+      {reel.map((item, index) => <article key={`${opening.run}-${opening.phase}-${index}`} className={`crate-opening-reel-item ${!isVerifying && index === 24 ? "winner" : ""} ${rarityRankClass(item.rarityRank)}`}><MarketplaceItemPreview item={item} enableMarketPreview={false} /><span>{item.displayName}</span></article>)}
     </div></div>
-    <p><Sparkles aria-hidden="true" /> {dropHeadline(opening.reward.rarityRank)} incoming</p>
+    <p>
+      {isVerifying ? <LoaderCircle aria-hidden="true" className="crate-opening-spinner" /> : <Sparkles aria-hidden="true" />}
+      {isVerifying ? "Verifying your server-side roll" : `${dropHeadline(opening.reward.rarityRank)} incoming`}
+    </p>
   </section>;
 }
 
@@ -829,7 +835,7 @@ export function CrateOpener({
     const crate = selectedOwnedCrate;
     setNotice(null);
     setUnboxed(null);
-    setOpening({ phase: "requesting", crate, run: Date.now() });
+    setOpening({ phase: "verifying", crate, run: Date.now() });
     setActiveAction("open");
     startTransition(async () => {
       try {
@@ -849,7 +855,7 @@ export function CrateOpener({
         );
         const run = Date.now();
         setOpening({
-          phase: "reeling",
+          phase: "revealing",
           crate,
           reward,
           rewardLootEntryId:
@@ -859,8 +865,8 @@ export function CrateOpener({
           run,
         });
         const duration = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? 250
-          : 4_200;
+          ? REDUCED_MOTION_FINAL_REEL_DURATION_MS
+          : FINAL_REEL_DURATION_MS;
         await new Promise<void>((resolve) => {
           revealTimer.current = window.setTimeout(resolve, duration);
         });
