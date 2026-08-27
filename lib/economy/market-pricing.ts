@@ -4,6 +4,11 @@ import {
   getSkinportHistoricalPrices,
   type SkinportHistoricalPrice,
 } from "@/lib/economy/skinport-prices";
+import {
+  getCsfloatExactListingPrice,
+  getExternalMarketPrices,
+  type ExternalMarketPrice,
+} from "@/lib/economy/external-market-prices";
 
 const defaultMarketplaceFloat = 0.15;
 export const maximumMarketplaceFloatDiscountBps = 1_500;
@@ -27,13 +32,18 @@ export type MarketplacePriceIdentityInput = {
   minFloat: number | null | undefined;
   maxFloat: number | null | undefined;
   floatValue?: number | null | undefined;
+  seed?: number | null | undefined;
   // StatTrak™ is a distinct public-market identity from the standard item.
   stattrak?: boolean | null | undefined;
+  // Exact float/seed market listings are queried only for a single sale or
+  // purchase quote, never while rendering an entire inventory page.
+  exactPatternQuote?: boolean | null | undefined;
 };
 
 export type MarketplacePriceIdentity = {
   floatRange: MarketplaceFloatRange | null;
   floatValue: number | null;
+  seed: number | null;
   wear: string | null;
   stattrak: boolean;
   marketVersion: string | null;
@@ -68,6 +78,9 @@ export type MarketplacePriceQuote = {
   // Basis points discounted from the selected exterior/base price. 1,500 is
   // 15%, reached only at the highest allowed float for that item.
   floatDiscountBps: number;
+  pricingRule: "float-linear-v1" | "external-exact-v2";
+  seed: number | null;
+  seedMatched: boolean;
   fromFallback: boolean;
 };
 
@@ -96,6 +109,15 @@ function metadataText(
 function boundedFloat(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1
     ? Math.round(value * floatPrecision) / floatPrecision
+    : null;
+}
+
+function boundedSeed(value: number | null | undefined) {
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= 1_000
+    ? value
     : null;
 }
 
@@ -223,6 +245,7 @@ export function deriveMarketplacePriceIdentity(
   ]);
   const floatRange = normalizeMarketplaceFloatRange(input);
   const floatValue = normalizeMarketplaceFloatValue(input);
+  const seed = boundedSeed(input.seed);
   const wear = marketplaceWearLabel(floatValue);
   const stattrak =
     input.stattrak === true && isStattrakMarketplaceItem(input.itemType);
@@ -264,6 +287,7 @@ export function deriveMarketplacePriceIdentity(
   return {
     floatRange,
     floatValue,
+    seed,
     wear,
     stattrak,
     marketVersion,
@@ -316,14 +340,17 @@ function quoteFromPrice(
     "baseEuroCents" | "source" | "sourceReference" | "marketHashName" | "marketVersion" | "fromFallback"
   >,
   identity: MarketplacePriceIdentity,
+  options: { exact?: ExternalMarketPrice | null | undefined } = {},
 ): MarketplacePriceQuote {
-  const floatDiscountBps = marketplaceFloatDiscountBps(
-    identity.floatRange,
-    identity.floatValue,
-  );
+  const exact = options.exact ?? null;
+  const floatDiscountBps = exact
+    ? 0
+    : marketplaceFloatDiscountBps(identity.floatRange, identity.floatValue);
   return {
     baseEuroCents: price.baseEuroCents,
-    eurCents: adjustedMarketplaceEuroCents(price.baseEuroCents, floatDiscountBps),
+    eurCents: exact
+      ? price.baseEuroCents
+      : adjustedMarketplaceEuroCents(price.baseEuroCents, floatDiscountBps),
     source: price.source,
     sourceReference: price.sourceReference,
     marketHashName: price.marketHashName,
@@ -332,15 +359,17 @@ function quoteFromPrice(
     wear: identity.wear,
     stattrak: identity.stattrak,
     floatDiscountBps,
+    pricingRule: exact ? "external-exact-v2" : "float-linear-v1",
+    seed: identity.seed,
+    seedMatched: exact?.exactSeed ?? false,
     fromFallback: price.fromFallback,
   };
 }
 
 /**
- * Resolves a batch of marketplace quotes from Skinport's public database.
- * Results preserve input order. The item-specific selected float is applied
- * only after locating the exact exterior quote, so this never mutates the
- * shared catalogue price snapshot for a buyer-specific float.
+ * Resolves a batch of marketplace quotes from public databases. Skinport's
+ * sales history is preferred; independent CSFloat and SkinCash indexes are
+ * used only when that exact public-market identity has no Skinport quote.
  */
 export async function getMarketplacePriceQuotes(
   inputs: readonly MarketplacePriceInput[],
@@ -371,8 +400,75 @@ export async function getMarketplacePriceQuotes(
     );
   }
 
+  // New releases and StatTrak™ variants often have no historical row yet.
+  // Fill only those gaps from two independent current-market indexes.
+  const externalLookupIndexes: number[] = [];
+  for (let index = 0; index < lookups.length; index += 1) {
+    const candidate = lookups[index];
+    const candidateKey = `${normalizedKey(candidate.marketHashName)}\u0000${normalizedKey(candidate.marketVersion)}`;
+    // Neither secondary index carries Skinport's phase/version dimension, so
+    // never let a generic live listing stand in for a named phase variant.
+    if (!candidate.marketVersion && !publicPriceByCandidate.has(candidateKey))
+      externalLookupIndexes.push(index);
+  }
+  const externalQuotes = await getExternalMarketPrices(
+    externalLookupIndexes.map((index) => lookups[index].marketHashName),
+  );
+  const externalPriceByCandidate = new Map<string, ExternalMarketPrice>();
+  for (let index = 0; index < externalLookupIndexes.length; index += 1) {
+    const quote = externalQuotes[index];
+    if (!quote) continue;
+    const candidate = lookups[externalLookupIndexes[index]];
+    externalPriceByCandidate.set(
+      `${normalizedKey(candidate.marketHashName)}\u0000${normalizedKey(candidate.marketVersion)}`,
+      quote,
+    );
+  }
+
+  // When a CSFloat API key is configured, sale and purchase mutations also
+  // try its listing endpoint with the actual float and paint-seed filters.
+  // This is intentionally opt-in per input so inventory-page rendering does
+  // not generate one remote query per card.
+  const exactQuotes = await Promise.all(
+    inputs.map(async (input, index) => {
+      if (input.exactPatternQuote !== true) return null;
+      const identity = identities[index];
+      if (identity.floatValue === null && identity.seed === null) return null;
+      // A named phase/version must remain on a source that exposes that exact
+      // version; do not infer it from an otherwise matching market hash.
+      if (identity.marketVersion) return null;
+      for (const candidate of identity.candidates) {
+        const quote = await getCsfloatExactListingPrice({
+          marketHashName: candidate.marketHashName,
+          stattrak: identity.stattrak,
+          floatValue: identity.floatValue,
+          minFloat: identity.floatRange?.minFloat ?? null,
+          maxFloat: identity.floatRange?.maxFloat ?? null,
+          seed: identity.seed,
+        });
+        if (quote) return quote;
+      }
+      return null;
+    }),
+  );
+
   return inputs.map((input, index) => {
     const identity = identities[index];
+    const exactQuote = exactQuotes[index];
+    if (exactQuote) {
+      return quoteFromPrice(
+        {
+          baseEuroCents: exactQuote.eurCents,
+          source: exactQuote.source,
+          sourceReference: exactQuote.sourceReference,
+          marketHashName: exactQuote.marketHashName,
+          marketVersion: identity.marketVersion,
+          fromFallback: false,
+        },
+        identity,
+        { exact: exactQuote },
+      );
+    }
     for (const candidate of identity.candidates) {
       const key = `${normalizedKey(candidate.marketHashName)}\u0000${normalizedKey(candidate.marketVersion)}`;
       const publicPrice = publicPriceByCandidate.get(key);
@@ -384,6 +480,23 @@ export async function getMarketplacePriceQuotes(
           sourceReference: publicPrice.sourceReference,
           marketHashName: publicPrice.marketHashName,
           marketVersion: publicPrice.marketVersion,
+          fromFallback: false,
+        },
+        identity,
+      );
+    }
+
+    for (const candidate of identity.candidates) {
+      const candidateKey = `${normalizedKey(candidate.marketHashName)}\u0000${normalizedKey(candidate.marketVersion)}`;
+      const externalPrice = externalPriceByCandidate.get(candidateKey);
+      if (!externalPrice) continue;
+      return quoteFromPrice(
+        {
+          baseEuroCents: externalPrice.eurCents,
+          source: externalPrice.source,
+          sourceReference: externalPrice.sourceReference,
+          marketHashName: externalPrice.marketHashName,
+          marketVersion: candidate.marketVersion,
           fromFallback: false,
         },
         identity,

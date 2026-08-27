@@ -17,7 +17,6 @@ import {
   isFloatPricedMarketplaceItem,
   isStattrakMarketplaceItem,
 } from "@/lib/economy/market-pricing";
-import { getSkinportHistoricalPrice } from "@/lib/economy/skinport-prices";
 
 function optionalFloat(value: unknown): number | undefined | null {
   if (value === undefined || value === null || value === "") return undefined;
@@ -36,13 +35,13 @@ function optionalStattrak(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 
-function catalogueMarketVersion(metadata: Record<string, unknown>) {
-  for (const key of ["marketVersion", "skinportVersion", "priceVersion"]) {
+function metadataSeed(metadata: Record<string, unknown>) {
+  for (const key of ["seed", "defaultSeed", "patternSeed"]) {
     const value = metadata[key];
-    if (typeof value === "string" && value.trim() && value.trim().length <= 120)
-      return value.trim();
+    if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 1_000)
+      return value;
   }
-  return null;
+  return undefined;
 }
 
 function isLegacySteamPrice(source: string | undefined) {
@@ -110,7 +109,9 @@ export async function POST(request: Request) {
           minFloat: catalogue.minFloat,
           maxFloat: catalogue.maxFloat,
           floatValue,
+          seed: metadataSeed(catalogue.metadata),
           stattrak,
+          exactPatternQuote: true,
           fallbackPrice:
             !stattrak && catalogue.price && !isLegacySteamPrice(catalogue.price.source)
               ? {
@@ -140,33 +141,46 @@ export async function POST(request: Request) {
         wear: quote.wear,
         stattrak: quote.stattrak,
         floatDiscountBps: quote.floatDiscountBps,
-        pricingRule: "float-linear-v1",
+        pricingRule: quote.pricingRule,
       };
     } else if (catalogue.marketHashName) {
-      const price = await getSkinportHistoricalPrice({
-        marketHashName: catalogue.marketHashName,
-        marketVersion: catalogueMarketVersion(catalogue.metadata),
-      });
-      if (price) {
-        // Re-price non-float items from the same public data source before
-        // spending Tokens. Float-specific quotes stay off the shared snapshot
-        // because each selected float has a distinct price.
+      const [quote] = await getMarketplacePriceQuotes([
+        {
+          itemType: catalogue.itemType,
+          displayName: catalogue.displayName,
+          marketHashName: catalogue.marketHashName,
+          metadata: catalogue.metadata,
+          minFloat: catalogue.minFloat,
+          maxFloat: catalogue.maxFloat,
+          stattrak: false,
+          fallbackPrice:
+            catalogue.price && !isLegacySteamPrice(catalogue.price.source)
+              ? {
+                  eurCents: catalogue.price.euroCents,
+                  source: catalogue.price.source,
+                  sourceReference: catalogue.price.sourceReference,
+                }
+              : null,
+        },
+      ]);
+      if (quote && !quote.fromFallback) {
+        // Re-price ordinary market goods before spending Tokens. This shares
+        // the same multi-source fallback used by the inventory sell flow.
         const current = catalogue.price;
-        if (
-          current?.source !== price.source ||
-          current.euroCents !== price.eurCents
-        ) {
+        if (current?.source !== quote.source || current.euroCents !== quote.eurCents) {
           const priceIdempotencyKey = `price-${context.body.idempotencyKey.slice(0, 122)}`;
           await recordEconomyPrice({
             actorSteamId: context.session.steamId,
             catalogueId,
-            eurCents: price.eurCents,
-            source: price.source,
-            sourceReference: price.sourceReference,
+            eurCents: quote.eurCents,
+            source: quote.source,
+            ...(quote.sourceReference
+              ? { sourceReference: quote.sourceReference }
+              : {}),
             idempotencyKey: priceIdempotencyKey,
           });
         }
-      } else if (isLegacySteamPrice(catalogue.price?.source)) {
+      } else if (!quote && isLegacySteamPrice(catalogue.price?.source)) {
         throw new EconomyRepositoryError(
           "price_unavailable",
           "No public price matched this item. Ask staff to set a last-known price.",

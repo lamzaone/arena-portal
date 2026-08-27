@@ -28,6 +28,15 @@ function stattrakFromSearch(value: string | null) {
   return null;
 }
 
+function metadataSeed(metadata: Record<string, unknown>) {
+  for (const key of ["seed", "defaultSeed", "patternSeed"]) {
+    const value = metadata[key];
+    if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 1_000)
+      return value;
+  }
+  return undefined;
+}
+
 function legacySteamPrice(source: string | undefined) {
   return source?.toLocaleLowerCase("en-US").startsWith("steam") ?? false;
 }
@@ -97,7 +106,9 @@ export async function GET(request: Request) {
         minFloat: item.minFloat,
         maxFloat: item.maxFloat,
         floatValue,
+        seed: metadataSeed(item.metadata),
         stattrak,
+        exactPatternQuote: true,
         fallbackPrice:
           !stattrak && item.price && !legacySteamPrice(item.price.source)
             ? {
@@ -131,7 +142,9 @@ export async function GET(request: Request) {
         wear: quote.wear,
         stattrak: quote.stattrak,
         floatDiscountBps: quote.floatDiscountBps,
-        pricingRule: "float-linear-v1",
+        pricingRule: quote.pricingRule,
+        seed: quote.seed,
+        seedMatched: quote.seedMatched,
       },
       { headers: { "Cache-Control": "private, max-age=60" } },
     );

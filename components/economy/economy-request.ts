@@ -12,6 +12,10 @@ export type EconomyActionResult = {
   itemId?: string;
   catalogueId?: number;
   rewardLootEntryId?: number;
+  codeId?: number;
+  displayName?: string;
+  tokensAwarded?: number;
+  itemNames?: string[];
   item?: unknown;
   trade?: unknown;
 };

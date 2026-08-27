@@ -6,6 +6,7 @@ import {
   withEconomyPublicPriceRefreshLock,
   type EconomyPublicPriceRefreshUpdate,
 } from "@/lib/data/portal-repository";
+import { getExternalMarketPrices } from "@/lib/economy/external-market-prices";
 import { getSkinportHistoricalPrices } from "@/lib/economy/skinport-prices";
 
 export type EconomyPublicPriceRefreshResult = {
@@ -26,9 +27,9 @@ function marketVersion(metadata: Record<string, unknown>) {
 }
 
 /**
- * Reads Skinport's single cached public snapshot once, resolves it against
- * every enabled exact market identity, and persists only changed observations.
- * Unmatched names keep their current staff/default snapshot unchanged.
+ * Reads the stable Skinport sales snapshot first, then fills only unmatched
+ * identities from independent CSFloat/SkinCash public indexes. This keeps the
+ * automatic price worker from leaving newly-listed variants at a stale value.
  */
 export async function refreshAllEconomyPublicPrices(): Promise<EconomyPublicPriceRefreshResult> {
   const lock = await withEconomyPublicPriceRefreshLock(async () => {
@@ -39,12 +40,24 @@ export async function refreshAllEconomyPublicPrices(): Promise<EconomyPublicPric
         marketVersion: marketVersion(candidate.metadata),
       })),
     );
+    const externalIndexes = quotes
+      .map((quote, index) =>
+        quote || marketVersion(candidates[index].metadata) ? null : index,
+      )
+      .filter((index): index is number => index !== null);
+    const externalQuotes = await getExternalMarketPrices(
+      externalIndexes.map((index) => candidates[index].marketHashName),
+    );
+    const externalQuoteByIndex = new Map<number, (typeof externalQuotes)[number]>();
+    for (let index = 0; index < externalIndexes.length; index += 1) {
+      externalQuoteByIndex.set(externalIndexes[index], externalQuotes[index]);
+    }
 
     const updates: EconomyPublicPriceRefreshUpdate[] = [];
     let matched = 0;
     for (let index = 0; index < candidates.length; index += 1) {
       const candidate = candidates[index];
-      const quote = quotes[index];
+      const quote = quotes[index] ?? externalQuoteByIndex.get(index);
       if (!quote) continue;
       matched += 1;
       const current = candidate.currentPrice;

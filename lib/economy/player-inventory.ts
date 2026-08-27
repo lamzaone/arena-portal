@@ -59,6 +59,7 @@ async function withCurrentMarketPrices(items: EconomyInventoryItem[]) {
           "wearMax",
         ]),
         floatValue: item.floatValue,
+        seed: item.seed,
         stattrak: item.stattrak,
         fallbackPrice:
           !item.stattrak && catalogue.price && !isLegacySteamPrice(catalogue.price.source)

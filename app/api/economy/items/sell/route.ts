@@ -65,7 +65,9 @@ export async function POST(request: Request) {
               "wearMax",
             ]),
             floatValue: item.floatValue,
+            seed: item.seed,
             stattrak: item.stattrak,
+            exactPatternQuote: true,
             fallbackPrice:
               !item.stattrak && catalogue.price && !isLegacySteamPrice(catalogue.price.source)
                 ? {

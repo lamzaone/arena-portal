@@ -304,6 +304,14 @@ function marketPriceSourceLabel(source: string | null) {
       return "public listing mean";
     case "skinport-listing-suggested":
       return "public suggested price";
+    case "csfloat-price-index":
+      return "CSFloat current listing index";
+    case "skincash-listing":
+      return "SkinCash current listing";
+    case "multi-market-index":
+      return "cross-market current price";
+    case "csfloat-exact-listing":
+      return "CSFloat exact float/pattern listing";
     case "staff-last-known":
       return "staff last-known price";
     default:

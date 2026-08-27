@@ -2566,6 +2566,69 @@ export type EconomyCataloguePage = {
   pageSize: number;
 };
 
+export type EconomyRedeemCodeReward = {
+  catalogueId: number;
+  quantity: number;
+  displayName: string;
+  itemType: EconomyItemType;
+  rarityRank: number;
+  imageUrl: string | null;
+};
+
+export type EconomyRedeemCode = {
+  id: number;
+  codeHint: string;
+  displayName: string;
+  tokenAmount: number;
+  maxRedemptions: number | null;
+  redemptionCount: number;
+  enabled: boolean;
+  createdBySteamId: string;
+  createdAt: string;
+  updatedAt: string;
+  rewards: EconomyRedeemCodeReward[];
+};
+
+export type EconomyRedeemCodePage = {
+  codes: EconomyRedeemCode[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export type CreateEconomyRedeemCodeInput = {
+  actorSteamId: string;
+  code: string;
+  displayName: string;
+  tokenAmount: number;
+  maxRedemptions: number | null;
+  rewards: Array<{ catalogueId: number; quantity: number }>;
+  idempotencyKey: string;
+};
+
+export type CreateEconomyRedeemCodeResult = {
+  code: EconomyRedeemCode;
+  // The raw code is intentionally returned only by this create action. The
+  // database retains only its SHA-256 hash thereafter.
+  revealedCode: string;
+};
+
+export type RedeemEconomyCodeInput = {
+  steamId: string;
+  code: string;
+  redeemedVia: "website" | "server";
+  idempotencyKey: string;
+};
+
+export type RedeemEconomyCodeResult = {
+  codeId: number;
+  displayName: string;
+  tokensAwarded: number;
+  itemIds: string[];
+  itemNames: string[];
+  wallet: TokenWallet;
+};
+
 export type EconomyCrate = EconomyCatalogueItem & {
   cratePriceTokens: number | null;
   lootTableId: number | null;
@@ -2797,7 +2860,7 @@ export type ResolvedMarketplacePurchaseQuote = {
   wear: string;
   stattrak: boolean;
   floatDiscountBps: number;
-  pricingRule: "float-linear-v1";
+  pricingRule: "float-linear-v1" | "external-exact-v2";
 };
 
 export type PurchaseEconomyItemResult = {
@@ -3355,6 +3418,31 @@ type EconomyOperationRow = RowDataPacket & {
   result_json: unknown;
 };
 
+type EconomyRedeemCodeRow = RowDataPacket & {
+  id: number | string;
+  code_hash: string;
+  code_hint: string;
+  display_name: string;
+  token_amount: number | string;
+  max_redemptions: number | string | null;
+  redemption_count: number | string;
+  enabled: number | boolean;
+  created_by_steam_id: string;
+  created_at: Date | string;
+  updated_at: Date | string;
+};
+
+type EconomyRedeemCodeRewardRow = RowDataPacket & {
+  redeem_code_id: number | string;
+  catalogue_id: number | string;
+  quantity: number | string;
+  sort_order: number | string;
+  item_type: string;
+  display_name: string;
+  rarity_rank: number | string;
+  metadata: unknown;
+};
+
 type EconomyLootTableRow = RowDataPacket & {
   id: number | string;
   code: string;
@@ -3613,6 +3701,59 @@ function economyIdempotencyKey(value: string) {
     economyError("invalid_idempotency_key", "Provide a valid idempotency key.");
   }
   return key;
+}
+
+function economyRedeemCode(value: string) {
+  // Normalize once at every entry point. Codes are intentionally restricted to
+  // a portable, easy-to-type alphabet so chat, console, and browser claims all
+  // address the same code without locale/case surprises.
+  const code = value.normalize("NFKC").trim().toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9_-]{3,63}$/.test(code)) {
+    economyError(
+      "invalid_input",
+      "Redeem codes must use 4-64 letters, numbers, hyphens, or underscores.",
+    );
+  }
+  return code;
+}
+
+function economyRedeemCodeHash(code: string) {
+  return createHash("sha256").update(code, "utf8").digest("hex");
+}
+
+function economyRedeemCodeHint(code: string) {
+  if (code.length <= 6) return `${code.slice(0, 2)}••${code.slice(-2)}`;
+  return `${code.slice(0, 4)}••••${code.slice(-4)}`;
+}
+
+function economyRedeemRewards(
+  value: Array<{ catalogueId: number; quantity: number }>,
+) {
+  if (!Array.isArray(value) || value.length > 20) {
+    economyError("invalid_input", "Choose up to 20 distinct item rewards.");
+  }
+  const merged = new Map<number, number>();
+  for (const reward of value) {
+    const catalogueId = economyNumber(
+      reward?.catalogueId,
+      "Reward catalogue item ID",
+      1,
+    );
+    const quantity = economyNumber(reward?.quantity, "Reward quantity", 1);
+    if (quantity > 50)
+      economyError("invalid_input", "Each item reward can be at most 50.");
+    const next = (merged.get(catalogueId) ?? 0) + quantity;
+    if (next > 50)
+      economyError("invalid_input", "Each item reward can be at most 50.");
+    merged.set(catalogueId, next);
+  }
+  const rewards = [...merged.entries()]
+    .map(([catalogueId, quantity]) => ({ catalogueId, quantity }))
+    .sort((left, right) => left.catalogueId - right.catalogueId);
+  const totalItems = rewards.reduce((total, reward) => total + reward.quantity, 0);
+  if (totalItems > 100)
+    economyError("invalid_input", "A code can award at most 100 items.");
+  return rewards;
 }
 
 function economyItemId(value: string, field = "Item ID") {
@@ -4972,6 +5113,413 @@ export async function getEconomyCatalogueItem(
   return rows[0] ? toEconomyCatalogueItem(rows[0]) : null;
 }
 
+function toEconomyRedeemCodeReward(
+  row: EconomyRedeemCodeRewardRow,
+): EconomyRedeemCodeReward {
+  const itemType = economyItemType(String(row.item_type));
+  const displayName = String(row.display_name);
+  const storedRarityRank = economyNumber(row.rarity_rank, "reward rarity");
+  return {
+    catalogueId: economyNumber(row.catalogue_id, "reward catalogue ID"),
+    quantity: economyNumber(row.quantity, "reward quantity", 1),
+    displayName,
+    itemType,
+    rarityRank: economyIsGoldTierSpecial(itemType, displayName)
+      ? 7
+      : storedRarityRank,
+    imageUrl: economyMetadataImageUrl(economyRecord(row.metadata)),
+  };
+}
+
+function toEconomyRedeemCode(
+  row: EconomyRedeemCodeRow,
+  rewards: EconomyRedeemCodeReward[],
+): EconomyRedeemCode {
+  return {
+    id: economyNumber(row.id, "redeem code ID", 1),
+    codeHint: String(row.code_hint),
+    displayName: String(row.display_name),
+    tokenAmount: economyNumber(row.token_amount, "redeem token amount"),
+    maxRedemptions: economyOptionalInteger(
+      row.max_redemptions,
+      "redeem max redemptions",
+      1,
+    ),
+    redemptionCount: economyNumber(
+      row.redemption_count,
+      "redeem redemption count",
+    ),
+    enabled: economyBoolean(row.enabled),
+    createdBySteamId: String(row.created_by_steam_id),
+    createdAt: economyDateToIso(row.created_at) ?? new Date(0).toISOString(),
+    updatedAt: economyDateToIso(row.updated_at) ?? new Date(0).toISOString(),
+    rewards,
+  };
+}
+
+export async function getEconomyRedeemCodes(input: {
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<EconomyRedeemCodePage> {
+  const pool = getPortalPool();
+  const paging = economyPage(input.page, input.pageSize, 100);
+  if (!pool)
+    return { codes: [], total: 0, page: paging.page, pageSize: paging.pageSize };
+  const [countRows] = await pool.query<
+    Array<RowDataPacket & { total: number | string }>
+  >("SELECT COUNT(*) AS total FROM portal_redeem_codes");
+  const [rows] = await pool.query<EconomyRedeemCodeRow[]>(
+    "SELECT id, code_hash, code_hint, display_name, token_amount, max_redemptions, redemption_count, enabled, created_by_steam_id, created_at, updated_at FROM portal_redeem_codes ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+    [paging.pageSize, paging.offset],
+  );
+  if (!rows.length)
+    return {
+      codes: [],
+      total: economyCount(countRows),
+      page: paging.page,
+      pageSize: paging.pageSize,
+    };
+  const codeIds = rows.map((row) => economyNumber(row.id, "redeem code ID", 1));
+  const [rewardRows] = await pool.query<EconomyRedeemCodeRewardRow[]>(
+    "SELECT r.redeem_code_id, r.catalogue_id, r.quantity, r.sort_order, c.item_type, c.display_name, c.rarity_rank, c.metadata FROM portal_redeem_code_items AS r INNER JOIN portal_economy_catalogue AS c ON c.id = r.catalogue_id WHERE r.redeem_code_id IN (" +
+      codeIds.map(() => "?").join(", ") +
+      ") ORDER BY r.redeem_code_id ASC, r.sort_order ASC, r.catalogue_id ASC",
+    codeIds,
+  );
+  const rewards = new Map<number, EconomyRedeemCodeReward[]>();
+  for (const row of rewardRows) {
+    const codeId = economyNumber(row.redeem_code_id, "redeem reward code ID", 1);
+    const entries = rewards.get(codeId) ?? [];
+    entries.push(toEconomyRedeemCodeReward(row));
+    rewards.set(codeId, entries);
+  }
+  return {
+    codes: rows.map((row) => {
+      const id = economyNumber(row.id, "redeem code ID", 1);
+      return toEconomyRedeemCode(row, rewards.get(id) ?? []);
+    }),
+    total: economyCount(countRows),
+    page: paging.page,
+    pageSize: paging.pageSize,
+  };
+}
+
+export async function createEconomyRedeemCode(
+  input: CreateEconomyRedeemCodeInput,
+): Promise<CreateEconomyRedeemCodeResult> {
+  const actorSteamId = economySteamId(input.actorSteamId, "Admin Steam ID");
+  const code = economyRedeemCode(input.code);
+  const codeHash = economyRedeemCodeHash(code);
+  const displayName = economyText(input.displayName, "Code display name", 120);
+  const tokenAmount = economyAmount(input.tokenAmount, "Token reward");
+  const maxRedemptions =
+    input.maxRedemptions === null || input.maxRedemptions === undefined
+      ? null
+      : economyNumber(input.maxRedemptions, "Code usage limit", 1);
+  if (maxRedemptions !== null && maxRedemptions > 2_147_483_647)
+    economyError("invalid_input", "Code usage limit is too large.");
+  const rewards = economyRedeemRewards(input.rewards);
+  if (tokenAmount === 0 && !rewards.length)
+    economyError("invalid_input", "Add Tokens or at least one item reward.");
+
+  const saved = await runEconomyMutation({
+    operationName: "redeem-code.create",
+    actorSteamId,
+    idempotencyKey: input.idempotencyKey,
+    // Do not include the raw code in the operation request: operations are
+    // retained for audit/idempotency, while redeem codes must remain hashed.
+    request: {
+      codeHash,
+      displayName,
+      tokenAmount,
+      maxRedemptions,
+      rewards,
+    },
+    work: async (context) => {
+      const [existing] = await context.connection.query<
+        Array<RowDataPacket & { id: number | string }>
+      >("SELECT id FROM portal_redeem_codes WHERE code_hash = ? FOR UPDATE", [
+        codeHash,
+      ]);
+      if (existing[0])
+        economyError("redeem_code_exists", "That redeem code already exists.");
+
+      const catalogueById = new Map<number, EconomyCatalogueItem>();
+      for (const reward of rewards) {
+        const catalogue = await lockEconomyCatalogue(
+          context.connection,
+          reward.catalogueId,
+        );
+        if (catalogue.itemType === "crate" || catalogue.itemType === "capsule") {
+          const table = await lockEconomyLootTable(context.connection, {
+            containerCatalogueId: catalogue.id,
+          });
+          await lockEconomyLootEntries(context.connection, table.id);
+        }
+        catalogueById.set(catalogue.id, catalogue);
+      }
+      const [insert] = await context.connection.execute<ResultSetHeader>(
+        "INSERT INTO portal_redeem_codes (code_hash, code_hint, display_name, token_amount, max_redemptions, created_by_steam_id) VALUES (?, ?, ?, ?, ?, ?)",
+        [
+          codeHash,
+          economyRedeemCodeHint(code),
+          displayName,
+          tokenAmount,
+          maxRedemptions,
+          actorSteamId,
+        ],
+      );
+      const id = economyNumber(insert.insertId, "redeem code ID", 1);
+      for (const [sortOrder, reward] of rewards.entries()) {
+        await context.connection.execute(
+          "INSERT INTO portal_redeem_code_items (redeem_code_id, catalogue_id, quantity, sort_order) VALUES (?, ?, ?, ?)",
+          [id, reward.catalogueId, reward.quantity, sortOrder],
+        );
+      }
+      await writeEconomyAdminAudit({
+        connection: context.connection,
+        actorSteamId,
+        action: "redeem_code.created",
+        targetType: "redeem_code",
+        targetId: String(id),
+        idempotencyKey: context.idempotencyKey,
+        metadata: { tokenAmount, maxRedemptions, rewards },
+      });
+      const now = new Date().toISOString();
+      return {
+        id,
+        codeHint: economyRedeemCodeHint(code),
+        displayName,
+        tokenAmount,
+        maxRedemptions,
+        redemptionCount: 0,
+        enabled: true,
+        createdBySteamId: actorSteamId,
+        createdAt: now,
+        updatedAt: now,
+        rewards: rewards.map((reward) => {
+          const catalogue = catalogueById.get(reward.catalogueId);
+          if (!catalogue)
+            economyError("catalogue_not_found", "A reward item no longer exists.");
+          return {
+            catalogueId: catalogue.id,
+            quantity: reward.quantity,
+            displayName: catalogue.displayName,
+            itemType: catalogue.itemType,
+            rarityRank: catalogue.rarityRank,
+            imageUrl: catalogue.imageUrl,
+          };
+        }),
+      } satisfies EconomyRedeemCode;
+    },
+  });
+  return { code: saved, revealedCode: code };
+}
+
+export async function setEconomyRedeemCodeEnabled(input: {
+  actorSteamId: string;
+  codeId: number;
+  enabled: boolean;
+  idempotencyKey: string;
+}): Promise<EconomyRedeemCode> {
+  const actorSteamId = economySteamId(input.actorSteamId, "Admin Steam ID");
+  const codeId = economyNumber(input.codeId, "Redeem code ID", 1);
+  if (typeof input.enabled !== "boolean")
+    economyError("invalid_input", "Redeem code status is invalid.");
+  return runEconomyMutation({
+    operationName: "redeem-code.set-enabled",
+    actorSteamId,
+    idempotencyKey: input.idempotencyKey,
+    request: { codeId, enabled: input.enabled },
+    work: async (context) => {
+      const [rows] = await context.connection.query<EconomyRedeemCodeRow[]>(
+        "SELECT id, code_hash, code_hint, display_name, token_amount, max_redemptions, redemption_count, enabled, created_by_steam_id, created_at, updated_at FROM portal_redeem_codes WHERE id = ? FOR UPDATE",
+        [codeId],
+      );
+      const row = rows[0];
+      if (!row)
+        economyError("redeem_code_not_found", "That redeem code does not exist.");
+      await context.connection.execute(
+        "UPDATE portal_redeem_codes SET enabled = ? WHERE id = ?",
+        [input.enabled, codeId],
+      );
+      await writeEconomyAdminAudit({
+        connection: context.connection,
+        actorSteamId,
+        action: input.enabled ? "redeem_code.enabled" : "redeem_code.disabled",
+        targetType: "redeem_code",
+        targetId: String(codeId),
+        idempotencyKey: context.idempotencyKey,
+        metadata: { enabled: input.enabled },
+      });
+      return toEconomyRedeemCode(
+        { ...row, enabled: input.enabled, updated_at: new Date() },
+        [],
+      );
+    },
+  });
+}
+
+export async function redeemEconomyCode(
+  input: RedeemEconomyCodeInput,
+): Promise<RedeemEconomyCodeResult> {
+  const steamId = economySteamId(input.steamId);
+  const code = economyRedeemCode(input.code);
+  const codeHash = economyRedeemCodeHash(code);
+  if (input.redeemedVia !== "website" && input.redeemedVia !== "server")
+    economyError("invalid_input", "Redeem source is invalid.");
+  return runEconomyMutation({
+    operationName: "redeem-code.claim",
+    actorSteamId: steamId,
+    idempotencyKey: input.idempotencyKey,
+    request: { codeHash, redeemedVia: input.redeemedVia },
+    work: async (context) => {
+      const [codeRows] = await context.connection.query<EconomyRedeemCodeRow[]>(
+        "SELECT id, code_hash, code_hint, display_name, token_amount, max_redemptions, redemption_count, enabled, created_by_steam_id, created_at, updated_at FROM portal_redeem_codes WHERE code_hash = ? FOR UPDATE",
+        [codeHash],
+      );
+      const redeemCode = codeRows[0];
+      if (!redeemCode)
+        economyError("redeem_code_not_found", "That redeem code is not valid.");
+      const codeId = economyNumber(redeemCode.id, "redeem code ID", 1);
+      if (!economyBoolean(redeemCode.enabled))
+        economyError("redeem_code_disabled", "That redeem code is currently disabled.");
+      const maxRedemptions = economyOptionalInteger(
+        redeemCode.max_redemptions,
+        "redeem max redemptions",
+        1,
+      );
+      if (
+        maxRedemptions !== null &&
+        economyNumber(redeemCode.redemption_count, "redeem redemption count") >=
+          maxRedemptions
+      ) {
+        economyError("redeem_code_exhausted", "That redeem code has reached its usage limit.");
+      }
+      const [claimRows] = await context.connection.query<
+        Array<RowDataPacket & { id: number | string }>
+      >(
+        "SELECT id FROM portal_redeem_code_redemptions WHERE redeem_code_id = ? AND steam_id = ? FOR UPDATE",
+        [codeId, steamId],
+      );
+      if (claimRows[0])
+        economyError("redeem_already_claimed", "You have already redeemed this code.");
+
+      const [rewardRows] = await context.connection.query<
+        EconomyRedeemCodeRewardRow[]
+      >(
+        "SELECT r.redeem_code_id, r.catalogue_id, r.quantity, r.sort_order, c.item_type, c.display_name, c.rarity_rank, c.metadata FROM portal_redeem_code_items AS r INNER JOIN portal_economy_catalogue AS c ON c.id = r.catalogue_id WHERE r.redeem_code_id = ? ORDER BY r.sort_order ASC, r.catalogue_id ASC FOR UPDATE",
+        [codeId],
+      );
+      const rewards = rewardRows.map((row) => ({
+        catalogueId: economyNumber(row.catalogue_id, "reward catalogue ID", 1),
+        quantity: economyNumber(row.quantity, "reward quantity", 1),
+      }));
+      const totalItems = rewards.reduce((total, reward) => total + reward.quantity, 0);
+      if (totalItems > 100)
+        economyError("invalid_database_value", "This redeem code has too many item rewards.");
+      const tokenAmount = economyNumber(redeemCode.token_amount, "redeem token amount");
+      if (tokenAmount === 0 && !rewards.length)
+        economyError("invalid_database_value", "This redeem code has no rewards.");
+
+      const catalogueById = new Map<number, EconomyCatalogueItem>();
+      for (const reward of rewards) {
+        const catalogue = await lockEconomyCatalogue(
+          context.connection,
+          reward.catalogueId,
+        );
+        if (catalogue.itemType === "crate" || catalogue.itemType === "capsule") {
+          const table = await lockEconomyLootTable(context.connection, {
+            containerCatalogueId: catalogue.id,
+          });
+          await lockEconomyLootEntries(context.connection, table.id);
+        }
+        catalogueById.set(catalogue.id, catalogue);
+      }
+      const wallets = await lockTokenAccounts(context.connection, [steamId]);
+      let wallet = wallets.get(steamId);
+      if (!wallet)
+        economyError("wallet_unavailable", "The token economy wallet is not locked.");
+      if (tokenAmount > 0) {
+        wallet = await applyTokenDelta({
+          connection: context.connection,
+          wallets,
+          steamId,
+          delta: tokenAmount,
+          reason: "redeem_code",
+          referenceType: "redeem_code",
+          referenceId: String(codeId),
+          idempotencyKey: context.idempotencyKey,
+          lineKey: "redeem:tokens",
+          actorSteamId: steamId,
+          metadata: { codeId, redeemedVia: input.redeemedVia },
+        });
+      }
+      const items = [] as CreatedEconomyItem[];
+      for (const reward of rewards) {
+        const catalogue = catalogueById.get(reward.catalogueId);
+        if (!catalogue)
+          economyError("catalogue_not_found", "A reward item no longer exists.");
+        for (let position = 0; position < reward.quantity; position += 1) {
+          items.push(
+            await createEconomyInventoryItem(context.connection, {
+              ownerSteamId: steamId,
+              catalogue,
+              source: {
+                type: "redeem_code",
+                codeId,
+                redeemedVia: input.redeemedVia,
+                rewardCatalogueId: catalogue.id,
+                rewardPosition: position + 1,
+              },
+              actorSteamId: steamId,
+              idempotencyKey: context.idempotencyKey,
+              lineKey: `redeem:item:${catalogue.id}:${position + 1}`,
+              eventType: "redeem_code.claimed",
+            }),
+          );
+        }
+      }
+      const [updated] = await context.connection.execute<ResultSetHeader>(
+        "UPDATE portal_redeem_codes SET redemption_count = redemption_count + 1 WHERE id = ? AND (max_redemptions IS NULL OR redemption_count < max_redemptions)",
+        [codeId],
+      );
+      if (updated.affectedRows !== 1)
+        economyError("redeem_code_exhausted", "That redeem code has reached its usage limit.");
+      await context.connection.execute(
+        "INSERT INTO portal_redeem_code_redemptions (redeem_code_id, steam_id, redeemed_via, token_amount, item_count, idempotency_key) VALUES (?, ?, ?, ?, ?, ?)",
+        [
+          codeId,
+          steamId,
+          input.redeemedVia,
+          tokenAmount,
+          items.length,
+          context.idempotencyKey,
+        ],
+      );
+      await createEconomyNotification({
+        connection: context.connection,
+        steamId,
+        notificationType: "redeem.code.claimed",
+        payload: {
+          codeId,
+          displayName: String(redeemCode.display_name),
+          tokenAmount,
+          itemCount: items.length,
+        },
+      });
+      return {
+        codeId,
+        displayName: String(redeemCode.display_name),
+        tokensAwarded: tokenAmount,
+        itemIds: items.map((item) => item.id),
+        itemNames: items.map((item) => item.displayName),
+        wallet,
+      } satisfies RedeemEconomyCodeResult;
+    },
+  });
+}
+
 /**
  * Returns every enabled catalogue item that has an exact public market name.
  * This deliberately excludes custom/unmapped entries: a last-known or custom
@@ -6018,6 +6566,10 @@ const marketplacePurchasePriceSources = new Set([
   "skinport-listing-median",
   "skinport-listing-mean",
   "skinport-listing-suggested",
+  "csfloat-price-index",
+  "skincash-listing",
+  "multi-market-index",
+  "csfloat-exact-listing",
   "staff-last-known",
 ]);
 
@@ -6073,17 +6625,28 @@ function economyResolvedMarketplacePurchaseQuote(
     "Public price reference",
     255,
   );
-  if (source.startsWith("skinport-")) {
+  if (
+    source.startsWith("skinport-") ||
+    source === "csfloat-price-index" ||
+    source === "csfloat-exact-listing" ||
+    source === "skincash-listing" ||
+    source === "multi-market-index"
+  ) {
     if (!sourceReference) {
       economyError("invalid_input", "The public price reference is missing.");
     }
     try {
       const url = new URL(sourceReference);
       const hostname = url.hostname.toLocaleLowerCase("en-US");
-      if (
-        url.protocol !== "https:" ||
-        (hostname !== "skinport.com" && !hostname.endsWith(".skinport.com"))
-      ) {
+      const validHost = source.startsWith("skinport-")
+        ? hostname === "skinport.com" || hostname.endsWith(".skinport.com")
+        : source === "skincash-listing"
+          ? hostname === "skincash.gg" || hostname.endsWith(".skincash.gg")
+          : source === "multi-market-index"
+            ? (hostname === "csfloat.com" || hostname.endsWith(".csfloat.com")) ||
+              hostname === "skincash.gg" || hostname.endsWith(".skincash.gg")
+            : hostname === "csfloat.com" || hostname.endsWith(".csfloat.com");
+      if (url.protocol !== "https:" || !validHost) {
         economyError("invalid_input", "The public price reference is invalid.");
       }
     } catch {
@@ -6117,7 +6680,10 @@ function economyResolvedMarketplacePurchaseQuote(
   ) {
     economyError("invalid_input", "The float price adjustment is invalid.");
   }
-  if (quote.pricingRule !== "float-linear-v1") {
+  if (
+    quote.pricingRule !== "float-linear-v1" &&
+    quote.pricingRule !== "external-exact-v2"
+  ) {
     economyError("invalid_input", "The float price rule is invalid.");
   }
   return {
@@ -6211,17 +6777,26 @@ function economyValidateResolvedMarketplaceQuote(input: {
     identity.floatRange,
     identity.floatValue,
   );
-  if (input.quote.floatDiscountBps !== expectedDiscount) {
-    economyError("invalid_input", "The float price adjustment is stale.");
-  }
-  if (
-    input.quote.euroCents !==
-    adjustedMarketplaceEuroCents(
-      input.quote.baseEuroCents,
-      input.quote.floatDiscountBps,
-    )
+  if (input.quote.pricingRule === "float-linear-v1") {
+    if (input.quote.floatDiscountBps !== expectedDiscount) {
+      economyError("invalid_input", "The float price adjustment is stale.");
+    }
+    if (
+      input.quote.euroCents !==
+      adjustedMarketplaceEuroCents(
+        input.quote.baseEuroCents,
+        input.quote.floatDiscountBps,
+      )
+    ) {
+      economyError("invalid_input", "The float-adjusted price is invalid.");
+    }
+  } else if (
+    input.quote.floatDiscountBps !== 0 ||
+    input.quote.euroCents !== input.quote.baseEuroCents
   ) {
-    economyError("invalid_input", "The float-adjusted price is invalid.");
+    // An exact external listing already includes its observed float/seed;
+    // applying the synthetic per-wear discount a second time would underprice it.
+    economyError("invalid_input", "The exact listing price is invalid.");
   }
   const quoteName = economyMarketplaceQuoteKey(input.quote.marketHashName);
   const quoteVersion = economyMarketplaceQuoteKey(input.quote.marketVersion);
