@@ -37,6 +37,17 @@ type PreviewState = "idle" | "loading" | "ready" | "unavailable";
 
 function safeImageUrl(value: string | null | undefined) {
   if (!value) return null;
+  // Staff-managed artwork lives in the portal's public image directory. It
+  // must be used directly rather than sent through the remote-image proxy.
+  if (
+    value.startsWith("/images/economy/") &&
+    !value.includes("\\") &&
+    !value.includes("..") &&
+    !value.includes("?") &&
+    !value.includes("#")
+  ) {
+    return value;
+  }
   try {
     const url = new URL(value.startsWith("//") ? `https:${value}` : value);
     return url.protocol === "https:" ? url.toString() : null;
@@ -48,6 +59,7 @@ function safeImageUrl(value: string | null | undefined) {
 function imageCandidates(value: string | null | undefined) {
   const directImageUrl = safeImageUrl(value);
   if (!directImageUrl) return [];
+  if (directImageUrl.startsWith("/")) return [directImageUrl];
   const proxiedUrl = proxiedImageUrl(directImageUrl);
   return [...new Set([proxiedUrl, directImageUrl].filter(Boolean))] as string[];
 }

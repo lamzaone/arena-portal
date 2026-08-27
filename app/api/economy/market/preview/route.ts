@@ -35,6 +35,7 @@ function metadataText(metadata: Record<string, unknown>, keys: string[]) {
 
 function officialImageUrl(metadata: Record<string, unknown>) {
   const value = metadataText(metadata, [
+    "staffArtworkUrl",
     "imageUrl",
     "image",
     "iconUrl",

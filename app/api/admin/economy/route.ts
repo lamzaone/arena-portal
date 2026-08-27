@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 import { NextResponse } from "next/server";
 
@@ -16,6 +18,7 @@ import {
   staffSetEconomyItemState,
   staffTransferEconomyItem,
   staffUpdateEconomyItem,
+  setEconomyCatalogueArtwork,
   setEconomyCatalogueMarketHash,
   type EconomyItemType,
   type EconomyLoadoutSlotInput,
@@ -39,6 +42,12 @@ const itemTypes: EconomyItemType[] = [
   "patch",
   "graffiti",
 ];
+const artworkContentTypes = new Map([
+  ["image/jpeg", "jpg"],
+  ["image/png", "png"],
+  ["image/webp", "webp"],
+]);
+const maxArtworkBytes = 5 * 1024 * 1024;
 
 function redirect(
   request: Request,
@@ -297,6 +306,27 @@ function catalogueMarketVersion(metadata: Record<string, unknown>) {
   return null;
 }
 
+async function saveCatalogueArtwork(value: FormDataEntryValue | null) {
+  if (!(value instanceof File) || value.size === 0) return null;
+  const extension = artworkContentTypes.get(value.type);
+  if (!extension || value.size > maxArtworkBytes) throw new Error("artwork");
+  const directory = path.join(
+    process.cwd(),
+    "public",
+    "images",
+    "economy",
+    "custom",
+  );
+  await mkdir(directory, { recursive: true });
+  const fileName = `staff-${randomUUID()}.${extension}`;
+  await writeFile(
+    path.join(directory, fileName),
+    Buffer.from(await value.arrayBuffer()),
+    { flag: "wx" },
+  );
+  return `/images/economy/custom/${fileName}`;
+}
+
 async function ensureActorCanTarget(
   actorSteamId: string,
   targetSteamId: string,
@@ -327,6 +357,32 @@ export async function POST(request: Request) {
   const reason = formText(formData, "reason", 180);
 
   try {
+    if (action === "catalogue-artwork-set") {
+      if (!actor.canManageEconomy)
+        return redirect(request, "error", "manage-permission");
+      const catalogueId = integer(formText(formData, "catalogueId", 20), 1);
+      const providedArtworkUrl = optionalText(formData, "artworkUrl", 512);
+      if (catalogueId === null || providedArtworkUrl === null)
+        return redirect(request, "error", "artwork");
+      const uploadedArtworkUrl = await saveCatalogueArtwork(
+        formData.get("artworkFile"),
+      );
+      const artworkUrl = uploadedArtworkUrl ?? providedArtworkUrl;
+      if (!artworkUrl) return redirect(request, "error", "artwork");
+      await setEconomyCatalogueArtwork({
+        actorSteamId: actor.steamId,
+        catalogueId,
+        artworkUrl,
+        idempotencyKey,
+      });
+      return redirect(
+        request,
+        "notice",
+        "artwork-saved",
+        targetSteamId ?? undefined,
+      );
+    }
+
     if (action === "market-name-set") {
       if (!actor.canManageEconomy)
         return redirect(request, "error", "manage-permission");
@@ -621,7 +677,14 @@ export async function POST(request: Request) {
     }
 
     return redirect(request, "error", "action", targetSteamId);
-  } catch {
-    return redirect(request, "error", "database", targetSteamId ?? undefined);
+  } catch (error) {
+    return redirect(
+      request,
+      "error",
+      error instanceof Error && error.message === "artwork"
+        ? "artwork"
+        : "database",
+      targetSteamId ?? undefined,
+    );
   }
 }

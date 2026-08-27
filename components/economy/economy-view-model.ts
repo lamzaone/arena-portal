@@ -146,6 +146,14 @@ function authoritativeCrateRarity(
   }
 }
 
+function isGoldTierSpecial(itemType: string, displayName: string) {
+  return (
+    itemType === "knife" ||
+    itemType === "glove" ||
+    /\bm4a4\s*\|\s*howl\b/iu.test(displayName)
+  );
+}
+
 function stringArray(value: unknown) {
   return asArray(value)
     .map((entry) => text(entry))
@@ -272,13 +280,16 @@ export function toEconomyItem(value: unknown): EconomyItemView {
       firstDefined(record, ["rarityRank", "rarityLevel"]),
       integer(firstDefined(catalogue, ["rarityRank", "rarityLevel"]), 0),
     ) ?? 0;
-  // Crate previews place per-entry attributes in metadata so they can retain
-  // the catalogue shape. Prefer those values for presentation: a knife's
-  // catalogue finish may be Covert, while its case entry is Extraordinary.
-  const rarityRank = authoritativeCrateRarity(
-    { ...metadata, ...attributes },
-    storedRarityRank,
-  );
+  // Knives, gloves, and the Contraband M4A4 | Howl are gold-tier CS items
+  // even if a legacy catalogue stored a finish rarity. Crate previews also
+  // place per-entry attributes in metadata for the remaining item types.
+  const rarityRank =
+    isGoldTierSpecial(itemType, displayName)
+      ? 7
+      : authoritativeCrateRarity(
+          { ...metadata, ...attributes },
+          storedRarityRank,
+        );
   const nestedPrice = isRecord(record.price)
     ? record.price
     : isRecord(catalogue.price)

@@ -82,6 +82,13 @@ function formatPrice(tokens: number | null) {
     : `${formatTokens(tokens)} Tokens`;
 }
 
+function catalogueArtworkUrl(metadata: Record<string, unknown>) {
+  const imageUrl = metadata.imageUrl;
+  return typeof imageUrl === "string" && imageUrl.trim()
+    ? imageUrl.trim()
+    : "";
+}
+
 function noticeText(value: string | undefined) {
   const messages: Record<string, string> = {
     "tokens-updated": "Token balance updated and logged.",
@@ -98,6 +105,7 @@ function noticeText(value: string | undefined) {
     "market-name-saved":
       "Exact public market name saved; its prior price snapshot was invalidated.",
     "price-saved": "Last-known market price recorded.",
+    "artwork-saved": "Catalogue artwork saved and will be used by all item previews.",
   };
   return value ? messages[value] : undefined;
 }
@@ -119,6 +127,8 @@ function errorText(value: string | undefined) {
     "price-unavailable":
       "The public price database has no matching EUR quote. Its last-known price remains unchanged.",
     price: "Provide a valid catalogue ID and whole EUR-cent price.",
+    artwork:
+      "Use a PNG, JPEG, or WebP below 5 MB, or an HTTPS URL or /images/economy/ path.",
     "token-details": "Provide a valid token action, amount, and reason.",
     "item-details": "Review the item fields, JSON, and reason before saving.",
     "container-catalogue":
@@ -1031,6 +1041,42 @@ export default async function AdminItemsPage({
                         </label>
                         <button className="staff-unban-button" type="submit">
                           Save market name
+                        </button>
+                      </form>
+                      <form
+                        action="/api/admin/economy"
+                        method="post"
+                        encType="multipart/form-data"
+                      >
+                        <ActionFields csrf={csrf} action="catalogue-artwork-set" />
+                        <input
+                          type="hidden"
+                          name="catalogueId"
+                          value={item.id}
+                        />
+                        <label>
+                          Catalogue artwork
+                          <input
+                            name="artworkUrl"
+                            maxLength={512}
+                            defaultValue={catalogueArtworkUrl(item.metadata)}
+                            placeholder="/images/economy/my-case.png or https://..."
+                          />
+                        </label>
+                        <label>
+                          Or upload PNG, JPEG, or WebP
+                          <input
+                            name="artworkFile"
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                          />
+                        </label>
+                        <small>
+                          Uploading replaces the URL above. Files are stored in
+                          the portal artwork folder and are limited to 5 MB.
+                        </small>
+                        <button className="staff-unban-button" type="submit">
+                          Save artwork
                         </button>
                       </form>
                       <form action="/api/admin/economy" method="post">

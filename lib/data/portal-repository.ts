@@ -3045,6 +3045,18 @@ export type SetEconomyCatalogueMarketHashResult = {
   marketHashName: string;
 };
 
+export type SetEconomyCatalogueArtworkInput = {
+  actorSteamId: string;
+  catalogueId: number;
+  artworkUrl: string;
+  idempotencyKey: string;
+};
+
+export type SetEconomyCatalogueArtworkResult = {
+  catalogueId: number;
+  artworkUrl: string;
+};
+
 export type StaffAdjustTokensInput = {
   actorSteamId: string;
   targetSteamId: string;
@@ -3853,9 +3865,27 @@ function economyLootEntryRarityRank(
 }
 
 function economyMetadataImageUrl(metadata: Record<string, unknown>) {
-  for (const key of ["imageUrl", "image", "iconUrl", "steamImageUrl"]) {
+  // Staff artwork intentionally wins over imported/official source artwork.
+  // The catalogue synchronizer may refresh imageUrl on server startup, but it
+  // must never make a staff-selected crate image disappear.
+  for (const key of [
+    "staffArtworkUrl",
+    "imageUrl",
+    "image",
+    "iconUrl",
+    "steamImageUrl",
+  ]) {
     const value = economyMetadataString(metadata, key);
     if (!value || value.length > 2_048) continue;
+    if (
+      value.startsWith("/images/economy/") &&
+      !value.includes("\\") &&
+      !value.includes("..") &&
+      !value.includes("?") &&
+      !value.includes("#")
+    ) {
+      return value;
+    }
     try {
       const url = new URL(value);
       if (url.protocol === "https:") return url.toString();
@@ -3900,10 +3930,25 @@ function economyCatalogueFloatRange(
   };
 }
 
+function economyIsGoldTierSpecial(itemType: EconomyItemType, displayName: string) {
+  return (
+    itemType === "knife" ||
+    itemType === "glove" ||
+    /\bm4a4\s*\|\s*howl\b/iu.test(displayName)
+  );
+}
+
 function toEconomyCatalogueItem(
   row: EconomyCatalogueRow,
 ): EconomyCatalogueItem {
   const itemType = economyItemType(String(row.item_type));
+  const storedRarityRank = economyNumber(row.rarity_rank, "catalogue rarity");
+  const displayName = String(row.display_name);
+  // Knives, gloves, and the Contraband M4A4 | Howl are gold-tier CS items.
+  // Imported rows can retain their finish rarity, but player-facing market
+  // filtering and sorting must use the actual extraordinary tier.
+  const rarityRank =
+    economyIsGoldTierSpecial(itemType, displayName) ? 7 : storedRarityRank;
   const price = toEconomyCataloguePrice(row);
   const metadata = economyRecord(row.metadata);
   const floatRange = economyCatalogueFloatRange(itemType, metadata);
@@ -3918,11 +3963,9 @@ function toEconomyCatalogueItem(
       "catalogue definition index",
     ),
     paintkit: economyOptionalInteger(row.paintkit, "catalogue paintkit"),
-    rarityRank: economyNumber(row.rarity_rank, "catalogue rarity"),
-    rarityName: economyRarityName(
-      economyNumber(row.rarity_rank, "catalogue rarity"),
-    ),
-    displayName: String(row.display_name),
+    rarityRank,
+    rarityName: economyRarityName(rarityRank),
+    displayName,
     imageUrl: economyMetadataImageUrl(metadata),
     minFloat: floatRange?.min ?? null,
     maxFloat: floatRange?.max ?? null,
@@ -4588,6 +4631,12 @@ const economyCatalogueFloatMinimumSql =
 const economyCatalogueFloatMaximumSql =
   "COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.maxFloat')) AS DECIMAL(8, 6)), CAST(JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.floatMax')) AS DECIMAL(8, 6)), CAST(JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.wearMax')) AS DECIMAL(8, 6)), 1)";
 
+// Use the same player-facing tier in SQL filters and ordering as the portal
+// cards. This keeps rare-special and Contraband items out of the Covert group
+// while preserving the raw catalogue rank for sync/audit purposes.
+const economyCataloguePresentationRaritySql =
+  "CASE WHEN c.item_type IN ('knife', 'glove') OR LOWER(c.display_name) LIKE '%m4a4%howl%' THEN 7 ELSE c.rarity_rank END";
+
 function economyFilterStates(values: EconomyItemState[] | undefined) {
   if (!values) return [];
   return [...new Set(values.map((value) => economyItemState(String(value))))];
@@ -4774,7 +4823,10 @@ export async function getEconomyCatalogue(
   }
   if (rarityRanks.length) {
     where.push(
-      "c.rarity_rank IN (" + rarityRanks.map(() => "?").join(", ") + ")",
+      economyCataloguePresentationRaritySql +
+        " IN (" +
+        rarityRanks.map(() => "?").join(", ") +
+        ")",
     );
     values.push(...rarityRanks);
   }
@@ -4806,7 +4858,9 @@ export async function getEconomyCatalogue(
   const [rows] = await pool.query<EconomyCatalogueRow[]>(
     economyCatalogueSelect +
       clause +
-      " ORDER BY c.rarity_rank DESC, c.display_name ASC, c.id ASC LIMIT ? OFFSET ?",
+      " ORDER BY " +
+      economyCataloguePresentationRaritySql +
+      " DESC, c.display_name ASC, c.id ASC LIMIT ? OFFSET ?",
     [...values, paging.pageSize, paging.offset],
   );
   return {
@@ -5785,6 +5839,73 @@ async function getEconomyPlayerDisplayName(steamId: string) {
     [steamId],
   );
   return rows[0]?.name?.trim() || steamId;
+}
+
+function economyArtworkUrl(value: string) {
+  const artworkUrl = economyText(value, "Catalogue artwork URL", 512);
+  if (
+    artworkUrl.startsWith("/images/economy/") &&
+    !artworkUrl.includes("\\") &&
+    !artworkUrl.includes("..") &&
+    !artworkUrl.includes("?") &&
+    !artworkUrl.includes("#")
+  ) {
+    return artworkUrl;
+  }
+  try {
+    const url = new URL(artworkUrl);
+    if (url.protocol !== "https:" || url.username || url.password)
+      economyError(
+        "invalid_input",
+        "Artwork must use HTTPS or a portal /images/economy/ path.",
+      );
+    return url.toString();
+  } catch {
+    return economyError(
+      "invalid_input",
+      "Artwork must use HTTPS or a portal /images/economy/ path.",
+    );
+  }
+}
+
+export async function setEconomyCatalogueArtwork(
+  input: SetEconomyCatalogueArtworkInput,
+): Promise<SetEconomyCatalogueArtworkResult> {
+  const catalogueId = economyNumber(input.catalogueId, "Catalogue item ID", 1);
+  const artworkUrl = economyArtworkUrl(input.artworkUrl);
+  return runEconomyMutation({
+    operationName: "catalogue.artwork.set",
+    actorSteamId: input.actorSteamId,
+    idempotencyKey: input.idempotencyKey,
+    request: { catalogueId, artworkUrl },
+    work: async (context) => {
+      const catalogue = await lockEconomyCatalogue(
+        context.connection,
+        catalogueId,
+        true,
+      );
+      const previousArtworkUrl = economyMetadataImageUrl(catalogue.metadata);
+      const metadata = {
+        ...catalogue.metadata,
+        imageUrl: artworkUrl,
+        staffArtworkUrl: artworkUrl,
+      };
+      await context.connection.execute(
+        "UPDATE portal_economy_catalogue SET metadata = ? WHERE id = ?",
+        [JSON.stringify(metadata), catalogueId],
+      );
+      await writeEconomyAdminAudit({
+        connection: context.connection,
+        actorSteamId: context.actorSteamId,
+        action: "catalogue.artwork.set",
+        targetType: "catalogue-item",
+        targetId: String(catalogueId),
+        idempotencyKey: context.idempotencyKey,
+        metadata: { previousArtworkUrl, artworkUrl },
+      });
+      return { catalogueId, artworkUrl };
+    },
+  });
 }
 
 export async function setEconomyCatalogueMarketHash(
