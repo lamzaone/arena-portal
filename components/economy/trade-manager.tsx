@@ -18,6 +18,7 @@ import {
   type EconomyTradeView,
 } from "@/components/economy/economy-view-model";
 import { TokenBalance } from "@/components/economy/token-balance";
+import { PortalToast } from "@/components/success-toast";
 
 type TradeManagerProps = {
   inventory: unknown;
@@ -275,12 +276,11 @@ export function TradeManager({
       </div>
 
       {notice ? (
-        <p
-          className={`notice notice-${notice.type === "success" ? "success" : "danger"}`}
-          role="status"
-        >
-          {notice.text}
-        </p>
+        <PortalToast
+          variant={notice.type === "success" ? "success" : "danger"}
+          message={notice.text}
+          onDismiss={() => setNotice(null)}
+        />
       ) : null}
 
       <section className="panel form-panel">

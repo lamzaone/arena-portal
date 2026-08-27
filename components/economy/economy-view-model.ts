@@ -272,7 +272,13 @@ export function toEconomyItem(value: unknown): EconomyItemView {
       firstDefined(record, ["rarityRank", "rarityLevel"]),
       integer(firstDefined(catalogue, ["rarityRank", "rarityLevel"]), 0),
     ) ?? 0;
-  const rarityRank = authoritativeCrateRarity(attributes, storedRarityRank);
+  // Crate previews place per-entry attributes in metadata so they can retain
+  // the catalogue shape. Prefer those values for presentation: a knife's
+  // catalogue finish may be Covert, while its case entry is Extraordinary.
+  const rarityRank = authoritativeCrateRarity(
+    { ...metadata, ...attributes },
+    storedRarityRank,
+  );
   const nestedPrice = isRecord(record.price)
     ? record.price
     : isRecord(catalogue.price)
@@ -595,6 +601,16 @@ export function itemSupportsStickers(item: EconomyItemView) {
     (item.itemType === "skin" || item.itemType === "weapon") &&
     itemStickerSlotCount(item) > 0
   );
+}
+
+export function itemSupportsCharm(item: EconomyItemView) {
+  return item.itemType === "skin" || item.itemType === "weapon";
+}
+
+export function itemCharmDefinitionIndex(item: EconomyItemView) {
+  const attributes = isRecord(item.raw.attributes) ? item.raw.attributes : {};
+  const keychain = isRecord(attributes.keychain) ? attributes.keychain : {};
+  return integer(firstDefined(keychain, ["id", "definitionIndex", "keychain"]));
 }
 
 export function itemStickerSlotCount(item: EconomyItemView) {

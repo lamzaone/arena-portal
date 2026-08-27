@@ -15,15 +15,29 @@ function slotField(value: unknown): EconomyLoadoutSlotInput | null {
   return null;
 }
 
+function slotsField(value: unknown) {
+  const values = Array.isArray(value) ? value : [value];
+  if (values.length < 1 || values.length > 2) return null;
+  const slots = values.map(slotField);
+  return slots.every((slot): slot is EconomyLoadoutSlotInput => slot !== null)
+    ? slots
+    : null;
+}
+
 export async function POST(request: Request) {
   const context = await readEconomyMutation(request);
   if (isEconomyError(context)) return context;
-  const slot = slotField(context.body.slot);
-  if (!slot) return economyJsonError("Choose a valid loadout slot to clear.", 400);
+  const slots = slotsField(context.body.slots ?? context.body.slot);
+  if (!slots) return economyJsonError("Choose a valid loadout slot to clear.", 400);
 
   try {
-    const result = await clearEconomyLoadoutSlot({ steamId: context.session.steamId, slot, idempotencyKey: context.body.idempotencyKey });
-    return economyJsonSuccess({ ...result, message: "Loadout slot cleared. The server will refresh your active cosmetics." });
+    const result = await clearEconomyLoadoutSlot({ steamId: context.session.steamId, slots, idempotencyKey: context.body.idempotencyKey });
+    const scope = result.slots[0]?.team === null
+      ? "Global loadout slot"
+      : result.slots.length === 2
+        ? "Both selected loadout slots"
+        : "Loadout slot";
+    return economyJsonSuccess({ ...result, message: `${scope} cleared. The server will refresh your active cosmetics.` });
   } catch (error) {
     return economyMutationFailure(error);
   }

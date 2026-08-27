@@ -15,7 +15,7 @@ export default async function TradesPage() {
 
   const [wallet, inventory, trades] = await Promise.all([
     getTokenWallet(session.steamId),
-    getCompletePlayerEconomyInventory(session.steamId, { includeAttached: true }),
+    getCompletePlayerEconomyInventory(session.steamId),
     getCompletePlayerEconomyTrades(session.steamId)
   ]);
 

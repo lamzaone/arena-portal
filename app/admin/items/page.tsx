@@ -27,6 +27,7 @@ import {
 } from "@/lib/data/portal-repository";
 import { SignInRequired } from "@/components/sign-in-required";
 import { SiteHeader } from "@/components/site-header";
+import { PortalToast } from "@/components/success-toast";
 
 type AdminItemsPageProps = {
   searchParams: Promise<{
@@ -746,16 +747,8 @@ export default async function AdminItemsPage({
             Back to staff panel
           </Link>
         </section>
-        {notice ? (
-          <div className="notice notice-success" role="status">
-            {notice}
-          </div>
-        ) : null}
-        {error ? (
-          <div className="notice notice-danger" role="alert">
-            {error}
-          </div>
-        ) : null}
+        {notice ? <PortalToast message={notice} /> : null}
+        {error ? <PortalToast variant="danger" message={error} /> : null}
         <section className="economy-admin-search panel">
           <form action="/admin/items" method="get">
             <label>

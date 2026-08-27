@@ -47,6 +47,7 @@ import {
   type EconomyItemView,
 } from "@/components/economy/economy-view-model";
 import { TokenBalance } from "@/components/economy/token-balance";
+import { PortalToast } from "@/components/success-toast";
 
 type CrateOpenerProps = {
   crates: unknown;
@@ -164,6 +165,20 @@ function finiteNumber(value: unknown, fallback: number | null = null) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function crateLootPresentation(item: EconomyItemView): EconomyItemView {
+  // CS containers put knives and gloves in the rare-special slot. Older and
+  // custom loot tables can omit `rareSpecial`, leaving the catalogue's skin
+  // finish rank (normally Covert) in the response. At the opening surface the
+  // container category is still authoritative, so make the special tier
+  // explicit for the odds, reel, and completed reward alike.
+  if (item.itemType !== "knife" && item.itemType !== "glove") return item;
+  return {
+    ...item,
+    rarityRank: 7,
+    rarity: rarityName(7),
+  };
+}
+
 function crateDropStateFromResponse(value: unknown): CrateDropState {
   if (!isRecord(value))
     return { status: "unavailable", message: "Crate odds are unavailable." };
@@ -176,7 +191,7 @@ function crateDropStateFromResponse(value: unknown): CrateDropState {
     if (!Number.isSafeInteger(lootEntryId) || weight <= 0) return [];
     return [
       {
-        item: toEconomyItem(entry.catalogue),
+        item: crateLootPresentation(toEconomyItem(entry.catalogue)),
         lootEntryId,
         weight,
         minFloat: finiteNumber(entry.minFloat),
@@ -222,9 +237,19 @@ function rewardWithDropArtwork(
       ? null
       : drops.find((drop) => drop.lootEntryId === rewardLootEntryId)) ??
     drops.find((drop) => drop.item.catalogueId === reward.catalogueId);
-  return matchingDrop
-    ? { ...matchingDrop.item, ...reward, imageUrl: reward.imageUrl ?? matchingDrop.item.imageUrl }
-    : reward;
+  if (!matchingDrop) return crateLootPresentation(reward);
+
+  // The item instance returned by the opening endpoint carries the item's
+  // legacy catalogue rarity. The selected loot entry is authoritative for a
+  // case opening, notably for rare-special knives and gloves: retain its
+  // Extraordinary tier after merging the instance details.
+  return crateLootPresentation({
+    ...matchingDrop.item,
+    ...reward,
+    rarityRank: matchingDrop.item.rarityRank,
+    rarity: matchingDrop.item.rarity,
+    imageUrl: reward.imageUrl ?? matchingDrop.item.imageUrl,
+  });
 }
 
 function reelDropForIndex(drops: CrateDrop[], index: number, run: number) {
@@ -1304,12 +1329,11 @@ export function CrateOpener({
       </div>
 
       {notice ? (
-        <p
-          className={`notice notice-${notice.type === "success" ? "success" : "danger"}`}
-          role="status"
-        >
-          {notice.text}
-        </p>
+        <PortalToast
+          variant={notice.type === "success" ? "success" : "danger"}
+          message={notice.text}
+          onDismiss={() => setNotice(null)}
+        />
       ) : null}
 
       <section className="history-section crate-picker-section" aria-labelledby="crate-browser-heading">

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, Ban, CheckCircle2, Gavel, LockKeyhole, Search, ShieldCheck, Ticket, UsersRound, VolumeX } from "lucide-react";
+import { AlertTriangle, Ban, Gavel, LockKeyhole, Search, ShieldCheck, Ticket, UsersRound, VolumeX } from "lucide-react";
 
 import { adminWriteConfigured, getAdminAccess, getStaffGroupDefinitions } from "@/lib/admin/access";
 import { getSession, createAdminActionToken } from "@/lib/auth/session";
@@ -9,6 +9,7 @@ import { GroupBadge } from "@/components/group-badge";
 import { ResilientRemoteImage } from "@/components/resilient-remote-image";
 import { SignInRequired } from "@/components/sign-in-required";
 import { SiteHeader } from "@/components/site-header";
+import { PortalToast } from "@/components/success-toast";
 import { getStaffAdmins, getStaffAppeals, getStaffModeration, getStaffTickets, getStaffVips, type CaseMessage, type StaffAdmin, type StaffAppeal, type StaffSanction } from "@/lib/data/portal-repository";
 import { getSteamProfiles, type SteamProfile } from "@/lib/steam/profiles";
 
@@ -164,8 +165,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   return <main className="tapped-page staff-page"><div className="shell"><SiteHeader authenticated />
     <section className="staff-hero"><div><p className="tapped-kicker"><ShieldCheck aria-hidden="true" /> Staff operations</p><h1>Command<br /><span>centre.</span></h1><p>Moderate the server, manage access, and respond to player cases from one protected control room.</p></div><aside className="staff-access-card"><span>ACTIVE ROLE</span><strong>{access.groups.join(" + ")}</strong><small>Immunity {access.immunity} · Ban {access.canBan ? "allowed" : "no"} · Unban {access.canUnban ? "allowed" : "no"}</small></aside></section>
     <nav className="staff-tabs" aria-label="Staff panel sections">{tabs.filter((item) => item.id !== "appeals" || access.canUnban).map((item) => <Link key={item.id} className={tab === item.id ? "active" : ""} href={staffLink(item.id)}>{item.label}</Link>)}{access.canViewEconomy ? <Link href="/admin/items">Items</Link> : null}</nav>
-    {notice ? <div className="notice notice-success"><CheckCircle2 aria-hidden="true" /> {notice}</div> : null}
-    {error ? <div className="notice notice-danger"><AlertTriangle aria-hidden="true" /> {error}</div> : null}
+    {notice ? <PortalToast message={notice} /> : null}
+    {error ? <PortalToast variant="danger" message={error} /> : null}
 
     {tab === "bans" && moderation ? <>
       <section className="staff-tools"><form className="staff-search" action="/admin" method="get"><input type="hidden" name="tab" value="bans" /><label htmlFor="staff-search">Find a player</label><div><input id="staff-search" name="q" defaultValue={query} placeholder="SteamID64 or player name" /><button type="submit"><Search aria-hidden="true" /> Search</button></div></form><div className={`staff-write-status ${actionsReady ? "ready" : ""}`}><Gavel aria-hidden="true" /><span>{actionsReady ? "Server bridge actions are enabled" : "Read-only mode: server bridge is not enabled"}</span></div></section>

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import type { LoadoutCatalogue, LoadoutCategory, LoadoutTeam, PlayerLoadout, SavedLoadoutSkin } from "@/lib/data/portal-repository";
 import { proxiedImageUrl } from "@/lib/images/proxy-url";
+import { PortalToast } from "@/components/success-toast";
 
 type EditorCategory = LoadoutCategory | "agent" | "music-kit";
 type SideMode = LoadoutTeam | "both";
@@ -419,7 +420,7 @@ export function LoadoutEditor({ catalogue, loadout, actionToken }: LoadoutEditor
           </> : null}
 
           <div className="loadout-actions"><button type="button" className="button button-primary" disabled={submitting || !canApply} onClick={() => submit("set")}>{submitting ? "Queueing..." : sideMode === "both" && category !== "music-kit" ? "Apply to T + CT" : "Apply loadout"}</button><button type="button" className="button button-secondary" disabled={submitting} onClick={() => submit("reset")}>{sideMode === "both" && category !== "music-kit" ? "Reset T + CT" : "Reset this slot"}</button></div>
-          {notice ? <p className={`loadout-notice ${notice.type}`}>{notice.text}</p> : null}
+          {notice ? <PortalToast variant={notice.type === "success" ? "success" : "danger"} message={notice.text} onDismiss={() => setNotice(null)} /> : null}
         </div>
 
         <aside className="loadout-preview" style={previewStyle} aria-label="Selected loadout preview">

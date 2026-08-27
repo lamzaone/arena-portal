@@ -14,7 +14,7 @@ export default async function InventoryPage() {
 
   const [wallet, inventory, loadout] = await Promise.all([
     getTokenWallet(session.steamId),
-    getCompletePlayerEconomyInventory(session.steamId, { includeAttached: true }),
+    getCompletePlayerEconomyInventory(session.steamId),
     getPlayerEconomyLoadout(session.steamId)
   ]);
 

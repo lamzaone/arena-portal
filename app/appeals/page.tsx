@@ -7,6 +7,7 @@ import { CaseConversation } from "@/components/case-conversation";
 import { formatDate, formatPortalDate, isActiveSanction } from "@/components/formatters";
 import { SignInRequired } from "@/components/sign-in-required";
 import { SiteHeader } from "@/components/site-header";
+import { PortalToast } from "@/components/success-toast";
 import { getSession } from "@/lib/auth/session";
 import { getAppealEligibility, getAppeals, getPlayerDashboard, portalStorageConfigured, type AppealBan, type BanAppeal } from "@/lib/data/portal-repository";
 import { getSteamProfiles, type SteamProfile } from "@/lib/steam/profiles";
@@ -68,9 +69,9 @@ export default async function AppealsPage({ searchParams }: AppealsPageProps) {
   return (
     <main><div className="shell"><SiteHeader authenticated /><AccountNav current="/appeals" />
       <section className="page-heading"><div><p className="eyebrow"><Shield aria-hidden="true" /> Moderation review</p><h1>Ban appeals</h1><p>Appeals are unlocked only while a current ban is active.</p></div></section>
-      {params.submitted && <div className="notice notice-success">Your appeal was submitted. Staff updates will appear below.</div>}
-      {params.replied && <div className="notice notice-success">Your reply and any screenshots were sent to staff.</div>}
-      {params.error && <div className="notice notice-danger"><AlertTriangle aria-hidden="true" /> {error}</div>}
+      {params.submitted && <PortalToast message="Your appeal was submitted. Staff updates will appear below." />}
+      {params.replied && <PortalToast message="Your reply and any screenshots were sent to staff." />}
+      {params.error && <PortalToast variant="danger" message={error} />}
       {activeBan ? <>
         <section className="panel appeal-ban"><div><span className="badge badge-danger">Active ban</span><h2>{activeBan.reason}</h2><p>Issued by <AdminProfileMention steamId={activeBan.adminSteamId} name={activeBan.adminSteamId ? steamProfiles.get(activeBan.adminSteamId)?.name ?? activeBan.adminName : activeBan.adminName} /> on {formatDate(activeBan.createdAt)}. {activeBan.expiresAt ? `Ends ${formatDate(activeBan.expiresAt)}.` : "This ban is permanent until reviewed."}</p></div></section>
         {storageReady && appealEligibility?.eligible ? <form className="panel form-panel" action="/api/appeals" method="post" encType="multipart/form-data"><input type="hidden" name="action" value="create" /><div className="panel-heading"><h2>Submit an appeal</h2><p>Explain what happened, take responsibility where appropriate, and include useful context.</p></div><label htmlFor="appeal-body">Your appeal</label><textarea id="appeal-body" name="body" minLength={20} maxLength={5000} required placeholder="Write your appeal…" /><label htmlFor="appeal-screenshots">Screenshots (optional)<input id="appeal-screenshots" name="screenshots" type="file" accept="image/png,image/jpeg,image/webp" multiple /></label><EvidenceGuidance /><button className="button button-primary" type="submit">Submit appeal</button></form> : !storageReady ? <div className="notice notice-info"><AlertTriangle aria-hidden="true" /> Portal storage needs to be configured before appeals can be submitted.</div> : <div className="notice notice-warning"><AlertTriangle aria-hidden="true" /> Your previous appeal was closed as still banned. You can submit a new appeal after <strong>{appealEligibility?.eligibleAt ? formatPortalDate(appealEligibility.eligibleAt) : "the seven-day review cooldown"}</strong>.</div>}

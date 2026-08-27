@@ -16,7 +16,7 @@ export default async function CratesPage() {
   const [wallet, crates, inventory] = await Promise.all([
     getTokenWallet(session.steamId),
     getCompleteEconomyCrates(),
-    getCompletePlayerEconomyInventory(session.steamId, { includeAttached: true })
+    getCompletePlayerEconomyInventory(session.steamId)
   ]);
 
   return <main><div className="shell"><SiteHeader authenticated /><AccountNav current="/crates" />

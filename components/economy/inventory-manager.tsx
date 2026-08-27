@@ -28,6 +28,8 @@ import {
   economyLoadout,
   economyWallet,
   formatTokens,
+  itemCharmDefinitionIndex,
+  itemSupportsCharm,
   humanize,
   itemStickerSlotCount,
   itemSupportsLoadout,
@@ -36,6 +38,7 @@ import {
   type EconomyItemView,
 } from "@/components/economy/economy-view-model";
 import { TokenBalance } from "@/components/economy/token-balance";
+import { PortalToast } from "@/components/success-toast";
 
 type InventoryManagerProps = {
   inventory: unknown;
@@ -124,9 +127,12 @@ export function InventoryManager({
   const [rarity, setRarity] = useState("all");
   const [sort, setSort] = useState<SortMode>("newest");
   const [selectedId, setSelectedId] = useState("");
-  const [team, setTeam] = useState<"T" | "CT">("T");
+  const [selectedTeams, setSelectedTeams] = useState<Array<"T" | "CT">>([
+    "T",
+  ]);
   const [nametag, setNametag] = useState("");
   const [nametagItemId, setNametagItemId] = useState("");
+  const [charmItemId, setCharmItemId] = useState("");
   const [stickerId, setStickerId] = useState("");
   const [stickerSlot, setStickerSlot] = useState("0");
   const [saleConfirmationItemId, setSaleConfirmationItemId] = useState("");
@@ -174,8 +180,14 @@ export function InventoryManager({
   const selectedIndex = filtered.findIndex((item) => item.id === selectedId);
   const selectedSalePayout =
     selected?.marketPriceTokens !== null && selected?.marketPriceTokens !== undefined
-      ? Math.floor(selected.marketPriceTokens / 10)
+      ? Math.max(5, Math.floor(selected.marketPriceTokens / 10))
       : null;
+  const salePriceIsKnown =
+    selectedSalePayout !== null && selectedSalePayout >= 1;
+  // Inventory records retain a saved snapshot while the Market can show a
+  // fresher public quote. The server resolves that current quote on sale.
+  const saleCanResolveFromMarket =
+    selected !== null && selected.catalogueId !== null;
   const saleIsConfirming = selected?.id === saleConfirmationItemId;
   const saleUnavailableReason = !selected
     ? null
@@ -183,10 +195,23 @@ export function InventoryManager({
       ? "Attached or trade-reserved items cannot be sold."
       : selected.stickers.length
         ? "Remove the attached stickers before selling this item."
-      : selectedSalePayout === null || selectedSalePayout < 1
+      : !salePriceIsKnown && !saleCanResolveFromMarket
         ? "This item needs a current market or last-known price before it can be sold."
         : null;
-  const selectedSlot = selected ? slotForItem(selected, team) : null;
+  const selectedSlots = selected
+    ? (() => {
+        const prototype = slotForItem(selected, "T");
+        if (!prototype) return [];
+        if (prototype.slotType === "music_kit") return [prototype];
+        return selectedTeams
+          .map((team) => slotForItem(selected, team))
+          .filter((slot): slot is LoadoutSlotInput => slot !== null);
+      })()
+    : [];
+  const selectedSlot = selectedSlots[0] ?? null;
+  const selectedCharmDefinitionIndex = selected
+    ? itemCharmDefinitionIndex(selected)
+    : null;
   const stickerSlots = selected ? itemStickerSlotCount(selected) : 0;
   const stickers = items.filter(
     (item) => item.itemType === "sticker" && item.id,
@@ -195,12 +220,21 @@ export function InventoryManager({
     (item) =>
       item.itemType === "nametag" && item.state === "available" && item.id,
   );
+  const charms = items.filter(
+    (item) => item.itemType === "keychain" && item.state === "available" && item.id,
+  );
+  const canCustomize =
+    selected !== null &&
+    (itemSupportsNametag(selected) ||
+      itemSupportsCharm(selected) ||
+      itemSupportsStickers(selected));
 
   useEffect(() => {
     if (!selected) return;
     setNametag(selected.nametag ?? "");
     setNametagItemId("");
-    setTeam("T");
+    setCharmItemId("");
+    setSelectedTeams(["T"]);
     setStickerId("");
     setStickerSlot("0");
     setSaleConfirmationItemId("");
@@ -253,6 +287,18 @@ export function InventoryManager({
     const itemIndex = filtered.findIndex((item) => item.id === itemId);
     setInventoryInlineModalIndex(rowEndIndex(itemIndex, columns, filtered.length));
     setSelectedId(nextSelectedId);
+  }
+
+  function toggleLoadoutTeam(team: "T" | "CT") {
+    setSelectedTeams((current) => {
+      if (current.includes(team)) {
+        // Keep one team active so Equip and Clear are always meaningful.
+        return current.length === 1
+          ? current
+          : current.filter((entry) => entry !== team);
+      }
+      return [...current, team].sort();
+    });
   }
 
   function runAction(
@@ -315,12 +361,11 @@ export function InventoryManager({
       </div>
 
       {notice ? (
-        <p
-          className={`notice notice-${notice.type === "success" ? "success" : "danger"}`}
-          role="status"
-        >
-          {notice.text}
-        </p>
+        <PortalToast
+          variant={notice.type === "success" ? "success" : "danger"}
+          message={notice.text}
+          onDismiss={() => setNotice(null)}
+        />
       ) : null}
 
       <form
@@ -494,29 +539,33 @@ export function InventoryManager({
                     <legend>Equip item</legend>
                     {selectedSlot?.slotType !== "music_kit" ? (
                       <fieldset className="inventory-team-switch">
-                        <legend>Loadout team</legend>
-                        <div role="group" aria-label="Loadout team">
+                        <legend>Loadout teams</legend>
+                        <div role="group" aria-label="Loadout teams">
                           <button
                             type="button"
-                            className={`inventory-team-choice is-terrorist${team === "T" ? " is-selected" : ""}`}
-                            aria-pressed={team === "T"}
+                            className={`inventory-team-choice is-terrorist${selectedTeams.includes("T") ? " is-selected" : ""}`}
+                            aria-pressed={selectedTeams.includes("T")}
                             disabled={pending}
-                            onClick={() => setTeam("T")}
+                            onClick={() => toggleLoadoutTeam("T")}
                           >
                             <Crosshair aria-hidden="true" />
                             <span><strong>T</strong><small>Terrorist</small></span>
                           </button>
                           <button
                             type="button"
-                            className={`inventory-team-choice is-counter-terrorist${team === "CT" ? " is-selected" : ""}`}
-                            aria-pressed={team === "CT"}
+                            className={`inventory-team-choice is-counter-terrorist${selectedTeams.includes("CT") ? " is-selected" : ""}`}
+                            aria-pressed={selectedTeams.includes("CT")}
                             disabled={pending}
-                            onClick={() => setTeam("CT")}
+                            onClick={() => toggleLoadoutTeam("CT")}
                           >
                             <Shield aria-hidden="true" />
                             <span><strong>CT</strong><small>Counter-Terrorist</small></span>
                           </button>
                         </div>
+                        <p className="empty-copy">
+                          Select both teams to apply this item to T and CT in
+                          one update.
+                        </p>
                       </fieldset>
                     ) : (
                       <p className="empty-copy">
@@ -533,13 +582,13 @@ export function InventoryManager({
                       <button
                         type="button"
                         className="button button-primary"
-                        disabled={pending || !selected.id || !selectedSlot}
+                        disabled={pending || !selected.id || !selectedSlots.length}
                         onClick={() =>
-                          selectedSlot
+                          selectedSlots.length
                             ? runAction(
                                 "/api/economy/loadout/equip",
-                                { itemId: selected.id, slot: selectedSlot },
-                                `${selected.displayName} has been equipped.`,
+                                { itemId: selected.id, slots: selectedSlots },
+                                `${selected.displayName} has been equipped for ${selectedSlots.length === 2 ? "T and CT" : "the selected team"}.`,
                               )
                             : undefined
                         }
@@ -550,13 +599,13 @@ export function InventoryManager({
                       <button
                         type="button"
                         className="button button-secondary"
-                        disabled={pending || !selectedSlot}
+                        disabled={pending || !selectedSlots.length}
                         onClick={() =>
-                          selectedSlot
+                          selectedSlots.length
                             ? runAction(
                                 "/api/economy/loadout/clear",
-                                { slot: selectedSlot },
-                                "Loadout slot cleared.",
+                                { slots: selectedSlots },
+                                `${selectedSlots.length === 2 ? "Both loadout slots cleared." : "Loadout slot cleared."}`,
                               )
                             : undefined
                         }
@@ -572,6 +621,13 @@ export function InventoryManager({
                   </p>
                 )}
 
+                {canCustomize ? (
+                  <details className="inventory-customize-panel">
+                    <summary>
+                      <span><Sticker aria-hidden="true" /> Customize</span>
+                      <small>Name tag, charm, stickers</small>
+                    </summary>
+                    <div className="inventory-customize-panel-body">
                 {itemSupportsNametag(selected) ? (
                   <fieldset className="form-panel">
                     <legend>Name tag</legend>
@@ -629,6 +685,49 @@ export function InventoryManager({
                     >
                       <PencilLine aria-hidden="true" />{" "}
                       {pending ? "Saving…" : "Apply name tag"}
+                    </button>
+                  </fieldset>
+                ) : null}
+
+                {itemSupportsCharm(selected) ? (
+                  <fieldset className="form-panel">
+                    <legend>Charm</legend>
+                    <label htmlFor="inventory-charm">
+                      Owned charm
+                      <select
+                        id="inventory-charm"
+                        value={charmItemId}
+                        onChange={(event) => setCharmItemId(event.target.value)}
+                      >
+                        <option value="">Choose an owned charm</option>
+                        {charms.map((charm) => (
+                          <option key={charm.id} value={charm.id}>
+                            {charm.displayName} · {charm.rarity}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {selectedCharmDefinitionIndex !== null ? (
+                      <p className="empty-copy">
+                        Current charm: game definition {selectedCharmDefinitionIndex}.
+                      </p>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="button button-secondary"
+                      disabled={pending || !selected.id || !charmItemId}
+                      onClick={() =>
+                        runAction(
+                          "/api/economy/items/charm",
+                          {
+                            weaponItemId: selected.id,
+                            charmItemId,
+                          },
+                          "Charm applied to your weapon.",
+                        )
+                      }
+                    >
+                      <Sticker aria-hidden="true" /> {pending ? "Saving…" : "Apply charm"}
                     </button>
                   </fieldset>
                 ) : null}
@@ -698,6 +797,9 @@ export function InventoryManager({
                     ) : null}
                   </fieldset>
                 ) : null}
+                    </div>
+                  </details>
+                ) : null}
                 <details className="inventory-sell-panel">
                   <summary>
                     <span><Coins aria-hidden="true" /> Sell to market</span>
@@ -710,13 +812,21 @@ export function InventoryManager({
                       <>
                         <div className="inventory-sell-price">
                           <span>Current buyback payout</span>
-                          <strong>{formatTokens(selectedSalePayout ?? 0)} Tokens</strong>
+                          <strong>
+                            {salePriceIsKnown
+                              ? `${formatTokens(selectedSalePayout)} Tokens`
+                              : "Market quote"}
+                          </strong>
                           <small>
-                            10% of the current {formatTokens(selected.marketPriceTokens ?? 0)}-Token market price.
+                            {salePriceIsKnown
+                              ? selected.marketPriceTokens !== null && selected.marketPriceTokens < 50
+                                ? `Minimum 5-Token buyback for this ${formatTokens(selected.marketPriceTokens)}-Token market price.`
+                                : `10% of the current ${formatTokens(selected.marketPriceTokens ?? 0)}-Token market price.`
+                              : "Your final 10% payout is resolved from the same current quote shown in Market."}
                           </small>
                         </div>
                         <p className="empty-copy">
-                          The price is checked again when you confirm. Selling permanently removes this item from your inventory and clears it from your loadout.
+                          Uses the current portal Market price or its staff-set last-known price. Selling permanently removes this item from your inventory and clears it from your loadout.
                         </p>
                         {saleIsConfirming ? (
                           <div className="hero-actions inventory-sell-confirmation">
@@ -728,11 +838,15 @@ export function InventoryManager({
                                 runAction(
                                   "/api/economy/items/sell",
                                   { itemId: selected.id },
-                                  `${selected.displayName} sold for ${formatTokens(selectedSalePayout ?? 0)} Tokens.`,
+                                  `${selected.displayName} sale completed.`,
                                 )
                               }
                             >
-                              <Coins aria-hidden="true" /> {pending ? "Selling…" : `Confirm sale for ${formatTokens(selectedSalePayout ?? 0)} Tokens`}
+                              <Coins aria-hidden="true" /> {pending
+                                ? "Selling…"
+                                : salePriceIsKnown
+                                  ? `Confirm sale for ${formatTokens(selectedSalePayout)} Tokens`
+                                  : "Confirm sale at market price"}
                             </button>
                             <button
                               type="button"
@@ -750,7 +864,9 @@ export function InventoryManager({
                             disabled={pending}
                             onClick={() => setSaleConfirmationItemId(selected.id)}
                           >
-                            <Coins aria-hidden="true" /> Sell for {formatTokens(selectedSalePayout ?? 0)} Tokens
+                            <Coins aria-hidden="true" /> {salePriceIsKnown
+                              ? `Sell for ${formatTokens(selectedSalePayout)} Tokens`
+                              : "Sell at market price"}
                           </button>
                         )}
                       </>

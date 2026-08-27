@@ -2637,6 +2637,16 @@ export type EconomyInventoryItem = {
   consumedAt: string | null;
   updatedAt: string;
   catalogue: EconomyInventoryCatalogue;
+  // Inventory pages overlay the fresh public quote here when one is available.
+  // The persisted catalogue price remains nested under `catalogue.price` for
+  // audit, while these fields let all player-facing cards show one consistent
+  // current Market price for this exact item's float.
+  marketPriceTokens: number | null;
+  marketPriceEuroCents: number | null;
+  marketPriceSource: string | null;
+  marketPriceFloatValue: number | null;
+  marketPriceWear: string | null;
+  marketPriceFloatDiscountBps: number | null;
   stickers: EconomyInventorySticker[];
   equippedSlotKeys: string[];
 };
@@ -2801,9 +2811,9 @@ export type PurchaseEconomyItemResult = {
 export type SellEconomyItemInput = {
   steamId: string;
   itemId: string;
-  // The sell route resolves a current public quote before entering the
-  // database transaction. It is never supplied by the browser.
-  resolvedMarketPrice?: ResolvedEconomyMarketSalePrice;
+  // Resolved only by the authenticated sell route using the same public-price
+  // adapter as the portal Market. It is never browser input.
+  marketQuote?: ResolvedEconomyMarketSalePrice;
   idempotencyKey: string;
 };
 
@@ -2860,7 +2870,7 @@ export type OpenEconomyCrateResult = {
 export type EquipEconomyItemInput = {
   steamId: string;
   itemId: string;
-  slot: EconomyLoadoutSlotInput;
+  slots: EconomyLoadoutSlotInput[];
   idempotencyKey: string;
 };
 
@@ -2869,14 +2879,23 @@ export type EquipEconomyItemResult = {
   slot: EconomyLoadoutSlot;
 };
 
+export type EquipEconomyItemSlotsResult = {
+  itemId: string;
+  slots: EconomyLoadoutSlot[];
+};
+
 export type ClearEconomyLoadoutSlotInput = {
   steamId: string;
-  slot: EconomyLoadoutSlotInput;
+  slots: EconomyLoadoutSlotInput[];
   idempotencyKey: string;
 };
 
 export type ClearEconomyLoadoutSlotResult = {
   slot: EconomyLoadoutSlot;
+};
+
+export type ClearEconomyLoadoutSlotsResult = {
+  slots: EconomyLoadoutSlot[];
 };
 
 export type SetEconomyItemNametagInput = {
@@ -2906,6 +2925,19 @@ export type AttachEconomyStickerResult = {
   weaponItemId: string;
   stickerItemId: string;
   slot: number;
+};
+
+export type AttachEconomyCharmInput = {
+  steamId: string;
+  weaponItemId: string;
+  charmItemId: string;
+  idempotencyKey: string;
+};
+
+export type AttachEconomyCharmResult = {
+  weaponItemId: string;
+  charmItemId: string;
+  charmDefinitionIndex: number;
 };
 
 export type CreateEconomyTradeInput = {
@@ -3636,6 +3668,25 @@ function economySlot(input: EconomyLoadoutSlotInput): {
   };
 }
 
+function economySlots(inputs: EconomyLoadoutSlotInput[]) {
+  if (!Array.isArray(inputs) || inputs.length < 1 || inputs.length > 2) {
+    economyError("invalid_input", "Choose one or both loadout teams.");
+  }
+  const slotsByKey = new Map<
+    string,
+    ReturnType<typeof economySlot>
+  >();
+  for (const input of inputs) {
+    const slot = economySlot(input);
+    slotsByKey.set(slot.slotKey, slot);
+  }
+  const slots = [...slotsByKey.values()].sort((left, right) =>
+    left.slotKey.localeCompare(right.slotKey),
+  );
+  if (!slots.length) economyError("invalid_input", "Choose a loadout slot.");
+  return slots;
+}
+
 function economyStableJson(value: unknown): string {
   if (value === null) return "null";
   if (typeof value === "string") return JSON.stringify(value);
@@ -3972,6 +4023,12 @@ function toEconomyInventoryItem(
             enabled: economyBoolean(row.catalogue_enabled),
             price,
           },
+    marketPriceTokens: price?.tokenPrice ?? null,
+    marketPriceEuroCents: price?.euroCents ?? null,
+    marketPriceSource: price?.source ?? null,
+    marketPriceFloatValue: null,
+    marketPriceWear: null,
+    marketPriceFloatDiscountBps: null,
     stickers: [],
     equippedSlotKeys: [],
   };
@@ -4025,6 +4082,32 @@ function economyStickerSlots(item: EconomyInventoryItem) {
   const metadata = item.catalogue?.metadata ?? item.attributes;
   const slots = economyMetadataInteger(metadata, "stickerSlots");
   return slots === null ? 0 : Math.max(0, Math.min(slots, 6));
+}
+
+function economyItemSupportsCharm(item: EconomyInventoryItem) {
+  return item.itemType === "skin";
+}
+
+function economyCharmAttributes(charm: EconomyInventoryItem) {
+  if (charm.definitionIndex === null || charm.definitionIndex < 1)
+    economyError("incompatible_item", "That charm has no valid game definition.");
+  const keychain: Record<string, number> = { id: charm.definitionIndex };
+  const aliases: Array<[string, string]> = [
+    ["offsetX", "offsetX"],
+    ["offsetY", "offsetY"],
+    ["offsetZ", "offsetZ"],
+    ["x", "offsetX"],
+    ["y", "offsetY"],
+    ["z", "offsetZ"],
+  ];
+  for (const [source, target] of aliases) {
+    if (keychain[target] !== undefined) continue;
+    const value = economyMetadataDecimal(charm.attributes, source);
+    if (value !== null) keychain[target] = value;
+  }
+  const seed = charm.seed ?? economyMetadataInteger(charm.attributes, "seed");
+  if (seed !== null && seed >= 0) keychain.seed = seed;
+  return keychain;
 }
 
 function economyLoadoutCategory(item: EconomyInventoryItem) {
@@ -4589,7 +4672,11 @@ async function findEconomyInventoryItem(pool: Pool, itemId: string) {
   return items[0] ?? null;
 }
 
-/** Reads one inventory instance only when it belongs to the requesting player. */
+/**
+ * Returns a single item only when it is owned by the requesting player. This
+ * is used by server-side mutation routes to resolve a fresh public Market
+ * quote; it never exposes another player's inventory to the browser.
+ */
 export async function getPlayerEconomyInventoryItem(
   steamId: string,
   itemId: string,
@@ -5916,37 +6003,37 @@ function economyResolvedMarketplacePurchaseQuote(
 }
 
 function economyResolvedMarketSalePrice(
-  price: ResolvedEconomyMarketSalePrice,
+  quote: ResolvedEconomyMarketSalePrice,
 ): ResolvedEconomyMarketSalePrice {
   const tokenPrice = economyMarketplaceQuoteAmount(
-    price.tokenPrice,
-    "Current market price",
+    quote.tokenPrice,
+    "Quoted market Token price",
   );
   const euroCents = economyMarketplaceQuoteAmount(
-    price.euroCents,
-    "Current market EUR price",
+    quote.euroCents,
+    "Quoted market EUR-cent price",
   );
-  if (tokenPrice !== euroCents)
-    economyError("invalid_input", "The current market price is invalid.");
-  const source = economyText(price.source, "Public price source", 32);
-  if (!marketplacePurchasePriceSources.has(source))
+  // The portal deliberately maps one EUR cent to one Token. Keeping both
+  // values in the trusted route payload makes the ledger audit clear while
+  // stopping a stale or malformed server integration from drifting them apart.
+  if (tokenPrice !== euroCents) {
+    economyError("invalid_input", "The quoted market price is inconsistent.");
+  }
+  const source = economyText(quote.source, "Public price source", 32);
+  if (!marketplacePurchasePriceSources.has(source)) {
     economyError("invalid_input", "The public price source is invalid.");
+  }
   const sourceReference = economyMarketplaceQuoteText(
-    price.sourceReference,
+    quote.sourceReference,
     "Public price reference",
     255,
   );
-  const floatValue =
-    price.floatValue === null
-      ? null
-      : economyFloat(price.floatValue, "Quoted float");
-  const floatDiscountBps =
-    price.floatDiscountBps === null ? null : price.floatDiscountBps;
+  const floatValue = economyFloat(quote.floatValue, "Quoted float");
   if (
-    floatDiscountBps !== null &&
-    (!Number.isSafeInteger(floatDiscountBps) ||
-      floatDiscountBps < 0 ||
-      floatDiscountBps > 1_500)
+    quote.floatDiscountBps !== null &&
+    (!Number.isSafeInteger(quote.floatDiscountBps) ||
+      quote.floatDiscountBps < 0 ||
+      quote.floatDiscountBps > 1_500)
   ) {
     economyError("invalid_input", "The float price adjustment is invalid.");
   }
@@ -5956,7 +6043,7 @@ function economyResolvedMarketSalePrice(
     source,
     sourceReference,
     floatValue,
-    floatDiscountBps,
+    floatDiscountBps: quote.floatDiscountBps,
   };
 }
 
@@ -6212,24 +6299,24 @@ export async function purchaseEconomyItem(
 }
 
 /**
- * Buys an owned inventory instance back for 10% of its current public or
- * staff-maintained market price. The browser only sends an item ID; any live
- * quote is resolved by the route and audited with the resulting sale.
+ * Buys an owned inventory instance back for 10% of the price resolved by the
+ * same public adapter as the portal Market. The saved market snapshot remains
+ * the fallback when the public database has no current quote.
  */
 export async function sellEconomyItem(
   input: SellEconomyItemInput,
 ): Promise<SellEconomyItemResult> {
   const steamId = economySteamId(input.steamId);
   const itemId = economyItemId(input.itemId);
-  const resolvedMarketPrice =
-    input.resolvedMarketPrice === undefined
+  const marketQuote =
+    input.marketQuote === undefined
       ? undefined
-      : economyResolvedMarketSalePrice(input.resolvedMarketPrice);
+      : economyResolvedMarketSalePrice(input.marketQuote);
   return runEconomyMutation({
     operationName: "marketplace.sale",
     actorSteamId: steamId,
     idempotencyKey: input.idempotencyKey,
-    request: { itemId, resolvedMarketPrice },
+    request: { itemId, marketQuote },
     work: async (context) => {
       // Wallet-before-item locking is shared with paid item customisation and
       // keeps concurrent trade/loadout changes from creating inconsistent
@@ -6263,7 +6350,7 @@ export async function sellEconomyItem(
 
       const fallbackPrice = item.catalogue.price;
       if (
-        !resolvedMarketPrice &&
+        !marketQuote &&
         (!fallbackPrice || economyPriceIsLegacySteam(fallbackPrice))
       ) {
         economyError(
@@ -6272,20 +6359,16 @@ export async function sellEconomyItem(
         );
       }
       const marketPriceTokens =
-        resolvedMarketPrice?.tokenPrice ?? fallbackPrice?.tokenPrice;
+        marketQuote?.tokenPrice ?? fallbackPrice?.tokenPrice;
       if (!marketPriceTokens) {
         economyError(
           "price_unavailable",
           "This item has no current market or last-known price.",
         );
       }
-      const payoutTokens = Math.floor(marketPriceTokens / 10);
-      if (payoutTokens < 1) {
-        economyError(
-          "price_unavailable",
-          "This item's 10% market payout is below one Token.",
-        );
-      }
+      // Low-value market items still have a meaningful, predictable return:
+      // anything below 50 Tokens sells for the 5-Token minimum.
+      const payoutTokens = Math.max(5, Math.floor(marketPriceTokens / 10));
 
       await applyTokenDelta({
         connection: context.connection,
@@ -6301,16 +6384,14 @@ export async function sellEconomyItem(
         metadata: {
           marketPriceTokens,
           marketPriceEurCents:
-            resolvedMarketPrice?.euroCents ?? fallbackPrice?.euroCents ?? null,
+            marketQuote?.euroCents ?? fallbackPrice?.euroCents,
           payoutTokens,
           sellRateBps: 1_000,
-          priceSource: resolvedMarketPrice?.source ?? fallbackPrice?.source ?? null,
+          priceSource: marketQuote?.source ?? fallbackPrice?.source,
           priceSourceReference:
-            resolvedMarketPrice?.sourceReference ??
-            fallbackPrice?.sourceReference ??
-            null,
-          floatValue: resolvedMarketPrice?.floatValue ?? item.floatValue,
-          floatDiscountBps: resolvedMarketPrice?.floatDiscountBps ?? null,
+            marketQuote?.sourceReference ?? fallbackPrice?.sourceReference,
+          floatValue: marketQuote?.floatValue ?? item.floatValue,
+          floatDiscountBps: marketQuote?.floatDiscountBps ?? null,
         },
       });
       await context.connection.execute(
@@ -6331,11 +6412,11 @@ export async function sellEconomyItem(
           marketPriceTokens,
           payoutTokens,
           sellRateBps: 1_000,
-          priceSource: resolvedMarketPrice?.source ?? fallbackPrice?.source ?? null,
+          priceSource: marketQuote?.source ?? fallbackPrice?.source,
           priceSourceReference:
-            resolvedMarketPrice?.sourceReference ??
-            fallbackPrice?.sourceReference ??
-            null,
+            marketQuote?.sourceReference ?? fallbackPrice?.sourceReference,
+          floatValue: marketQuote?.floatValue ?? item.floatValue,
+          floatDiscountBps: marketQuote?.floatDiscountBps ?? null,
         },
       });
       await enqueueEconomyLoadoutRefresh(
@@ -6725,15 +6806,15 @@ async function enqueueEconomyLoadoutRefresh(
 
 export async function equipEconomyItem(
   input: EquipEconomyItemInput,
-): Promise<EquipEconomyItemResult> {
+): Promise<EquipEconomyItemSlotsResult> {
   const steamId = economySteamId(input.steamId);
   const itemId = economyItemId(input.itemId);
-  const slot = economySlot(input.slot);
+  const slots = economySlots(input.slots);
   return runEconomyMutation({
     operationName: "loadout.equip",
     actorSteamId: steamId,
     idempotencyKey: input.idempotencyKey,
-    request: { itemId, slot },
+    request: { itemId, slots },
     work: async (context) => {
       const item = await lockEconomyInventoryItem(context.connection, itemId);
       if (item.ownerSteamId !== steamId || item.state !== "available")
@@ -6741,22 +6822,27 @@ export async function equipEconomyItem(
           "ownership_required",
           "That item is not available in your inventory.",
         );
-      economyEnsureLoadoutCompatibility(item, slot);
-      const savedSlot = await setEconomyLoadoutSlot({
-        connection: context.connection,
-        ownerSteamId: steamId,
-        slot,
-        item,
-      });
-      await writeInventoryEvent({
-        connection: context.connection,
-        itemId,
-        actorSteamId: steamId,
-        eventType: "loadout.equipped",
-        idempotencyKey: context.idempotencyKey,
-        lineKey: "loadout:" + slot.slotKey,
-        metadata: { slotKey: slot.slotKey },
-      });
+      for (const slot of slots) economyEnsureLoadoutCompatibility(item, slot);
+      const savedSlots: EconomyLoadoutSlot[] = [];
+      for (const slot of slots) {
+        savedSlots.push(
+          await setEconomyLoadoutSlot({
+            connection: context.connection,
+            ownerSteamId: steamId,
+            slot,
+            item,
+          }),
+        );
+        await writeInventoryEvent({
+          connection: context.connection,
+          itemId,
+          actorSteamId: steamId,
+          eventType: "loadout.equipped",
+          idempotencyKey: context.idempotencyKey,
+          lineKey: "loadout:" + slot.slotKey,
+          metadata: { slotKey: slot.slotKey },
+        });
+      }
       await enqueueEconomyLoadoutRefresh(
         context.connection,
         steamId,
@@ -6764,65 +6850,72 @@ export async function equipEconomyItem(
         "equipped",
         [itemId],
       );
-      return { itemId, slot: savedSlot };
+      return { itemId, slots: savedSlots };
     },
   });
 }
 
 export async function clearEconomyLoadoutSlot(
   input: ClearEconomyLoadoutSlotInput,
-): Promise<ClearEconomyLoadoutSlotResult> {
+): Promise<ClearEconomyLoadoutSlotsResult> {
   const steamId = economySteamId(input.steamId);
-  const slot = economySlot(input.slot);
+  const slots = economySlots(input.slots);
   return runEconomyMutation({
     operationName: "loadout.clear",
     actorSteamId: steamId,
     idempotencyKey: input.idempotencyKey,
-    request: { slot },
+    request: { slots },
     work: async (context) => {
-      const [slotRows] = await context.connection.query<
-        Array<RowDataPacket & { item_id: string | null }>
-      >(
-        "SELECT item_id FROM portal_loadout_slots WHERE owner_steam_id = ? AND slot_key = ? FOR UPDATE",
-        [steamId, slot.slotKey],
-      );
-      const previousItemId = slotRows[0]?.item_id
-        ? economyItemId(String(slotRows[0].item_id))
-        : null;
-      if (previousItemId) {
-        const item = await lockEconomyInventoryItem(
-          context.connection,
-          previousItemId,
+      const clearedItemIds: string[] = [];
+      const savedSlots: EconomyLoadoutSlot[] = [];
+      for (const slot of slots) {
+        const [slotRows] = await context.connection.query<
+          Array<RowDataPacket & { item_id: string | null }>
+        >(
+          "SELECT item_id FROM portal_loadout_slots WHERE owner_steam_id = ? AND slot_key = ? FOR UPDATE",
+          [steamId, slot.slotKey],
         );
-        if (item.ownerSteamId !== steamId)
-          economyError(
-            "ownership_required",
-            "The equipped item no longer belongs to this player.",
+        const previousItemId = slotRows[0]?.item_id
+          ? economyItemId(String(slotRows[0].item_id))
+          : null;
+        if (previousItemId) {
+          const item = await lockEconomyInventoryItem(
+            context.connection,
+            previousItemId,
           );
-        await writeInventoryEvent({
-          connection: context.connection,
-          itemId: previousItemId,
-          actorSteamId: steamId,
-          eventType: "loadout.cleared",
-          idempotencyKey: context.idempotencyKey,
-          lineKey: "clear:" + slot.slotKey,
-          metadata: { slotKey: slot.slotKey },
-        });
+          if (item.ownerSteamId !== steamId)
+            economyError(
+              "ownership_required",
+              "The equipped item no longer belongs to this player.",
+            );
+          clearedItemIds.push(previousItemId);
+          await writeInventoryEvent({
+            connection: context.connection,
+            itemId: previousItemId,
+            actorSteamId: steamId,
+            eventType: "loadout.cleared",
+            idempotencyKey: context.idempotencyKey,
+            lineKey: "clear:" + slot.slotKey,
+            metadata: { slotKey: slot.slotKey },
+          });
+        }
+        savedSlots.push(
+          await setEconomyLoadoutSlot({
+            connection: context.connection,
+            ownerSteamId: steamId,
+            slot,
+            item: null,
+          }),
+        );
       }
-      const savedSlot = await setEconomyLoadoutSlot({
-        connection: context.connection,
-        ownerSteamId: steamId,
-        slot,
-        item: null,
-      });
       await enqueueEconomyLoadoutRefresh(
         context.connection,
         steamId,
         context.idempotencyKey,
         "cleared",
-        previousItemId ? [previousItemId] : [],
+        [...new Set(clearedItemIds)],
       );
-      return { slot: savedSlot };
+      return { slots: savedSlots };
     },
   });
 }
@@ -6944,6 +7037,97 @@ export async function setEconomyItemNametag(
         nametag,
         priceTokens: nametagItemId ? 0 : ECONOMY_NAMETAG_PRICE_TOKENS,
         wallet,
+      };
+    },
+  });
+}
+
+export async function attachEconomyCharm(
+  input: AttachEconomyCharmInput,
+): Promise<AttachEconomyCharmResult> {
+  const steamId = economySteamId(input.steamId);
+  const weaponItemId = economyItemId(input.weaponItemId, "Weapon item ID");
+  const charmItemId = economyItemId(input.charmItemId, "Charm item ID");
+  return runEconomyMutation({
+    operationName: "item.charm.attach",
+    actorSteamId: steamId,
+    idempotencyKey: input.idempotencyKey,
+    request: { weaponItemId, charmItemId },
+    work: async (context) => {
+      const items = await lockEconomyInventoryItems(context.connection, [
+        weaponItemId,
+        charmItemId,
+      ]);
+      const weapon = items.get(weaponItemId);
+      const charm = items.get(charmItemId);
+      if (!weapon || !charm)
+        economyError(
+          "item_not_found",
+          "The weapon or charm no longer exists.",
+        );
+      if (weapon.ownerSteamId !== steamId || weapon.state !== "available")
+        economyError(
+          "ownership_required",
+          "That weapon is not available in your inventory.",
+        );
+      if (
+        charm.ownerSteamId !== steamId ||
+        charm.state !== "available" ||
+        charm.itemType !== "keychain"
+      ) {
+        economyError(
+          "ownership_required",
+          "That charm is not available in your inventory.",
+        );
+      }
+      if (!economyItemSupportsCharm(weapon))
+        economyError(
+          "unsupported_customization",
+          "That item does not support charms.",
+        );
+      const keychain = economyCharmAttributes(charm);
+      const nextAttributes = { ...weapon.attributes, keychain };
+      await context.connection.execute(
+        "UPDATE portal_inventory_items SET attributes = ? WHERE id = ? AND state = 'available'",
+        [JSON.stringify(nextAttributes), weaponItemId],
+      );
+      await context.connection.execute(
+        "UPDATE portal_inventory_items SET state = 'consumed', consumed_at = CURRENT_TIMESTAMP WHERE id = ? AND state = 'available'",
+        [charmItemId],
+      );
+      await writeInventoryEvent({
+        connection: context.connection,
+        itemId: weaponItemId,
+        actorSteamId: steamId,
+        eventType: "item.charm.attached",
+        idempotencyKey: context.idempotencyKey,
+        lineKey: "charm:weapon",
+        beforeState: economyInventorySnapshot(weapon),
+        afterState: { ...economyInventorySnapshot(weapon), attributes: nextAttributes },
+        metadata: { charmItemId, keychain },
+      });
+      await writeInventoryEvent({
+        connection: context.connection,
+        itemId: charmItemId,
+        actorSteamId: steamId,
+        eventType: "charm.consumed",
+        idempotencyKey: context.idempotencyKey,
+        lineKey: "charm:item",
+        beforeState: economyInventorySnapshot(charm),
+        afterState: { ...economyInventorySnapshot(charm), state: "consumed" },
+        metadata: { weaponItemId, keychain },
+      });
+      await enqueueEconomyLoadoutRefresh(
+        context.connection,
+        steamId,
+        context.idempotencyKey,
+        "charm-attached",
+        [weaponItemId, charmItemId],
+      );
+      return {
+        weaponItemId,
+        charmItemId,
+        charmDefinitionIndex: keychain.id,
       };
     },
   });
