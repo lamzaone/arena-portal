@@ -45,7 +45,8 @@ function officialImageUrl(metadata: Record<string, unknown>) {
     const url = new URL(value);
     const officialHost =
       url.hostname === "steamstatic.com" ||
-      url.hostname.endsWith(".steamstatic.com");
+      url.hostname.endsWith(".steamstatic.com") ||
+      url.hostname === "steamcdn-a.akamaihd.net";
     return url.protocol === "https:" && officialHost ? url.toString() : null;
   } catch {
     return null;
