@@ -5157,6 +5157,54 @@ function toEconomyRedeemCode(
   };
 }
 
+let redeemSchemaReady: Promise<void> | null = null;
+
+/**
+ * Redeem was added after the original economy rollout. Keep existing portal
+ * databases from returning a 500 on the first staff visit if the game server
+ * has not yet performed its startup schema pass. These statements are narrow,
+ * idempotent, and match db/007_redeem_codes.sql exactly in purpose.
+ */
+async function ensureEconomyRedeemSchema() {
+  if (redeemSchemaReady) return redeemSchemaReady;
+  const pool = economyStorageRequired();
+  const initialize = async () => {
+    const [existingRows] = await pool.query<
+      Array<RowDataPacket & { table_name: string }>
+    >(
+      "SELECT TABLE_NAME AS table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN ('portal_redeem_codes', 'portal_redeem_code_items', 'portal_redeem_code_redemptions')",
+    );
+    const existing = new Set(
+      existingRows.map((row) => String(row.table_name).toLowerCase()),
+    );
+    if (!existing.has("portal_redeem_codes")) {
+      await pool.execute(
+        "CREATE TABLE IF NOT EXISTS portal_redeem_codes (" +
+          "id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, code_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL, code_hint VARCHAR(24) NOT NULL, display_name VARCHAR(120) NOT NULL, token_amount BIGINT UNSIGNED NOT NULL DEFAULT 0, max_redemptions INT UNSIGNED NULL, redemption_count INT UNSIGNED NOT NULL DEFAULT 0, enabled BOOLEAN NOT NULL DEFAULT TRUE, created_by_steam_id VARCHAR(17) NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (id), UNIQUE KEY portal_redeem_codes_hash_unique (code_hash), KEY portal_redeem_codes_manage (enabled, created_at, id), CONSTRAINT portal_redeem_codes_tokens_nonnegative CHECK (token_amount >= 0), CONSTRAINT portal_redeem_codes_usage_limit CHECK (max_redemptions IS NULL OR max_redemptions >= 1), CONSTRAINT portal_redeem_codes_usage_count_nonnegative CHECK (redemption_count >= 0)) ENGINE=InnoDB",
+      );
+    }
+    if (!existing.has("portal_redeem_code_items")) {
+      await pool.execute(
+        "CREATE TABLE IF NOT EXISTS portal_redeem_code_items (" +
+          "redeem_code_id BIGINT UNSIGNED NOT NULL, catalogue_id BIGINT UNSIGNED NOT NULL, quantity SMALLINT UNSIGNED NOT NULL DEFAULT 1, sort_order SMALLINT UNSIGNED NOT NULL DEFAULT 0, PRIMARY KEY (redeem_code_id, catalogue_id), KEY portal_redeem_code_items_catalogue (catalogue_id), CONSTRAINT portal_redeem_code_items_quantity_positive CHECK (quantity >= 1), CONSTRAINT portal_redeem_code_items_code_fk FOREIGN KEY (redeem_code_id) REFERENCES portal_redeem_codes (id) ON DELETE RESTRICT, CONSTRAINT portal_redeem_code_items_catalogue_fk FOREIGN KEY (catalogue_id) REFERENCES portal_economy_catalogue (id) ON DELETE RESTRICT) ENGINE=InnoDB",
+      );
+    }
+    if (!existing.has("portal_redeem_code_redemptions")) {
+      await pool.execute(
+        "CREATE TABLE IF NOT EXISTS portal_redeem_code_redemptions (" +
+          "id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, redeem_code_id BIGINT UNSIGNED NOT NULL, steam_id VARCHAR(17) NOT NULL, redeemed_via ENUM('website', 'server') NOT NULL, token_amount BIGINT UNSIGNED NOT NULL DEFAULT 0, item_count INT UNSIGNED NOT NULL DEFAULT 0, idempotency_key VARCHAR(128) NOT NULL, redeemed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), UNIQUE KEY portal_redeem_code_redemptions_once_per_player (redeem_code_id, steam_id), UNIQUE KEY portal_redeem_code_redemptions_idempotency (idempotency_key), KEY portal_redeem_code_redemptions_player_created (steam_id, redeemed_at, id), CONSTRAINT portal_redeem_code_redemptions_code_fk FOREIGN KEY (redeem_code_id) REFERENCES portal_redeem_codes (id) ON DELETE RESTRICT) ENGINE=InnoDB",
+      );
+    }
+  };
+  redeemSchemaReady = initialize().catch((error) => {
+    // Allow a later request to retry after a transient database or permission
+    // issue instead of poisoning the in-process cache permanently.
+    redeemSchemaReady = null;
+    throw error;
+  });
+  return redeemSchemaReady;
+}
+
 export async function getEconomyRedeemCodes(input: {
   page?: number;
   pageSize?: number;
@@ -5165,6 +5213,7 @@ export async function getEconomyRedeemCodes(input: {
   const paging = economyPage(input.page, input.pageSize, 100);
   if (!pool)
     return { codes: [], total: 0, page: paging.page, pageSize: paging.pageSize };
+  await ensureEconomyRedeemSchema();
   const [countRows] = await pool.query<
     Array<RowDataPacket & { total: number | string }>
   >("SELECT COUNT(*) AS total FROM portal_redeem_codes");
@@ -5221,6 +5270,7 @@ export async function createEconomyRedeemCode(
   const rewards = economyRedeemRewards(input.rewards);
   if (tokenAmount === 0 && !rewards.length)
     economyError("invalid_input", "Add Tokens or at least one item reward.");
+  await ensureEconomyRedeemSchema();
 
   const saved = await runEconomyMutation({
     operationName: "redeem-code.create",
@@ -5326,6 +5376,7 @@ export async function setEconomyRedeemCodeEnabled(input: {
   const codeId = economyNumber(input.codeId, "Redeem code ID", 1);
   if (typeof input.enabled !== "boolean")
     economyError("invalid_input", "Redeem code status is invalid.");
+  await ensureEconomyRedeemSchema();
   return runEconomyMutation({
     operationName: "redeem-code.set-enabled",
     actorSteamId,
@@ -5368,6 +5419,7 @@ export async function redeemEconomyCode(
   const codeHash = economyRedeemCodeHash(code);
   if (input.redeemedVia !== "website" && input.redeemedVia !== "server")
     economyError("invalid_input", "Redeem source is invalid.");
+  await ensureEconomyRedeemSchema();
   return runEconomyMutation({
     operationName: "redeem-code.claim",
     actorSteamId: steamId,

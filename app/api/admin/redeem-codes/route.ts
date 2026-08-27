@@ -2,6 +2,7 @@ import { getAdminAccess } from "@/lib/admin/access";
 import { getSession, verifyAdminActionToken } from "@/lib/auth/session";
 import {
   createEconomyRedeemCode,
+  getEconomyCatalogue,
   setEconomyRedeemCodeEnabled,
 } from "@/lib/data/portal-repository";
 import { economyMutationFailure } from "@/lib/economy/request";
@@ -40,6 +41,31 @@ function idempotencyKey(value: unknown) {
   return key && /^[A-Za-z0-9][A-Za-z0-9._:/-]{15,127}$/.test(key)
     ? key
     : null;
+}
+
+export async function GET(request: Request) {
+  const session = await getSession();
+  if (!session)
+    return Response.json(
+      { ok: false, message: "Sign in before searching reward items." },
+      { status: 401 },
+    );
+  const access = await getAdminAccess(session.steamId);
+  if (!access.canManageEconomy)
+    return Response.json(
+      { ok: false, message: "Your staff role cannot manage redeem codes." },
+      { status: 403 },
+    );
+  const query = new URL(request.url).searchParams.get("q")?.trim().slice(0, 100);
+  try {
+    const catalogue = await getEconomyCatalogue({
+      query: query || undefined,
+      pageSize: 100,
+    });
+    return Response.json({ ok: true, items: catalogue.items, total: catalogue.total });
+  } catch (error) {
+    return economyMutationFailure(error);
+  }
 }
 
 export async function POST(request: Request) {

@@ -82,6 +82,12 @@ export function RedeemCodeAdmin({
   const [useMode, setUseMode] = useState<UseMode>("unlimited");
   const [customUses, setCustomUses] = useState("10");
   const [rewards, setRewards] = useState<SelectedReward[]>([]);
+  const [pickerQuery, setPickerQuery] = useState(searchQuery);
+  const [pickerItems, setPickerItems] = useState(catalogue);
+  const [knownCatalogueItems, setKnownCatalogueItems] = useState(() =>
+    new Map(catalogue.map((item) => [item.id, item])),
+  );
+  const [searching, setSearching] = useState(false);
   const [pending, setPending] = useState(false);
   const [activeCodeId, setActiveCodeId] = useState<number | null>(null);
   const [revealedCode, setRevealedCode] = useState<string | null>(null);
@@ -89,8 +95,8 @@ export function RedeemCodeAdmin({
   const [error, setError] = useState<string | null>(null);
 
   const catalogueById = useMemo(
-    () => new Map(catalogue.map((item) => [item.id, item])),
-    [catalogue],
+    () => knownCatalogueItems,
+    [knownCatalogueItems],
   );
   const selectedRewards = rewards.flatMap((reward) => {
     const item = catalogueById.get(reward.catalogueId);
@@ -187,6 +193,36 @@ export function RedeemCodeAdmin({
       setError(cause instanceof Error ? cause.message : "Could not create the code.");
     } finally {
       setPending(false);
+    }
+  }
+
+  async function searchCatalogue(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (searching) return;
+    setSearching(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (pickerQuery.trim()) params.set("q", pickerQuery.trim());
+      const response = await fetch(
+        `/api/admin/redeem-codes${params.size ? `?${params.toString()}` : ""}`,
+        { credentials: "same-origin", headers: { accept: "application/json" } },
+      );
+      const result = (await response.json().catch(() => null)) as
+        | { ok?: boolean; message?: string; items?: EconomyCatalogueItem[] }
+        | null;
+      if (!response.ok || !result?.ok || !Array.isArray(result.items))
+        throw new Error(result?.message ?? "The catalogue search could not be completed.");
+      setPickerItems(result.items);
+      setKnownCatalogueItems((current) => {
+        const next = new Map(current);
+        for (const item of result.items ?? []) next.set(item.id, item);
+        return next;
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The catalogue search could not be completed.");
+    } finally {
+      setSearching(false);
     }
   }
 
@@ -349,15 +385,15 @@ export function RedeemCodeAdmin({
             <div>
               <p className="eyebrow"><Search aria-hidden="true" /> Catalogue rewards</p>
               <h2>Choose items</h2>
-              <p>{searchQuery ? `Results for “${searchQuery}”` : "Search below for a specific item."}</p>
+              <p>{pickerQuery.trim() ? `Results for “${pickerQuery.trim()}”` : "Search below for a specific item."}</p>
             </div>
           </div>
-          <form className="redeem-catalogue-search" action="/admin/redeem" method="get">
-            <input name="q" defaultValue={searchQuery} placeholder="Search skins, cases, stickers…" maxLength={100} />
-            <button className="button button-secondary" type="submit"><Search aria-hidden="true" /> Search</button>
+          <form className="redeem-catalogue-search" onSubmit={searchCatalogue}>
+            <input value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} placeholder="Search skins, cases, stickers…" maxLength={100} />
+            <button className="button button-secondary" type="submit" disabled={searching}>{searching ? <LoaderCircle className="spin" aria-hidden="true" /> : <Search aria-hidden="true" />} {searching ? "Searching" : "Search"}</button>
           </form>
           <div className="redeem-picker-list">
-            {catalogue.length ? catalogue.map((item) => {
+            {pickerItems.length ? pickerItems.map((item) => {
               const selected = rewards.find((reward) => reward.catalogueId === item.id);
               return <article key={item.id} className="redeem-picker-item">
                 <MarketplaceItemPreview item={{ catalogueId: item.id, displayName: item.displayName, floatValue: null, imageUrl: item.imageUrl, itemType: item.itemType, rarityRank: item.rarityRank }} enableMarketPreview={false} />
