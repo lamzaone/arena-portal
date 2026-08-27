@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 
 import { formatDate } from "@/components/formatters";
 import { GroupBadge } from "@/components/group-badge";
+import { ResilientRemoteImage } from "@/components/resilient-remote-image";
 import { SiteHeader } from "@/components/site-header";
 import { getSession } from "@/lib/auth/session";
 import { getVipTiers, type VipTier } from "@/lib/content/game-catalogue";
@@ -108,7 +109,7 @@ export default async function VipPage({ searchParams }: VipPageProps) {
           {vipRoster.vips.length ? <div className="leaderboard-scroll vip-roster-scroll"><table className="leaderboard-table vip-roster-table"><thead><tr><th>Player</th><th>VIP tier</th><th>Admin rank</th><th>Access</th></tr></thead><tbody>{vipRoster.vips.map((vip) => {
             const profile = steamProfiles.get(vip.steamId);
             const name = profile?.name || vip.name;
-            return <tr key={`${vip.steamId}-${vip.group}`}><td><Link className="leaderboard-player" href={`/players/${vip.steamId}`}>{profile?.avatarFull ? <img src={profile.avatarFull} alt={`${name}'s Steam avatar`} referrerPolicy="no-referrer" /> : <span className="player-avatar-fallback" aria-hidden="true">{avatarInitial(name)}</span>}<div><strong>{name}</strong><small>SteamID64 {vip.steamId}</small></div></Link></td><td><GroupBadge kind="vip" group={vip.group} /></td><td>{vip.adminGroups.length ? <span className="vip-roster-role-badges">{vip.adminGroups.map((group) => <GroupBadge key={group.name} kind="admin" group={group.name} />)}</span> : <span className="role-empty">—</span>}</td><td><strong>{vip.expiresAt === 0 ? "Permanent" : `Until ${formatDate(vip.expiresAt)}`}</strong></td></tr>;
+            return <tr key={`${vip.steamId}-${vip.group}`}><td><Link className="leaderboard-player" href={`/players/${vip.steamId}`}><ResilientRemoteImage src={profile?.avatarFull} alt={`${name}'s Steam avatar`} referrerPolicy="no-referrer" fallback={<span className="player-avatar-fallback" aria-hidden="true">{avatarInitial(name)}</span>} /><div><strong>{name}</strong><small>SteamID64 {vip.steamId}</small></div></Link></td><td><GroupBadge kind="vip" group={vip.group} /></td><td>{vip.adminGroups.length ? <span className="vip-roster-role-badges">{vip.adminGroups.map((group) => <GroupBadge key={group.name} kind="admin" group={group.name} />)}</span> : <span className="role-empty">—</span>}</td><td><strong>{vip.expiresAt === 0 ? "Permanent" : `Until ${formatDate(vip.expiresAt)}`}</strong></td></tr>;
           })}</tbody></table></div> : <section className="vip-roster-empty"><UsersRound aria-hidden="true" /><h3>No active VIPs yet.</h3><p>VIPs with active or permanent access will appear here.</p></section>}
           <nav className="pagination vip-roster-pagination" aria-label="VIP roster pages"><Link className={currentPage <= 1 ? "is-disabled" : ""} aria-disabled={currentPage <= 1} href={`/vip?page=${Math.max(1, currentPage - 1)}`}>Previous</Link><span>Page {currentPage} of {totalPages}</span><Link className={currentPage >= totalPages ? "is-disabled" : ""} aria-disabled={currentPage >= totalPages} href={`/vip?page=${Math.min(totalPages, currentPage + 1)}`}>Next</Link></nav>
         </section>

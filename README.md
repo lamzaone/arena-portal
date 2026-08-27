@@ -19,7 +19,7 @@ For local testing with `http://localhost`, the session cookie is deliberately no
 - The game database account must be read-only.
 - The portal database is separate and owns website/bot data, Token Economy wallets/items/trades, plus `portal_outbox` bridge jobs.
 - Enable `PORTAL_BRIDGE_ENABLED=true` only after `TAPPED.PortalBridge` is installed and its `portal` Swiftly database connection points to `PORTAL_DATABASE_URL`. Website moderation is validated, queued, and then executed in-process through Swiftly's plugin APIs; it never writes game tables directly.
-- Economy prices are held as immutable EUR-cent snapshots: 1 EUR equals 100 Tokens, while crates and capsules sell for half their snapshot price. Marketplace cards resolve their price from Skinport's public CS2 historical-sales database, preferring the 30-day EUR median and using a public listing price only when no sale history exists; the server caches the full public snapshot for 30 minutes and clients never submit a price.
+- Economy prices are held as immutable EUR-cent snapshots: 1 EUR equals 100 Tokens, while crates and capsules sell for half their snapshot price. Marketplace cards resolve their price from Skinport's public CS2 historical-sales database, preferring the 30-day EUR median and using a public listing price only when no sale history exists; the server caches the full public snapshot for 30 minutes and clients never submit a price. In production, the portal automatically refreshes every enabled exact market-hash item hourly (configurable through `ECONOMY_PRICE_REFRESH_INTERVAL_MINUTES`) and persists only changed snapshots.
 - Public price refresh is used only for an exact market-hash name (and an optional `marketVersion`, `skinportVersion`, or `priceVersion` catalogue metadata field for phase variants). The retained WeaponSkins cache lacks exterior/StatTrak variants for many skins, so staff must record an appropriate last-known EUR-cent snapshot or set the exact variant name in Staff > Item management before those imported items can be sold.
 - The old WeaponSkins portal Loadout API/page and server plugin are intentionally retained as disabled backups. Do not turn either legacy feature back on alongside TAPPED.Inventory.
 
@@ -34,3 +34,9 @@ See [the website plan](docs/website-plan.md) and [the Discord bot plan](docs/dis
 5. Use Portal > Staff > Item management for grants, customisation, price refresh/overrides, inventory changes, stickers, and player loadouts.
 
 No production database migration or server restart is performed by the portal application itself.
+
+## Automatic economy price refresh
+
+On a normal Node.js deployment, `instrumentation.ts` starts an in-process price worker after the portal boots. It refreshes every catalogue item with an enabled, exact public market-hash name; multiple portal instances are serialized with a MySQL named lock. Items with no public match retain their current staff/default snapshot, so the branded TAPPD case remains at its configured 1,000-Token direct price.
+
+For serverless hosting, schedule `GET /api/cron/economy-prices` at the same interval and send `Authorization: Bearer <ECONOMY_PRICE_REFRESH_SECRET>`. The endpoint returns counts for scanned, matched, updated, and unmatched catalogue items. Keep the secret outside source control.

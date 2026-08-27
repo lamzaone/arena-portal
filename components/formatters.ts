@@ -7,12 +7,12 @@ export function formatPlaytime(seconds: number) {
 
 export function formatDate(unixSeconds: number) {
   if (!unixSeconds) return "Permanent";
-  return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" })
+  return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" })
     .format(new Date(unixSeconds * 1_000));
 }
 
 export function formatPortalDate(value: string) {
-  return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" })
+  return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" })
     .format(new Date(value));
 }
 

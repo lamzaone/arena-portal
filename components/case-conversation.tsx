@@ -4,6 +4,7 @@ import type { CaseMessage } from "@/lib/data/portal-repository";
 import type { SteamProfile } from "@/lib/steam/profiles";
 
 import { formatPortalDate } from "@/components/formatters";
+import { ResilientRemoteImage } from "@/components/resilient-remote-image";
 
 type CaseConversationProps = {
   openingBody: string;
@@ -41,7 +42,7 @@ function MessageCard({ authorId, authorType, body, createdAt, attachments, steam
   const name = authorName(authorId, authorType, steamProfiles, viewerSteamId);
   const role = authorId === viewerSteamId ? "You" : authorType === "staff" ? "Staff" : "Player";
 
-  const author = <>{profile?.avatarFull ? <img src={profile.avatarFull} alt="" referrerPolicy="no-referrer" /> : <span aria-hidden="true">{avatarInitial(name)}</span>}<div><b>{name}</b><small>{opening ? "Original message" : role}</small></div></>;
+  const author = <><ResilientRemoteImage src={profile?.avatarFull} alt="" referrerPolicy="no-referrer" fallback={<span aria-hidden="true">{avatarInitial(name)}</span>} /><div><b>{name}</b><small>{opening ? "Original message" : role}</small></div></>;
 
   return <article className={`case-message case-conversation-message ${authorType}${opening ? " opening" : ""}`}>
     <header className="case-message-header">

@@ -424,6 +424,21 @@ code { padding: 2px 4px; border-radius: 4px; color: #fecdd3; background: rgba(22
 .crate-selection-empty { display: grid; min-height: 300px; align-content: center; justify-items: start; gap: 9px; padding: 14px; border: 1px dashed rgba(255,145,164,.3); color: #d3abb3; background: rgba(6,1,4,.35); }
 .crate-selection-empty svg { width: 29px; height: 29px; color: #ff91a4; }
 .crate-catalogue-grid { grid-template-columns: repeat(auto-fill, minmax(205px, 1fr)); }
+.crate-catalogue-filters { display: grid; gap: 15px; margin-bottom: 18px; border-color: rgba(255,113,133,.3); background: linear-gradient(130deg, rgba(45,6,13,.78), rgba(9,2,5,.88)); }
+.crate-filter-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.crate-filter-heading .eyebrow { margin: 0 0 5px; }
+.crate-filter-heading .empty-copy { max-width: 610px; }
+.crate-filter-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; align-items: end; }
+.crate-filter-grid > label { grid-column: span 2; margin: 0; }
+.crate-filter-grid > .crate-search-field { grid-column: span 4; }
+.crate-filter-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; border-top: 1px solid rgba(255,113,133,.17); }
+.crate-filter-summary p { margin: 0; color: #caa4ab; font-size: 12px; font-weight: 700; }
+.crate-filter-summary .button { flex: 0 0 auto; margin: 0; }
+.crate-catalogue-purchase { display: grid; gap: 9px; width: 100%; }
+.crate-catalogue-purchase .button { width: 100%; justify-content: center; }
+.crate-purchase-help { color: #d9a0aa; font-size: 10px; font-weight: 700; line-height: 1.4; text-align: center; }
+.crate-pagination { display: flex; align-items: center; justify-content: center; gap: 13px; margin-top: 26px; }
+.crate-pagination > span { color: #caa4ab; font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
 .unboxed-reveal { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, .48fr); gap: 18px; align-items: center; overflow: hidden; border-color: rgba(211,44,230,.54); background: radial-gradient(circle at 12% 12%, rgba(211,44,230,.2), transparent 40%), linear-gradient(145deg, rgba(64,8,54,.88), rgba(13,2,9,.96)); box-shadow: 0 0 34px rgba(211,44,230,.15); }
 .unboxed-reveal h2 { margin: 6px 0 9px; font-size: 1.55rem; }
 .unboxed-reveal .economy-item-card { margin: -8px; }
@@ -460,4 +475,6 @@ code { padding: 2px 4px; border-radius: 4px; color: #fecdd3; background: rgba(22
 @media (max-width: 1080px) { .inventory-layout, .crate-opening-layout { grid-template-columns: 1fr; }.inventory-detail-panel, .crate-opening-stage { position: static; }.inventory-detail-hero { grid-template-columns: minmax(190px, .65fr) 1fr; align-items: center; }.inventory-detail-hero .economy-item-preview { margin: -15px 0 -15px -15px; min-height: 100%; }.inventory-detail-hero .economy-item-preview img { height: 100%; min-height: 210px; }.crate-opening-stage { grid-template-columns: minmax(210px, .5fr) 1fr; align-items: center; }.crate-opening-stage > .economy-item-preview { grid-row: span 2; margin: -15px 0 -15px -15px; min-height: 100%; }.crate-opening-stage > .economy-item-preview img { height: 100%; min-height: 220px; }.crate-opening-stage .button { grid-column: 2; }.trade-offer-picker { max-height: none; } }
 @media (max-width: 680px) { .inventory-filter-summary { flex-direction: column; align-items: stretch; }.inventory-filter-summary .button { width: 100%; justify-content: center; }.inventory-detail-hero, .crate-opening-stage { grid-template-columns: 1fr; }.inventory-detail-hero .economy-item-preview, .crate-opening-stage > .economy-item-preview { margin: -15px -15px 0; }.crate-opening-stage .button { grid-column: auto; }.unboxed-reveal { grid-template-columns: 1fr; }.unboxed-reveal .economy-item-card { margin: 0; }.trade-offer-picker { grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); }.trade-asset-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 420px) { .inventory-item-grid, .crate-item-grid, .crate-catalogue-grid { grid-template-columns: 1fr; }.trade-offer-picker { grid-template-columns: 1fr 1fr; }.trade-asset-list { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .crate-filter-grid > label, .crate-filter-grid > .crate-search-field { grid-column: span 4; } }
+@media (max-width: 640px) { .crate-filter-heading, .crate-filter-summary { align-items: stretch; flex-direction: column; }.crate-filter-heading .tag, .crate-filter-summary .button { width: 100%; justify-content: center; }.crate-filter-grid { grid-template-columns: 1fr; }.crate-filter-grid > label, .crate-filter-grid > .crate-search-field { grid-column: auto; }.crate-pagination { flex-wrap: wrap; }.crate-pagination > span { width: 100%; text-align: center; } }
 @media (prefers-reduced-motion: reduce) { .trade-offer-item { transition: none; } }

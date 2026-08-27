@@ -4,6 +4,7 @@ import { Crosshair, Hand, ImageOff, LoaderCircle, Music2, Shield, Sword, UserRou
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import type { LoadoutCatalogue, LoadoutCategory, LoadoutTeam, PlayerLoadout, SavedLoadoutSkin } from "@/lib/data/portal-repository";
+import { proxiedImageUrl } from "@/lib/images/proxy-url";
 
 type EditorCategory = LoadoutCategory | "agent" | "music-kit";
 type SideMode = LoadoutTeam | "both";
@@ -125,9 +126,13 @@ function previewImageUrlsFromResponse(body: unknown) {
     if (typeof value !== "string") continue;
     try {
       const url = new URL(value);
-      if (url.protocol !== "https:" || seen.has(url.toString())) continue;
-      seen.add(url.toString());
-      imageUrls.push(url.toString());
+      if (url.protocol !== "https:") continue;
+      const directImageUrl = url.toString();
+      for (const imageUrl of [proxiedImageUrl(directImageUrl), directImageUrl]) {
+        if (!imageUrl || seen.has(imageUrl)) continue;
+        seen.add(imageUrl);
+        imageUrls.push(imageUrl);
+      }
     } catch {
       // Ignore malformed preview URLs instead of handing them to an image tag.
     }

@@ -17,6 +17,7 @@ import {
   rarityRankClass,
   type EconomyItemView,
 } from "@/components/economy/economy-view-model";
+import { proxiedImageUrl } from "@/lib/images/proxy-url";
 
 type MarketplaceItemPreviewProps = {
   item: Pick<
@@ -34,7 +35,7 @@ type MarketplaceItemPreviewProps = {
 
 type PreviewState = "idle" | "loading" | "ready" | "unavailable";
 
-function safeImageUrl(value: string | null) {
+function safeImageUrl(value: string | null | undefined) {
   if (!value) return null;
   try {
     const url = new URL(value.startsWith("//") ? `https:${value}` : value);
@@ -42,6 +43,13 @@ function safeImageUrl(value: string | null) {
   } catch {
     return null;
   }
+}
+
+function imageCandidates(value: string | null | undefined) {
+  const directImageUrl = safeImageUrl(value);
+  if (!directImageUrl) return [];
+  const proxiedUrl = proxiedImageUrl(directImageUrl);
+  return [...new Set([proxiedUrl, directImageUrl].filter(Boolean))] as string[];
 }
 
 function marketPreviewUrl(catalogueId: number | null, floatValue: number | null) {
@@ -69,10 +77,12 @@ function previewImageUrlsFromResponse(body: unknown) {
   const seen = new Set<string>();
   const imageUrls: string[] = [];
   for (const value of values) {
-    const imageUrl = typeof value === "string" ? safeImageUrl(value) : null;
-    if (!imageUrl || seen.has(imageUrl)) continue;
-    seen.add(imageUrl);
-    imageUrls.push(imageUrl);
+    if (typeof value !== "string") continue;
+    for (const imageUrl of imageCandidates(value)) {
+      if (seen.has(imageUrl)) continue;
+      seen.add(imageUrl);
+      imageUrls.push(imageUrl);
+    }
   }
   return imageUrls;
 }
@@ -100,13 +110,19 @@ export function MarketplaceItemPreview({
 }: MarketplaceItemPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
-  const [directImageFailed, setDirectImageFailed] = useState(false);
+  const [failedDirectImageUrls, setFailedDirectImageUrls] = useState<string[]>(
+    [],
+  );
   const [previewImageUrls, setPreviewImageUrls] = useState<string[]>([]);
   const [failedPreviewImageUrls, setFailedPreviewImageUrls] = useState<string[]>(
     [],
   );
   const [state, setState] = useState<PreviewState>("idle");
-  const directImageUrl = useMemo(() => safeImageUrl(item.imageUrl), [item.imageUrl]);
+  const directImageUrls = useMemo(() => imageCandidates(item.imageUrl), [item.imageUrl]);
+  const directImageKey = directImageUrls.join("|");
+  const directImageUrl = directImageUrls.find(
+    (imageUrl) => !failedDirectImageUrls.includes(imageUrl),
+  );
   const previewFloat =
     floatValue !== null &&
     Number.isFinite(floatValue) &&
@@ -127,8 +143,8 @@ export function MarketplaceItemPreview({
   );
 
   useEffect(() => {
-    setDirectImageFailed(false);
-  }, [directImageUrl]);
+    setFailedDirectImageUrls([]);
+  }, [directImageKey]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -157,9 +173,9 @@ export function MarketplaceItemPreview({
     if (
       !isVisible ||
       !previewRequestUrl ||
-      (directImageUrl && !directImageFailed)
+      directImageUrl
     ) {
-      setState(directImageUrl && !directImageFailed ? "ready" : "idle");
+      setState(directImageUrl ? "ready" : "idle");
       return;
     }
 
@@ -170,7 +186,7 @@ export function MarketplaceItemPreview({
         const body: unknown = await response.json();
         if (!response.ok) throw new Error("Preview unavailable");
         const imageUrls = previewImageUrlsFromResponse(body).filter(
-          (imageUrl) => imageUrl !== directImageUrl,
+          (imageUrl) => !directImageUrls.includes(imageUrl),
         );
         if (!imageUrls.length) throw new Error("Preview unavailable");
         return imageUrls;
@@ -187,10 +203,9 @@ export function MarketplaceItemPreview({
       });
 
     return () => controller.abort();
-  }, [directImageFailed, directImageUrl, isVisible, previewRequestUrl]);
+  }, [directImageKey, directImageUrl, isVisible, previewRequestUrl]);
 
-  const imageUrl =
-    directImageUrl && !directImageFailed ? directImageUrl : previewImageUrl;
+  const imageUrl = directImageUrl ?? previewImageUrl;
   const loading = !imageUrl && state === "loading";
   const label = loading
     ? "Loading item art"
@@ -212,8 +227,10 @@ export function MarketplaceItemPreview({
           decoding="async"
           referrerPolicy="no-referrer"
           onError={() => {
-            if (imageUrl === directImageUrl && !directImageFailed) {
-              setDirectImageFailed(true);
+            if (directImageUrls.includes(imageUrl)) {
+              setFailedDirectImageUrls((current) =>
+                current.includes(imageUrl) ? current : [...current, imageUrl],
+              );
               return;
             }
             const hasAnotherCandidate = previewImageUrls.some(

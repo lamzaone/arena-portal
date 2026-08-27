@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import { AccountNav } from "@/components/account-nav";
 import { formatDate, formatPlaytime, isActiveSanction } from "@/components/formatters";
 import { GroupBadge } from "@/components/group-badge";
+import { ResilientRemoteImage } from "@/components/resilient-remote-image";
 import { SiteHeader } from "@/components/site-header";
 import { getLevelRank, getNextLevelRank, getRankProgress } from "@/lib/content/levelranks";
 import { getGroupPresentation, type RoleKind } from "@/lib/content/group-presentation";
@@ -37,6 +38,16 @@ const hitboxes: Hitbox[] = [
   { key: "rightLeg", label: "Right leg" }
 ];
 
+// The Node renderer and a player's browser can have different default locales.
+// Keep shared SSR/client number text deterministic for hydration.
+const countFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 0,
+});
+
+function formatCount(value: number) {
+  return countFormatter.format(value);
+}
+
 function avatarInitial(name: string) {
   return name.trim().slice(0, 1).toUpperCase() || "?";
 }
@@ -56,29 +67,29 @@ function HitMap({ stats }: { stats: HitboxStats }) {
 
   return (
     <article className="panel hit-map-panel">
-      <div className="panel-heading"><div><h2>Hit distribution</h2><p>Real K4 LevelRanks hitgroup data.</p></div><span>{stats.totalHits.toLocaleString()} hits</span></div>
+      <div className="panel-heading"><div><h2>Hit distribution</h2><p>Real K4 LevelRanks hitgroup data.</p></div><span>{formatCount(stats.totalHits)} hits</span></div>
       {stats.totalHits ? <div className="hit-map-layout">
         <figure className="hit-map-figure">
           <svg className="hit-map-body" viewBox="0 0 180 350" role="img" aria-labelledby="hit-map-title hit-map-description">
             <title id="hit-map-title">Body hit distribution</title>
             <desc id="hit-map-description">A body outline coloured by recorded K4 LevelRanks hitgroup totals.</desc>
             <path className="hit-map-outline" d="M90 12c-16 0-28 13-28 29 0 10 5 19 12 24l-7 17-27 17-12 61 22 5 8-45 12 5-10 57 2 45 14 12 3 82h22l3-82 14-12 2-45-10-57 12-5 8 45 22-5-12-61-27-17-7-17c7-5 12-14 12-24 0-16-12-29-28-29Z" />
-            <circle className="hitbox hitbox-head" cx="90" cy="40" r="25" style={{ "--hit-intensity": hitIntensity(stats.head, max) } as CSSProperties}><title>Head: {stats.head.toLocaleString()} hits</title></circle>
-            <rect className="hitbox hitbox-neck" x="78" y="65" width="24" height="18" rx="7" style={{ "--hit-intensity": hitIntensity(stats.neck, max) } as CSSProperties}><title>Neck: {stats.neck.toLocaleString()} hits</title></rect>
-            <path className="hitbox hitbox-chest" d="M62 86h56l10 24-10 57H62l-10-57Z" style={{ "--hit-intensity": hitIntensity(stats.chest, max) } as CSSProperties}><title>Chest: {stats.chest.toLocaleString()} hits</title></path>
-            <path className="hitbox hitbox-stomach" d="M66 170h48l-5 51H71Z" style={{ "--hit-intensity": hitIntensity(stats.stomach, max) } as CSSProperties}><title>Stomach: {stats.stomach.toLocaleString()} hits</title></path>
-            <path className="hitbox hitbox-left-arm" d="M50 95 35 106l-11 55 20 4 12-48 12 7-8 46-13 11-6-14-9 50 19 4 14-63 9-47Z" style={{ "--hit-intensity": hitIntensity(stats.leftArm, max) } as CSSProperties}><title>Left arm: {stats.leftArm.toLocaleString()} hits</title></path>
-            <path className="hitbox hitbox-right-arm" d="m130 95 15 11 11 55-20 4-12-48-12 7 8 46 13 11 6-14 9 50-19 4-14-63-9-47Z" style={{ "--hit-intensity": hitIntensity(stats.rightArm, max) } as CSSProperties}><title>Right arm: {stats.rightArm.toLocaleString()} hits</title></path>
-            <path className="hitbox hitbox-left-leg" d="m72 224 17 2-2 100H64l-8-70Z" style={{ "--hit-intensity": hitIntensity(stats.leftLeg, max) } as CSSProperties}><title>Left leg: {stats.leftLeg.toLocaleString()} hits</title></path>
-            <path className="hitbox hitbox-right-leg" d="m91 226 17-2 16 32-8 70H93Z" style={{ "--hit-intensity": hitIntensity(stats.rightLeg, max) } as CSSProperties}><title>Right leg: {stats.rightLeg.toLocaleString()} hits</title></path>
+            <circle className="hitbox hitbox-head" cx="90" cy="40" r="25" style={{ "--hit-intensity": hitIntensity(stats.head, max) } as CSSProperties}><title>{`Head: ${formatCount(stats.head)} hits`}</title></circle>
+            <rect className="hitbox hitbox-neck" x="78" y="65" width="24" height="18" rx="7" style={{ "--hit-intensity": hitIntensity(stats.neck, max) } as CSSProperties}><title>{`Neck: ${formatCount(stats.neck)} hits`}</title></rect>
+            <path className="hitbox hitbox-chest" d="M62 86h56l10 24-10 57H62l-10-57Z" style={{ "--hit-intensity": hitIntensity(stats.chest, max) } as CSSProperties}><title>{`Chest: ${formatCount(stats.chest)} hits`}</title></path>
+            <path className="hitbox hitbox-stomach" d="M66 170h48l-5 51H71Z" style={{ "--hit-intensity": hitIntensity(stats.stomach, max) } as CSSProperties}><title>{`Stomach: ${formatCount(stats.stomach)} hits`}</title></path>
+            <path className="hitbox hitbox-left-arm" d="M50 95 35 106l-11 55 20 4 12-48 12 7-8 46-13 11-6-14-9 50 19 4 14-63 9-47Z" style={{ "--hit-intensity": hitIntensity(stats.leftArm, max) } as CSSProperties}><title>{`Left arm: ${formatCount(stats.leftArm)} hits`}</title></path>
+            <path className="hitbox hitbox-right-arm" d="m130 95 15 11 11 55-20 4-12-48-12 7 8 46 13 11 6-14 9 50-19 4-14-63-9-47Z" style={{ "--hit-intensity": hitIntensity(stats.rightArm, max) } as CSSProperties}><title>{`Right arm: ${formatCount(stats.rightArm)} hits`}</title></path>
+            <path className="hitbox hitbox-left-leg" d="m72 224 17 2-2 100H64l-8-70Z" style={{ "--hit-intensity": hitIntensity(stats.leftLeg, max) } as CSSProperties}><title>{`Left leg: ${formatCount(stats.leftLeg)} hits`}</title></path>
+            <path className="hitbox hitbox-right-leg" d="m91 226 17-2 16 32-8 70H93Z" style={{ "--hit-intensity": hitIntensity(stats.rightLeg, max) } as CSSProperties}><title>{`Right leg: ${formatCount(stats.rightLeg)} hits`}</title></path>
           </svg>
           <figcaption>Brighter zones received more hits.</figcaption>
         </figure>
         <div className="hit-map-list" aria-label="Hit distribution details">
-          {cells.map((cell) => <div key={cell.key}><span><i style={{ "--hit-intensity": hitIntensity(cell.value, max) } as CSSProperties} aria-hidden="true" />{cell.label}</span><strong>{cell.value.toLocaleString()}</strong><small>{cell.percent.toFixed(1)}%</small></div>)}
+          {cells.map((cell) => <div key={cell.key}><span><i style={{ "--hit-intensity": hitIntensity(cell.value, max) } as CSSProperties} aria-hidden="true" />{cell.label}</span><strong>{formatCount(cell.value)}</strong><small>{cell.percent.toFixed(1)}%</small></div>)}
         </div>
       </div> : <p className="empty-copy">Hitgroup tracking has no saved hits for this player yet. K4 LevelRanks will populate this after combat damage is recorded.</p>}
-      <div className="hit-map-damage"><span>Health damage <strong>{stats.healthDamage.toLocaleString()}</strong></span><span>Armor damage <strong>{stats.armorDamage.toLocaleString()}</strong></span></div>
+      <div className="hit-map-damage"><span>Health damage <strong>{formatCount(stats.healthDamage)}</strong></span><span>Armor damage <strong>{formatCount(stats.armorDamage)}</strong></span></div>
     </article>
   );
 }
@@ -107,7 +118,9 @@ export function PlayerProfilePage({ profile, steamId, steamProfile, isOwnProfile
   const kdRatio = profile.deaths ? (profile.kills / profile.deaths).toFixed(2) : profile.kills.toFixed(2);
   const headshotPercent = profile.kills ? ((profile.headshots / profile.kills) * 100).toFixed(1) : "0.0";
   const placement = profile.leaderboardPosition ?? "—";
-  const placementTotal = profile.leaderboardTotal ? profile.leaderboardTotal.toLocaleString() : "—";
+  const formattedPlacementTotal = profile.leaderboardTotal
+    ? formatCount(profile.leaderboardTotal)
+    : "No rank";
   const steamProfileUrl = `https://steamcommunity.com/profiles/${steamId}`;
   const presence = steamProfile?.presence ?? "unknown";
   const presenceLabel = presence === "online" ? "Steam online" : presence === "offline" ? "Steam offline" : "Steam status unavailable";
@@ -122,7 +135,7 @@ export function PlayerProfilePage({ profile, steamId, steamProfile, isOwnProfile
             {!isOwnProfile ? <Link className="back-link" href="/ranking"><ArrowLeft aria-hidden="true" /> Server ranking</Link> : null}
             <div className="public-player-identity" data-presence={presence}>
               <div className={`public-player-avatar${isBanned ? " is-banned" : ""}`}>
-                {steamProfile?.avatarFull ? <img src={steamProfile.avatarFull} alt={`${displayName}'s Steam avatar`} referrerPolicy="no-referrer" /> : <span className="public-player-avatar-fallback" aria-hidden="true">{avatarInitial(displayName)}</span>}
+                <ResilientRemoteImage src={steamProfile?.avatarFull} alt={`${displayName}'s Steam avatar`} referrerPolicy="no-referrer" fallback={<span className="public-player-avatar-fallback" aria-hidden="true">{avatarInitial(displayName)}</span>} />
                 {isBanned ? <span className="banned-avatar-overlay">BANNED</span> : null}
               </div>
               <div>
@@ -147,8 +160,8 @@ export function PlayerProfilePage({ profile, steamId, steamProfile, isOwnProfile
 
         <section className="stat-grid public-player-stat-grid" aria-label={`${displayName}'s statistics`}>
           <article><span>Playtime</span><strong>{formatPlaytime(profile.playtimeSeconds)}</strong><Clock3 aria-hidden="true" /></article>
-          <article className="profile-points-stat" style={{ "--level-rank-color": levelRank.hex } as CSSProperties}><span>Points</span><strong>{levelRank.name}</strong><span className="stat-foot">{profile.points.toLocaleString()} total points</span><ShieldCheck aria-hidden="true" /></article>
-          <article className="level-rank-stat"><span>K4 rank</span><strong>RANKED #{placement}</strong><span className="stat-foot">out of {placementTotal}</span></article>
+          <article className="profile-points-stat" style={{ "--level-rank-color": levelRank.hex } as CSSProperties}><span>Points</span><strong>{levelRank.name}</strong><span className="stat-foot">{formatCount(profile.points)} total points</span><ShieldCheck aria-hidden="true" /></article>
+          <article className="level-rank-stat"><span>K4 rank</span><strong>RANKED #{placement}</strong><span className="stat-foot">out of {formattedPlacementTotal}</span></article>
           <article><span>K / D</span><strong>{kdRatio}</strong><span className="stat-foot">{profile.kills} kills / {profile.deaths} deaths</span></article>
         </section>
 
@@ -160,12 +173,12 @@ export function PlayerProfilePage({ profile, steamId, steamProfile, isOwnProfile
           <article className="panel combat-panel">
             <div className="panel-heading"><h2>Combat profile</h2><p>From K4 LevelRanks.</p></div>
             <div className="combat-stat-grid">
-              <div><span>Kills</span><strong>{profile.kills.toLocaleString()}</strong><Crosshair aria-hidden="true" /></div>
-              <div><span>Deaths</span><strong>{profile.deaths.toLocaleString()}</strong><Ban aria-hidden="true" /></div>
+              <div><span>Kills</span><strong>{formatCount(profile.kills)}</strong><Crosshair aria-hidden="true" /></div>
+              <div><span>Deaths</span><strong>{formatCount(profile.deaths)}</strong><Ban aria-hidden="true" /></div>
               <div><span>Headshot rate</span><strong>{headshotPercent}%</strong><Target aria-hidden="true" /></div>
-              <div><span>Noscopes</span><strong>{profile.noscopes.toLocaleString()}</strong><UserRound aria-hidden="true" /></div>
+              <div><span>Noscopes</span><strong>{formatCount(profile.noscopes)}</strong><UserRound aria-hidden="true" /></div>
             </div>
-            <div className="rank-progress" aria-label={`K4 rank progression: ${levelRank.name}`}><div><span>{levelRank.name}</span><strong>{nextLevelRank ? `${Math.max(0, nextLevelRank.points - profile.points).toLocaleString()} points to ${nextLevelRank.tag}` : "Highest K4 rank"}</strong></div><div className="rank-progress-track"><i style={{ width: `${rankProgress}%`, backgroundColor: levelRank.hex }} /></div></div>
+            <div className="rank-progress" aria-label={`K4 rank progression: ${levelRank.name}`}><div><span>{levelRank.name}</span><strong>{nextLevelRank ? `${formatCount(Math.max(0, nextLevelRank.points - profile.points))} points to ${nextLevelRank.tag}` : "Highest K4 rank"}</strong></div><div className="rank-progress-track"><i style={{ width: `${rankProgress}%`, backgroundColor: levelRank.hex }} /></div></div>
           </article>
           <HitMap stats={profile.hitStats} />
         </section>

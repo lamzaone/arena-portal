@@ -188,14 +188,21 @@ export function economyCrates(value: unknown): EconomyCrateView[] {
     const record = isRecord(entry) ? entry : {};
     return {
       ...item,
-      code: text(firstDefined(record, ["code", "crateCode"]), "") || null,
+      code:
+        text(
+          firstDefined(record, ["code", "crateCode", "lootTableCode"]),
+          "",
+        ) || null,
       priceTokens: number(
         firstDefined(record, [
           "priceTokens",
           "cratePriceTokens",
+          "directPurchasePriceTokens",
+          "displayPriceTokens",
           "marketPriceTokens",
           "price",
         ]),
+        item.cratePriceTokens ?? item.marketPriceTokens,
       ),
       possibleItems: integer(
         firstDefined(record, ["possibleItems", "itemCount", "contentsCount"]),

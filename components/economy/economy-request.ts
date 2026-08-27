@@ -4,6 +4,9 @@ export type EconomyActionResult = {
   ok: boolean;
   message?: string;
   balance?: number;
+  priceTokens?: number;
+  itemId?: string;
+  catalogueId?: number;
   item?: unknown;
   trade?: unknown;
 };

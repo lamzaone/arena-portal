@@ -2928,6 +2928,28 @@ export type RecordEconomyPriceResult = {
   price: EconomyCataloguePrice;
 };
 
+/** A market-addressable catalogue row used by the background price worker. */
+export type EconomyPublicPriceRefreshCandidate = {
+  catalogueId: number;
+  marketHashName: string;
+  metadata: Record<string, unknown>;
+  currentPrice: EconomyCataloguePrice | null;
+};
+
+/** A trusted EUR-cent quote resolved by the server-side public price adapter. */
+export type EconomyPublicPriceRefreshUpdate = {
+  catalogueId: number;
+  eurCents: number;
+  source: string;
+  sourceReference: string;
+};
+
+export type EconomyPriceRefreshLockResult<T> = {
+  available: boolean;
+  acquired: boolean;
+  value: T | null;
+};
+
 export type SetEconomyCatalogueMarketHashInput = {
   actorSteamId: string;
   catalogueId: number;
@@ -4690,6 +4712,135 @@ export async function getEconomyCatalogueItem(
     [catalogueId],
   );
   return rows[0] ? toEconomyCatalogueItem(rows[0]) : null;
+}
+
+/**
+ * Returns every enabled catalogue item that has an exact public market name.
+ * This deliberately excludes custom/unmapped entries: a last-known or custom
+ * price must never be replaced by a quote for a guessed identity.
+ */
+export async function getEconomyPublicPriceRefreshCandidates(): Promise<
+  EconomyPublicPriceRefreshCandidate[]
+> {
+  const pool = getPortalPool();
+  if (!pool) return [];
+  const [rows] = await pool.query<EconomyCatalogueRow[]>(
+    economyCatalogueSelect +
+      "WHERE c.enabled = TRUE AND c.market_hash_name IS NOT NULL " +
+      "AND TRIM(c.market_hash_name) <> '' ORDER BY c.id ASC",
+  );
+  return rows.map((row) => ({
+    catalogueId: economyNumber(row.id, "catalogue ID", 1),
+    marketHashName: economyText(
+      String(row.market_hash_name ?? ""),
+      "Public market-hash name",
+      255,
+    ),
+    metadata: economyRecord(row.metadata),
+    currentPrice: toEconomyCataloguePrice(row),
+  }));
+}
+
+/**
+ * Serializes an automatic price sweep across all portal instances. The lock is
+ * intentionally held while the public snapshot is read and updates are saved,
+ * so an in-process scheduler and an external cron endpoint cannot duplicate a
+ * refresh or create competing current-price rows.
+ */
+export async function withEconomyPublicPriceRefreshLock<T>(
+  work: () => Promise<T>,
+): Promise<EconomyPriceRefreshLockResult<T>> {
+  const pool = getPortalPool();
+  if (!pool) return { available: false, acquired: false, value: null };
+
+  const connection = await pool.getConnection();
+  let acquired = false;
+  try {
+    const [rows] = await connection.query<
+      Array<RowDataPacket & { locked: number | string | null }>
+    >("SELECT GET_LOCK('arena_portal_economy_public_price_refresh', 0) AS locked");
+    acquired = Number(rows[0]?.locked ?? 0) === 1;
+    if (!acquired) return { available: true, acquired: false, value: null };
+    return { available: true, acquired: true, value: await work() };
+  } finally {
+    if (acquired) {
+      try {
+        await connection.query(
+          "SELECT RELEASE_LOCK('arena_portal_economy_public_price_refresh')",
+        );
+      } catch {
+        // The connection is about to be released. MySQL also releases named
+        // locks on disconnect, so a release failure cannot leave a permanent
+        // lock behind.
+      }
+    }
+    connection.release();
+  }
+}
+
+/**
+ * Records only changed public prices. Price history is retained by closing the
+ * prior current snapshot before inserting the new immutable observation.
+ */
+export async function recordAutomaticEconomyPublicPrices(
+  input: readonly EconomyPublicPriceRefreshUpdate[],
+): Promise<number> {
+  if (!input.length) return 0;
+  const pool = getPortalPool();
+  if (!pool) return 0;
+
+  const updatesByCatalogueId = new Map<number, EconomyPublicPriceRefreshUpdate>();
+  for (const value of input) {
+    const catalogueId = economyNumber(value.catalogueId, "catalogue ID", 1);
+    updatesByCatalogueId.set(catalogueId, {
+      catalogueId,
+      eurCents: economyAmount(value.eurCents, "Public EUR-cent price"),
+      source: economyText(value.source, "Public price source", 32),
+      sourceReference: economyText(
+        value.sourceReference,
+        "Public price reference",
+        255,
+      ),
+    });
+  }
+  const updates = [...updatesByCatalogueId.values()];
+  const connection = await pool.getConnection();
+  const batchSize = 250;
+  try {
+    for (let offset = 0; offset < updates.length; offset += batchSize) {
+      const batch = updates.slice(offset, offset + batchSize);
+      await connection.beginTransaction();
+      try {
+        const cataloguePlaceholders = batch.map(() => "?").join(", ");
+        await connection.execute(
+          "UPDATE portal_economy_catalogue_prices SET is_current = FALSE " +
+            "WHERE is_current = TRUE AND catalogue_id IN (" +
+            cataloguePlaceholders +
+            ")",
+          batch.map((update) => update.catalogueId),
+        );
+        const valuePlaceholders = batch.map(() => "(?, ?, ?, ?, TRUE)").join(", ");
+        await connection.execute(
+          "INSERT INTO portal_economy_catalogue_prices " +
+            "(catalogue_id, market_price_eur_cents, price_source, source_reference, is_current) VALUES " +
+            valuePlaceholders,
+          batch.flatMap((update) => [
+            update.catalogueId,
+            update.eurCents,
+            update.source,
+            update.sourceReference,
+          ]),
+        );
+        await connection.commit();
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      }
+    }
+    return updates.length;
+  } finally {
+    connection.release();
+  }
 }
 
 export async function getEconomyCrates(
