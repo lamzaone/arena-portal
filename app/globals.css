@@ -707,4 +707,3 @@ code { padding: 2px 4px; border-radius: 4px; color: #fecdd3; background: rgba(22
    is running. This prevents duplicate clicks without making the grid jump. */
 .crate-owned-grid .economy-item-card.is-opening { position: relative; isolation: isolate; overflow: hidden; opacity: .48; filter: grayscale(.78) saturate(.55); cursor: progress; pointer-events: none; }
 .crate-owned-grid .economy-item-card.is-opening::after { position: absolute; z-index: 8; inset: 0; display: grid; place-items: center; border: 1px solid rgba(173,191,222,.4); color: #e4efff; background: rgba(6,12,25,.58); content: "Opening…"; font-size: 11px; font-weight: 900; letter-spacing: .1em; text-shadow: 0 1px 8px rgba(0,0,0,.75); text-transform: uppercase; }
-.crate-owned-grid .economy-item-card.crate-consumed-slot { visibility: hidden; pointer-events: none; }

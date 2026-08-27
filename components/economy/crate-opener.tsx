@@ -891,22 +891,28 @@ export function CrateOpener({
     activeTab === "owned" ? selectedOwnedCrate : selectedMarketCrate;
   const busy = pending || activeAction !== null;
   const openingCrateId = opening?.crate.id ?? null;
-  const hasDetachedOwnedOpener =
+  const selectedInventoryCrateIndex = inventoryCrates.findIndex(
+    (item) => item.id === selectedCrateId,
+  );
+  const selectedVisibleCrateIndex = ownedCrates.findIndex(
+    (item) => item.id === selectedCrateId,
+  );
+  const hasRetainedOwnedOpener =
     selectedCrateId !== "" &&
     selectedOwnedCrate !== null &&
-    !inventoryCrates.some((crate) => crate.id === selectedCrateId) &&
+    selectedVisibleCrateIndex < 0 &&
     (opening?.crate.id === selectedCrateId ||
       unboxedCrateId === selectedCrateId);
   const selectedCatalogueId = selectedCrate?.catalogueId ?? null;
   const selectedDrops = dropState.status === "ready" ? dropState.drops : [];
-  const selectedOwnedCrateIndex = inventoryCrates.findIndex(
-    (item) => item.id === selectedCrateId,
-  );
-  const ownedInlineOpenerIndex = selectedOwnedCrateIndex < 0
+  const selectedCrateRowIndex = selectedVisibleCrateIndex >= 0
+    ? selectedVisibleCrateIndex
+    : selectedInventoryCrateIndex;
+  const ownedInlineOpenerIndex = selectedCrateRowIndex < 0 || !ownedCrates.length
     ? -1
     : Math.min(
-        inventoryCrates.length - 1,
-        Math.ceil((selectedOwnedCrateIndex + 1) / ownedGridColumns) *
+        ownedCrates.length - 1,
+        Math.ceil((selectedCrateRowIndex + 1) / ownedGridColumns) *
           ownedGridColumns -
           1,
       );
@@ -1414,14 +1420,12 @@ export function CrateOpener({
         </div>
 
         {activeTab === "owned" ? <>
-          {inventoryCrates.length || hasDetachedOwnedOpener ? <div ref={ownedGridRef} id="crate-owned-panel" className="feature-grid crate-item-grid crate-owned-grid" role="tabpanel" aria-labelledby="crate-owned-tab">
-            {inventoryCrates.map((crate, index) => <Fragment key={crate.id}>
-              {consumedCrateIds.has(crate.id)
-                ? <EconomyItemCard item={crate} className="crate-consumed-slot" enableMarketPreview={false} />
-                : <EconomyItemCard item={crate} selected={selectedCrateId === crate.id} onSelect={() => toggleOwnedCrate(crate.id)} selectionLabel={`Open ${crate.displayName} options`} selectionControls={selectedCrateId === crate.id ? `crate-opening-${crate.id}` : undefined} enableMarketPreview disabled={openingCrateId === crate.id} className={openingCrateId === crate.id ? "is-opening" : ""} />}
+          {ownedCrates.length || hasRetainedOwnedOpener ? <div ref={ownedGridRef} id="crate-owned-panel" className="feature-grid crate-item-grid crate-owned-grid" role="tabpanel" aria-labelledby="crate-owned-tab">
+            {ownedCrates.map((crate, index) => <Fragment key={crate.id}>
+              <EconomyItemCard item={crate} selected={selectedCrateId === crate.id} onSelect={() => toggleOwnedCrate(crate.id)} selectionLabel={`Open ${crate.displayName} options`} selectionControls={selectedCrateId === crate.id ? `crate-opening-${crate.id}` : undefined} enableMarketPreview disabled={openingCrateId === crate.id} className={openingCrateId === crate.id ? "is-opening" : ""} />
               {index === ownedInlineOpenerIndex && selectedOwnedCrate ? <OwnedCrateInlineOpener crate={selectedOwnedCrate} dropState={dropState} opening={opening} reward={unboxedCrateId === selectedOwnedCrate.id ? unboxed : null} rewardMessage={unboxedCrateId === selectedOwnedCrate.id ? unboxMessage : null} busy={busy} onOpen={openCrate} onClose={() => closeOwnedCrate(selectedOwnedCrate.id)} onRevealComplete={() => revealComplete.current?.()} onTick={playReelTick} /> : null}
             </Fragment>)}
-            {hasDetachedOwnedOpener && selectedOwnedCrate ? <OwnedCrateInlineOpener crate={selectedOwnedCrate} dropState={dropState} opening={opening} reward={unboxed} rewardMessage={unboxMessage} busy={busy} onOpen={openCrate} onClose={() => closeOwnedCrate(selectedOwnedCrate.id)} onRevealComplete={() => revealComplete.current?.()} onTick={playReelTick} /> : null}
+            {ownedInlineOpenerIndex < 0 && hasRetainedOwnedOpener && selectedOwnedCrate ? <OwnedCrateInlineOpener crate={selectedOwnedCrate} dropState={dropState} opening={opening} reward={unboxed} rewardMessage={unboxMessage} busy={busy} onOpen={openCrate} onClose={() => closeOwnedCrate(selectedOwnedCrate.id)} onRevealComplete={() => revealComplete.current?.()} onTick={playReelTick} /> : null}
           </div> : <div id="crate-owned-panel" role="tabpanel" aria-labelledby="crate-owned-tab"><EconomyEmptyState title="You do not have a crate yet" description="Crates can arrive as match drops, hourly drops, map-end drops, or direct marketplace purchases in the Market tab." icon={<Gift aria-hidden="true" />} /></div>}
         </> : <>
           <form className="panel form-panel crate-catalogue-filters" onSubmit={(event) => event.preventDefault()}>
