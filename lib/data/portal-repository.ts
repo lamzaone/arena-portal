@@ -2798,6 +2798,31 @@ export type PurchaseEconomyItemResult = {
   wallet: TokenWallet;
 };
 
+export type SellEconomyItemInput = {
+  steamId: string;
+  itemId: string;
+  // The sell route resolves a current public quote before entering the
+  // database transaction. It is never supplied by the browser.
+  resolvedMarketPrice?: ResolvedEconomyMarketSalePrice;
+  idempotencyKey: string;
+};
+
+export type ResolvedEconomyMarketSalePrice = {
+  tokenPrice: number;
+  euroCents: number;
+  source: string;
+  sourceReference: string | null;
+  floatValue: number | null;
+  floatDiscountBps: number | null;
+};
+
+export type SellEconomyItemResult = {
+  itemId: string;
+  marketPriceTokens: number;
+  payoutTokens: number;
+  wallet: TokenWallet;
+};
+
 export type OpenEconomyCrateInput = {
   steamId: string;
   crateItemId: string;
@@ -4564,6 +4589,19 @@ async function findEconomyInventoryItem(pool: Pool, itemId: string) {
   return items[0] ?? null;
 }
 
+/** Reads one inventory instance only when it belongs to the requesting player. */
+export async function getPlayerEconomyInventoryItem(
+  steamId: string,
+  itemId: string,
+) {
+  const ownerSteamId = economySteamId(steamId);
+  const normalizedItemId = economyItemId(itemId);
+  const pool = getPortalPool();
+  if (!pool) return null;
+  const item = await findEconomyInventoryItem(pool, normalizedItemId);
+  return item?.ownerSteamId === ownerSteamId ? item : null;
+}
+
 export function economyStorageConfigured() {
   return Boolean(getPortalPool());
 }
@@ -5072,9 +5110,13 @@ export async function getPlayerEconomyInventory(
     where.push("i.state IN (" + states.map(() => "?").join(", ") + ")");
     values.push(...states);
   } else if (filter.includeAttached) {
-    where.push("i.state IN ('available', 'escrowed', 'attached')");
+    // Escrowed instances are currently reserved by a pending trade. They are
+    // intentionally absent from player Inventory and Crates until the trade
+    // is accepted, rejected, cancelled, or expires. Staff views pass an
+    // explicit state filter and still retain their audit visibility.
+    where.push("i.state IN ('available', 'attached')");
   } else {
-    where.push("i.state IN ('available', 'escrowed')");
+    where.push("i.state = 'available'");
   }
   if (itemTypes.length) {
     where.push("i.item_type IN (" + itemTypes.map(() => "?").join(", ") + ")");
@@ -5873,6 +5915,51 @@ function economyResolvedMarketplacePurchaseQuote(
   };
 }
 
+function economyResolvedMarketSalePrice(
+  price: ResolvedEconomyMarketSalePrice,
+): ResolvedEconomyMarketSalePrice {
+  const tokenPrice = economyMarketplaceQuoteAmount(
+    price.tokenPrice,
+    "Current market price",
+  );
+  const euroCents = economyMarketplaceQuoteAmount(
+    price.euroCents,
+    "Current market EUR price",
+  );
+  if (tokenPrice !== euroCents)
+    economyError("invalid_input", "The current market price is invalid.");
+  const source = economyText(price.source, "Public price source", 32);
+  if (!marketplacePurchasePriceSources.has(source))
+    economyError("invalid_input", "The public price source is invalid.");
+  const sourceReference = economyMarketplaceQuoteText(
+    price.sourceReference,
+    "Public price reference",
+    255,
+  );
+  const floatValue =
+    price.floatValue === null
+      ? null
+      : economyFloat(price.floatValue, "Quoted float");
+  const floatDiscountBps =
+    price.floatDiscountBps === null ? null : price.floatDiscountBps;
+  if (
+    floatDiscountBps !== null &&
+    (!Number.isSafeInteger(floatDiscountBps) ||
+      floatDiscountBps < 0 ||
+      floatDiscountBps > 1_500)
+  ) {
+    economyError("invalid_input", "The float price adjustment is invalid.");
+  }
+  return {
+    tokenPrice,
+    euroCents,
+    source,
+    sourceReference,
+    floatValue,
+    floatDiscountBps,
+  };
+}
+
 function economyValidateResolvedMarketplaceQuote(input: {
   catalogue: EconomyCatalogueItem;
   requestedFloat: number;
@@ -6120,6 +6207,151 @@ export async function purchaseEconomyItem(
         floatValue: items[0].floatValue,
         wallet,
       };
+    },
+  });
+}
+
+/**
+ * Buys an owned inventory instance back for 10% of its current public or
+ * staff-maintained market price. The browser only sends an item ID; any live
+ * quote is resolved by the route and audited with the resulting sale.
+ */
+export async function sellEconomyItem(
+  input: SellEconomyItemInput,
+): Promise<SellEconomyItemResult> {
+  const steamId = economySteamId(input.steamId);
+  const itemId = economyItemId(input.itemId);
+  const resolvedMarketPrice =
+    input.resolvedMarketPrice === undefined
+      ? undefined
+      : economyResolvedMarketSalePrice(input.resolvedMarketPrice);
+  return runEconomyMutation({
+    operationName: "marketplace.sale",
+    actorSteamId: steamId,
+    idempotencyKey: input.idempotencyKey,
+    request: { itemId, resolvedMarketPrice },
+    work: async (context) => {
+      // Wallet-before-item locking is shared with paid item customisation and
+      // keeps concurrent trade/loadout changes from creating inconsistent
+      // balances or stale ownership decisions.
+      const wallets = await lockTokenAccounts(context.connection, [steamId]);
+      const item = await lockEconomyInventoryItem(context.connection, itemId);
+      if (item.ownerSteamId !== steamId || item.state !== "available") {
+        economyError(
+          "ownership_required",
+          "That item is not available to sell from your inventory.",
+        );
+      }
+      if (!item.catalogue) {
+        economyError(
+          "price_unavailable",
+          "This item has no current market or last-known price.",
+        );
+      }
+      const [attachedStickerRows] = await context.connection.query<
+        Array<RowDataPacket & { sticker_item_id: string }>
+      >(
+        "SELECT sticker_item_id FROM portal_inventory_item_stickers WHERE weapon_item_id = ? FOR UPDATE",
+        [itemId],
+      );
+      if (attachedStickerRows.length) {
+        economyError(
+          "item_customized",
+          "Remove the attached stickers before selling this item.",
+        );
+      }
+
+      const fallbackPrice = item.catalogue.price;
+      if (
+        !resolvedMarketPrice &&
+        (!fallbackPrice || economyPriceIsLegacySteam(fallbackPrice))
+      ) {
+        economyError(
+          "price_unavailable",
+          "This item has no current market or last-known price.",
+        );
+      }
+      const marketPriceTokens =
+        resolvedMarketPrice?.tokenPrice ?? fallbackPrice?.tokenPrice;
+      if (!marketPriceTokens) {
+        economyError(
+          "price_unavailable",
+          "This item has no current market or last-known price.",
+        );
+      }
+      const payoutTokens = Math.floor(marketPriceTokens / 10);
+      if (payoutTokens < 1) {
+        economyError(
+          "price_unavailable",
+          "This item's 10% market payout is below one Token.",
+        );
+      }
+
+      await applyTokenDelta({
+        connection: context.connection,
+        wallets,
+        steamId,
+        delta: payoutTokens,
+        reason: "marketplace.sale",
+        referenceType: "inventory-item",
+        referenceId: itemId,
+        idempotencyKey: context.idempotencyKey,
+        lineKey: "sale:credit",
+        actorSteamId: steamId,
+        metadata: {
+          marketPriceTokens,
+          marketPriceEurCents:
+            resolvedMarketPrice?.euroCents ?? fallbackPrice?.euroCents ?? null,
+          payoutTokens,
+          sellRateBps: 1_000,
+          priceSource: resolvedMarketPrice?.source ?? fallbackPrice?.source ?? null,
+          priceSourceReference:
+            resolvedMarketPrice?.sourceReference ??
+            fallbackPrice?.sourceReference ??
+            null,
+          floatValue: resolvedMarketPrice?.floatValue ?? item.floatValue,
+          floatDiscountBps: resolvedMarketPrice?.floatDiscountBps ?? null,
+        },
+      });
+      await context.connection.execute(
+        "UPDATE portal_inventory_items SET state = 'consumed', consumed_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_steam_id = ? AND state = 'available'",
+        [itemId, steamId],
+      );
+      await clearEconomyLoadoutSlots(context.connection, steamId, [itemId]);
+      await writeInventoryEvent({
+        connection: context.connection,
+        itemId,
+        actorSteamId: steamId,
+        eventType: "marketplace.sold",
+        idempotencyKey: context.idempotencyKey,
+        lineKey: "sale:item",
+        beforeState: economyInventorySnapshot(item),
+        afterState: { ...economyInventorySnapshot(item), state: "consumed" },
+        metadata: {
+          marketPriceTokens,
+          payoutTokens,
+          sellRateBps: 1_000,
+          priceSource: resolvedMarketPrice?.source ?? fallbackPrice?.source ?? null,
+          priceSourceReference:
+            resolvedMarketPrice?.sourceReference ??
+            fallbackPrice?.sourceReference ??
+            null,
+        },
+      });
+      await enqueueEconomyLoadoutRefresh(
+        context.connection,
+        steamId,
+        context.idempotencyKey,
+        "sold",
+        [itemId],
+      );
+      const wallet = wallets.get(steamId);
+      if (!wallet)
+        economyError(
+          "wallet_unavailable",
+          "The sale wallet was not locked.",
+        );
+      return { itemId, marketPriceTokens, payoutTokens, wallet };
     },
   });
 }

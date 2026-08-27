@@ -30,7 +30,7 @@ export function economyMutationFailure(error: unknown) {
   const candidate = isRecord(error) ? error : null;
   const code = typeof candidate?.code === "string" ? candidate.code : "";
   const message = error instanceof Error ? error.message : "The economy operation could not be completed.";
-  if (["invalid_input", "invalid_idempotency_key", "incompatible_item", "ownership_required", "not_a_crate", "item_not_found", "unsupported_customization"].includes(code)) return economyJsonError(message, 400);
+  if (["invalid_input", "invalid_idempotency_key", "incompatible_item", "ownership_required", "not_a_crate", "item_not_found", "unsupported_customization", "item_customized"].includes(code)) return economyJsonError(message, 400);
   if (["insufficient_tokens", "idempotency_conflict", "operation_in_progress", "requested_item_unavailable", "sticker_slot_occupied", "price_unavailable", "catalogue_not_found", "catalogue_unavailable"].includes(code)) return economyJsonError(message, 409);
   if (["storage_unavailable", "operation_unavailable", "wallet_unavailable"].includes(code)) return economyJsonError(message, 503);
   return economyJsonError("The economy operation could not be completed. Please try again shortly.", 500);

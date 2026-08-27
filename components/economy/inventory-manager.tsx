@@ -2,14 +2,19 @@
 
 import {
   Check,
+  Coins,
+  Crosshair,
   Copy,
   PencilLine,
   Search,
+  Shield,
   ShieldCheck,
   Sticker,
   Sword,
+  X,
 } from "lucide-react";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 
 import {
@@ -89,6 +94,21 @@ function compareItems(
   return 0;
 }
 
+function gridColumnCount(grid: HTMLElement) {
+  return Math.max(
+    1,
+    getComputedStyle(grid).gridTemplateColumns.split(" ").filter(Boolean).length,
+  );
+}
+
+function rowEndIndex(itemIndex: number, columns: number, itemCount: number) {
+  if (itemIndex < 0 || itemCount < 1) return -1;
+  return Math.min(
+    itemCount - 1,
+    Math.ceil((itemIndex + 1) / columns) * columns - 1,
+  );
+}
+
 export function InventoryManager({
   inventory,
   loadout,
@@ -109,11 +129,16 @@ export function InventoryManager({
   const [nametagItemId, setNametagItemId] = useState("");
   const [stickerId, setStickerId] = useState("");
   const [stickerSlot, setStickerSlot] = useState("0");
+  const [saleConfirmationItemId, setSaleConfirmationItemId] = useState("");
   const [notice, setNotice] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(null);
   const [pending, startTransition] = useTransition();
+  const inventoryGridRef = useRef<HTMLDivElement | null>(null);
+  const [inventoryGridColumns, setInventoryGridColumns] = useState(1);
+  const [inventoryInlineModalIndex, setInventoryInlineModalIndex] = useState(-1);
+  const [inventoryModalHost, setInventoryModalHost] = useState<HTMLDivElement | null>(null);
 
   const types = useMemo(
     () => [...new Set(items.map((item) => item.itemType))].sort(),
@@ -145,8 +170,22 @@ export function InventoryManager({
       .sort((left, right) => compareItems(left, right, sort));
   }, [items, query, rarity, sort, type]);
 
-  const selected =
-    filtered.find((item) => item.id === selectedId) ?? filtered[0] ?? null;
+  const selected = filtered.find((item) => item.id === selectedId) ?? null;
+  const selectedIndex = filtered.findIndex((item) => item.id === selectedId);
+  const selectedSalePayout =
+    selected?.marketPriceTokens !== null && selected?.marketPriceTokens !== undefined
+      ? Math.floor(selected.marketPriceTokens / 10)
+      : null;
+  const saleIsConfirming = selected?.id === saleConfirmationItemId;
+  const saleUnavailableReason = !selected
+    ? null
+    : selected.state !== "available"
+      ? "Attached or trade-reserved items cannot be sold."
+      : selected.stickers.length
+        ? "Remove the attached stickers before selling this item."
+      : selectedSalePayout === null || selectedSalePayout < 1
+        ? "This item needs a current market or last-known price before it can be sold."
+        : null;
   const selectedSlot = selected ? slotForItem(selected, team) : null;
   const stickerSlots = selected ? itemStickerSlotCount(selected) : 0;
   const stickers = items.filter(
@@ -164,7 +203,57 @@ export function InventoryManager({
     setTeam("T");
     setStickerId("");
     setStickerSlot("0");
+    setSaleConfirmationItemId("");
   }, [loadoutView, selected?.id]);
+
+  useEffect(() => {
+    if (selectedId && !filtered.some((item) => item.id === selectedId)) {
+      setSelectedId("");
+      setInventoryInlineModalIndex(-1);
+      setSaleConfirmationItemId("");
+    }
+  }, [filtered, selectedId]);
+
+  useEffect(() => {
+    const grid = inventoryGridRef.current;
+    if (!grid) return;
+
+    const syncColumnCount = () => {
+      const columns = gridColumnCount(grid);
+      setInventoryGridColumns((current) => {
+        const next = columns;
+        return current === next ? current : next;
+      });
+      if (selectedIndex >= 0) {
+        setInventoryInlineModalIndex(
+          rowEndIndex(selectedIndex, columns, filtered.length),
+        );
+      }
+    };
+
+    syncColumnCount();
+    const observer = new ResizeObserver(syncColumnCount);
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, [filtered.length, selectedIndex]);
+
+  function selectInventoryItem(itemId: string) {
+    const grid = inventoryGridRef.current;
+    const columns = grid ? gridColumnCount(grid) : inventoryGridColumns;
+    const nextSelectedId = selectedId === itemId ? "" : itemId;
+
+    setInventoryGridColumns(columns);
+    if (!nextSelectedId) {
+      setInventoryInlineModalIndex(-1);
+      setSaleConfirmationItemId("");
+      setSelectedId("");
+      return;
+    }
+
+    const itemIndex = filtered.findIndex((item) => item.id === itemId);
+    setInventoryInlineModalIndex(rowEndIndex(itemIndex, columns, filtered.length));
+    setSelectedId(nextSelectedId);
+  }
 
   function runAction(
     path: string,
@@ -317,80 +406,118 @@ export function InventoryManager({
 
       {items.length ? (
         <div className="inventory-layout">
-          <div>
-            <div className="feature-grid inventory-item-grid">
-              {filtered.map((item) => (
+          <div ref={inventoryGridRef} className="feature-grid inventory-item-grid">
+            {filtered.map((item, index) => (
+              <Fragment key={item.id || `${item.catalogueId}-${item.displayName}`}>
                 <EconomyItemCard
-                  key={item.id || `${item.catalogueId}-${item.displayName}`}
                   item={item}
                   selected={selected?.id === item.id}
-                  onSelect={() => setSelectedId(item.id)}
+                  onSelect={() => selectInventoryItem(item.id)}
                   selectionLabel={`Manage ${item.displayName}`}
+                  selectionControls={selected?.id === item.id ? `inventory-item-modal-${item.id}` : undefined}
                   enableMarketPreview
                 />
-              ))}
-            </div>
-            {!filtered.length ? (
-              <EconomyEmptyState
-                title="No inventory items match"
-                description="Clear a filter or search for another item."
-              />
-            ) : null}
+                {index === inventoryInlineModalIndex ? <div ref={setInventoryModalHost} className="inventory-inline-modal-host" aria-live="polite" /> : null}
+              </Fragment>
+            ))}
           </div>
-          <aside
-            className="panel inventory-detail-panel"
+          {!filtered.length ? (
+            <EconomyEmptyState
+              title="No inventory items match"
+              description="Clear a filter or search for another item."
+            />
+          ) : null}
+          {inventoryModalHost && selected ? createPortal(
+          <section
+            id={`inventory-item-modal-${selected.id}`}
+            className="panel crate-inline-modal inventory-inline-modal"
             aria-label="Selected item controls"
           >
-            {selected ? (
-              <>
+              <header className="crate-inline-modal-header inventory-inline-modal-header">
+                <div>
+                  <p className="eyebrow"><Sword aria-hidden="true" /> Item management</p>
+                  <h3>{selected.displayName}</h3>
+                </div>
+                <button type="button" className="button button-quiet crate-inline-modal-close" onClick={() => { setSelectedId(""); setInventoryInlineModalIndex(-1); setSaleConfirmationItemId(""); }} disabled={pending} aria-label={`Close ${selected.displayName} item management`}>
+                  <X aria-hidden="true" /> Close
+                </button>
+              </header>
                 <div className="inventory-detail-hero">
                   <MarketplaceItemPreview item={selected} enableMarketPreview />
                   <div className="inventory-detail-heading">
-                    <p className="eyebrow">
-                      <Sword aria-hidden="true" /> Item management
-                    </p>
-                    <h2>{selected.displayName}</h2>
                     <p>
                       {selected.rarity} · {humanize(selected.itemType)}
                     </p>
+                  </div>
+                </div>
+                <details className="inventory-inline-extra">
+                  <summary>Extra details and trade ID</summary>
+                  <div className="inventory-inline-extra-body">
                     {selected.description ? (
                       <p className="inventory-detail-description">
                         {selected.description}
                       </p>
                     ) : null}
+                    <div className="tag-list">
+                      <code>{selected.id}</code>
+                      <button
+                        type="button"
+                        className="button button-secondary"
+                        onClick={copyTradeItemId}
+                      >
+                        <Copy aria-hidden="true" /> Copy trade ID
+                      </button>
+                    </div>
+                    <p className="empty-copy">
+                      Share this ID only when you want another player to request
+                      this exact item in a trade.
+                    </p>
+                    <p className="empty-copy">
+                      Current wallet: {formatTokens(walletView.balance)} tokens.
+                    </p>
+                    {loadoutView.length ? (
+                      <div className="group-block">
+                        <span>Current loadout slots</span>
+                        <div className="tag-list">
+                          {loadoutView.map((entry) => (
+                            <span key={entry.slot} className="tag">
+                              {humanize(entry.slot)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
-                </div>
-                <div className="tag-list">
-                  <code>{selected.id}</code>
-                  <button
-                    type="button"
-                    className="button button-secondary"
-                    onClick={copyTradeItemId}
-                  >
-                    <Copy aria-hidden="true" /> Copy trade ID
-                  </button>
-                </div>
-                <p className="empty-copy">
-                  Share this ID only when you want another player to request
-                  this exact item in a trade.
-                </p>
+                </details>
                 {itemSupportsLoadout(selected) ? (
                   <fieldset className="form-panel">
                     <legend>Equip item</legend>
                     {selectedSlot?.slotType !== "music_kit" ? (
-                      <label htmlFor="inventory-team">
-                        Loadout team
-                        <select
-                          id="inventory-team"
-                          value={team}
-                          onChange={(event) =>
-                            setTeam(event.target.value === "CT" ? "CT" : "T")
-                          }
-                        >
-                          <option value="T">Terrorist</option>
-                          <option value="CT">Counter-Terrorist</option>
-                        </select>
-                      </label>
+                      <fieldset className="inventory-team-switch">
+                        <legend>Loadout team</legend>
+                        <div role="group" aria-label="Loadout team">
+                          <button
+                            type="button"
+                            className={`inventory-team-choice is-terrorist${team === "T" ? " is-selected" : ""}`}
+                            aria-pressed={team === "T"}
+                            disabled={pending}
+                            onClick={() => setTeam("T")}
+                          >
+                            <Crosshair aria-hidden="true" />
+                            <span><strong>T</strong><small>Terrorist</small></span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`inventory-team-choice is-counter-terrorist${team === "CT" ? " is-selected" : ""}`}
+                            aria-pressed={team === "CT"}
+                            disabled={pending}
+                            onClick={() => setTeam("CT")}
+                          >
+                            <Shield aria-hidden="true" />
+                            <span><strong>CT</strong><small>Counter-Terrorist</small></span>
+                          </button>
+                        </div>
+                      </fieldset>
                     ) : (
                       <p className="empty-copy">
                         Music kits are equipped globally for both sides.
@@ -571,29 +698,66 @@ export function InventoryManager({
                     ) : null}
                   </fieldset>
                 ) : null}
-                <p className="empty-copy">
-                  Current wallet: {formatTokens(walletView.balance)} tokens.
-                </p>
-                {loadoutView.length ? (
-                  <div className="group-block">
-                    <span>Current loadout slots</span>
-                    <div className="tag-list">
-                      {loadoutView.map((entry) => (
-                        <span key={entry.slot} className="tag">
-                          {humanize(entry.slot)}
-                        </span>
-                      ))}
-                    </div>
+                <details className="inventory-sell-panel">
+                  <summary>
+                    <span><Coins aria-hidden="true" /> Sell to market</span>
+                    <small>10% buyback</small>
+                  </summary>
+                  <div className="inventory-sell-panel-body">
+                    {saleUnavailableReason ? (
+                      <p className="empty-copy">{saleUnavailableReason}</p>
+                    ) : (
+                      <>
+                        <div className="inventory-sell-price">
+                          <span>Current buyback payout</span>
+                          <strong>{formatTokens(selectedSalePayout ?? 0)} Tokens</strong>
+                          <small>
+                            10% of the current {formatTokens(selected.marketPriceTokens ?? 0)}-Token market price.
+                          </small>
+                        </div>
+                        <p className="empty-copy">
+                          The price is checked again when you confirm. Selling permanently removes this item from your inventory and clears it from your loadout.
+                        </p>
+                        {saleIsConfirming ? (
+                          <div className="hero-actions inventory-sell-confirmation">
+                            <button
+                              type="button"
+                              className="button inventory-sell-confirm"
+                              disabled={pending}
+                              onClick={() =>
+                                runAction(
+                                  "/api/economy/items/sell",
+                                  { itemId: selected.id },
+                                  `${selected.displayName} sold for ${formatTokens(selectedSalePayout ?? 0)} Tokens.`,
+                                )
+                              }
+                            >
+                              <Coins aria-hidden="true" /> {pending ? "Selling…" : `Confirm sale for ${formatTokens(selectedSalePayout ?? 0)} Tokens`}
+                            </button>
+                            <button
+                              type="button"
+                              className="button button-secondary"
+                              disabled={pending}
+                              onClick={() => setSaleConfirmationItemId("")}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="button inventory-sell-start"
+                            disabled={pending}
+                            onClick={() => setSaleConfirmationItemId(selected.id)}
+                          >
+                            <Coins aria-hidden="true" /> Sell for {formatTokens(selectedSalePayout ?? 0)} Tokens
+                          </button>
+                        )}
+                      </>
+                    )}
                   </div>
-                ) : null}
-              </>
-            ) : (
-              <EconomyEmptyState
-                title="Select an item"
-                description="Choose an item from the inventory list to manage it."
-              />
-            )}
-          </aside>
+                </details>
+          </section>, inventoryModalHost) : null}
         </div>
       ) : (
         <EconomyEmptyState
