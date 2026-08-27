@@ -6,7 +6,10 @@ import {
   type EconomyInventoryItem,
   type EconomyInventoryPage,
 } from "@/lib/data/portal-repository";
-import { getMarketplacePriceQuotes } from "@/lib/economy/market-pricing";
+import {
+  getMarketplacePriceQuotes,
+  isStattrakMarketplaceItem,
+} from "@/lib/economy/market-pricing";
 
 const INVENTORY_PAGE_SIZE = 100;
 
@@ -31,7 +34,11 @@ function isLegacySteamPrice(source: string | null | undefined) {
  * still re-resolves it within the authenticated mutation route.
  */
 async function withCurrentMarketPrices(items: EconomyInventoryItem[]) {
-  const quoteable = items.filter((item) => item.catalogue !== null);
+  const quoteable = items.filter(
+    (item) =>
+      item.catalogue !== null &&
+      (!item.stattrak || isStattrakMarketplaceItem(item.itemType)),
+  );
   if (!quoteable.length) return items;
   const quotes = await getMarketplacePriceQuotes(
     quoteable.map((item) => {
@@ -69,7 +76,21 @@ async function withCurrentMarketPrices(items: EconomyInventoryItem[]) {
   );
   return items.map((item) => {
     const quote = quoteByItemId.get(item.id);
-    if (!quote) return item;
+    if (!quote) {
+      // The catalogue stores the normal item's historic snapshot. Never show
+      // it as the value of a separately priced StatTrak™ instance.
+      return item.stattrak
+        ? {
+            ...item,
+            marketPriceTokens: null,
+            marketPriceEuroCents: null,
+            marketPriceSource: null,
+            marketPriceFloatValue: null,
+            marketPriceWear: null,
+            marketPriceFloatDiscountBps: null,
+          }
+        : item;
+    }
     return {
       ...item,
       marketPriceTokens: quote.eurCents,

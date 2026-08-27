@@ -2,7 +2,10 @@ import {
   getPlayerEconomyInventoryItem,
   sellEconomyItem,
 } from "@/lib/data/portal-repository";
-import { getMarketplacePriceQuotes } from "@/lib/economy/market-pricing";
+import {
+  getMarketplacePriceQuotes,
+  isStattrakMarketplaceItem,
+} from "@/lib/economy/market-pricing";
 import {
   economyJsonError,
   economyJsonSuccess,
@@ -43,7 +46,8 @@ export async function POST(request: Request) {
       itemId,
     );
     const catalogue = item?.catalogue;
-    const [quote] = catalogue
+    const [quote] = catalogue &&
+      (!item.stattrak || isStattrakMarketplaceItem(item.itemType))
       ? await getMarketplacePriceQuotes([
           {
             itemType: item.itemType,

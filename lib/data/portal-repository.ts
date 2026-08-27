@@ -6509,7 +6509,9 @@ export async function sellEconomyItem(
         );
       }
 
-      const fallbackPrice = item.catalogue.price;
+      // Catalogue snapshots price the standard variant. A StatTrak™ instance
+      // can only use an exact resolved StatTrak™ quote, never that fallback.
+      const fallbackPrice = item.stattrak ? null : item.catalogue.price;
       if (
         !marketQuote &&
         (!fallbackPrice || economyPriceIsLegacySteam(fallbackPrice))

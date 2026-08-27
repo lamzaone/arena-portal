@@ -52,7 +52,15 @@ export function EconomyItemCard({
         </div>
       </div>
       <div className="tag-list" aria-label="Item details">
-        {item.stattrak ? <span className="tag"><Tag aria-hidden="true" /> StatTrak {formatTokens(item.stattrakCount)}</span> : null}
+        {item.stattrak ? (
+          <span
+            className="badge stattrak-badge"
+            aria-label={`StatTrak™: ${item.stattrakCount.toLocaleString()} kills`}
+          >
+            <Tag aria-hidden="true" /> StatTrak™
+            <small>{item.stattrakCount.toLocaleString()}</small>
+          </span>
+        ) : null}
         {item.floatValue !== null ? <span className="tag">Float {item.floatValue.toFixed(6)}</span> : null}
         {item.seed !== null ? <span className="tag">Seed {item.seed}</span> : null}
         {item.equippedSlots.map((slot) => <span key={slot} className="tag tag-vip">Equipped: {humanize(slot)}</span>)}
