@@ -1198,7 +1198,7 @@ export function CrateOpener({
       run: Date.now(),
     });
     setActiveAction("open");
-    startTransition(async () => {
+    void (async () => {
       try {
         const result = await postEconomyAction("/api/economy/crates/open", csrf, {
           crateItemId: crate.id,
@@ -1282,7 +1282,7 @@ export function CrateOpener({
         setOpening(null);
         setActiveAction(null);
       }
-    });
+    })();
   }
 
   function clearUnboxResult() {
