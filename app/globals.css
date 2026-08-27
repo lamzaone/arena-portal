@@ -693,3 +693,17 @@ code { padding: 2px 4px; border-radius: 4px; color: #fecdd3; background: rgba(22
 @keyframes portal-toast-enter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 640px) { .portal-toast { right: 14px; bottom: max(14px, env(safe-area-inset-bottom)); width: calc(100vw - 28px); } }
 @media (prefers-reduced-motion: reduce) { .portal-toast { animation: none; } }
+
+/* Marketplace StatTrak™ selection is a separate price variant, not an item
+   customisation. Keep it prominent without overpowering the price HUD. */
+.market-purchase-stattrak { display: flex; align-items: center; gap: 9px; min-height: 48px; padding: 9px 10px; border: 1px solid rgba(255,184,77,.33); border-radius: 5px; color: #f9e7c3; background: linear-gradient(115deg, rgba(122,74,11,.21), rgba(12,4,5,.52)); cursor: pointer; }
+.market-purchase-stattrak:has(input:checked) { border-color: rgba(255,198,83,.72); background: linear-gradient(115deg, rgba(175,109,15,.32), rgba(31,12,4,.6)); box-shadow: inset 0 1px 0 rgba(255,245,204,.08), 0 0 15px rgba(244,171,42,.1); }
+.market-purchase-stattrak input { width: 16px; height: 16px; margin: 0; accent-color: #e4ae39; }
+.market-purchase-stattrak span { display: grid; gap: 2px; }
+.market-purchase-stattrak strong { color: #ffe4a4; font-size: 11px; }
+.market-purchase-stattrak small { color: #b99a6a; font-size: 9px; font-weight: 650; line-height: 1.35; }
+
+/* A consumed container stays in place only while its server-confirmed reveal
+   is running. This prevents duplicate clicks without making the grid jump. */
+.crate-owned-grid .economy-item-card.is-opening { position: relative; isolation: isolate; overflow: hidden; opacity: .48; filter: grayscale(.78) saturate(.55); cursor: progress; pointer-events: none; }
+.crate-owned-grid .economy-item-card.is-opening::after { position: absolute; z-index: 8; inset: 0; display: grid; place-items: center; border: 1px solid rgba(173,191,222,.4); color: #e4efff; background: rgba(6,12,25,.58); content: "Opening…"; font-size: 11px; font-weight: 900; letter-spacing: .1em; text-shadow: 0 1px 8px rgba(0,0,0,.75); text-transform: uppercase; }

@@ -2780,6 +2780,9 @@ export type PurchaseEconomyItemInput = {
   // This is created by a server route after resolving the selected exterior
   // against the public price feed. The browser never submits it.
   resolvedMarketQuote?: ResolvedMarketplacePurchaseQuote;
+  // Marketplace purchases are standard by default; selecting the separate
+  // StatTrak™ public-market variant opts in explicitly.
+  stattrak?: boolean;
   idempotencyKey: string;
 };
 
@@ -2792,6 +2795,7 @@ export type ResolvedMarketplacePurchaseQuote = {
   marketVersion: string | null;
   floatValue: number;
   wear: string;
+  stattrak: boolean;
   floatDiscountBps: number;
   pricingRule: "float-linear-v1";
 };
@@ -4109,6 +4113,10 @@ function economyMetadataString(metadata: Record<string, unknown>, key: string) {
 
 function economyIsSkinLike(itemType: EconomyItemType) {
   return itemType === "skin" || itemType === "knife" || itemType === "glove";
+}
+
+function economyItemSupportsStattrak(itemType: EconomyItemType) {
+  return itemType === "skin" || itemType === "knife";
 }
 
 function economyItemSupportsNametag(item: EconomyInventoryItem) {
@@ -6099,6 +6107,9 @@ function economyResolvedMarketplacePurchaseQuote(
   if (!marketplaceWearLabels.has(wear)) {
     economyError("invalid_input", "The quoted exterior is invalid.");
   }
+  if (typeof quote.stattrak !== "boolean") {
+    economyError("invalid_input", "The quoted StatTrak variant is invalid.");
+  }
   if (
     !Number.isSafeInteger(quote.floatDiscountBps) ||
     quote.floatDiscountBps < 0 ||
@@ -6118,6 +6129,7 @@ function economyResolvedMarketplacePurchaseQuote(
     marketVersion,
     floatValue,
     wear,
+    stattrak: quote.stattrak,
     floatDiscountBps: quote.floatDiscountBps,
     pricingRule: quote.pricingRule,
   };
@@ -6171,6 +6183,7 @@ function economyResolvedMarketSalePrice(
 function economyValidateResolvedMarketplaceQuote(input: {
   catalogue: EconomyCatalogueItem;
   requestedFloat: number;
+  requestedStattrak: boolean;
   quote: ResolvedMarketplacePurchaseQuote;
 }) {
   const identity = deriveMarketplacePriceIdentity({
@@ -6181,6 +6194,7 @@ function economyValidateResolvedMarketplaceQuote(input: {
     minFloat: input.catalogue.minFloat,
     maxFloat: input.catalogue.maxFloat,
     floatValue: input.requestedFloat,
+    stattrak: input.requestedStattrak,
   });
   if (
     !identity.floatRange ||
@@ -6188,7 +6202,8 @@ function economyValidateResolvedMarketplaceQuote(input: {
     identity.wear === null ||
     identity.floatValue !== input.requestedFloat ||
     input.quote.floatValue !== input.requestedFloat ||
-    input.quote.wear !== identity.wear
+    input.quote.wear !== identity.wear ||
+    input.quote.stattrak !== identity.stattrak
   ) {
     economyError("invalid_input", "The quoted float does not match this item.");
   }
@@ -6234,6 +6249,10 @@ export async function purchaseEconomyItem(
       : economyFloat(input.floatValue, "Requested float");
   if (requestedFloat === null)
     economyError("invalid_input", "Requested float must be between 0 and 1.");
+  if (input.stattrak !== undefined && typeof input.stattrak !== "boolean") {
+    economyError("invalid_input", "Requested StatTrak option is invalid.");
+  }
+  const requestedStattrak = input.stattrak ?? false;
   const resolvedMarketQuote =
     input.resolvedMarketQuote === undefined
       ? undefined
@@ -6242,13 +6261,27 @@ export async function purchaseEconomyItem(
     operationName: "marketplace.purchase",
     actorSteamId: steamId,
     idempotencyKey: input.idempotencyKey,
-    request: { catalogueId, quantity, floatValue: requestedFloat },
+    request: {
+      catalogueId,
+      quantity,
+      floatValue: requestedFloat,
+      stattrak: requestedStattrak,
+    },
     work: async (context) => {
       const catalogue = await lockEconomyCatalogue(
         context.connection,
         catalogueId,
       );
       const skinLike = economyIsSkinLike(catalogue.itemType);
+      if (
+        requestedStattrak &&
+        !economyItemSupportsStattrak(catalogue.itemType)
+      ) {
+        economyError(
+          "incompatible_item",
+          "StatTrak is available only for weapon skins and knives.",
+        );
+      }
       if (
         quantity > 1 &&
         catalogue.itemType !== "crate" &&
@@ -6302,6 +6335,7 @@ export async function purchaseEconomyItem(
         economyValidateResolvedMarketplaceQuote({
           catalogue,
           requestedFloat,
+          requestedStattrak,
           quote: resolvedMarketQuote,
         });
       }
@@ -6353,6 +6387,7 @@ export async function purchaseEconomyItem(
             quoteWear: resolvedMarketQuote?.wear ?? null,
             floatDiscountBps: resolvedMarketQuote?.floatDiscountBps ?? null,
             floatPricingRule: resolvedMarketQuote?.pricingRule ?? null,
+            stattrak: requestedStattrak,
             itemType: catalogue.itemType,
             quantity,
             unitPriceTokens: priceTokens,
@@ -6367,8 +6402,12 @@ export async function purchaseEconomyItem(
           catalogue,
           customization:
             requestedFloat === undefined
-              ? undefined
-              : { floatValue: requestedFloat },
+              ? { stattrak: requestedStattrak, stattrakCount: 0 }
+              : {
+                  floatValue: requestedFloat,
+                  stattrak: requestedStattrak,
+                  stattrakCount: 0,
+                },
           source: {
             type: "marketplace_purchase",
             catalogueId: catalogue.id,
@@ -6391,6 +6430,7 @@ export async function purchaseEconomyItem(
             floatDiscountBps: resolvedMarketQuote?.floatDiscountBps ?? null,
             floatPricingRule: resolvedMarketQuote?.pricingRule ?? null,
             requestedFloat: requestedFloat ?? null,
+            stattrak: requestedStattrak,
           },
           actorSteamId: steamId,
           idempotencyKey: context.idempotencyKey,
@@ -6692,8 +6732,11 @@ export async function openEconomyCrate(
           payload: {
             steamId,
             playerName,
+            containerName: crate.displayName,
+            containerItemType: crate.itemType,
             itemId: reward.id,
             itemName: reward.displayName,
+            itemType: reward.itemType,
             rarityRank: reward.rarityRank,
             openingId,
           },
@@ -6839,6 +6882,7 @@ export async function awardEconomyDrop(
           awardId,
           itemId: item.id,
           itemName: item.displayName,
+          itemType: item.itemType,
           rarityRank: item.rarityRank,
           source: input.source,
         },

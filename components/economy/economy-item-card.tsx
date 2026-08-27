@@ -20,6 +20,8 @@ type EconomyItemCardProps = {
   selectionControls?: string;
   enableMarketPreview?: boolean;
   previewFloat?: number | null;
+  className?: string;
+  disabled?: boolean;
 };
 
 export function EconomyItemCard({
@@ -31,6 +33,8 @@ export function EconomyItemCard({
   selectionControls,
   enableMarketPreview = true,
   previewFloat = null,
+  className = "",
+  disabled = false,
 }: EconomyItemCardProps) {
   const price = item.marketPriceTokens;
   const content = (
@@ -60,13 +64,13 @@ export function EconomyItemCard({
 
   if (onSelect) {
     return (
-      <button type="button" className={`panel economy-item-card ${selected ? "is-selected" : ""}`} aria-pressed={selected} aria-expanded={selectionControls ? selected : undefined} aria-controls={selected ? selectionControls : undefined} onClick={onSelect} aria-label={selectionLabel ?? `Select ${item.displayName}`}>
+      <button type="button" className={`panel economy-item-card ${selected ? "is-selected" : ""} ${className}`.trim()} aria-pressed={selected} aria-expanded={selectionControls ? selected : undefined} aria-controls={selected ? selectionControls : undefined} onClick={onSelect} aria-label={selectionLabel ?? `Select ${item.displayName}`} disabled={disabled}>
         {content}
       </button>
     );
   }
 
-  return <article className="panel economy-item-card">{content}</article>;
+  return <article className={`panel economy-item-card ${className}`.trim()}>{content}</article>;
 }
 
 export function EconomyEmptyState({ title, description, icon = <Box aria-hidden="true" /> }: { title: string; description: string; icon?: ReactNode }) {

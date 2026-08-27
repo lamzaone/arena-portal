@@ -817,9 +817,21 @@ export function CrateOpener({
 }: CrateOpenerProps) {
   const router = useRouter();
   const crateCatalogue = useMemo(() => economyCrates(crates), [crates]);
-  const ownedCrates = useMemo(
+  const inventoryCrates = useMemo(
     () => economyItems(inventory).filter(isCrate),
     [inventory],
+  );
+  // A crate remains on the server-backed inventory until the current RSC
+  // payload refreshes. Hide confirmed-opened crate IDs locally so it cannot
+  // reappear between its result reveal and that refresh.
+  const [consumedCrateIds, setConsumedCrateIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [retainedOpenedCrate, setRetainedOpenedCrate] =
+    useState<EconomyItemView | null>(null);
+  const ownedCrates = useMemo(
+    () => inventoryCrates.filter((crate) => !consumedCrateIds.has(crate.id)),
+    [consumedCrateIds, inventoryCrates],
   );
   const walletView = useMemo(() => economyWallet(wallet), [wallet]);
   const [activeTab, setActiveTab] = useState<CrateTab>("owned");
@@ -860,7 +872,10 @@ export function CrateOpener({
   const [marketGridColumns, setMarketGridColumns] = useState(1);
 
   const selectedOwnedCrate =
-    ownedCrates.find((item) => item.id === selectedCrateId) ?? null;
+    ownedCrates.find((item) => item.id === selectedCrateId) ??
+    (retainedOpenedCrate?.id === selectedCrateId
+      ? retainedOpenedCrate
+      : null);
   const selectedMarketCrate =
     crateCatalogue.find(
       (crate) => crate.catalogueId === selectedMarketCatalogueId,
@@ -868,6 +883,13 @@ export function CrateOpener({
   const selectedCrate =
     activeTab === "owned" ? selectedOwnedCrate : selectedMarketCrate;
   const busy = pending || activeAction !== null;
+  const openingCrateId = opening?.crate.id ?? null;
+  const hasDetachedOwnedOpener =
+    selectedCrateId !== "" &&
+    selectedOwnedCrate !== null &&
+    !ownedCrates.some((crate) => crate.id === selectedCrateId) &&
+    (opening?.crate.id === selectedCrateId ||
+      unboxedCrateId === selectedCrateId);
   const selectedCatalogueId = selectedCrate?.catalogueId ?? null;
   const selectedDrops = dropState.status === "ready" ? dropState.drops : [];
   const selectedOwnedCrateIndex = ownedCrates.findIndex(
@@ -993,6 +1015,21 @@ export function CrateOpener({
   useEffect(() => {
     setPurchaseQuantity(1);
   }, [activeTab, selectedMarketCatalogueId]);
+
+  useEffect(() => {
+    setConsumedCrateIds((current) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const crateId of current) {
+        if (inventoryCrates.some((crate) => crate.id === crateId)) {
+          next.add(crateId);
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [inventoryCrates]);
 
   useEffect(() => {
     if (
@@ -1151,6 +1188,15 @@ export function CrateOpener({
             ? rewardLootEntryId
             : null,
         );
+        // The reward payload is now safely available to present. Remove the
+        // consumed crate from the owned collection before the reveal begins,
+        // while retaining its opener context so the animation stays mounted.
+        setRetainedOpenedCrate(crate);
+        setConsumedCrateIds((current) => {
+          const next = new Set(current);
+          next.add(crate.id);
+          return next;
+        });
         const run = Date.now();
         setOpening({
           phase: "revealing",
@@ -1216,6 +1262,7 @@ export function CrateOpener({
     setUnboxed(null);
     setUnboxedCrateId(null);
     setUnboxMessage(null);
+    setRetainedOpenedCrate(null);
     if (refreshAfterUnbox.current) {
       refreshAfterUnbox.current = false;
       router.refresh();
@@ -1346,11 +1393,12 @@ export function CrateOpener({
         </div>
 
         {activeTab === "owned" ? <>
-          {ownedCrates.length ? <div ref={ownedGridRef} id="crate-owned-panel" className="feature-grid crate-item-grid crate-owned-grid" role="tabpanel" aria-labelledby="crate-owned-tab">
+          {ownedCrates.length || hasDetachedOwnedOpener ? <div ref={ownedGridRef} id="crate-owned-panel" className="feature-grid crate-item-grid crate-owned-grid" role="tabpanel" aria-labelledby="crate-owned-tab">
             {ownedCrates.map((crate, index) => <Fragment key={crate.id}>
-              <EconomyItemCard item={crate} selected={selectedCrateId === crate.id} onSelect={() => toggleOwnedCrate(crate.id)} selectionLabel={`Open ${crate.displayName} options`} selectionControls={selectedCrateId === crate.id ? `crate-opening-${crate.id}` : undefined} enableMarketPreview />
+              <EconomyItemCard item={crate} selected={selectedCrateId === crate.id} onSelect={() => toggleOwnedCrate(crate.id)} selectionLabel={`Open ${crate.displayName} options`} selectionControls={selectedCrateId === crate.id ? `crate-opening-${crate.id}` : undefined} enableMarketPreview disabled={openingCrateId === crate.id} className={openingCrateId === crate.id ? "is-opening" : ""} />
               {index === ownedInlineOpenerIndex && selectedOwnedCrate ? <OwnedCrateInlineOpener crate={selectedOwnedCrate} dropState={dropState} opening={opening} reward={unboxedCrateId === selectedOwnedCrate.id ? unboxed : null} rewardMessage={unboxedCrateId === selectedOwnedCrate.id ? unboxMessage : null} busy={busy} onOpen={openCrate} onClose={() => closeOwnedCrate(selectedOwnedCrate.id)} onRevealComplete={() => revealComplete.current?.()} onTick={playReelTick} /> : null}
             </Fragment>)}
+            {hasDetachedOwnedOpener && selectedOwnedCrate ? <OwnedCrateInlineOpener crate={selectedOwnedCrate} dropState={dropState} opening={opening} reward={unboxed} rewardMessage={unboxMessage} busy={busy} onOpen={openCrate} onClose={() => closeOwnedCrate(selectedOwnedCrate.id)} onRevealComplete={() => revealComplete.current?.()} onTick={playReelTick} /> : null}
           </div> : <div id="crate-owned-panel" role="tabpanel" aria-labelledby="crate-owned-tab"><EconomyEmptyState title="You do not have a crate yet" description="Crates can arrive as match drops, hourly drops, map-end drops, or direct marketplace purchases in the Market tab." icon={<Gift aria-hidden="true" />} /></div>}
         </> : <>
           <form className="panel form-panel crate-catalogue-filters" onSubmit={(event) => event.preventDefault()}>

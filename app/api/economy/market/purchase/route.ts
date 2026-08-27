@@ -15,6 +15,7 @@ import {
 import {
   getMarketplacePriceQuotes,
   isFloatPricedMarketplaceItem,
+  isStattrakMarketplaceItem,
 } from "@/lib/economy/market-pricing";
 import { getSkinportHistoricalPrice } from "@/lib/economy/skinport-prices";
 
@@ -28,6 +29,11 @@ function optionalFloat(value: unknown): number | undefined | null {
         : Number.NaN;
   if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) return null;
   return Number(parsed.toFixed(6));
+}
+
+function optionalStattrak(value: unknown): boolean | null {
+  if (value === undefined || value === null) return false;
+  return typeof value === "boolean" ? value : null;
 }
 
 function catalogueMarketVersion(metadata: Record<string, unknown>) {
@@ -52,12 +58,15 @@ export async function POST(request: Request) {
       ? 1
       : integerField(context.body.quantity, 1, 50);
   const floatValue = optionalFloat(context.body.floatValue);
+  const stattrak = optionalStattrak(context.body.stattrak);
   if (catalogueId === null)
     return economyJsonError("Choose a valid marketplace item.", 400);
   if (quantity === null)
     return economyJsonError("Choose an amount between 1 and 50.", 400);
   if (floatValue === null)
     return economyJsonError("Choose a float between 0 and 1.", 400);
+  if (stattrak === null)
+    return economyJsonError("Choose a valid StatTrak option.", 400);
 
   try {
     const catalogue = await getEconomyCatalogueItem(catalogueId);
@@ -71,6 +80,12 @@ export async function POST(request: Request) {
     let resolvedMarketQuote:
       | Parameters<typeof purchaseEconomyItem>[0]["resolvedMarketQuote"]
       | undefined;
+    if (stattrak && !isStattrakMarketplaceItem(catalogue.itemType)) {
+      throw new EconomyRepositoryError(
+        "incompatible_item",
+        "StatTrak is available only for weapon skins and knives.",
+      );
+    }
     if (isFloatPricedMarketplaceItem(catalogue.itemType)) {
       if (floatValue === undefined) {
         throw new EconomyRepositoryError(
@@ -95,8 +110,9 @@ export async function POST(request: Request) {
           minFloat: catalogue.minFloat,
           maxFloat: catalogue.maxFloat,
           floatValue,
+          stattrak,
           fallbackPrice:
-            catalogue.price && !isLegacySteamPrice(catalogue.price.source)
+            !stattrak && catalogue.price && !isLegacySteamPrice(catalogue.price.source)
               ? {
                   eurCents: catalogue.price.euroCents,
                   source: catalogue.price.source,
@@ -108,7 +124,9 @@ export async function POST(request: Request) {
       if (!quote || quote.floatValue !== floatValue || !quote.wear) {
         throw new EconomyRepositoryError(
           "price_unavailable",
-          "No current public price matched this float. Ask staff to set a last-known price.",
+          stattrak
+            ? "No current public StatTrak™ price matched this float."
+            : "No current public price matched this float. Ask staff to set a last-known price.",
         );
       }
       resolvedMarketQuote = {
@@ -120,6 +138,7 @@ export async function POST(request: Request) {
         marketVersion: quote.marketVersion,
         floatValue: quote.floatValue,
         wear: quote.wear,
+        stattrak: quote.stattrak,
         floatDiscountBps: quote.floatDiscountBps,
         pricingRule: "float-linear-v1",
       };
@@ -164,6 +183,7 @@ export async function POST(request: Request) {
       steamId: context.session.steamId,
       catalogueId,
       quantity,
+      stattrak,
       ...(floatValue === undefined ? {} : { floatValue }),
       ...(resolvedMarketQuote === undefined ? {} : { resolvedMarketQuote }),
       idempotencyKey: context.body.idempotencyKey,

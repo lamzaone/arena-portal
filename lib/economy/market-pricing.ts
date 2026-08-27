@@ -27,12 +27,15 @@ export type MarketplacePriceIdentityInput = {
   minFloat: number | null | undefined;
   maxFloat: number | null | undefined;
   floatValue?: number | null | undefined;
+  // StatTrak™ is a distinct public-market identity from the standard item.
+  stattrak?: boolean | null | undefined;
 };
 
 export type MarketplacePriceIdentity = {
   floatRange: MarketplaceFloatRange | null;
   floatValue: number | null;
   wear: string | null;
+  stattrak: boolean;
   marketVersion: string | null;
   candidates: readonly MarketplacePriceCandidate[];
 };
@@ -61,6 +64,7 @@ export type MarketplacePriceQuote = {
   marketVersion: string | null;
   floatValue: number | null;
   wear: string | null;
+  stattrak: boolean;
   // Basis points discounted from the selected exterior/base price. 1,500 is
   // 15%, reached only at the highest allowed float for that item.
   floatDiscountBps: number;
@@ -129,6 +133,16 @@ function stripStarPrefix(value: string) {
   return value.replace(/^\s*\u2605\s*/u, "").trim();
 }
 
+function stattrakMarketHashName(value: string) {
+  const normalized = normalizedText(value);
+  if (!normalized) return "";
+  // Preserve manually-normalized catalogue names while using Skinport's
+  // exact StatTrak™ public-market identity for ordinary items.
+  return /^stattrak(?:™)?\s+/iu.test(normalized)
+    ? normalized
+    : `StatTrak™ ${normalized}`;
+}
+
 function validEuroCents(value: unknown) {
   return typeof value === "number" &&
     Number.isSafeInteger(value) &&
@@ -141,6 +155,11 @@ function validEuroCents(value: unknown) {
 /** Whether this catalogue item has an exterior float that affects its price. */
 export function isFloatPricedMarketplaceItem(itemType: string | null | undefined) {
   return ["skin", "knife", "glove"].includes(normalizedKey(itemType));
+}
+
+/** CS2 has marketable StatTrak™ variants for weapon skins and knives. */
+export function isStattrakMarketplaceItem(itemType: string | null | undefined) {
+  return ["skin", "knife"].includes(normalizedKey(itemType));
 }
 
 /**
@@ -205,6 +224,9 @@ export function deriveMarketplacePriceIdentity(
   const floatRange = normalizeMarketplaceFloatRange(input);
   const floatValue = normalizeMarketplaceFloatValue(input);
   const wear = marketplaceWearLabel(floatValue);
+  const stattrak =
+    input.stattrak === true && isStattrakMarketplaceItem(input.itemType);
+  const baseCandidates: MarketplacePriceCandidate[] = [];
   const candidates: MarketplacePriceCandidate[] = [];
   const itemType = normalizedKey(input.itemType);
   const baseName =
@@ -221,19 +243,29 @@ export function deriveMarketplacePriceIdentity(
       const bareFinishBase = stripStarPrefix(finishBase);
       const exteriorName = `${bareFinishBase} (${wear})`;
       if (itemType === "knife" || itemType === "glove")
-        addCandidate(candidates, `\u2605 ${exteriorName}`, marketVersion);
-      addCandidate(candidates, exteriorName, marketVersion);
+        addCandidate(baseCandidates, `\u2605 ${exteriorName}`, marketVersion);
+      addCandidate(baseCandidates, exteriorName, marketVersion);
     }
-    addCandidate(candidates, input.marketHashName, marketVersion);
+    addCandidate(baseCandidates, input.marketHashName, marketVersion);
   } else {
-    addCandidate(candidates, input.marketHashName, marketVersion);
-    addCandidate(candidates, baseName, marketVersion);
+    addCandidate(baseCandidates, input.marketHashName, marketVersion);
+    addCandidate(baseCandidates, baseName, marketVersion);
+  }
+  for (const candidate of baseCandidates) {
+    addCandidate(
+      candidates,
+      stattrak
+        ? stattrakMarketHashName(candidate.marketHashName)
+        : candidate.marketHashName,
+      candidate.marketVersion,
+    );
   }
 
   return {
     floatRange,
     floatValue,
     wear,
+    stattrak,
     marketVersion,
     candidates,
   };
@@ -298,6 +330,7 @@ function quoteFromPrice(
     marketVersion: price.marketVersion,
     floatValue: identity.floatValue,
     wear: identity.wear,
+    stattrak: identity.stattrak,
     floatDiscountBps,
     fromFallback: price.fromFallback,
   };
@@ -357,7 +390,10 @@ export async function getMarketplacePriceQuotes(
       );
     }
 
-    const fallback = validFallback(input.fallbackPrice);
+    // A standard last-known value cannot safely price a separate StatTrak™
+    // variant. Staff can add an exact public mapping instead of inheriting a
+    // misleading normal-item fallback.
+    const fallback = identity.stattrak ? null : validFallback(input.fallbackPrice);
     if (!fallback) return null;
     return quoteFromPrice(
       {

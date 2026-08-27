@@ -76,10 +76,16 @@ type MarketplaceQuote = {
   source: string | null;
   floatValue: number;
   wear: string | null;
+  stattrak: boolean;
   floatDiscountBps: number | null;
 };
 
 type MarketplaceQuoteStatus = "idle" | "loading" | "ready" | "error";
+
+type MarketplacePurchaseOptions = {
+  floatValue?: number;
+  stattrak: boolean;
+};
 
 function marketHref(filters: MarketplaceFilters, page: number) {
   const parameters = new URLSearchParams();
@@ -157,6 +163,10 @@ function isFloatSelectable(item: EconomyItemView) {
   return ["skin", "knife", "glove"].includes(item.itemType);
 }
 
+function isStattrakSelectable(item: EconomyItemView) {
+  return ["skin", "knife"].includes(item.itemType);
+}
+
 function formatFloat(value: number) {
   return value.toFixed(6).replace(/\.?0+$/, "");
 }
@@ -228,13 +238,15 @@ function marketplaceQuoteFromResponse(value: unknown): MarketplaceQuote | null {
   const floatValue = numberFromUnknown(record.floatValue);
   const euroCents = numberFromUnknown(record.euroCents);
   const floatDiscountBps = numberFromUnknown(record.floatDiscountBps);
+  const stattrak = record.stattrak;
   if (
     priceTokens === null ||
     !Number.isSafeInteger(priceTokens) ||
     priceTokens < 1 ||
     floatValue === null ||
     floatValue < 0 ||
-    floatValue > 1
+    floatValue > 1 ||
+    typeof stattrak !== "boolean"
   ) {
     return null;
   }
@@ -253,6 +265,7 @@ function marketplaceQuoteFromResponse(value: unknown): MarketplaceQuote | null {
     wear: typeof record.wear === "string" && record.wear.trim()
       ? record.wear.trim()
       : null,
+    stattrak,
     floatDiscountBps:
       floatDiscountBps !== null &&
       Number.isSafeInteger(floatDiscountBps) &&
@@ -331,6 +344,8 @@ function MarketplacePurchaseAction({
   quotePending,
   quoteError,
   onFloatChange,
+  stattrak,
+  onStattrakChange,
   onPurchase,
 }: {
   item: EconomyItemView;
@@ -342,11 +357,16 @@ function MarketplacePurchaseAction({
   quotePending: boolean;
   quoteError: string | null;
   onFloatChange: (value: string) => void;
-  onPurchase: (item: EconomyItemView, floatValue?: number) => void;
+  stattrak: boolean;
+  onStattrakChange: (value: boolean) => void;
+  onPurchase: (item: EconomyItemView, options: MarketplacePurchaseOptions) => void;
 }) {
   const supportsFloat = isFloatSelectable(item);
+  const supportsStattrak = isStattrakSelectable(item);
   const selectedFloat = parseFloatInput(floatInput);
-  const knownPrice = item.marketPriceTokens;
+  // The standard catalogue price must never be shown or charged while the
+  // separately quoted StatTrak™ variant is still being resolved.
+  const knownPrice = stattrak && !quote ? null : item.marketPriceTokens;
   const needsMarketPrice = knownPrice === null;
   const canFetchMarketPrice = supportsFloat
     ? Boolean(item.catalogueId)
@@ -361,6 +381,7 @@ function MarketplacePurchaseAction({
       Math.max(minimumFloat, DEFAULT_MARKET_FLOAT),
     );
   const floatControlId = `market-purchase-float-${item.catalogueId ?? item.id}`;
+  const stattrakControlId = `market-purchase-stattrak-${item.catalogueId ?? item.id}`;
   const containerRate = item.itemType === "crate" || item.itemType === "capsule";
   const priceSource = marketPriceSourceLabel(item.marketPriceSource);
   const euroPrice = formatEurosFromCents(item.marketPriceEuroCents);
@@ -390,7 +411,7 @@ function MarketplacePurchaseAction({
           .join(" | ")
       : null;
   const priceDetail = quoteLoading
-    ? "Updating the Token price for this float..."
+    ? `Updating the ${stattrak ? "StatTrak™ " : ""}Token price for this float...`
     : quoteFailed
       ? quoteError ?? "The float-specific price could not be refreshed."
       : knownPrice === null
@@ -400,6 +421,7 @@ function MarketplacePurchaseAction({
     : [
         euroPrice,
         priceSource,
+        stattrak ? "StatTrak™ variant" : "Standard variant",
         containerRate ? "50% container rate applied" : null,
         floatPriceDetail,
       ]
@@ -425,7 +447,13 @@ function MarketplacePurchaseAction({
             : `Marketplace price: ${formatTokens(knownPrice)} Tokens`
         }
       >
-        <span>{containerRate ? "Container price" : "Marketplace price"}</span>
+        <span>
+          {containerRate
+            ? "Container price"
+            : stattrak
+              ? "StatTrak™ marketplace price"
+              : "Marketplace price"}
+        </span>
         <strong>
           {quoteLoading
             ? "Updating price..."
@@ -435,6 +463,20 @@ function MarketplacePurchaseAction({
         </strong>
         <small>{priceDetail}</small>
       </div>
+      {supportsStattrak ? (
+        <label className="market-purchase-stattrak" htmlFor={stattrakControlId}>
+          <input
+            id={stattrakControlId}
+            type="checkbox"
+            checked={stattrak}
+            onChange={(event) => onStattrakChange(event.target.checked)}
+          />
+          <span>
+            <strong>StatTrak™</strong>
+            <small>Use the separately priced StatTrak™ market variant.</small>
+          </span>
+        </label>
+      ) : null}
       {supportsFloat ? (
         <div className="market-purchase-float">
           <div className="market-float-slider-label">
@@ -465,7 +507,12 @@ function MarketplacePurchaseAction({
         onClick={() =>
           onPurchase(
             item,
-            supportsFloat ? (selectedFloat.number ?? undefined) : undefined,
+            {
+              floatValue: supportsFloat
+                ? (selectedFloat.number ?? undefined)
+                : undefined,
+              stattrak,
+            },
           )
         }
       >
@@ -500,15 +547,17 @@ function MarketplaceListing({
   pending: boolean;
   walletBalance: number;
   suggestedPurchaseFloat: string;
-  onPurchase: (item: EconomyItemView, floatValue?: number) => void;
+  onPurchase: (item: EconomyItemView, options: MarketplacePurchaseOptions) => void;
 }) {
   const defaultFloat = defaultFloatForItem(item, suggestedPurchaseFloat);
   const [floatInput, setFloatInput] = useState(defaultFloat);
+  const [stattrak, setStattrak] = useState(false);
   const [quote, setQuote] = useState<MarketplaceQuote | null>(null);
   const [quoteStatus, setQuoteStatus] =
     useState<MarketplaceQuoteStatus>("idle");
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const supportsFloat = isFloatSelectable(item);
+  const supportsStattrak = isStattrakSelectable(item);
   const selectedFloat = parseFloatInput(floatInput);
   const minimumFloat = item.minFloat ?? 0;
   const maximumFloat = item.maxFloat ?? 1;
@@ -520,10 +569,12 @@ function MarketplaceListing({
   const activeQuote =
     quote &&
     selectedFloat.number !== null &&
-    floatsMatch(quote.floatValue, selectedFloat.number)
+    floatsMatch(quote.floatValue, selectedFloat.number) &&
+    quote.stattrak === stattrak
       ? quote
       : null;
   const serverQuoteMatchesSelection =
+    !stattrak &&
     selectedFloat.number !== null &&
     serverQuoteFloat !== null &&
     floatsMatch(serverQuoteFloat, selectedFloat.number);
@@ -540,6 +591,7 @@ function MarketplaceListing({
     setQuote(null);
     setQuoteStatus("idle");
     setQuoteError(null);
+    setStattrak(false);
   }, [defaultFloat, item.catalogueId]);
 
   useEffect(() => {
@@ -561,6 +613,7 @@ function MarketplaceListing({
           const parameters = new URLSearchParams({
             catalogueId: String(item.catalogueId),
             float: requestedFloat.toFixed(6),
+            stattrak: stattrak ? "1" : "0",
           });
           const response = await fetch(
             `/api/economy/market/quote?${parameters.toString()}`,
@@ -578,7 +631,10 @@ function MarketplaceListing({
                 "A float-specific price is not available right now.",
             );
           }
-          if (!floatsMatch(nextQuote.floatValue, requestedFloat)) {
+          if (
+            !floatsMatch(nextQuote.floatValue, requestedFloat) ||
+            nextQuote.stattrak !== stattrak
+          ) {
             throw new Error("The marketplace returned a price for a different float.");
           }
           setQuote(nextQuote);
@@ -604,21 +660,26 @@ function MarketplaceListing({
     activeQuote,
     item.catalogueId,
     selectedFloat.number,
+    stattrak,
     shouldRefreshQuote,
   ]);
 
   const previewFloat = parseFloatInput(floatInput).number;
-  const pricedItem = activeQuote
-    ? {
-        ...item,
+  const pricedItem = {
+    ...item,
+    stattrak: supportsStattrak && stattrak,
+    stattrakCount: 0,
+    ...(activeQuote
+      ? {
         marketPriceTokens: activeQuote.priceTokens,
         marketPriceEuroCents: activeQuote.euroCents,
         marketPriceSource: activeQuote.source,
         marketPriceFloatValue: activeQuote.floatValue,
         marketPriceWear: activeQuote.wear,
         marketPriceFloatDiscountBps: activeQuote.floatDiscountBps,
-      }
-    : item;
+        }
+      : {}),
+  };
   return (
     <EconomyItemCard
       item={pricedItem}
@@ -635,6 +696,8 @@ function MarketplaceListing({
           quotePending={shouldRefreshQuote}
           quoteError={quoteError}
           onFloatChange={setFloatInput}
+          stattrak={stattrak}
+          onStattrakChange={setStattrak}
           onPurchase={onPurchase}
         />
       }
@@ -710,7 +773,7 @@ export function MarketplaceBrowser({
     router.push(marketHref(normalized.filters, 1), { scroll: false });
   }
 
-  function purchase(item: EconomyItemView, floatValue?: number) {
+  function purchase(item: EconomyItemView, options: MarketplacePurchaseOptions) {
     if (!item.catalogueId) return;
     setNotice(null);
     startTransition(async () => {
@@ -720,7 +783,10 @@ export function MarketplaceBrowser({
           csrf,
           {
             catalogueId: item.catalogueId,
-            ...(floatValue === undefined ? {} : { floatValue }),
+            stattrak: options.stattrak,
+            ...(options.floatValue === undefined
+              ? {}
+              : { floatValue: options.floatValue }),
           },
         );
         setNotice({

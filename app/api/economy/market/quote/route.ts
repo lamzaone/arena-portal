@@ -5,6 +5,7 @@ import { getEconomyCatalogueItem } from "@/lib/data/portal-repository";
 import {
   getMarketplacePriceQuotes,
   isFloatPricedMarketplaceItem,
+  isStattrakMarketplaceItem,
 } from "@/lib/economy/market-pricing";
 
 function catalogueIdFromSearch(value: string | null) {
@@ -18,6 +19,13 @@ function floatFromSearch(value: string | null) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) return null;
   return Number(parsed.toFixed(6));
+}
+
+function stattrakFromSearch(value: string | null) {
+  if (value === null || value === "" || value === "0" || value === "false")
+    return false;
+  if (value === "1" || value === "true") return true;
+  return null;
 }
 
 function legacySteamPrice(source: string | undefined) {
@@ -35,9 +43,16 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const catalogueId = catalogueIdFromSearch(url.searchParams.get("catalogueId"));
   const floatValue = floatFromSearch(url.searchParams.get("float"));
+  const stattrak = stattrakFromSearch(url.searchParams.get("stattrak"));
   if (catalogueId === null || floatValue === null) {
     return NextResponse.json(
       { ok: false, message: "Choose a catalogue item and a float between 0 and 1." },
+      { status: 400 },
+    );
+  }
+  if (stattrak === null) {
+    return NextResponse.json(
+      { ok: false, message: "Choose a valid StatTrak option." },
       { status: 400 },
     );
   }
@@ -52,6 +67,12 @@ export async function GET(request: Request) {
     if (!isFloatPricedMarketplaceItem(item.itemType)) {
       return NextResponse.json(
         { ok: false, message: "This item does not support a float-specific price." },
+        { status: 400 },
+      );
+    }
+    if (stattrak && !isStattrakMarketplaceItem(item.itemType)) {
+      return NextResponse.json(
+        { ok: false, message: "StatTrak is available only for weapon skins and knives." },
         { status: 400 },
       );
     }
@@ -76,8 +97,9 @@ export async function GET(request: Request) {
         minFloat: item.minFloat,
         maxFloat: item.maxFloat,
         floatValue,
+        stattrak,
         fallbackPrice:
-          item.price && !legacySteamPrice(item.price.source)
+          !stattrak && item.price && !legacySteamPrice(item.price.source)
             ? {
                 eurCents: item.price.euroCents,
                 source: item.price.source,
@@ -90,7 +112,9 @@ export async function GET(request: Request) {
       return NextResponse.json(
         {
           ok: false,
-          message: "No current public price matched this float. Ask staff to set a last-known price.",
+          message: stattrak
+            ? "No current public StatTrak™ price matched this float."
+            : "No current public price matched this float. Ask staff to set a last-known price.",
         },
         { status: 409 },
       );
@@ -105,6 +129,7 @@ export async function GET(request: Request) {
         source: quote.source,
         floatValue: quote.floatValue,
         wear: quote.wear,
+        stattrak: quote.stattrak,
         floatDiscountBps: quote.floatDiscountBps,
         pricingRule: "float-linear-v1",
       },
