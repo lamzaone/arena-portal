@@ -77,12 +77,20 @@ type OpeningState =
   // The server is authoritative for the roll. Keep a weighted filler reel
   // moving while its transaction is in flight; it intentionally has no
   // winner, so the UI can never imply a client-selected reward.
-  | { phase: "verifying"; crate: EconomyItemView; run: number }
+  | {
+      phase: "verifying";
+      crate: EconomyItemView;
+      // Freeze the verified pool for this run. Selection and inventory state
+      // can change while the request resolves, but filler cards must not.
+      drops: CrateDrop[];
+      run: number;
+    }
   | {
       phase: "revealing";
       crate: EconomyItemView;
       reward: EconomyItemView;
       rewardLootEntryId: number | null;
+      drops: CrateDrop[];
       run: number;
     };
 
@@ -502,12 +510,10 @@ function CrateDropOddsReady({
 
 function CrateOpeningAnimation({
   opening,
-  drops,
   onRevealComplete,
   onTick,
 }: {
   opening: OpeningState;
-  drops: CrateDrop[];
   onRevealComplete?: () => void;
   onTick?: () => void;
 }) {
@@ -519,16 +525,20 @@ function CrateOpeningAnimation({
       : VERIFYING_REEL_LOOP_LENGTH * VERIFYING_REEL_REPETITIONS;
     return Array.from({ length: reelLength }, (_, index) =>
       opening.phase === "revealing" && index === REVEAL_WINNER_INDEX
-        ? rewardWithDropArtwork(opening.reward, drops, opening.rewardLootEntryId)
+        ? rewardWithDropArtwork(
+            opening.reward,
+            opening.drops,
+            opening.rewardLootEntryId,
+          )
         : reelDropForIndex(
-            drops,
+            opening.drops,
             opening.phase === "verifying"
               ? index % VERIFYING_REEL_LOOP_LENGTH
               : index,
             opening.run,
           )?.item ?? fallback,
     );
-  }, [drops, opening]);
+  }, [opening]);
 
   const isVerifying = opening.phase === "verifying";
   const reelStyle = {
@@ -638,7 +648,6 @@ function OwnedCrateInlineOpener({
       {openingHere ? (
         <CrateOpeningAnimation
           opening={openingHere}
-          drops={dropState.status === "ready" ? dropState.drops : []}
           onRevealComplete={onRevealComplete}
           onTick={onTick}
         />
@@ -671,10 +680,10 @@ function OwnedCrateInlineOpener({
               <button
                 type="button"
                 className="button button-primary button-large"
-                disabled={busy}
+                disabled={busy || dropState.status !== "ready"}
                 onClick={onOpen}
               >
-                <Gift aria-hidden="true" /> Open crate
+                <Gift aria-hidden="true" /> {dropState.status === "loading" ? "Loading drops…" : "Open crate"}
               </button>
               <button
                 type="button"
@@ -765,7 +774,6 @@ function CrateSelectionStage({
   tab,
   crate,
   cratePriceTokens,
-  drops,
   opening,
   busy,
   purchasing,
@@ -778,7 +786,6 @@ function CrateSelectionStage({
   tab: CrateTab;
   crate: EconomyItemView | EconomyCrateView | null;
   cratePriceTokens: number | null;
-  drops: CrateDrop[];
   opening: OpeningState | null;
   busy: boolean;
   purchasing: boolean;
@@ -788,7 +795,7 @@ function CrateSelectionStage({
   onOpen: () => void;
   onPurchase: () => void;
 }) {
-  if (opening) return <aside className="panel crate-opening-stage"><CrateOpeningAnimation opening={opening} drops={drops} /></aside>;
+  if (opening) return <aside className="panel crate-opening-stage"><CrateOpeningAnimation opening={opening} /></aside>;
 
   if (!crate) {
     return <aside className="panel crate-opening-stage"><div className="crate-selection-empty"><Gift aria-hidden="true" /><h3>Select a crate</h3><p>{tab === "owned" ? "Choose an owned case or capsule to inspect its odds and open it without a key." : "Choose a case or capsule to inspect its odds, set the quantity, and buy it."}</p></div></aside>;
@@ -887,18 +894,18 @@ export function CrateOpener({
   const hasDetachedOwnedOpener =
     selectedCrateId !== "" &&
     selectedOwnedCrate !== null &&
-    !ownedCrates.some((crate) => crate.id === selectedCrateId) &&
+    !inventoryCrates.some((crate) => crate.id === selectedCrateId) &&
     (opening?.crate.id === selectedCrateId ||
       unboxedCrateId === selectedCrateId);
   const selectedCatalogueId = selectedCrate?.catalogueId ?? null;
   const selectedDrops = dropState.status === "ready" ? dropState.drops : [];
-  const selectedOwnedCrateIndex = ownedCrates.findIndex(
+  const selectedOwnedCrateIndex = inventoryCrates.findIndex(
     (item) => item.id === selectedCrateId,
   );
   const ownedInlineOpenerIndex = selectedOwnedCrateIndex < 0
     ? -1
     : Math.min(
-        ownedCrates.length - 1,
+        inventoryCrates.length - 1,
         Math.ceil((selectedOwnedCrateIndex + 1) / ownedGridColumns) *
           ownedGridColumns -
           1,
@@ -1057,7 +1064,7 @@ export function CrateOpener({
     const observer = new ResizeObserver(syncColumnCount);
     observer.observe(grid);
     return () => observer.disconnect();
-  }, [activeTab, ownedCrates.length]);
+  }, [activeTab, inventoryCrates.length]);
 
   useEffect(() => {
     const grid = marketGridRef.current;
@@ -1164,13 +1171,26 @@ export function CrateOpener({
 
   function openCrate() {
     if (!selectedOwnedCrate || busy || opening) return;
+    if (dropState.status !== "ready") {
+      setNotice({
+        type: "error",
+        text: "The verified drop pool is still loading. Please try again in a moment.",
+      });
+      return;
+    }
     const crate = selectedOwnedCrate;
+    const dropsForOpening = [...dropState.drops];
     prepareReelAudio();
     setNotice(null);
     setUnboxed(null);
     setUnboxedCrateId(null);
     setUnboxMessage(null);
-    setOpening({ phase: "verifying", crate, run: Date.now() });
+    setOpening({
+      phase: "verifying",
+      crate,
+      drops: dropsForOpening,
+      run: Date.now(),
+    });
     setActiveAction("open");
     startTransition(async () => {
       try {
@@ -1183,7 +1203,7 @@ export function CrateOpener({
         const rewardLootEntryId = finiteNumber(result.rewardLootEntryId);
         const reward = rewardWithDropArtwork(
           resultItem,
-          selectedDrops,
+          dropsForOpening,
           rewardLootEntryId !== null && Number.isSafeInteger(rewardLootEntryId)
             ? rewardLootEntryId
             : null,
@@ -1206,6 +1226,7 @@ export function CrateOpener({
             rewardLootEntryId !== null && Number.isSafeInteger(rewardLootEntryId)
               ? rewardLootEntryId
               : null,
+          drops: dropsForOpening,
           run,
         });
         const duration = window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -1393,9 +1414,11 @@ export function CrateOpener({
         </div>
 
         {activeTab === "owned" ? <>
-          {ownedCrates.length || hasDetachedOwnedOpener ? <div ref={ownedGridRef} id="crate-owned-panel" className="feature-grid crate-item-grid crate-owned-grid" role="tabpanel" aria-labelledby="crate-owned-tab">
-            {ownedCrates.map((crate, index) => <Fragment key={crate.id}>
-              <EconomyItemCard item={crate} selected={selectedCrateId === crate.id} onSelect={() => toggleOwnedCrate(crate.id)} selectionLabel={`Open ${crate.displayName} options`} selectionControls={selectedCrateId === crate.id ? `crate-opening-${crate.id}` : undefined} enableMarketPreview disabled={openingCrateId === crate.id} className={openingCrateId === crate.id ? "is-opening" : ""} />
+          {inventoryCrates.length || hasDetachedOwnedOpener ? <div ref={ownedGridRef} id="crate-owned-panel" className="feature-grid crate-item-grid crate-owned-grid" role="tabpanel" aria-labelledby="crate-owned-tab">
+            {inventoryCrates.map((crate, index) => <Fragment key={crate.id}>
+              {consumedCrateIds.has(crate.id)
+                ? <EconomyItemCard item={crate} className="crate-consumed-slot" enableMarketPreview={false} />
+                : <EconomyItemCard item={crate} selected={selectedCrateId === crate.id} onSelect={() => toggleOwnedCrate(crate.id)} selectionLabel={`Open ${crate.displayName} options`} selectionControls={selectedCrateId === crate.id ? `crate-opening-${crate.id}` : undefined} enableMarketPreview disabled={openingCrateId === crate.id} className={openingCrateId === crate.id ? "is-opening" : ""} />}
               {index === ownedInlineOpenerIndex && selectedOwnedCrate ? <OwnedCrateInlineOpener crate={selectedOwnedCrate} dropState={dropState} opening={opening} reward={unboxedCrateId === selectedOwnedCrate.id ? unboxed : null} rewardMessage={unboxedCrateId === selectedOwnedCrate.id ? unboxMessage : null} busy={busy} onOpen={openCrate} onClose={() => closeOwnedCrate(selectedOwnedCrate.id)} onRevealComplete={() => revealComplete.current?.()} onTick={playReelTick} /> : null}
             </Fragment>)}
             {hasDetachedOwnedOpener && selectedOwnedCrate ? <OwnedCrateInlineOpener crate={selectedOwnedCrate} dropState={dropState} opening={opening} reward={unboxed} rewardMessage={unboxMessage} busy={busy} onOpen={openCrate} onClose={() => closeOwnedCrate(selectedOwnedCrate.id)} onRevealComplete={() => revealComplete.current?.()} onTick={playReelTick} /> : null}
