@@ -231,6 +231,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isVipMembershipItem(item: EconomyItemView) {
+  const metadata = item.raw.metadata;
+  return isRecord(metadata) && metadata.specialKind === "vip_membership";
+}
+
 function marketplaceQuoteFromResponse(value: unknown): MarketplaceQuote | null {
   if (!isRecord(value)) return null;
   const record = isRecord(value.quote) ? value.quote : value;
@@ -369,6 +374,7 @@ function MarketplacePurchaseAction({
   onStattrakChange: (value: boolean) => void;
   onPurchase: (item: EconomyItemView, options: MarketplacePurchaseOptions) => void;
 }) {
+  const vipMembership = isVipMembershipItem(item);
   const supportsFloat = isFloatSelectable(item);
   const supportsStattrak = isStattrakSelectable(item);
   const selectedFloat = parseFloatInput(floatInput);
@@ -456,8 +462,10 @@ function MarketplacePurchaseAction({
         }
       >
         <span>
-          {containerRate
-            ? "Container price"
+          {vipMembership
+            ? "VIP membership price"
+            : containerRate
+              ? "Container price"
             : stattrak
               ? "StatTrak™ marketplace price"
               : "Marketplace price"}
@@ -538,7 +546,9 @@ function MarketplacePurchaseAction({
               ? "Price pending staff"
               : needsMarketPrice
                 ? "Refresh public price & buy"
-                : `Buy for ${formatTokens(knownPrice)}`}
+                : vipMembership
+                  ? `Buy membership for ${formatTokens(knownPrice)}`
+                  : `Buy for ${formatTokens(knownPrice)}`}
       </button>
     </div>
   );
@@ -691,6 +701,7 @@ function MarketplaceListing({
   return (
     <EconomyItemCard
       item={pricedItem}
+      className={isVipMembershipItem(item) ? "market-item-special" : ""}
       enableMarketPreview
       previewFloat={previewFloat}
       actions={

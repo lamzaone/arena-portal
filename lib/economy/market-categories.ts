@@ -17,7 +17,8 @@ export type MarketplaceCatalogueItemType =
 export type MarketplaceCategory = {
   value: string;
   label: string;
-  itemTypes: readonly MarketplaceCatalogueItemType[];
+  itemTypes?: readonly MarketplaceCatalogueItemType[];
+  marketCategory?: "special";
 };
 
 export const marketplaceCategories: readonly MarketplaceCategory[] = [
@@ -28,11 +29,8 @@ export const marketplaceCategories: readonly MarketplaceCategory[] = [
   { value: "capsule", label: "Capsules", itemTypes: ["capsule"] },
   { value: "sticker", label: "Stickers", itemTypes: ["sticker"] },
   { value: "agent", label: "Agents", itemTypes: ["agent"] },
-  { value: "music_kit", label: "Music kits", itemTypes: ["music_kit"] },
-  { value: "nametag", label: "Name tags", itemTypes: ["nametag"] },
   { value: "keychain", label: "Keychains", itemTypes: ["keychain"] },
-  { value: "patch", label: "Patches", itemTypes: ["patch"] },
-  { value: "graffiti", label: "Graffiti", itemTypes: ["graffiti"] },
+  { value: "special", label: "Special", marketCategory: "special" },
 ];
 
 const weaponCategoryAliases = new Set([
@@ -60,4 +58,12 @@ export function marketplaceCategoryItemTypes(value: string | null | undefined) {
     marketplaceCategories.find((category) => category.value === normalized)
       ?.itemTypes ?? null
   );
+}
+
+export function marketplaceCategoryMarketCategory(
+  value: string | null | undefined,
+) {
+  const normalized = normalizeMarketplaceCategory(value);
+  return marketplaceCategories.find((category) => category.value === normalized)
+    ?.marketCategory ?? null;
 }

@@ -24,6 +24,27 @@ type EconomyItemCardProps = {
   disabled?: boolean;
 };
 
+function isVipMembership(item: EconomyItemView) {
+  const catalogue = item.raw.catalogue;
+  const metadata =
+    typeof item.raw.metadata === "object" &&
+    item.raw.metadata !== null &&
+    !Array.isArray(item.raw.metadata)
+      ? item.raw.metadata
+      : typeof catalogue === "object" &&
+          catalogue !== null &&
+          !Array.isArray(catalogue) &&
+          typeof (catalogue as Record<string, unknown>).metadata === "object" &&
+          (catalogue as Record<string, unknown>).metadata !== null &&
+          !Array.isArray((catalogue as Record<string, unknown>).metadata)
+        ? (catalogue as Record<string, unknown>).metadata
+        : null;
+  return (
+    metadata !== null &&
+    (metadata as Record<string, unknown>).specialKind === "vip_membership"
+  );
+}
+
 export function EconomyItemCard({
   item,
   actions,
@@ -37,6 +58,8 @@ export function EconomyItemCard({
   disabled = false,
 }: EconomyItemCardProps) {
   const price = item.marketPriceTokens;
+  const vipMembership = isVipMembership(item);
+  const itemKind = vipMembership ? "VIP membership" : humanize(item.itemType);
   const content = (
     <>
       <MarketplaceItemPreview
@@ -46,9 +69,17 @@ export function EconomyItemCard({
       />
       <div className="panel-heading">
         <div>
-          <span className={rarityClass(item.rarityRank)}>{item.rarity}</span>
+          <span
+            className={
+              vipMembership
+                ? "badge economy-special-badge"
+                : rarityClass(item.rarityRank)
+            }
+          >
+            {vipMembership ? "Special" : item.rarity}
+          </span>
           <h3>{item.displayName}</h3>
-          <p>{humanize(item.itemType)}{item.nametag ? ` · “${item.nametag}”` : ""}</p>
+          <p>{itemKind}{item.nametag ? ` · “${item.nametag}”` : ""}</p>
         </div>
       </div>
       <div className="tag-list" aria-label="Item details">

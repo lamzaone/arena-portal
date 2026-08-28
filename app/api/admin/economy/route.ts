@@ -7,8 +7,12 @@ import { NextResponse } from "next/server";
 import { canActOnTarget, getAdminAccess } from "@/lib/admin/access";
 import { getSession, verifyAdminActionToken } from "@/lib/auth/session";
 import {
+  addStaffCustomCrateLootEntry,
+  createStaffCustomCrate,
+  EconomyRepositoryError,
   getEconomyCatalogueItem,
   recordEconomyPrice,
+  removeStaffCustomCrateLootEntry,
   staffAdjustTokens,
   staffAttachStickerToEconomyItem,
   staffClearEconomyLoadoutSlot,
@@ -19,7 +23,9 @@ import {
   staffTransferEconomyItem,
   staffUpdateEconomyItem,
   setEconomyCatalogueArtwork,
+  setEconomyCatalogueMarketplaceStatus,
   setEconomyCatalogueMarketHash,
+  updateStaffCustomCrate,
   type EconomyItemType,
   type EconomyLoadoutSlotInput,
   type StaffCustomEconomyItem,
@@ -54,11 +60,14 @@ function redirect(
   key: "notice" | "error",
   value: string,
   steamId?: string,
+  crateId?: number,
 ) {
   const url = new URL("/admin/items", request.url);
   url.searchParams.set(key, value);
   if (steamId && /^7656119\d{10}$/.test(steamId))
     url.searchParams.set("steamId", steamId);
+  if (crateId && Number.isSafeInteger(crateId) && crateId > 0)
+    url.searchParams.set("crate", String(crateId));
   return NextResponse.redirect(url, 303);
 }
 
@@ -109,6 +118,23 @@ function optionalFloat(formData: FormData, name: string) {
   return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1
     ? Number(parsed.toFixed(6))
     : null;
+}
+
+function crateActionErrorKey(error: unknown, crateId: number | null) {
+  if (!crateId || !(error instanceof EconomyRepositoryError)) return null;
+  if (error.code === "loot_table_empty") return "crate-reward-required";
+  if (error.code === "duplicate_reward") return "custom-crate-duplicate";
+  if (
+    [
+      "catalogue_not_found",
+      "catalogue_unavailable",
+      "item_not_found",
+      "incompatible_item",
+    ].includes(error.code)
+  ) {
+    return "custom-crate-reward";
+  }
+  return null;
 }
 
 function parseJsonRecord(value: string | undefined, maximum = 12_000) {
@@ -353,6 +379,7 @@ export async function POST(request: Request) {
 
   const action = formText(formData, "action", 48);
   const targetSteamId = validSteamId(formText(formData, "steamId", 17));
+  const crateContextId = integer(formText(formData, "crateId", 20), 1);
   const idempotencyKey = actionIdempotencyKey(formData, action ?? "unknown");
   const reason = formText(formData, "reason", 180);
 
@@ -401,6 +428,27 @@ export async function POST(request: Request) {
         "notice",
         "market-name-saved",
         targetSteamId ?? undefined,
+      );
+    }
+
+    if (action === "market-status-set") {
+      if (!actor.canManageEconomy)
+        return redirect(request, "error", "manage-permission");
+      const catalogueId = integer(formText(formData, "catalogueId", 20), 1);
+      const marketEnabled = formData.get("marketEnabled") === "true";
+      if (catalogueId === null) return redirect(request, "error", "catalogue");
+      await setEconomyCatalogueMarketplaceStatus({
+        actorSteamId: actor.steamId,
+        catalogueId,
+        marketEnabled,
+        idempotencyKey,
+      });
+      return redirect(
+        request,
+        "notice",
+        marketEnabled ? "market-enabled" : "market-disabled",
+        targetSteamId ?? undefined,
+        crateContextId ?? undefined,
       );
     }
 
@@ -458,6 +506,120 @@ export async function POST(request: Request) {
         "price-saved",
         targetSteamId ?? undefined,
       );
+    }
+
+    if (action === "custom-crate-create") {
+      if (!actor.canManageEconomy)
+        return redirect(request, "error", "manage-permission");
+      const displayName = formText(formData, "crateDisplayName", 160);
+      const rarityRank = integer(formText(formData, "crateRarityRank", 8), 0, 7);
+      const directPriceTokens = integer(
+        formText(formData, "crateDirectPriceTokens", 20),
+        0,
+        10_000_000_000,
+      );
+      const providedArtworkUrl = optionalText(formData, "crateArtworkUrl", 512);
+      if (
+        !displayName ||
+        rarityRank === null ||
+        directPriceTokens === null ||
+        providedArtworkUrl === null
+      )
+        return redirect(request, "error", "custom-crate-details");
+      const uploadedArtworkUrl = await saveCatalogueArtwork(
+        formData.get("crateArtworkFile"),
+      );
+      const artworkUrl = uploadedArtworkUrl ?? providedArtworkUrl;
+      if (!artworkUrl)
+        return redirect(request, "error", "custom-crate-details");
+      const result = await createStaffCustomCrate({
+        actorSteamId: actor.steamId,
+        displayName,
+        rarityRank,
+        directPriceTokens,
+        artworkUrl,
+        idempotencyKey,
+      });
+      return redirect(request, "notice", "custom-crate-created", undefined, result.catalogueId);
+    }
+
+    if (action === "custom-crate-update") {
+      if (!actor.canManageEconomy)
+        return redirect(request, "error", "manage-permission");
+      const catalogueId = integer(formText(formData, "crateId", 20), 1);
+      const displayName = formText(formData, "crateDisplayName", 160);
+      const rarityRank = integer(formText(formData, "crateRarityRank", 8), 0, 7);
+      const directPriceTokens = integer(
+        formText(formData, "crateDirectPriceTokens", 20),
+        0,
+        10_000_000_000,
+      );
+      const providedArtworkUrl = optionalText(formData, "crateArtworkUrl", 512);
+      if (
+        catalogueId === null ||
+        !displayName ||
+        rarityRank === null ||
+        directPriceTokens === null ||
+        providedArtworkUrl === null
+      )
+        return redirect(request, "error", "custom-crate-details", undefined, catalogueId ?? undefined);
+      const uploadedArtworkUrl = await saveCatalogueArtwork(
+        formData.get("crateArtworkFile"),
+      );
+      const artworkUrl = uploadedArtworkUrl ?? providedArtworkUrl;
+      if (!artworkUrl)
+        return redirect(request, "error", "custom-crate-details", undefined, catalogueId);
+      await updateStaffCustomCrate({
+        actorSteamId: actor.steamId,
+        catalogueId,
+        displayName,
+        rarityRank,
+        directPriceTokens,
+        artworkUrl,
+        idempotencyKey,
+      });
+      return redirect(request, "notice", "custom-crate-saved", undefined, catalogueId);
+    }
+
+    if (action === "custom-crate-loot-add") {
+      if (!actor.canManageEconomy)
+        return redirect(request, "error", "manage-permission");
+      const catalogueId = integer(formText(formData, "crateId", 20), 1);
+      const rewardCatalogueId = integer(
+        formText(formData, "rewardCatalogueId", 20),
+        1,
+      );
+      const weight = integer(
+        formText(formData, "rewardWeight", 20),
+        1,
+        1_000_000_000_000,
+      );
+      if (catalogueId === null || rewardCatalogueId === null || weight === null)
+        return redirect(request, "error", "custom-crate-reward", undefined, catalogueId ?? undefined);
+      await addStaffCustomCrateLootEntry({
+        actorSteamId: actor.steamId,
+        catalogueId,
+        rewardCatalogueId,
+        weight,
+        idempotencyKey,
+      });
+      return redirect(request, "notice", "custom-crate-reward-added", undefined, catalogueId);
+    }
+
+    if (action === "custom-crate-loot-remove") {
+      if (!actor.canManageEconomy)
+        return redirect(request, "error", "manage-permission");
+      const catalogueId = integer(formText(formData, "crateId", 20), 1);
+      const lootEntryId = integer(formText(formData, "lootEntryId", 20), 1);
+      if (catalogueId === null || lootEntryId === null)
+        return redirect(request, "error", "custom-crate-reward", undefined, catalogueId ?? undefined);
+      await removeStaffCustomCrateLootEntry({
+        actorSteamId: actor.steamId,
+        catalogueId,
+        lootEntryId,
+        idempotencyKey,
+      });
+      return redirect(request, "notice", "custom-crate-reward-removed", undefined, catalogueId);
     }
 
     if (
@@ -683,8 +845,9 @@ export async function POST(request: Request) {
       "error",
       error instanceof Error && error.message === "artwork"
         ? "artwork"
-        : "database",
+        : crateActionErrorKey(error, crateContextId) ?? "database",
       targetSteamId ?? undefined,
+      crateContextId ?? undefined,
     );
   }
 }

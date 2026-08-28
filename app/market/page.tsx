@@ -11,6 +11,7 @@ import {
 } from "@/lib/data/portal-repository";
 import {
   marketplaceCategoryItemTypes,
+  marketplaceCategoryMarketCategory,
   normalizeMarketplaceCategory,
 } from "@/lib/economy/market-categories";
 
@@ -58,6 +59,7 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
   const query = (params.q ?? "").trim().slice(0, 120);
   const itemType = normalizeMarketplaceCategory(params.type);
   const itemTypes = marketplaceCategoryItemTypes(itemType);
+  const marketCategory = marketplaceCategoryMarketCategory(itemType);
   // `Number("")` is 0, which made the native "All rarities" form value
   // accidentally turn into the rank-0 filter. Preserve a deliberate `0`, but
   // treat an omitted or empty value as no rarity filter.
@@ -80,6 +82,11 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
     getMarketplaceCatalogue({
       query: query || undefined,
       itemTypes: itemTypes ? [...itemTypes] : undefined,
+      marketCategory: marketCategory ?? undefined,
+      // VIP memberships use a storage-compatible item type internally. Keep
+      // them in Special rather than leaking them into the Agents category.
+      excludeMarketCategory:
+        itemType === "agent" ? "special" : undefined,
       rarityRanks: rarity === null ? undefined : [rarity],
       minFloat: minFloat ?? undefined,
       maxFloat: maxFloat ?? undefined,
@@ -100,8 +107,8 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
             </p>
             <h1>Marketplace</h1>
             <p>
-              Search the full catalogue and buy a specific skin, sticker, agent,
-              music kit, or other listed cosmetic directly.
+              Buy a specific cosmetic, case, or VIP membership item directly
+              with Tokens.
             </p>
           </div>
         </section>

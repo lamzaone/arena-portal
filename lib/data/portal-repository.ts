@@ -2552,6 +2552,12 @@ export type EconomyCatalogueFilter = {
   query?: string;
   itemTypes?: EconomyItemType[];
   rarityRanks?: number[];
+  // Marketplace-only controls are intentionally metadata-backed: they let us
+  // retire a product from sale without deleting its existing inventory or
+  // staff/redeem visibility.
+  marketOnly?: boolean;
+  marketCategory?: "special";
+  excludeMarketCategory?: "special";
   // A requested float range. Catalogue entries without an explicit range are
   // treated as the normal [0, 1] range for skin-like items.
   minFloat?: number;
@@ -2806,6 +2812,7 @@ export type EconomyTradeItemPreview = {
   stattrakCount: number;
   nametag: string | null;
   imageUrl: string | null;
+  specialKind: string | null;
 };
 
 export type EconomyTrade = {
@@ -2875,6 +2882,20 @@ export type PurchaseEconomyItemResult = {
   totalPriceTokens: number;
   floatValue: number | null;
   wallet: TokenWallet;
+};
+
+export type ActivateVipMembershipItemInput = {
+  steamId: string;
+  itemId: string;
+  idempotencyKey: string;
+};
+
+export type ActivateVipMembershipItemResult = {
+  itemId: string;
+  catalogueId: number;
+  tier: string;
+  durationMinutes: number;
+  expiresAt: number;
 };
 
 export type SellEconomyItemInput = {
@@ -3157,6 +3178,94 @@ export type SetEconomyCatalogueArtworkInput = {
 export type SetEconomyCatalogueArtworkResult = {
   catalogueId: number;
   artworkUrl: string;
+};
+
+export type SetEconomyCatalogueMarketplaceStatusInput = {
+  actorSteamId: string;
+  catalogueId: number;
+  marketEnabled: boolean;
+  idempotencyKey: string;
+};
+
+export type SetEconomyCatalogueMarketplaceStatusResult = {
+  catalogueId: number;
+  marketEnabled: boolean;
+};
+
+export type StaffCustomCrate = EconomyCatalogueItem & {
+  lootTableId: number;
+  lootTableCode: string;
+  lootTableEnabled: boolean;
+  entryCount: number;
+  tappdDefault: boolean;
+};
+
+export type StaffCustomCrateLootEntry = {
+  id: number;
+  catalogue: EconomyCatalogueItem;
+  weight: number;
+  enabled: boolean;
+  sortOrder: number;
+};
+
+export type StaffCustomCrateManagement = {
+  crate: StaffCustomCrate;
+  entries: StaffCustomCrateLootEntry[];
+};
+
+export type CreateStaffCustomCrateInput = {
+  actorSteamId: string;
+  displayName: string;
+  rarityRank: number;
+  directPriceTokens: number;
+  artworkUrl: string;
+  idempotencyKey: string;
+};
+
+export type CreateStaffCustomCrateResult = {
+  catalogueId: number;
+  lootTableId: number;
+  lootTableCode: string;
+};
+
+export type UpdateStaffCustomCrateInput = {
+  actorSteamId: string;
+  catalogueId: number;
+  displayName: string;
+  rarityRank: number;
+  directPriceTokens: number;
+  artworkUrl: string;
+  idempotencyKey: string;
+};
+
+export type UpdateStaffCustomCrateResult = {
+  catalogueId: number;
+  directPriceTokens: number;
+};
+
+export type AddStaffCustomCrateLootEntryInput = {
+  actorSteamId: string;
+  catalogueId: number;
+  rewardCatalogueId: number;
+  weight: number;
+  idempotencyKey: string;
+};
+
+export type AddStaffCustomCrateLootEntryResult = {
+  catalogueId: number;
+  lootEntryId: number;
+};
+
+export type RemoveStaffCustomCrateLootEntryInput = {
+  actorSteamId: string;
+  catalogueId: number;
+  lootEntryId: number;
+  idempotencyKey: string;
+};
+
+export type RemoveStaffCustomCrateLootEntryResult = {
+  catalogueId: number;
+  lootEntryId: number;
 };
 
 export type StaffAdjustTokensInput = {
@@ -3513,6 +3622,7 @@ type EconomyLootEntryRow = RowDataPacket & {
   seed_max: number | string | null;
   stattrak_chance_bps: number | string;
   attributes: unknown;
+  sort_order: number | string;
   enabled: number | boolean;
 };
 
@@ -4302,6 +4412,25 @@ function economyItemSupportsStattrak(itemType: EconomyItemType) {
   return itemType === "skin" || itemType === "knife";
 }
 
+const disabledMarketplaceItemTypes = new Set<EconomyItemType>([
+  "graffiti",
+  "patch",
+  "nametag",
+  "music_kit",
+]);
+
+export function isEconomyVipMembership(item: Pick<EconomyCatalogueItem, "metadata">) {
+  return economyMetadataString(item.metadata, "specialKind") === "vip_membership";
+}
+
+export function isEconomyMarketplacePurchasable(item: EconomyCatalogueItem) {
+  return (
+    item.enabled &&
+    !disabledMarketplaceItemTypes.has(item.itemType) &&
+    item.metadata.marketEnabled !== false
+  );
+}
+
 function economyItemSupportsNametag(item: EconomyInventoryItem) {
   return (
     economyIsSkinLike(item.itemType) &&
@@ -5009,6 +5138,15 @@ export async function getEconomyCatalogue(
   const where: string[] = [];
   const values: unknown[] = [];
   if (!filter.includeDisabled) where.push("c.enabled = TRUE");
+  if (filter.marketOnly) {
+    where.push("c.item_type NOT IN ('graffiti', 'patch', 'nametag', 'music_kit')");
+    where.push("COALESCE(JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.marketEnabled')), 'true') <> 'false'");
+  }
+  if (filter.marketCategory === "special") {
+    where.push("JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.marketCategory')) = 'special'");
+  } else if (filter.excludeMarketCategory === "special") {
+    where.push("COALESCE(JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.marketCategory')), '') <> 'special'");
+  }
   if (itemTypes.length) {
     where.push("c.item_type IN (" + itemTypes.map(() => "?").join(", ") + ")");
     values.push(...itemTypes);
@@ -5073,6 +5211,7 @@ export async function getMarketplaceCatalogue(
 ): Promise<EconomyCataloguePage> {
   const catalogue = await getEconomyCatalogue({
     ...filter,
+    marketOnly: true,
     pageSize:
       filter.pageSize === undefined
         ? 50
@@ -5954,6 +6093,11 @@ export async function getEconomyCrates(
   const where: string[] = ["c.item_type IN ('crate', 'capsule')"];
   const values: unknown[] = [];
   if (!filter.includeDisabled) where.push("c.enabled = TRUE");
+  if (filter.marketOnly) {
+    where.push(
+      "COALESCE(JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.marketEnabled')), 'true') <> 'false'",
+    );
+  }
   const rarityRanks = economyFilterRarityRanks(filter.rarityRanks);
   if (rarityRanks.length) {
     where.push(
@@ -6019,7 +6163,7 @@ export async function getEconomyCrateDropPreview(
       "e.id AS loot_entry_id, e.weight, e.min_float, e.max_float, e.stattrak_chance_bps, e.attributes " +
       "FROM portal_loot_tables AS l " +
       "INNER JOIN portal_loot_entries AS e ON e.loot_table_id = l.id AND e.enabled = TRUE " +
-      "INNER JOIN portal_economy_catalogue AS c ON c.id = e.catalogue_id " +
+      "INNER JOIN portal_economy_catalogue AS c ON c.id = e.catalogue_id AND c.enabled = TRUE " +
       "LEFT JOIN portal_economy_catalogue_prices AS p ON p.catalogue_id = c.id AND p.is_current = TRUE " +
       "WHERE l.container_catalogue_id = ? AND l.table_type = 'container' AND l.enabled = TRUE " +
       "ORDER BY " +
@@ -6412,7 +6556,7 @@ async function lockEconomyLootEntries(
   lootTableId: number,
 ) {
   const [rows] = await connection.query<EconomyLootEntryRow[]>(
-    "SELECT id, loot_table_id, catalogue_id, weight, min_float, max_float, seed_min, seed_max, stattrak_chance_bps, attributes, enabled FROM portal_loot_entries WHERE loot_table_id = ? AND enabled = TRUE ORDER BY id FOR UPDATE",
+    "SELECT e.id, e.loot_table_id, e.catalogue_id, e.weight, e.min_float, e.max_float, e.seed_min, e.seed_max, e.stattrak_chance_bps, e.attributes, e.enabled FROM portal_loot_entries AS e INNER JOIN portal_economy_catalogue AS c ON c.id = e.catalogue_id AND c.enabled = TRUE WHERE e.loot_table_id = ? AND e.enabled = TRUE ORDER BY e.id FOR UPDATE",
     [lootTableId],
   );
   if (!rows.length)
@@ -6768,6 +6912,531 @@ export async function setEconomyCatalogueArtwork(
         metadata: { previousArtworkUrl, artworkUrl },
       });
       return { catalogueId, artworkUrl };
+    },
+  });
+}
+
+/** Hides a catalogue product from Market without affecting owned items. */
+export async function setEconomyCatalogueMarketplaceStatus(
+  input: SetEconomyCatalogueMarketplaceStatusInput,
+): Promise<SetEconomyCatalogueMarketplaceStatusResult> {
+  const catalogueId = economyNumber(input.catalogueId, "Catalogue item ID", 1);
+  if (typeof input.marketEnabled !== "boolean")
+    economyError("invalid_input", "Marketplace availability is invalid.");
+  return runEconomyMutation({
+    operationName: "catalogue.marketplace_status.set",
+    actorSteamId: input.actorSteamId,
+    idempotencyKey: input.idempotencyKey,
+    request: { catalogueId, marketEnabled: input.marketEnabled },
+    work: async (context) => {
+      const catalogue = await lockEconomyCatalogue(
+        context.connection,
+        catalogueId,
+        true,
+      );
+      if (
+        input.marketEnabled &&
+        (catalogue.itemType === "crate" || catalogue.itemType === "capsule")
+      ) {
+        const [rows] = await context.connection.query<
+          Array<RowDataPacket & { has_rewards: number | string }>
+        >(
+          "SELECT EXISTS(SELECT 1 FROM portal_loot_tables AS l INNER JOIN portal_loot_entries AS e ON e.loot_table_id = l.id AND e.enabled = TRUE INNER JOIN portal_economy_catalogue AS reward ON reward.id = e.catalogue_id AND reward.enabled = TRUE WHERE l.container_catalogue_id = ? AND l.table_type = 'container' AND l.enabled = TRUE) AS has_rewards",
+          [catalogueId],
+        );
+        if (Number(rows[0]?.has_rewards ?? 0) !== 1) {
+          economyError(
+            "loot_table_empty",
+            "Add at least one enabled reward before listing this container in Marketplace.",
+          );
+        }
+      }
+      const metadata = {
+        ...catalogue.metadata,
+        marketEnabled: input.marketEnabled,
+      };
+      await context.connection.execute(
+        "UPDATE portal_economy_catalogue SET metadata = ? WHERE id = ?",
+        [JSON.stringify(metadata), catalogueId],
+      );
+      await writeEconomyAdminAudit({
+        connection: context.connection,
+        actorSteamId: context.actorSteamId,
+        action: "catalogue.marketplace_status.set",
+        targetType: "catalogue-item",
+        targetId: String(catalogueId),
+        idempotencyKey: context.idempotencyKey,
+        metadata: {
+          previousMarketEnabled: catalogue.metadata.marketEnabled !== false,
+          marketEnabled: input.marketEnabled,
+        },
+      });
+      return { catalogueId, marketEnabled: input.marketEnabled };
+    },
+  });
+}
+
+type StaffCustomCrateRow = EconomyCatalogueRow & {
+  loot_table_id: number | string;
+  loot_table_code: string;
+  loot_table_enabled: number | boolean;
+  entry_count: number | string | null;
+};
+
+type StaffCustomCrateLootEntryRow = EconomyCatalogueRow & {
+  loot_entry_id: number | string;
+  weight: number | string;
+  sort_order: number | string;
+  loot_entry_enabled: number | boolean;
+};
+
+const tappdWeaponCaseCatalogueKey = "tappd:container:weapon_case";
+
+function isStaffManagedCustomCrate(crate: EconomyCatalogueItem) {
+  return (
+    crate.itemType === "crate" &&
+    (crate.catalogueKey === tappdWeaponCaseCatalogueKey ||
+      crate.metadata.staffCreated === true)
+  );
+}
+
+function staffCustomCrateBasePrice(directPriceTokens: number) {
+  const directPrice = economyAmount(
+    directPriceTokens,
+    "Custom crate Token price",
+  );
+  if (directPrice > Math.floor(Number.MAX_SAFE_INTEGER / 2))
+    economyError("invalid_input", "The custom crate price is too large.");
+  // The public catalogue price is the comparable market price. Containers are
+  // deliberately sold for half of it everywhere else, so save double the
+  // staff-entered direct Token price here.
+  return directPrice * 2;
+}
+
+function staffCustomCrateSlug(displayName: string) {
+  const normalized = displayName
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  return normalized || "custom-crate";
+}
+
+async function lockStaffManagedCustomCrate(
+  connection: PoolConnection,
+  catalogueId: number,
+) {
+  const crate = await lockEconomyCatalogue(connection, catalogueId, true);
+  if (!isStaffManagedCustomCrate(crate)) {
+    economyError(
+      "incompatible_item",
+      "Only the TAPPD case and staff-created crates can be managed here.",
+    );
+  }
+  const lootTable = await lockEconomyLootTable(connection, {
+    containerCatalogueId: crate.id,
+  });
+  if (
+    lootTable.tableType !== "container" ||
+    lootTable.containerCatalogueId !== crate.id
+  ) {
+    economyError(
+      "loot_table_unavailable",
+      "This crate does not have a usable container loot table.",
+    );
+  }
+  return { crate, lootTable };
+}
+
+async function replaceStaffCustomCratePrice(input: {
+  connection: PoolConnection;
+  catalogueId: number;
+  directPriceTokens: number;
+}) {
+  const marketPriceEurCents = staffCustomCrateBasePrice(
+    input.directPriceTokens,
+  );
+  await input.connection.execute(
+    "UPDATE portal_economy_catalogue_prices SET is_current = FALSE WHERE catalogue_id = ? AND is_current = TRUE",
+    [input.catalogueId],
+  );
+  await input.connection.execute(
+    "INSERT INTO portal_economy_catalogue_prices (catalogue_id, market_price_eur_cents, price_source, source_reference, is_current) VALUES (?, ?, 'staff-custom-crate', 'Staff custom crate direct Token price', TRUE)",
+    [input.catalogueId, marketPriceEurCents],
+  );
+}
+
+/** Lists the intentionally editable container products in the staff editor. */
+export async function getStaffCustomCrates(): Promise<StaffCustomCrate[]> {
+  const pool = getPortalPool();
+  if (!pool) return [];
+  const [rows] = await pool.query<StaffCustomCrateRow[]>(
+    "SELECT c.id, c.catalogue_key, c.market_hash_name, c.item_type, c.definition_index, c.paintkit, c.rarity_rank, c.display_name, c.metadata, c.enabled, c.created_at, c.updated_at, " +
+      "p.id AS price_id, p.market_price_eur_cents, p.token_price, p.price_source, p.source_reference, p.observed_at, " +
+      "l.id AS loot_table_id, l.code AS loot_table_code, l.enabled AS loot_table_enabled, COALESCE(entry_counts.entry_count, 0) AS entry_count " +
+      "FROM portal_economy_catalogue AS c " +
+      "INNER JOIN portal_loot_tables AS l ON l.container_catalogue_id = c.id AND l.table_type = 'container' " +
+      "LEFT JOIN portal_economy_catalogue_prices AS p ON p.catalogue_id = c.id AND p.is_current = TRUE " +
+      "LEFT JOIN (SELECT e.loot_table_id, COUNT(*) AS entry_count FROM portal_loot_entries AS e INNER JOIN portal_economy_catalogue AS reward ON reward.id = e.catalogue_id AND reward.enabled = TRUE WHERE e.enabled = TRUE GROUP BY e.loot_table_id) AS entry_counts ON entry_counts.loot_table_id = l.id " +
+      "WHERE c.item_type = 'crate' AND (c.catalogue_key = ? OR JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.staffCreated')) = 'true') " +
+      "ORDER BY c.catalogue_key = ? DESC, c.display_name ASC, c.id ASC",
+    [tappdWeaponCaseCatalogueKey, tappdWeaponCaseCatalogueKey],
+  );
+  return rows.map((row) => {
+    const crate = toEconomyCatalogueItem(row);
+    return {
+      ...crate,
+      lootTableId: economyNumber(row.loot_table_id, "loot table ID", 1),
+      lootTableCode: economyText(row.loot_table_code, "loot table code", 64),
+      lootTableEnabled: economyBoolean(row.loot_table_enabled),
+      entryCount: economyNumber(row.entry_count ?? 0, "loot entry count"),
+      tappdDefault: crate.catalogueKey === tappdWeaponCaseCatalogueKey,
+    };
+  });
+}
+
+export async function getStaffCustomCrateManagement(
+  catalogueId: number,
+): Promise<StaffCustomCrateManagement | null> {
+  const selectedId = economyNumber(catalogueId, "Custom crate catalogue ID", 1);
+  const crates = await getStaffCustomCrates();
+  const crate = crates.find((candidate) => candidate.id === selectedId);
+  if (!crate) return null;
+  const pool = getPortalPool();
+  if (!pool) return null;
+  const [rows] = await pool.query<StaffCustomCrateLootEntryRow[]>(
+    "SELECT c.id, c.catalogue_key, c.market_hash_name, c.item_type, c.definition_index, c.paintkit, c.rarity_rank, c.display_name, c.metadata, c.enabled, c.created_at, c.updated_at, " +
+      "p.id AS price_id, p.market_price_eur_cents, p.token_price, p.price_source, p.source_reference, p.observed_at, " +
+      "e.id AS loot_entry_id, e.weight, e.sort_order, e.enabled AS loot_entry_enabled " +
+      "FROM portal_loot_entries AS e " +
+      "INNER JOIN portal_economy_catalogue AS c ON c.id = e.catalogue_id " +
+      "LEFT JOIN portal_economy_catalogue_prices AS p ON p.catalogue_id = c.id AND p.is_current = TRUE " +
+      "WHERE e.loot_table_id = ? ORDER BY e.enabled DESC, e.sort_order ASC, e.id ASC",
+    [crate.lootTableId],
+  );
+  return {
+    crate,
+    entries: rows.map((row) => ({
+      id: economyNumber(row.loot_entry_id, "loot entry ID", 1),
+      catalogue: toEconomyCatalogueItem(row),
+      weight: economyNumber(row.weight, "loot entry weight", 1),
+      enabled: economyBoolean(row.loot_entry_enabled),
+      sortOrder: economyNumber(row.sort_order, "loot entry sort order"),
+    })),
+  };
+}
+
+export async function createStaffCustomCrate(
+  input: CreateStaffCustomCrateInput,
+): Promise<CreateStaffCustomCrateResult> {
+  const displayName = economyText(input.displayName, "Custom crate name", 160);
+  const rarityRank = economyNumber(input.rarityRank, "Custom crate rarity");
+  if (rarityRank > 7)
+    economyError("invalid_input", "Custom crate rarity must be between 0 and 7.");
+  const directPriceTokens = economyAmount(
+    input.directPriceTokens,
+    "Custom crate Token price",
+  );
+  const artworkUrl = economyArtworkUrl(input.artworkUrl);
+  const stableId = randomUUID().replaceAll("-", "");
+  const catalogueKey = `staff:container:${staffCustomCrateSlug(displayName)}:${stableId}`;
+  const lootTableCode = `staff_crate_${stableId.slice(0, 24)}`;
+  return runEconomyMutation({
+    operationName: "staff.custom_crate.create",
+    actorSteamId: input.actorSteamId,
+    idempotencyKey: input.idempotencyKey,
+    request: { displayName, rarityRank, directPriceTokens, artworkUrl },
+    work: async (context) => {
+      const metadata = {
+        source: "staff",
+        staffCreated: true,
+        customCrate: true,
+        marketEnabled: false,
+        containerCode: lootTableCode,
+        imageUrl: artworkUrl,
+        staffArtworkUrl: artworkUrl,
+      };
+      const [catalogueInsert] = await context.connection.execute<ResultSetHeader>(
+        "INSERT INTO portal_economy_catalogue (catalogue_key, market_hash_name, item_type, definition_index, paintkit, rarity_rank, display_name, metadata, enabled) VALUES (?, NULL, 'crate', NULL, NULL, ?, ?, ?, TRUE)",
+        [catalogueKey, rarityRank, displayName, JSON.stringify(metadata)],
+      );
+      const catalogueId = Number(catalogueInsert.insertId);
+      if (!Number.isSafeInteger(catalogueId) || catalogueId < 1)
+        economyError("catalogue_unavailable", "The custom crate could not be created.");
+      const [lootTableInsert] = await context.connection.execute<ResultSetHeader>(
+        "INSERT INTO portal_loot_tables (code, table_type, container_catalogue_id, display_name, enabled, metadata) VALUES (?, 'container', ?, ?, TRUE, ?)",
+        [
+          lootTableCode,
+          catalogueId,
+          displayName,
+          JSON.stringify({ source: "staff", staffCreated: true, customCrate: true }),
+        ],
+      );
+      const lootTableId = Number(lootTableInsert.insertId);
+      if (!Number.isSafeInteger(lootTableId) || lootTableId < 1)
+        economyError("loot_table_unavailable", "The custom crate loot table could not be created.");
+      await replaceStaffCustomCratePrice({
+        connection: context.connection,
+        catalogueId,
+        directPriceTokens,
+      });
+      await writeEconomyAdminAudit({
+        connection: context.connection,
+        actorSteamId: context.actorSteamId,
+        action: "custom_crate.created",
+        targetType: "catalogue-item",
+        targetId: String(catalogueId),
+        idempotencyKey: context.idempotencyKey,
+        metadata: { lootTableId, lootTableCode, directPriceTokens, rarityRank },
+      });
+      return { catalogueId, lootTableId, lootTableCode };
+    },
+  });
+}
+
+export async function updateStaffCustomCrate(
+  input: UpdateStaffCustomCrateInput,
+): Promise<UpdateStaffCustomCrateResult> {
+  const catalogueId = economyNumber(input.catalogueId, "Custom crate catalogue ID", 1);
+  const displayName = economyText(input.displayName, "Custom crate name", 160);
+  const rarityRank = economyNumber(input.rarityRank, "Custom crate rarity");
+  if (rarityRank > 7)
+    economyError("invalid_input", "Custom crate rarity must be between 0 and 7.");
+  const directPriceTokens = economyAmount(
+    input.directPriceTokens,
+    "Custom crate Token price",
+  );
+  const artworkUrl = economyArtworkUrl(input.artworkUrl);
+  return runEconomyMutation({
+    operationName: "staff.custom_crate.update",
+    actorSteamId: input.actorSteamId,
+    idempotencyKey: input.idempotencyKey,
+    request: { catalogueId, displayName, rarityRank, directPriceTokens, artworkUrl },
+    work: async (context) => {
+      const { crate, lootTable } = await lockStaffManagedCustomCrate(
+        context.connection,
+        catalogueId,
+      );
+      const metadata = {
+        ...crate.metadata,
+        imageUrl: artworkUrl,
+        staffArtworkUrl: artworkUrl,
+      };
+      await context.connection.execute(
+        "UPDATE portal_economy_catalogue SET display_name = ?, rarity_rank = ?, metadata = ? WHERE id = ?",
+        [displayName, rarityRank, JSON.stringify(metadata), catalogueId],
+      );
+      await context.connection.execute(
+        "UPDATE portal_loot_tables SET display_name = ? WHERE id = ?",
+        [displayName, lootTable.id],
+      );
+      await replaceStaffCustomCratePrice({
+        connection: context.connection,
+        catalogueId,
+        directPriceTokens,
+      });
+      await writeEconomyAdminAudit({
+        connection: context.connection,
+        actorSteamId: context.actorSteamId,
+        action: "custom_crate.updated",
+        targetType: "catalogue-item",
+        targetId: String(catalogueId),
+        idempotencyKey: context.idempotencyKey,
+        metadata: {
+          previousName: crate.displayName,
+          displayName,
+          previousRarityRank: crate.rarityRank,
+          rarityRank,
+          directPriceTokens,
+          artworkUrl,
+        },
+      });
+      return { catalogueId, directPriceTokens };
+    },
+  });
+}
+
+export async function addStaffCustomCrateLootEntry(
+  input: AddStaffCustomCrateLootEntryInput,
+): Promise<AddStaffCustomCrateLootEntryResult> {
+  const catalogueId = economyNumber(input.catalogueId, "Custom crate catalogue ID", 1);
+  const rewardCatalogueId = economyNumber(
+    input.rewardCatalogueId,
+    "Reward catalogue ID",
+    1,
+  );
+  const weight = economyNumber(input.weight, "Reward weight", 1);
+  if (weight > 1_000_000_000_000)
+    economyError("invalid_input", "Reward weight is too large.");
+  return runEconomyMutation({
+    operationName: "staff.custom_crate.loot_entry.add",
+    actorSteamId: input.actorSteamId,
+    idempotencyKey: input.idempotencyKey,
+    request: { catalogueId, rewardCatalogueId, weight },
+    work: async (context) => {
+      const { lootTable } = await lockStaffManagedCustomCrate(
+        context.connection,
+        catalogueId,
+      );
+      if (rewardCatalogueId === catalogueId)
+        economyError("incompatible_item", "A crate cannot contain itself.");
+      const reward = await lockEconomyCatalogue(
+        context.connection,
+        rewardCatalogueId,
+      );
+      const [existingRows] = await context.connection.query<
+        Array<RowDataPacket & { id: number | string; enabled: number | boolean }>
+      >(
+        "SELECT id, enabled FROM portal_loot_entries WHERE loot_table_id = ? AND catalogue_id = ? ORDER BY enabled DESC, sort_order ASC, id ASC FOR UPDATE",
+        [lootTable.id, reward.id],
+      );
+      const activeEntry = existingRows.find((entry) => economyBoolean(entry.enabled));
+      if (activeEntry) {
+        economyError(
+          "duplicate_reward",
+          "That catalogue item is already in this crate's active reward pool.",
+        );
+      }
+      const disabledEntry = existingRows.find((entry) => !economyBoolean(entry.enabled));
+      if (disabledEntry) {
+        const lootEntryId = economyNumber(
+          disabledEntry.id,
+          "loot entry ID",
+          1,
+        );
+        await context.connection.execute(
+          "UPDATE portal_loot_entries SET weight = ?, attributes = ?, enabled = TRUE WHERE id = ? AND loot_table_id = ?",
+          [
+            weight,
+            JSON.stringify({ source: "staff_custom_crate", catalogueId }),
+            lootEntryId,
+            lootTable.id,
+          ],
+        );
+        await writeEconomyAdminAudit({
+          connection: context.connection,
+          actorSteamId: context.actorSteamId,
+          action: "custom_crate.loot_entry.restored",
+          targetType: "loot-entry",
+          targetId: String(lootEntryId),
+          idempotencyKey: context.idempotencyKey,
+          metadata: {
+            catalogueId,
+            lootTableId: lootTable.id,
+            rewardCatalogueId,
+            weight,
+          },
+        });
+        return { catalogueId, lootEntryId };
+      }
+      const [sortRows] = await context.connection.query<
+        Array<RowDataPacket & { sort_order: number | string | null }>
+      >(
+        "SELECT sort_order FROM portal_loot_entries WHERE loot_table_id = ? ORDER BY sort_order DESC, id DESC LIMIT 1 FOR UPDATE",
+        [lootTable.id],
+      );
+      const nextSortOrder = sortRows[0]?.sort_order === null || sortRows[0]?.sort_order === undefined
+        ? 0
+        : economyNumber(sortRows[0].sort_order, "loot entry sort order") + 1;
+      const [insert] = await context.connection.execute<ResultSetHeader>(
+        "INSERT INTO portal_loot_entries (loot_table_id, catalogue_id, weight, min_float, max_float, seed_min, seed_max, stattrak_chance_bps, attributes, sort_order, enabled) VALUES (?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?, TRUE)",
+        [
+          lootTable.id,
+          reward.id,
+          weight,
+          JSON.stringify({ source: "staff_custom_crate", catalogueId }),
+          nextSortOrder,
+        ],
+      );
+      const lootEntryId = Number(insert.insertId);
+      if (!Number.isSafeInteger(lootEntryId) || lootEntryId < 1)
+        economyError("loot_table_unavailable", "The crate reward could not be added.");
+      await writeEconomyAdminAudit({
+        connection: context.connection,
+        actorSteamId: context.actorSteamId,
+        action: "custom_crate.loot_entry.added",
+        targetType: "loot-entry",
+        targetId: String(lootEntryId),
+        idempotencyKey: context.idempotencyKey,
+        metadata: { catalogueId, lootTableId: lootTable.id, rewardCatalogueId, weight },
+      });
+      return { catalogueId, lootEntryId };
+    },
+  });
+}
+
+export async function removeStaffCustomCrateLootEntry(
+  input: RemoveStaffCustomCrateLootEntryInput,
+): Promise<RemoveStaffCustomCrateLootEntryResult> {
+  const catalogueId = economyNumber(input.catalogueId, "Custom crate catalogue ID", 1);
+  const lootEntryId = economyNumber(input.lootEntryId, "Loot entry ID", 1);
+  return runEconomyMutation({
+    operationName: "staff.custom_crate.loot_entry.remove",
+    actorSteamId: input.actorSteamId,
+    idempotencyKey: input.idempotencyKey,
+    request: { catalogueId, lootEntryId },
+    work: async (context) => {
+      const { crate, lootTable } = await lockStaffManagedCustomCrate(
+        context.connection,
+        catalogueId,
+      );
+      const [entryRows] = await context.connection.query<
+        Array<RowDataPacket & { id: number | string; catalogue_id: number | string; enabled: number | boolean }>
+      >(
+        "SELECT id, catalogue_id, enabled FROM portal_loot_entries WHERE id = ? AND loot_table_id = ? FOR UPDATE",
+        [lootEntryId, lootTable.id],
+      );
+      const entry = entryRows[0];
+      if (!entry)
+        economyError("item_not_found", "That crate reward no longer exists.");
+      if (economyBoolean(entry.enabled)) {
+        const [countRows] = await context.connection.query<
+          Array<RowDataPacket & { active_count: number | string }>
+        >(
+          "SELECT COUNT(*) AS active_count FROM portal_loot_entries AS e INNER JOIN portal_economy_catalogue AS reward ON reward.id = e.catalogue_id AND reward.enabled = TRUE WHERE e.loot_table_id = ? AND e.enabled = TRUE",
+          [lootTable.id],
+        );
+        const activeCount = Number(countRows[0]?.active_count ?? 0);
+        const [circulationRows] = await context.connection.query<
+          Array<RowDataPacket & { has_unopened_copy: number | string }>
+        >(
+          "SELECT EXISTS(SELECT 1 FROM portal_inventory_items WHERE catalogue_id = ? AND state IN ('available', 'escrowed')) AS has_unopened_copy",
+          [catalogueId],
+        );
+        const hasUnopenedCopy = Number(
+          circulationRows[0]?.has_unopened_copy ?? 0,
+        ) === 1;
+        if (
+          activeCount <= 1 &&
+          (crate.metadata.marketEnabled !== false || hasUnopenedCopy)
+        ) {
+          economyError(
+            "loot_table_empty",
+            "A listed or circulating crate must retain at least one active reward.",
+          );
+        }
+      }
+      await context.connection.execute(
+        "UPDATE portal_loot_entries SET enabled = FALSE WHERE id = ? AND loot_table_id = ?",
+        [lootEntryId, lootTable.id],
+      );
+      await writeEconomyAdminAudit({
+        connection: context.connection,
+        actorSteamId: context.actorSteamId,
+        action: "custom_crate.loot_entry.removed",
+        targetType: "loot-entry",
+        targetId: String(lootEntryId),
+        idempotencyKey: context.idempotencyKey,
+        metadata: {
+          catalogueId,
+          lootTableId: lootTable.id,
+          rewardCatalogueId: economyNumber(entry.catalogue_id, "reward catalogue ID", 1),
+          wasEnabled: economyBoolean(entry.enabled),
+        },
+      });
+      return { catalogueId, lootEntryId };
     },
   });
 }
@@ -7155,6 +7824,12 @@ export async function purchaseEconomyItem(
         context.connection,
         catalogueId,
       );
+      if (!isEconomyMarketplacePurchasable(catalogue)) {
+        economyError(
+          "catalogue_unavailable",
+          "That marketplace item is not currently purchasable.",
+        );
+      }
       const skinLike = economyIsSkinLike(catalogue.itemType);
       if (
         requestedStattrak &&
@@ -7347,6 +8022,195 @@ export async function purchaseEconomyItem(
  * same public adapter as the portal Market. The saved market snapshot remains
  * the fallback when the public database has no current quote.
  */
+function economyVipMembershipDetails(
+  product: Pick<EconomyCatalogueItem, "metadata">,
+) {
+  if (!isEconomyVipMembership(product))
+    economyError("incompatible_item", "That Special product is not a VIP membership.");
+  const tier = economyMetadataString(product.metadata, "vipTier")?.trim().toUpperCase();
+  const durationMinutes = economyMetadataInteger(
+    product.metadata,
+    "vipDurationMinutes",
+  );
+  if (
+    !tier ||
+    !/^(ULTIMATE|DIAMOND|GOLD|SILVER|STANDARD)$/.test(tier) ||
+    durationMinutes === null ||
+    !Number.isSafeInteger(durationMinutes) ||
+    durationMinutes < 1 ||
+    durationMinutes > 43_200
+  ) {
+    economyError(
+      "catalogue_unavailable",
+      "This VIP membership has incomplete tier or duration settings.",
+    );
+  }
+  return { tier, durationMinutes };
+}
+
+/**
+ * Consumes an owned, catalogue-backed VIP membership and extends the matching
+ * VIPCore record. The membership stays a normal available inventory asset
+ * until this action, so it can safely be held, traded, or sold first.
+ */
+export async function activateVipMembershipItem(
+  input: ActivateVipMembershipItemInput,
+): Promise<ActivateVipMembershipItemResult> {
+  const steamId = economySteamId(input.steamId);
+  const itemId = economyItemId(input.itemId, "VIP membership item ID");
+  const gamePool = getGamePool();
+  if (!gamePool)
+    throw new EconomyRepositoryError(
+      "storage_unavailable",
+      "VIP activation is not configured on this portal yet.",
+    );
+
+  const vipState: {
+    connection: PoolConnection | null;
+    transactionStarted: boolean;
+    committed: boolean;
+    rollback: { tier: string; previousExpiry: number | null } | null;
+  } = {
+    connection: null,
+    transactionStarted: false,
+    committed: false,
+    rollback: null,
+  };
+
+  try {
+    return await runEconomyMutation({
+      operationName: "inventory.vip_membership.activate",
+      actorSteamId: steamId,
+      idempotencyKey: input.idempotencyKey,
+      request: { itemId },
+      work: async (context) => {
+        const item = await lockEconomyInventoryItem(context.connection, itemId);
+        if (item.ownerSteamId !== steamId) {
+          economyError(
+            "item_not_owned",
+            "You do not own that VIP membership item.",
+          );
+        }
+        if (item.state !== "available") {
+          economyError(
+            "item_unavailable",
+            "That VIP membership is attached, consumed, or reserved for a trade.",
+          );
+        }
+        const catalogueId = item.catalogueId;
+        if (!item.catalogue || catalogueId === null) {
+          economyError(
+            "incompatible_item",
+            "That item is not a catalogue-backed VIP membership.",
+          );
+        }
+        const membership = economyVipMembershipDetails(item.catalogue);
+
+        vipState.connection = await gamePool.getConnection();
+        await vipState.connection.beginTransaction();
+        vipState.transactionStarted = true;
+        const accountId = toAccountId(steamId);
+        const serverId = getVipServerId();
+        const [rows] = await vipState.connection.query<
+          Array<RowDataPacket & { expires: number | string }>
+        >(
+          "SELECT expires FROM vip_users WHERE account_id = ? AND sid = ? AND `group` = ? LIMIT 1 FOR UPDATE",
+          [accountId, serverId, membership.tier],
+        );
+        const previousExpiry = rows[0] ? Number(rows[0].expires) : null;
+        if (previousExpiry === 0) {
+          economyError(
+            "incompatible_item",
+            `You already have permanent ${membership.tier} VIP access.`,
+          );
+        }
+        const now = Math.floor(Date.now() / 1_000);
+        const expiresAt = Math.max(now, previousExpiry ?? now) + membership.durationMinutes * 60;
+        vipState.rollback = { tier: membership.tier, previousExpiry };
+        await vipState.connection.execute(
+          "INSERT INTO vip_users (account_id, name, lastvisit, sid, `group`, expires) VALUES (?, ?, ?, ?, ?, ?) " +
+            "ON DUPLICATE KEY UPDATE name = VALUES(name), lastvisit = VALUES(lastvisit), expires = VALUES(expires)",
+          [accountId, `Steam ${steamId}`, now, serverId, membership.tier, expiresAt],
+        );
+
+        await context.connection.execute(
+          "UPDATE portal_inventory_items SET state = 'consumed', consumed_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_steam_id = ? AND state = 'available'",
+          [itemId, steamId],
+        );
+        await writeInventoryEvent({
+          connection: context.connection,
+          itemId,
+          actorSteamId: steamId,
+          eventType: "vip_membership.activated",
+          idempotencyKey: context.idempotencyKey,
+          lineKey: "vip:consumed",
+          beforeState: economyInventorySnapshot(item),
+          afterState: { ...economyInventorySnapshot(item), state: "consumed" },
+          metadata: {
+            catalogueId,
+            tier: membership.tier,
+            durationMinutes: membership.durationMinutes,
+            expiresAt,
+          },
+        });
+
+        // The game write is committed before the portal mutation returns. If
+        // the portal transaction cannot commit afterwards, the outer catch
+        // restores this exact previous VIP expiry instead of leaving a free
+        // entitlement behind.
+        await vipState.connection.commit();
+        vipState.transactionStarted = false;
+        vipState.committed = true;
+        vipState.connection.release();
+        vipState.connection = null;
+
+        return {
+          itemId,
+          catalogueId,
+          tier: membership.tier,
+          durationMinutes: membership.durationMinutes,
+          expiresAt,
+        };
+      },
+    });
+  } catch (error) {
+    if (vipState.transactionStarted && vipState.connection) {
+      try {
+        await vipState.connection.rollback();
+      } catch {
+        // Preserve the original error.
+      }
+    }
+    if (vipState.committed && vipState.rollback) {
+      try {
+        const compensation = await gamePool.getConnection();
+        try {
+          if (vipState.rollback.previousExpiry === null) {
+            await compensation.execute(
+              "DELETE FROM vip_users WHERE account_id = ? AND sid = ? AND `group` = ?",
+              [toAccountId(steamId), getVipServerId(), vipState.rollback.tier],
+            );
+          } else {
+            await compensation.execute(
+              "UPDATE vip_users SET expires = ? WHERE account_id = ? AND sid = ? AND `group` = ?",
+              [vipState.rollback.previousExpiry, toAccountId(steamId), getVipServerId(), vipState.rollback.tier],
+            );
+          }
+        } finally {
+          compensation.release();
+        }
+      } catch {
+        // This is an exceptionally narrow double-storage failure. The portal
+        // mutation remains the financial source of truth and staff audit can
+        // reconcile the VIPCore row if that compensation also failed.
+      }
+    }
+    throw error;
+  } finally {
+    vipState.connection?.release();
+  }
+}
+
 export async function sellEconomyItem(
   input: SellEconomyItemInput,
 ): Promise<SellEconomyItemResult> {
@@ -8330,6 +9194,10 @@ function toEconomyTradeItemPreview(
     imageUrl:
       economyMetadataImageUrl(item.attributes) ??
       economyMetadataImageUrl(item.catalogue?.metadata ?? {}),
+    specialKind: economyMetadataString(
+      item.catalogue?.metadata ?? {},
+      "specialKind",
+    ),
   };
 }
 

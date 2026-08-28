@@ -1,6 +1,8 @@
 import {
   EconomyRepositoryError,
   getEconomyCatalogueItem,
+  isEconomyMarketplacePurchasable,
+  isEconomyVipMembership,
   purchaseEconomyItem,
   recordEconomyPrice,
 } from "@/lib/data/portal-repository";
@@ -77,6 +79,12 @@ export async function POST(request: Request) {
       throw new EconomyRepositoryError(
         "catalogue_not_found",
         "That marketplace item is no longer available.",
+      );
+    }
+    if (!isEconomyMarketplacePurchasable(catalogue)) {
+      throw new EconomyRepositoryError(
+        "catalogue_unavailable",
+        "That marketplace item is not currently purchasable.",
       );
     }
 
@@ -222,7 +230,9 @@ export async function POST(request: Request) {
       ...result,
       balance: result.wallet.balance,
       message:
-        quantity === 1
+        isEconomyVipMembership(catalogue)
+          ? "VIP membership added to your inventory. Activate it whenever you are ready."
+          : quantity === 1
           ? "Item purchased and added to your inventory."
           : `${quantity} items purchased and added to your inventory.`,
     });

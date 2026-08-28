@@ -15,7 +15,7 @@ export default async function CratesPage() {
 
   const [wallet, crates, inventory] = await Promise.all([
     getTokenWallet(session.steamId),
-    getCompleteEconomyCrates(),
+    getCompleteEconomyCrates({ marketOnly: true }),
     getCompletePlayerEconomyInventory(session.steamId)
   ]);
 

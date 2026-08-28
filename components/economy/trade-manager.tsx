@@ -66,12 +66,20 @@ function TradeItems({
               <article key={item.id} className="trade-item-preview">
                 <MarketplaceItemPreview item={item} enableMarketPreview />
                 <div>
-                  <span className={rarityClass(item.rarityRank)}>
-                    {item.rarity}
+                  <span
+                    className={
+                      item.specialKind === "vip_membership"
+                        ? "badge economy-special-badge"
+                        : rarityClass(item.rarityRank)
+                    }
+                  >
+                    {item.specialKind === "vip_membership" ? "Special" : item.rarity}
                   </span>
                   <strong>{item.displayName}</strong>
                   <p>
-                    {humanize(item.itemType)}
+                    {item.specialKind === "vip_membership"
+                      ? "VIP membership"
+                      : humanize(item.itemType)}
                     {item.floatValue !== null
                       ? ` · Float ${item.floatValue.toFixed(6)}`
                       : ""}

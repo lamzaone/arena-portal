@@ -59,6 +59,7 @@ export type EconomyTradeItemView = {
   stattrak: boolean;
   stattrakCount: number;
   nametag: string | null;
+  specialKind: string | null;
 };
 
 export type EconomyTradeView = {
@@ -516,6 +517,13 @@ function tradeItems(value: unknown): EconomyTradeItemView[] {
         stattrak: item.stattrak,
         stattrakCount: item.stattrakCount,
         nametag: item.nametag,
+        specialKind:
+          text(
+            firstDefined(record, ["specialKind"]),
+            isRecord(record.item)
+              ? text(firstDefined(record.item, ["specialKind"]), "")
+              : "",
+          ) || null,
       };
     },
   );
@@ -582,7 +590,18 @@ export function itemIsTradable(item: EconomyItemView) {
   );
 }
 
+export function itemIsVipMembership(item: EconomyItemView) {
+  const catalogue = isRecord(item.raw.catalogue) ? item.raw.catalogue : {};
+  const metadata = isRecord(item.raw.metadata)
+    ? item.raw.metadata
+    : isRecord(catalogue.metadata)
+      ? catalogue.metadata
+      : {};
+  return metadata.specialKind === "vip_membership";
+}
+
 export function itemSupportsLoadout(item: EconomyItemView) {
+  if (itemIsVipMembership(item)) return false;
   return [
     "skin",
     "weapon",

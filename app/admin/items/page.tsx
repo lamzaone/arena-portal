@@ -18,9 +18,12 @@ import { getAdminAccess } from "@/lib/admin/access";
 import { createAdminActionToken, getSession } from "@/lib/auth/session";
 import {
   getEconomyCatalogue,
+  getStaffCustomCrateManagement,
+  getStaffCustomCrates,
   getStaffEconomyAccount,
   getTokenLedger,
   findStaffEconomyAccounts,
+  type EconomyItemType,
   type EconomyInventoryItem,
   type EconomyLoadoutSlot,
   type StaffEconomyAccount,
@@ -28,12 +31,16 @@ import {
 import { SignInRequired } from "@/components/sign-in-required";
 import { SiteHeader } from "@/components/site-header";
 import { PortalToast } from "@/components/success-toast";
+import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
 
 type AdminItemsPageProps = {
   searchParams: Promise<{
     steamId?: string;
     q?: string;
     catalogue?: string;
+    crate?: string;
+    crateReward?: string;
+    crateRewardType?: string;
     notice?: string;
     error?: string;
   }>;
@@ -52,7 +59,7 @@ const itemTypes = [
   "keychain",
   "patch",
   "graffiti",
-];
+] as const satisfies readonly EconomyItemType[];
 
 const customItemTypes = itemTypes.filter(
   (type) => type !== "crate" && type !== "capsule",
@@ -60,6 +67,18 @@ const customItemTypes = itemTypes.filter(
 
 function validSteamId(value: string | undefined) {
   return value && /^7656119\d{10}$/.test(value) ? value : null;
+}
+
+function validCatalogueId(value: string | undefined) {
+  if (!value || !/^\d{1,20}$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function validEconomyItemType(value: string | undefined) {
+  return itemTypes.includes(value as (typeof itemTypes)[number])
+    ? (value as EconomyItemType)
+    : undefined;
 }
 
 function formatTokens(value: number) {
@@ -82,11 +101,33 @@ function formatPrice(tokens: number | null) {
     : `${formatTokens(tokens)} Tokens`;
 }
 
+function formatDropChance(weight: number, totalWeight: number) {
+  if (totalWeight < 1) return "No active odds";
+  const chance = (weight / totalWeight) * 100;
+  const digits = chance < 0.1 ? 3 : chance < 1 ? 2 : 1;
+  return `${chance.toFixed(digits)}%`;
+}
+
 function catalogueArtworkUrl(metadata: Record<string, unknown>) {
   const imageUrl = metadata.imageUrl;
   return typeof imageUrl === "string" && imageUrl.trim()
     ? imageUrl.trim()
     : "";
+}
+
+const permanentlyMarketDisabledItemTypes = new Set([
+  "graffiti",
+  "patch",
+  "nametag",
+  "music_kit",
+]);
+
+function isVipMembership(metadata: Record<string, unknown>) {
+  return metadata.specialKind === "vip_membership";
+}
+
+function isMarketEnabled(metadata: Record<string, unknown>) {
+  return metadata.marketEnabled !== false;
 }
 
 function noticeText(value: string | undefined) {
@@ -106,6 +147,12 @@ function noticeText(value: string | undefined) {
       "Exact public market name saved; its prior price snapshot was invalidated.",
     "price-saved": "Last-known market price recorded.",
     "artwork-saved": "Catalogue artwork saved and will be used by all item previews.",
+    "market-enabled": "This product is now listed in the Marketplace.",
+    "market-disabled": "This product is now hidden from the Marketplace.",
+    "custom-crate-created": "Custom crate created as a draft. Add rewards, then list it in Marketplace when ready.",
+    "custom-crate-saved": "Custom crate product details and direct Token price saved.",
+    "custom-crate-reward-added": "Reward added to the crate pool.",
+    "custom-crate-reward-removed": "Reward removed from future crate openings.",
   };
   return value ? messages[value] : undefined;
 }
@@ -133,6 +180,14 @@ function errorText(value: string | undefined) {
     "item-details": "Review the item fields, JSON, and reason before saving.",
     "container-catalogue":
       "Crates and capsules must be granted from a catalogue entry so their loot table is available.",
+    "custom-crate-details":
+      "Provide a crate name, rarity, direct Token price, and valid artwork URL or image upload.",
+    "custom-crate-reward":
+      "Choose a valid catalogue reward and a positive drop weight.",
+    "custom-crate-duplicate":
+      "That item is already active in this crate's reward pool. Remove it first if you need to change the reward.",
+    "crate-reward-required":
+      "A listed crate, or one with unopened copies in player inventories, must keep at least one active reward.",
     "sticker-details": "Provide a valid weapon, sticker, slot, and reason.",
     "loadout-details": "Choose a valid loadout slot, item, and reason.",
     "transfer-details": "Provide a valid destination SteamID64 and reason.",
@@ -721,7 +776,18 @@ export default async function AdminItemsPage({
   const steamId = validSteamId(params.steamId);
   const accountQuery = (params.q ?? "").trim().slice(0, 17);
   const catalogueQuery = (params.catalogue ?? "").trim().slice(0, 120);
-  const [accounts, catalogue, account, ledger] = await Promise.all([
+  const selectedCrateId = validCatalogueId(params.crate);
+  const crateRewardQuery = (params.crateReward ?? "").trim().slice(0, 120);
+  const crateRewardType = validEconomyItemType(params.crateRewardType);
+  const [
+    accounts,
+    catalogue,
+    account,
+    ledger,
+    customCrates,
+    customCrate,
+    crateRewardCatalogue,
+  ] = await Promise.all([
     findStaffEconomyAccounts({
       query: accountQuery || undefined,
       pageSize: 25,
@@ -733,7 +799,34 @@ export default async function AdminItemsPage({
     }),
     steamId ? getStaffEconomyAccount(steamId) : Promise.resolve(null),
     steamId ? getTokenLedger(steamId, { pageSize: 25 }) : Promise.resolve(null),
+    getStaffCustomCrates(),
+    selectedCrateId
+      ? getStaffCustomCrateManagement(selectedCrateId)
+      : Promise.resolve(null),
+    getEconomyCatalogue({
+      query: crateRewardQuery || undefined,
+      itemTypes: crateRewardType ? [crateRewardType] : undefined,
+      pageSize: 50,
+    }),
   ]);
+  const activeCrateRewardWeight = customCrate
+    ? customCrate.entries.reduce(
+        (total, entry) =>
+          total + (entry.enabled && entry.catalogue.enabled ? entry.weight : 0),
+        0,
+      )
+    : 0;
+  const activeCrateRewardCount = customCrate?.entries.filter(
+    (entry) => entry.enabled && entry.catalogue.enabled,
+  ).length ?? 0;
+  const customCrateMarketListed = customCrate
+    ? isMarketEnabled(customCrate.crate.metadata)
+    : false;
+  const activeCrateRewardIds = new Set(
+    customCrate?.entries
+      .filter((entry) => entry.enabled && entry.catalogue.enabled)
+      .map((entry) => entry.catalogue.id) ?? [],
+  );
   const csrf = createAdminActionToken(session);
   const notice = noticeText(params.notice);
   const error = errorText(params.error);
@@ -761,6 +854,23 @@ export default async function AdminItemsPage({
         {error ? <PortalToast variant="danger" message={error} /> : null}
         <section className="economy-admin-search panel">
           <form action="/admin/items" method="get">
+            {selectedCrateId ? (
+              <input type="hidden" name="crate" value={selectedCrateId} />
+            ) : null}
+            {crateRewardQuery ? (
+              <input
+                type="hidden"
+                name="crateReward"
+                value={crateRewardQuery}
+              />
+            ) : null}
+            {crateRewardType ? (
+              <input
+                type="hidden"
+                name="crateRewardType"
+                value={crateRewardType}
+              />
+            ) : null}
             <label>
               Player SteamID64
               <input
@@ -796,7 +906,7 @@ export default async function AdminItemsPage({
               {accounts.accounts.map((entry) => (
                 <Link
                   key={entry.steamId}
-                  href={`/admin/items?steamId=${entry.steamId}&catalogue=${encodeURIComponent(catalogueQuery)}`}
+                  href={`/admin/items?steamId=${entry.steamId}&catalogue=${encodeURIComponent(catalogueQuery)}${selectedCrateId ? `&crate=${selectedCrateId}` : ""}${crateRewardQuery ? `&crateReward=${encodeURIComponent(crateRewardQuery)}` : ""}${crateRewardType ? `&crateRewardType=${encodeURIComponent(crateRewardType)}` : ""}`}
                 >
                   <strong>{entry.steamId}</strong>
                   <span>
@@ -996,25 +1106,566 @@ export default async function AdminItemsPage({
           </section>
         ) : null}
         {access.canManageEconomy ? (
+          <section className="economy-crate-section">
+            <div className="section-heading compact">
+              <p className="eyebrow">
+                <Archive aria-hidden="true" /> Custom crate studio
+              </p>
+              <h2>Build a crate from any catalogue item.</h2>
+              <p>
+                Create the container, set its direct Token price and artwork,
+                then add skins, knives, gloves, stickers, agents, charms, or
+                Special/VIP items to its verified drop pool.
+              </p>
+            </div>
+            <div className="economy-crate-studio-grid">
+              <form
+                className="panel form-panel economy-crate-create"
+                action="/api/admin/economy"
+                method="post"
+                encType="multipart/form-data"
+              >
+                <p className="eyebrow">New container</p>
+                <h3>Create a draft crate</h3>
+                <p className="empty-copy">
+                  Draft crates stay out of Marketplace until you deliberately
+                  list them after adding rewards.
+                </p>
+                <ActionFields csrf={csrf} action="custom-crate-create" />
+                <div className="form-grid">
+                  <label>
+                    Crate name
+                    <input
+                      name="crateDisplayName"
+                      required
+                      maxLength={160}
+                      placeholder="TAPPD Friday Case"
+                    />
+                  </label>
+                  <label>
+                    Crate rarity
+                    <select name="crateRarityRank" defaultValue="0">
+                      <option value="0">Standard</option>
+                      <option value="1">Consumer Grade</option>
+                      <option value="2">Industrial Grade</option>
+                      <option value="3">Mil-Spec Grade</option>
+                      <option value="4">Restricted</option>
+                      <option value="5">Classified</option>
+                      <option value="6">Covert</option>
+                      <option value="7">Extraordinary</option>
+                    </select>
+                  </label>
+                  <label>
+                    Direct price (Tokens)
+                    <input
+                      name="crateDirectPriceTokens"
+                      required
+                      inputMode="numeric"
+                      min="0"
+                      defaultValue="1000"
+                    />
+                  </label>
+                  <label>
+                    Artwork URL
+                    <input
+                      name="crateArtworkUrl"
+                      maxLength={512}
+                      placeholder="/images/economy/my-case.png"
+                    />
+                  </label>
+                </div>
+                <label>
+                  Or upload PNG, JPEG, or WebP
+                  <input
+                    name="crateArtworkFile"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                  />
+                </label>
+                <button className="button button-primary" type="submit">
+                  <PackagePlus aria-hidden="true" /> Create crate draft
+                </button>
+              </form>
+              <aside className="panel economy-crate-picker">
+                <p className="eyebrow">Managed containers</p>
+                <h3>Crate library</h3>
+                <p className="empty-copy">
+                  The TAPPD Weapon Case and every staff-created crate are
+                  editable here. Official Valve cases stay protected.
+                </p>
+                {customCrates.length ? (
+                  <div className="economy-crate-picker-list">
+                    {customCrates.map((crate) => (
+                      <Link
+                        className={`economy-crate-picker-item ${customCrate?.crate.id === crate.id ? "is-selected" : ""}`}
+                        key={crate.id}
+                        href={`/admin/items?crate=${crate.id}${catalogueQuery ? `&catalogue=${encodeURIComponent(catalogueQuery)}` : ""}${crateRewardQuery ? `&crateReward=${encodeURIComponent(crateRewardQuery)}` : ""}${crateRewardType ? `&crateRewardType=${encodeURIComponent(crateRewardType)}` : ""}`}
+                      >
+                        <MarketplaceItemPreview
+                          item={{
+                            catalogueId: crate.id,
+                            displayName: crate.displayName,
+                            floatValue: null,
+                            imageUrl: crate.imageUrl,
+                            itemType: crate.itemType,
+                            rarityRank: crate.rarityRank,
+                          }}
+                          enableMarketPreview={false}
+                        />
+                        <div>
+                          <span className="badge">
+                            {crate.tappdDefault ? "TAPPD" : "Custom"}
+                          </span>
+                          <strong>{crate.displayName}</strong>
+                          <small>
+                            {formatPrice(crate.directPurchasePriceTokens)} ·{" "}
+                            {crate.entryCount} active rewards
+                          </small>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="empty-copy">
+                    No managed crates yet. Create the first one above.
+                  </p>
+                )}
+              </aside>
+            </div>
+            {customCrate ? (
+              <div className="economy-crate-workbench">
+                <header className="economy-crate-workbench-header">
+                  <div>
+                    <p className="eyebrow">
+                      <SlidersHorizontal aria-hidden="true" /> Editing crate
+                    </p>
+                    <h3>{customCrate.crate.displayName}</h3>
+                    <p>
+                      {customCrate.crate.tappdDefault
+                        ? "TAPPD default container"
+                        : "Staff-created container"}{" "}
+                      · {activeCrateRewardCount} active rewards
+                    </p>
+                  </div>
+                  <span className="tag">
+                    {customCrateMarketListed
+                      ? "Marketplace listed"
+                      : "Marketplace draft"}
+                  </span>
+                </header>
+                <div className="economy-crate-editor-grid">
+                  <form
+                    className="panel form-panel economy-crate-product-form"
+                    action="/api/admin/economy"
+                    method="post"
+                    encType="multipart/form-data"
+                  >
+                    <p className="eyebrow">Container product</p>
+                    <h4>Name, artwork, rarity, and price</h4>
+                    <ActionFields csrf={csrf} action="custom-crate-update" />
+                    <input type="hidden" name="crateId" value={customCrate.crate.id} />
+                    <div className="form-grid">
+                      <label>
+                        Crate name
+                        <input
+                          name="crateDisplayName"
+                          required
+                          maxLength={160}
+                          defaultValue={customCrate.crate.displayName}
+                        />
+                      </label>
+                      <label>
+                        Crate rarity
+                        <select
+                          name="crateRarityRank"
+                          defaultValue={String(customCrate.crate.rarityRank)}
+                        >
+                          <option value="0">Standard</option>
+                          <option value="1">Consumer Grade</option>
+                          <option value="2">Industrial Grade</option>
+                          <option value="3">Mil-Spec Grade</option>
+                          <option value="4">Restricted</option>
+                          <option value="5">Classified</option>
+                          <option value="6">Covert</option>
+                          <option value="7">Extraordinary</option>
+                        </select>
+                      </label>
+                      <label>
+                        Direct price (Tokens)
+                        <input
+                          name="crateDirectPriceTokens"
+                          required
+                          inputMode="numeric"
+                          min="0"
+                          defaultValue={customCrate.crate.directPurchasePriceTokens ?? 0}
+                        />
+                      </label>
+                      <label>
+                        Artwork URL
+                        <input
+                          name="crateArtworkUrl"
+                          maxLength={512}
+                          defaultValue={catalogueArtworkUrl(customCrate.crate.metadata)}
+                        />
+                      </label>
+                    </div>
+                    <label>
+                      Replace artwork with PNG, JPEG, or WebP
+                      <input
+                        name="crateArtworkFile"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                      />
+                    </label>
+                    <button className="staff-unban-button" type="submit">
+                      Save crate product
+                    </button>
+                  </form>
+                  <form
+                    className="panel economy-crate-market-form"
+                    action="/api/admin/economy"
+                    method="post"
+                  >
+                    <p className="eyebrow">Release control</p>
+                    <h4>Marketplace availability</h4>
+                    <p className="empty-copy">
+                      A crate needs at least one active reward before it can be
+                      released for purchase.
+                    </p>
+                    <ActionFields csrf={csrf} action="market-status-set" />
+                    <input
+                      type="hidden"
+                      name="catalogueId"
+                      value={customCrate.crate.id}
+                    />
+                    <input
+                      type="hidden"
+                      name="crateId"
+                      value={customCrate.crate.id}
+                    />
+                    <label className="economy-check">
+                      <input
+                        name="marketEnabled"
+                        type="checkbox"
+                        value="true"
+                        defaultChecked={customCrateMarketListed}
+                        disabled={
+                          activeCrateRewardIds.size === 0 &&
+                          !customCrateMarketListed
+                        }
+                      />
+                      List this crate in Marketplace
+                    </label>
+                    <button
+                      className="staff-unban-button"
+                      type="submit"
+                      disabled={
+                        activeCrateRewardIds.size === 0 &&
+                        !customCrateMarketListed
+                      }
+                    >
+                      Save release status
+                    </button>
+                  </form>
+                </div>
+                <div className="economy-crate-rewards-panel panel">
+                  <div className="economy-crate-rewards-heading">
+                    <div>
+                      <p className="eyebrow"><Gift aria-hidden="true" /> Verified reward pool</p>
+                      <h4>Build the drop pool from every item type</h4>
+                      <p className="empty-copy">
+                        Search the full enabled catalogue by name or category.
+                        Skins, knives, gloves, stickers, agents, charms,
+                        capsules, and Special/VIP memberships all work as
+                        rewards.
+                      </p>
+                    </div>
+                    <span className="tag">
+                      {activeCrateRewardCount} active
+                    </span>
+                  </div>
+                  <div className="economy-crate-reward-summary">
+                    <span>{formatTokens(activeCrateRewardWeight)} total active weight</span>
+                    <span>Odds are calculated from active reward weight.</span>
+                  </div>
+                  <datalist id="custom-crate-reward-options">
+                    {crateRewardCatalogue.items
+                      .filter((item) => item.id !== customCrate.crate.id)
+                      .map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.displayName} · {isVipMembership(item.metadata) ? "Special VIP" : item.itemType}
+                        </option>
+                      ))}
+                  </datalist>
+                  <form
+                    className="economy-crate-reward-search"
+                    action="/admin/items"
+                    method="get"
+                  >
+                    <input type="hidden" name="crate" value={customCrate.crate.id} />
+                    {catalogueQuery ? (
+                      <input type="hidden" name="catalogue" value={catalogueQuery} />
+                    ) : null}
+                    <label>
+                      Search catalogue rewards
+                      <input
+                        name="crateReward"
+                        defaultValue={crateRewardQuery}
+                        maxLength={120}
+                        placeholder="Skin, sticker, agent, knife, VIP…"
+                      />
+                    </label>
+                    <label>
+                      Category
+                      <select
+                        name="crateRewardType"
+                        defaultValue={crateRewardType ?? ""}
+                      >
+                        <option value="">All item types</option>
+                        {itemTypes.map((itemType) => (
+                          <option key={itemType} value={itemType}>
+                            {itemType === "keychain" ? "Charm" : itemType}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button className="button button-secondary" type="submit">
+                      <Search aria-hidden="true" /> Find items
+                    </button>
+                  </form>
+                  <p className="economy-crate-reward-results" aria-live="polite">
+                    {crateRewardQuery || crateRewardType
+                      ? `${crateRewardCatalogue.total} matching enabled catalogue item${crateRewardCatalogue.total === 1 ? "" : "s"}`
+                      : `Browse the first ${crateRewardCatalogue.items.length} enabled catalogue items, or narrow the search.`}
+                  </p>
+                  <form
+                    className="economy-crate-add-reward"
+                    action="/api/admin/economy"
+                    method="post"
+                  >
+                    <ActionFields csrf={csrf} action="custom-crate-loot-add" />
+                    <input type="hidden" name="crateId" value={customCrate.crate.id} />
+                    <label>
+                      Catalogue reward ID
+                      <input
+                        name="rewardCatalogueId"
+                        required
+                        list="custom-crate-reward-options"
+                        inputMode="numeric"
+                        placeholder="Known catalogue ID"
+                      />
+                    </label>
+                    <label>
+                      Drop weight
+                      <input
+                        name="rewardWeight"
+                        required
+                        inputMode="numeric"
+                        min="1"
+                        defaultValue="1000"
+                      />
+                    </label>
+                    <button className="button button-primary" type="submit">
+                      <Gift aria-hidden="true" /> Add reward
+                    </button>
+                  </form>
+                  {crateRewardCatalogue.items.length ? (
+                    <div className="economy-crate-candidate-list">
+                      {crateRewardCatalogue.items
+                        .filter((item) => item.id !== customCrate.crate.id)
+                        .map((item) => {
+                          const alreadyActive = activeCrateRewardIds.has(item.id);
+                          const existingEntry = customCrate.entries.find(
+                            (entry) => entry.catalogue.id === item.id,
+                          );
+                          return (
+                            <article className="economy-crate-candidate" key={item.id}>
+                              <MarketplaceItemPreview
+                                item={{
+                                  catalogueId: item.id,
+                                  displayName: item.displayName,
+                                  floatValue: null,
+                                  imageUrl: item.imageUrl,
+                                  itemType: item.itemType,
+                                  rarityRank: item.rarityRank,
+                                }}
+                                enableMarketPreview={false}
+                              />
+                              <div className="economy-crate-candidate-copy">
+                                <span className={`badge rarity-rank-${item.rarityRank}`}>
+                                  {isVipMembership(item.metadata)
+                                    ? "Special · VIP"
+                                    : item.rarityName}
+                                </span>
+                                <strong>{item.displayName}</strong>
+                                <small>
+                                  {item.itemType === "keychain" ? "charm" : item.itemType} · ID {item.id}
+                                  {existingEntry && !alreadyActive
+                                    ? " · previously removed"
+                                    : ""}
+                                </small>
+                              </div>
+                              <form action="/api/admin/economy" method="post">
+                                <ActionFields csrf={csrf} action="custom-crate-loot-add" />
+                                <input type="hidden" name="crateId" value={customCrate.crate.id} />
+                                <input type="hidden" name="rewardCatalogueId" value={item.id} />
+                                <label>
+                                  Weight
+                                  <input
+                                    name="rewardWeight"
+                                    required
+                                    inputMode="numeric"
+                                    min="1"
+                                    defaultValue={existingEntry?.weight ?? 1000}
+                                  />
+                                </label>
+                                <button
+                                  className="button button-secondary"
+                                  type="submit"
+                                  disabled={alreadyActive}
+                                >
+                                  <Gift aria-hidden="true" />
+                                  {alreadyActive
+                                    ? "In pool"
+                                    : existingEntry
+                                      ? "Restore"
+                                      : "Add"}
+                                </button>
+                              </form>
+                            </article>
+                          );
+                        })}
+                    </div>
+                  ) : (
+                    <p className="empty-copy economy-crate-empty-candidates">
+                      No enabled catalogue items match this reward search.
+                    </p>
+                  )}
+                  {customCrate.entries.length ? (
+                    <div className="economy-crate-reward-list">
+                      {customCrate.entries.map((entry) => {
+                        const rewardIsActive =
+                          entry.enabled && entry.catalogue.enabled;
+                        return (
+                          <article
+                            className={`economy-crate-reward-row ${rewardIsActive ? "" : "is-removed"}`}
+                            key={entry.id}
+                          >
+                            <MarketplaceItemPreview
+                              item={{
+                                catalogueId: entry.catalogue.id,
+                                displayName: entry.catalogue.displayName,
+                                floatValue: null,
+                                imageUrl: entry.catalogue.imageUrl,
+                                itemType: entry.catalogue.itemType,
+                                rarityRank: entry.catalogue.rarityRank,
+                              }}
+                              enableMarketPreview={false}
+                            />
+                            <div>
+                              <span className={`badge rarity-rank-${entry.catalogue.rarityRank}`}>
+                                {isVipMembership(entry.catalogue.metadata)
+                                  ? "Special · VIP"
+                                  : entry.catalogue.rarityName}
+                              </span>
+                              <strong>{entry.catalogue.displayName}</strong>
+                              <small>
+                                {entry.catalogue.itemType === "keychain"
+                                  ? "charm"
+                                  : entry.catalogue.itemType} · weight {formatTokens(entry.weight)}
+                                {rewardIsActive
+                                  ? ` · ${formatDropChance(entry.weight, activeCrateRewardWeight)}`
+                                  : entry.catalogue.enabled
+                                    ? " · removed from future openings"
+                                    : " · catalogue item disabled"}
+                              </small>
+                            </div>
+                            {entry.enabled ? (
+                              <form action="/api/admin/economy" method="post">
+                                <ActionFields csrf={csrf} action="custom-crate-loot-remove" />
+                                <input type="hidden" name="crateId" value={customCrate.crate.id} />
+                                <input type="hidden" name="lootEntryId" value={entry.id} />
+                                <button className="staff-danger-button" type="submit">
+                                  Remove reward
+                                </button>
+                              </form>
+                            ) : entry.catalogue.enabled ? (
+                              <form action="/api/admin/economy" method="post">
+                                <ActionFields csrf={csrf} action="custom-crate-loot-add" />
+                                <input type="hidden" name="crateId" value={customCrate.crate.id} />
+                                <input type="hidden" name="rewardCatalogueId" value={entry.catalogue.id} />
+                                <input type="hidden" name="rewardWeight" value={entry.weight} />
+                                <button className="staff-unban-button" type="submit">
+                                  Restore reward
+                                </button>
+                              </form>
+                            ) : null}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="empty-copy economy-crate-empty-rewards">
+                      This crate has no rewards yet. It cannot be listed or opened
+                      until you add at least one catalogue item.
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+        {access.canManageEconomy ? (
           <section className="economy-price-section">
             <div className="section-heading compact">
               <p className="eyebrow">
                 <Coins aria-hidden="true" /> Price snapshots
               </p>
-              <h2>Marketplace catalogue results</h2>
-              <p>{catalogue.total} matching entries</p>
+              <h2>Marketplace products</h2>
+              <p>
+                {catalogue.total} matching entries · manage crates, custom
+                products, and Special VIP memberships in one catalogue.
+              </p>
             </div>
             {catalogue.items.length ? (
               <div className="economy-price-grid">
-                {catalogue.items.map((item) => (
-                  <article className="panel" key={item.id}>
+                {catalogue.items.map((item) => {
+                  const vipMembership = isVipMembership(item.metadata);
+                  const disabledByType = permanentlyMarketDisabledItemTypes.has(
+                    item.itemType,
+                  );
+                  const listed =
+                    !disabledByType && isMarketEnabled(item.metadata);
+                  const tier =
+                    typeof item.metadata.vipTier === "string"
+                      ? item.metadata.vipTier
+                      : null;
+                  const duration =
+                    typeof item.metadata.vipDurationMinutes === "number"
+                      ? item.metadata.vipDurationMinutes
+                      : null;
+
+                  return (
+                    <article
+                      className={`panel ${vipMembership ? "economy-market-special" : ""}`}
+                      key={item.id}
+                    >
                     <div>
-                      <span className="badge">{item.itemType}</span>
+                      <span className="badge">
+                        {vipMembership ? "Special · VIP" : item.itemType}
+                      </span>
                       <h3>{item.displayName}</h3>
                       <p className="empty-copy">
                         ID {item.id} · Direct price:{" "}
                         {formatPrice(item.directPurchasePriceTokens)}
                       </p>
+                      {vipMembership ? (
+                        <small>
+                          {tier ?? "VIP"}
+                          {duration ? ` · ${duration.toLocaleString()} minutes` : ""}
+                          {" · activates through Inventory"}
+                        </small>
+                      ) : null}
                       <small>
                         {item.price
                           ? `Last recorded ${formatDate(item.price.observedAt)} from ${item.price.source}`
@@ -1022,7 +1673,8 @@ export default async function AdminItemsPage({
                       </small>
                     </div>
                     <div className="economy-admin-actions">
-                      <form action="/api/admin/economy" method="post">
+                      {!vipMembership ? (
+                        <form action="/api/admin/economy" method="post">
                         <ActionFields csrf={csrf} action="market-name-set" />
                         <input
                           type="hidden"
@@ -1042,7 +1694,8 @@ export default async function AdminItemsPage({
                         <button className="staff-unban-button" type="submit">
                           Save market name
                         </button>
-                      </form>
+                        </form>
+                      ) : null}
                       <form
                         action="/api/admin/economy"
                         method="post"
@@ -1079,7 +1732,8 @@ export default async function AdminItemsPage({
                           Save artwork
                         </button>
                       </form>
-                      <form action="/api/admin/economy" method="post">
+                      {!vipMembership ? (
+                        <form action="/api/admin/economy" method="post">
                         <ActionFields csrf={csrf} action="price-refresh" />
                         <input
                           type="hidden"
@@ -1093,7 +1747,8 @@ export default async function AdminItemsPage({
                         >
                           Refresh public price
                         </button>
-                      </form>
+                        </form>
+                      ) : null}
                       <form action="/api/admin/economy" method="post">
                         <ActionFields csrf={csrf} action="price-set" />
                         <input
@@ -1102,7 +1757,7 @@ export default async function AdminItemsPage({
                           value={item.id}
                         />
                         <label>
-                          EUR cents
+                          {vipMembership ? "VIP price (Tokens)" : "EUR cents"}
                           <input
                             name="eurCents"
                             required
@@ -1112,12 +1767,39 @@ export default async function AdminItemsPage({
                           />
                         </label>
                         <button className="staff-unban-button" type="submit">
-                          Set last-known
+                          {vipMembership ? "Save VIP price" : "Set last-known"}
                         </button>
                       </form>
+                      {disabledByType ? (
+                        <small className="economy-market-disabled-copy">
+                          This item type is disabled from Marketplace purchases.
+                        </small>
+                      ) : (
+                        <form action="/api/admin/economy" method="post">
+                          <ActionFields csrf={csrf} action="market-status-set" />
+                          <input
+                            type="hidden"
+                            name="catalogueId"
+                            value={item.id}
+                          />
+                          <label className="economy-check">
+                            <input
+                              name="marketEnabled"
+                              type="checkbox"
+                              value="true"
+                              defaultChecked={listed}
+                            />
+                            List in Marketplace
+                          </label>
+                          <button className="staff-unban-button" type="submit">
+                            Save availability
+                          </button>
+                        </form>
+                      )}
                     </div>
-                  </article>
-                ))}
+                    </article>
+                  );
+                })}
               </div>
             ) : (
               <p className="empty-copy">

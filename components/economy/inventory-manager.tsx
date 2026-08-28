@@ -30,6 +30,7 @@ import {
   formatTokens,
   itemCharmDefinitionIndex,
   itemSupportsCharm,
+  itemIsVipMembership,
   humanize,
   itemStickerSlotCount,
   itemSupportsLoadout,
@@ -198,6 +199,7 @@ export function InventoryManager({
       : !salePriceIsKnown && !saleCanResolveFromMarket
         ? "This item needs a current market or last-known price before it can be sold."
         : null;
+  const selectedVipMembership = selected ? itemIsVipMembership(selected) : false;
   const selectedSlots = selected
     ? (() => {
         const prototype = slotForItem(selected, "T");
@@ -491,7 +493,7 @@ export function InventoryManager({
                   <MarketplaceItemPreview item={selected} enableMarketPreview />
                   <div className="inventory-detail-heading">
                     <p>
-                      {selected.rarity} · {humanize(selected.itemType)}
+                      {selected.rarity} · {selectedVipMembership ? "VIP membership" : humanize(selected.itemType)}
                     </p>
                   </div>
                 </div>
@@ -534,6 +536,31 @@ export function InventoryManager({
                     ) : null}
                   </div>
                 </details>
+                {selectedVipMembership ? (
+                  <fieldset className="form-panel inventory-vip-activation">
+                    <legend>Use VIP membership</legend>
+                    <p className="empty-copy">
+                      Activate this item when you are ready. It will be consumed
+                      and extend the matching VIP tier immediately. Until then,
+                      it remains a normal item that you can trade or sell.
+                    </p>
+                    <button
+                      type="button"
+                      className="button button-primary"
+                      disabled={pending || !selected.id || selected.state !== "available"}
+                      onClick={() =>
+                        runAction(
+                          "/api/economy/items/vip/activate",
+                          { itemId: selected.id },
+                          `${selected.displayName} was activated.`,
+                        )
+                      }
+                    >
+                      <ShieldCheck aria-hidden="true" />{" "}
+                      {pending ? "Activating…" : "Activate VIP membership"}
+                    </button>
+                  </fieldset>
+                ) : null}
                 {itemSupportsLoadout(selected) ? (
                   <fieldset className="form-panel">
                     <legend>Equip item</legend>
@@ -614,12 +641,12 @@ export function InventoryManager({
                       </button>
                     </div>
                   </fieldset>
-                ) : (
+                ) : !selectedVipMembership ? (
                   <p className="empty-copy">
                     This item is kept in your inventory and cannot be equipped
                     in a loadout slot.
                   </p>
-                )}
+                ) : null}
 
                 {canCustomize ? (
                   <details className="inventory-customize-panel">
