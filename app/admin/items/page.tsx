@@ -20,13 +20,12 @@ import {
   getEconomyCatalogue,
   getStaffCustomCrateManagement,
   getStaffCustomCrates,
-  getStaffEconomyAccount,
   getTokenLedger,
-  findStaffEconomyAccounts,
   type EconomyItemType,
   type EconomyInventoryItem,
   type EconomyLoadoutSlot,
   type StaffEconomyAccount,
+  type StaffEconomyAccountSummary,
 } from "@/lib/data/portal-repository";
 import { SignInRequired } from "@/components/sign-in-required";
 import { SiteHeader } from "@/components/site-header";
@@ -774,30 +773,22 @@ export default async function AdminItemsPage({
     );
 
   const steamId = validSteamId(params.steamId);
-  const accountQuery = (params.q ?? "").trim().slice(0, 17);
   const catalogueQuery = (params.catalogue ?? "").trim().slice(0, 120);
   const selectedCrateId = validCatalogueId(params.crate);
   const crateRewardQuery = (params.crateReward ?? "").trim().slice(0, 120);
   const crateRewardType = validEconomyItemType(params.crateRewardType);
   const [
-    accounts,
     catalogue,
-    account,
     ledger,
     customCrates,
     customCrate,
     crateRewardCatalogue,
   ] = await Promise.all([
-    findStaffEconomyAccounts({
-      query: accountQuery || undefined,
-      pageSize: 25,
-    }),
     getEconomyCatalogue({
       includeDisabled: true,
       query: catalogueQuery || undefined,
       pageSize: 100,
     }),
-    steamId ? getStaffEconomyAccount(steamId) : Promise.resolve(null),
     steamId ? getTokenLedger(steamId, { pageSize: 25 }) : Promise.resolve(null),
     getStaffCustomCrates(),
     selectedCrateId
@@ -828,6 +819,8 @@ export default async function AdminItemsPage({
       .map((entry) => entry.catalogue.id) ?? [],
   );
   const csrf = createAdminActionToken(session);
+  const accounts = { accounts: [] as StaffEconomyAccountSummary[] };
+  const account: StaffEconomyAccount | null = null;
   const notice = noticeText(params.notice);
   const error = errorText(params.error);
 
@@ -842,16 +835,34 @@ export default async function AdminItemsPage({
             </p>
             <h1>Item management</h1>
             <p>
-              Manage player wallets, every inventory instance, loadout slots,
-              stickers, and last-known market prices.
+              Maintain catalogue products, market visibility, prices, artwork,
+              and custom crate pools from one focused workspace.
             </p>
           </div>
           <Link className="button button-secondary" href="/admin">
             Back to staff panel
           </Link>
         </section>
+        <nav className="staff-tabs economy-staff-tabs" aria-label="Economy administration">
+          <Link className="active" href="/admin/items">Items &amp; crates</Link>
+          <Link href="/admin/inventories">Inventories</Link>
+          {access.canManageEconomy ? <Link href="/admin/redeem">Redeem codes</Link> : null}
+        </nav>
         {notice ? <PortalToast message={notice} /> : null}
         {error ? <PortalToast variant="danger" message={error} /> : null}
+        <section className="economy-admin-search panel">
+          <form action="/admin/items" method="get">
+            {selectedCrateId ? <input type="hidden" name="crate" value={selectedCrateId} /> : null}
+            {crateRewardQuery ? <input type="hidden" name="crateReward" value={crateRewardQuery} /> : null}
+            {crateRewardType ? <input type="hidden" name="crateRewardType" value={crateRewardType} /> : null}
+            <label>
+              Search catalogue
+              <input name="catalogue" defaultValue={catalogueQuery} placeholder="Skin, sticker, crate, VIP product..." autoComplete="off" />
+            </label>
+            <button className="button button-primary" type="submit"><Search aria-hidden="true" /> Search catalogue</button>
+          </form>
+        </section>
+        <div hidden>
         <section className="economy-admin-search panel">
           <form action="/admin/items" method="get">
             {selectedCrateId ? (
@@ -871,24 +882,6 @@ export default async function AdminItemsPage({
                 value={crateRewardType}
               />
             ) : null}
-            <label>
-              Player SteamID64
-              <input
-                name="steamId"
-                inputMode="numeric"
-                pattern="7656119[0-9]{10}"
-                defaultValue={steamId ?? ""}
-                placeholder="7656119..."
-              />
-            </label>
-            <label>
-              Account search
-              <input
-                name="q"
-                defaultValue={accountQuery}
-                placeholder="Known wallet SteamID64"
-              />
-            </label>
             <label>
               Catalogue search
               <input
@@ -942,6 +935,15 @@ export default async function AdminItemsPage({
             </p>
           </section>
         )}
+        </div>
+        <section className="economy-manage-shortcut panel">
+          <div>
+            <p className="eyebrow"><Archive aria-hidden="true" /> Player inventories</p>
+            <h2>Wallets, loadouts, and item instances have their own workspace.</h2>
+            <p className="empty-copy">Find a player by display name or SteamID64, inspect their paged inventory with live previews, and manage their loadout without losing your catalogue filters.</p>
+          </div>
+          <Link className="button button-secondary" href="/admin/inventories">Open inventories</Link>
+        </section>
         {access.canGrantEconomyItems ? (
           <section className="panel economy-admin-section">
             <div className="panel-heading">

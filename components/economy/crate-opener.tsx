@@ -630,7 +630,7 @@ function OwnedCrateInlineOpener({
   return (
     <section
       id={openerId}
-      className={`panel crate-inline-modal ${openingHere ? "is-opening" : ""} ${displayedRarity === null ? "" : `is-reward ${rarityRankClass(displayedRarity)}`}`}
+      className={`panel crate-inline-modal ${openingHere ? "is-opening" : ""} ${showDrops && !openingHere && !reward ? "has-drop-odds" : ""} ${displayedRarity === null ? "" : `is-reward ${rarityRankClass(displayedRarity)}`}`}
       aria-label={`Open ${crate.displayName}`}
     >
       <header className="crate-inline-modal-header">
@@ -744,7 +744,7 @@ function MarketCrateInlineOpener({
   const dropCount = dropState.status === "ready" ? dropState.drops.length : null;
   const dropsId = `crate-market-drops-${crate.catalogueId ?? crate.id}`;
 
-  return <section id={`crate-market-opening-${crate.catalogueId ?? crate.id}`} className="panel crate-inline-modal crate-market-inline-modal" aria-label={`Buy ${crate.displayName}`}>
+  return <section id={`crate-market-opening-${crate.catalogueId ?? crate.id}`} className={`panel crate-inline-modal crate-market-inline-modal ${showDrops ? "has-drop-odds" : ""}`} aria-label={`Buy ${crate.displayName}`}>
     <header className="crate-inline-modal-header">
       <div>
         <p className="eyebrow"><ShoppingBag aria-hidden="true" /> Container market</p>
@@ -766,11 +766,13 @@ function MarketCrateInlineOpener({
           {dropCount !== null ? <span className="tag">{dropCount.toLocaleString()} possible outcomes</span> : null}
         </div>
       </div>
-      <CratePurchaseControls crate={crate} walletBalance={walletBalance} quantity={quantity} pending={busy} buying={purchasing} onQuantityChange={onQuantityChange} onPurchase={onPurchase} />
+      <div className="crate-market-inline-actions">
+        <CratePurchaseControls crate={crate} walletBalance={walletBalance} quantity={quantity} pending={busy} buying={purchasing} onQuantityChange={onQuantityChange} onPurchase={onPurchase} />
+        <button type="button" className="button button-secondary crate-inline-drops-toggle" aria-expanded={showDrops} aria-controls={dropsId} onClick={() => setShowDrops((visible) => !visible)} disabled={busy}>
+          <ChevronDown aria-hidden="true" /> {showDrops ? "Hide possible drops" : dropCount !== null ? `Show ${dropCount.toLocaleString()} possible drops` : "Show possible drops"}
+        </button>
+      </div>
     </div>
-    <button type="button" className="button button-secondary crate-inline-drops-toggle" aria-expanded={showDrops} aria-controls={dropsId} onClick={() => setShowDrops((visible) => !visible)} disabled={busy}>
-      <ChevronDown aria-hidden="true" /> {showDrops ? "Hide possible drops" : dropCount !== null ? `Show ${dropCount.toLocaleString()} possible drops` : "Show possible drops"}
-    </button>
     {showDrops ? <div id={dropsId} className="crate-inline-modal-drops"><CrateDropOdds state={dropState} /></div> : null}
   </section>;
 }

@@ -62,7 +62,13 @@ function redirect(
   steamId?: string,
   crateId?: number,
 ) {
-  const url = new URL("/admin/items", request.url);
+  const requestUrl = new URL(request.url);
+  const url = new URL(
+    requestUrl.searchParams.get("returnTo") === "inventories"
+      ? "/admin/inventories"
+      : "/admin/items",
+    request.url,
+  );
   url.searchParams.set(key, value);
   if (steamId && /^7656119\d{10}$/.test(steamId))
     url.searchParams.set("steamId", steamId);

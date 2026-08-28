@@ -3411,6 +3411,7 @@ export type StaffClearEconomyLoadoutSlotInput = {
 
 export type StaffEconomyAccount = {
   steamId: string;
+  displayName: string;
   wallet: TokenWallet;
   inventory: EconomyInventoryPage;
   loadout: EconomyLoadoutSlot[];
@@ -3420,6 +3421,7 @@ export type StaffEconomyAccount = {
 
 export type StaffEconomyAccountSummary = {
   steamId: string;
+  displayName: string;
   wallet: TokenWallet;
   inventoryCount: number;
   pendingTradeCount: number;
@@ -3429,6 +3431,11 @@ export type StaffEconomyAccountFilter = {
   query?: string;
   page?: number;
   pageSize?: number;
+};
+
+export type StaffEconomyAccountOptions = {
+  inventoryPage?: number;
+  inventoryPageSize?: number;
 };
 
 export type StaffEconomyAccountPage = {
@@ -6847,6 +6854,29 @@ async function getEconomyPlayerDisplayName(steamId: string) {
     [steamId],
   );
   return rows[0]?.name?.trim() || steamId;
+}
+
+async function getEconomyPlayerDisplayNames(steamIds: string[]) {
+  const uniqueSteamIds = [...new Set(steamIds)].filter((steamId) =>
+    /^7656119\d{10}$/.test(steamId),
+  );
+  const playerNames = new Map<string, string>();
+  if (!uniqueSteamIds.length) return playerNames;
+
+  const rows = await safeGameQuery<
+    RowDataPacket & { steam_id: string | number; name: string | null }
+  >(
+    "SELECT CAST(steam AS CHAR) AS steam_id, name FROM lvl_base WHERE steam IN (" +
+      uniqueSteamIds.map(() => "?").join(", ") +
+      ")",
+    uniqueSteamIds,
+  );
+  for (const row of rows) {
+    const steamId = String(row.steam_id);
+    const name = row.name?.trim();
+    if (name) playerNames.set(steamId, name);
+  }
+  return playerNames;
 }
 
 function economyArtworkUrl(value: string) {
@@ -10944,45 +10974,25 @@ export async function staffClearEconomyLoadoutSlot(
 
 export async function getStaffEconomyAccount(
   steamId: string,
+  options: StaffEconomyAccountOptions = {},
 ): Promise<StaffEconomyAccount> {
   economySteamId(steamId);
-  const wallet = await getTokenWallet(steamId);
   const inventoryFilter: EconomyInventoryFilter = {
     states: ["available", "escrowed", "attached", "consumed", "revoked"],
-    page: 1,
-    pageSize: 100,
+    page: options.inventoryPage,
+    pageSize: options.inventoryPageSize,
   };
-  const firstInventoryPage = await getPlayerEconomyInventory(
-    steamId,
-    inventoryFilter,
-  );
-  const inventoryPageCount = Math.ceil(
-    firstInventoryPage.total / firstInventoryPage.pageSize,
-  );
-  const inventory =
-    inventoryPageCount <= 1
-      ? firstInventoryPage
-      : {
-          ...firstInventoryPage,
-          items: [
-            ...firstInventoryPage.items,
-            ...(
-              await Promise.all(
-                Array.from({ length: inventoryPageCount - 1 }, (_, index) =>
-                  getPlayerEconomyInventory(steamId, {
-                    ...inventoryFilter,
-                    page: index + 2,
-                  }),
-                ),
-              )
-            ).flatMap((page) => page.items),
-          ],
-        };
-  const loadout = await getPlayerEconomyLoadout(steamId);
+  const [wallet, inventory, loadout, displayName] = await Promise.all([
+    getTokenWallet(steamId),
+    getPlayerEconomyInventory(steamId, inventoryFilter),
+    getPlayerEconomyLoadout(steamId),
+    getEconomyPlayerDisplayName(steamId),
+  ]);
   const pool = getPortalPool();
   if (!pool) {
     return {
       steamId,
+      displayName,
       wallet,
       inventory,
       loadout,
@@ -11000,6 +11010,7 @@ export async function getStaffEconomyAccount(
   );
   return {
     steamId,
+    displayName,
     wallet,
     inventory,
     loadout,
@@ -11028,11 +11039,31 @@ export async function findStaffEconomyAccounts(
     };
   const values: unknown[] = [];
   let clause = "";
+  const matchingPlayers = new Map<string, string>();
   if (filter.query?.trim()) {
-    clause = " WHERE a.steam_id LIKE ?";
-    values.push(
-      "%" + economyText(filter.query, "Staff account search", 17) + "%",
+    const search = economyText(filter.query, "Staff account search", 64);
+    const pattern = "%" + search + "%";
+    const playerRows = await safeGameQuery<
+      RowDataPacket & { steam_id: string | number; name: string | null }
+    >(
+      "SELECT CAST(steam AS CHAR) AS steam_id, name FROM lvl_base WHERE name LIKE ? OR CAST(steam AS CHAR) LIKE ? LIMIT 500",
+      [pattern, pattern],
     );
+    for (const row of playerRows) {
+      const steamId = String(row.steam_id);
+      if (!/^7656119\d{10}$/.test(steamId)) continue;
+      matchingPlayers.set(steamId, row.name?.trim() || steamId);
+    }
+    const matchedSteamIds = [...matchingPlayers.keys()];
+    const conditions = ["a.steam_id LIKE ?"];
+    values.push(pattern);
+    if (matchedSteamIds.length) {
+      conditions.push(
+        "a.steam_id IN (" + matchedSteamIds.map(() => "?").join(", ") + ")",
+      );
+      values.push(...matchedSteamIds);
+    }
+    clause = " WHERE (" + conditions.join(" OR ") + ")";
   }
   const [countRows] = await pool.query<
     Array<RowDataPacket & { total: number | string }>
@@ -11056,17 +11087,52 @@ export async function findStaffEconomyAccounts(
       " ORDER BY a.updated_at DESC, a.steam_id ASC LIMIT ? OFFSET ?",
     [...values, paging.pageSize, paging.offset],
   );
-  return {
-    accounts: rows.map((row) => ({
-      steamId: String(row.steam_id),
+  const steamIds = rows.map((row) => String(row.steam_id));
+  const playerNames = await getEconomyPlayerDisplayNames(steamIds);
+  const accounts = rows.map((row) => {
+    const steamId = String(row.steam_id);
+    return {
+      steamId,
+      displayName:
+        playerNames.get(steamId) ?? matchingPlayers.get(steamId) ?? steamId,
       wallet: toTokenWallet(row),
       inventoryCount: economyNumber(row.inventory_count, "inventory count"),
       pendingTradeCount: economyNumber(
         row.pending_trade_count,
         "pending trade count",
       ),
-    })),
-    total: economyCount(countRows),
+    };
+  });
+  // A player can exist in the game database before ever receiving Tokens or
+  // an inventory item. Keep those search matches visible so staff can still
+  // inspect the empty inventory and grant that player's first item.
+  const knownWalletSteamIds = new Set(
+    accounts.map((account) => account.steamId),
+  );
+  const gameOnlyAccounts = [...matchingPlayers.entries()]
+    .filter(([steamId]) => !knownWalletSteamIds.has(steamId))
+    .slice(0, Math.max(0, paging.pageSize - accounts.length))
+    .map(([steamId, displayName]) => ({
+      steamId,
+      displayName,
+      wallet: {
+        steamId,
+        balance: 0,
+        lifetimeEarned: 0,
+        lifetimeSpent: 0,
+        createdAt: null,
+        updatedAt: null,
+      },
+      inventoryCount: 0,
+      pendingTradeCount: 0,
+    }));
+  return {
+    accounts: [...accounts, ...gameOnlyAccounts],
+    total:
+      economyCount(countRows) +
+      [...matchingPlayers.keys()].filter(
+        (steamId) => !knownWalletSteamIds.has(steamId),
+      ).length,
     page: paging.page,
     pageSize: paging.pageSize,
   };

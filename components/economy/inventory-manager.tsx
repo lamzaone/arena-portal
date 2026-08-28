@@ -4,7 +4,6 @@ import {
   Check,
   Coins,
   Crosshair,
-  Copy,
   PencilLine,
   Search,
   Shield,
@@ -128,9 +127,7 @@ export function InventoryManager({
   const [rarity, setRarity] = useState("all");
   const [sort, setSort] = useState<SortMode>("newest");
   const [selectedId, setSelectedId] = useState("");
-  const [selectedTeams, setSelectedTeams] = useState<Array<"T" | "CT">>([
-    "T",
-  ]);
+  const [selectedTeams, setSelectedTeams] = useState<Array<"T" | "CT">>([]);
   const [nametag, setNametag] = useState("");
   const [nametagItemId, setNametagItemId] = useState("");
   const [charmItemId, setCharmItemId] = useState("");
@@ -211,6 +208,26 @@ export function InventoryManager({
       })()
     : [];
   const selectedSlot = selectedSlots[0] ?? null;
+  const equipActionLabel =
+    selectedSlot?.slotType === "music_kit"
+      ? "Equip globally"
+      : selectedTeams.length === 2
+        ? "Equip T & CT"
+        : selectedTeams[0] === "T"
+          ? "Equip T"
+          : selectedTeams[0] === "CT"
+            ? "Equip CT"
+            : "Select a team";
+  const selectedTeamsDescription =
+    selectedSlot?.slotType === "music_kit"
+      ? "globally"
+      : selectedTeams.length === 2
+        ? "T and CT"
+        : selectedTeams[0] === "T"
+          ? "T"
+          : selectedTeams[0] === "CT"
+            ? "CT"
+            : "a selected team";
   const selectedCharmDefinitionIndex = selected
     ? itemCharmDefinitionIndex(selected)
     : null;
@@ -236,7 +253,7 @@ export function InventoryManager({
     setNametag(selected.nametag ?? "");
     setNametagItemId("");
     setCharmItemId("");
-    setSelectedTeams(["T"]);
+    setSelectedTeams([]);
     setStickerId("");
     setStickerSlot("0");
     setSaleConfirmationItemId("");
@@ -288,17 +305,13 @@ export function InventoryManager({
 
     const itemIndex = filtered.findIndex((item) => item.id === itemId);
     setInventoryInlineModalIndex(rowEndIndex(itemIndex, columns, filtered.length));
+    setSelectedTeams([]);
     setSelectedId(nextSelectedId);
   }
 
   function toggleLoadoutTeam(team: "T" | "CT") {
     setSelectedTeams((current) => {
-      if (current.includes(team)) {
-        // Keep one team active so Equip and Clear are always meaningful.
-        return current.length === 1
-          ? current
-          : current.filter((entry) => entry !== team);
-      }
+      if (current.includes(team)) return current.filter((entry) => entry !== team);
       return [...current, team].sort();
     });
   }
@@ -325,24 +338,6 @@ export function InventoryManager({
         });
       }
     });
-  }
-
-  async function copyTradeItemId() {
-    if (!selected?.id) return;
-    try {
-      if (!navigator.clipboard?.writeText)
-        throw new Error("Clipboard access is unavailable.");
-      await navigator.clipboard.writeText(selected.id);
-      setNotice({
-        type: "success",
-        text: "Trade item ID copied. Share it only with the player making the offer.",
-      });
-    } catch {
-      setNotice({
-        type: "error",
-        text: "Could not copy the trade item ID. Select and copy it manually below.",
-      });
-    }
   }
 
   return (
@@ -489,53 +484,28 @@ export function InventoryManager({
                   <X aria-hidden="true" /> Close
                 </button>
               </header>
+              <div className="inventory-management-workspace">
+                <div className="inventory-management-main">
                 <div className="inventory-detail-hero">
                   <MarketplaceItemPreview item={selected} enableMarketPreview />
                   <div className="inventory-detail-heading">
                     <p>
                       {selected.rarity} · {selectedVipMembership ? "VIP membership" : humanize(selected.itemType)}
                     </p>
+                    {selected.description ? (
+                      <p className="inventory-detail-description">{selected.description}</p>
+                    ) : null}
+                    <div className="tag-list inventory-detail-tags" aria-label="Item details">
+                      <span className="tag">{humanize(selected.state)}</span>
+                      {selected.stattrak ? <span className="tag">StatTrak {selected.stattrakCount.toLocaleString()}</span> : null}
+                      {selected.floatValue !== null ? <span className="tag">Float {selected.floatValue.toFixed(6)}</span> : null}
+                      {selected.seed !== null ? <span className="tag">Seed {selected.seed}</span> : null}
+                      {selected.equippedSlots.map((slot) => <span key={slot} className="tag tag-vip">Equipped: {humanize(slot)}</span>)}
+                      {selected.marketPriceTokens !== null ? <span className="tag"><Coins aria-hidden="true" /> {formatTokens(selected.marketPriceTokens)} Tokens</span> : null}
+                    </div>
                   </div>
                 </div>
-                <details className="inventory-inline-extra">
-                  <summary>Extra details and trade ID</summary>
-                  <div className="inventory-inline-extra-body">
-                    {selected.description ? (
-                      <p className="inventory-detail-description">
-                        {selected.description}
-                      </p>
-                    ) : null}
-                    <div className="tag-list">
-                      <code>{selected.id}</code>
-                      <button
-                        type="button"
-                        className="button button-secondary"
-                        onClick={copyTradeItemId}
-                      >
-                        <Copy aria-hidden="true" /> Copy trade ID
-                      </button>
-                    </div>
-                    <p className="empty-copy">
-                      Share this ID only when you want another player to request
-                      this exact item in a trade.
-                    </p>
-                    <p className="empty-copy">
-                      Current wallet: {formatTokens(walletView.balance)} tokens.
-                    </p>
-                    {loadoutView.length ? (
-                      <div className="group-block">
-                        <span>Current loadout slots</span>
-                        <div className="tag-list">
-                          {loadoutView.map((entry) => (
-                            <span key={entry.slot} className="tag">
-                              {humanize(entry.slot)}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                </details>
+                <div className="inventory-management-loadout">
                 {selectedVipMembership ? (
                   <fieldset className="form-panel inventory-vip-activation">
                     <legend>Use VIP membership</legend>
@@ -562,7 +532,7 @@ export function InventoryManager({
                   </fieldset>
                 ) : null}
                 {itemSupportsLoadout(selected) ? (
-                  <fieldset className="form-panel">
+                  <fieldset className="form-panel inventory-equip-panel">
                     <legend>Equip item</legend>
                     {selectedSlot?.slotType !== "music_kit" ? (
                       <fieldset className="inventory-team-switch">
@@ -590,8 +560,7 @@ export function InventoryManager({
                           </button>
                         </div>
                         <p className="empty-copy">
-                          Select both teams to apply this item to T and CT in
-                          one update.
+                          Choose one or both teams before equipping this item.
                         </p>
                       </fieldset>
                     ) : (
@@ -615,13 +584,13 @@ export function InventoryManager({
                             ? runAction(
                                 "/api/economy/loadout/equip",
                                 { itemId: selected.id, slots: selectedSlots },
-                                `${selected.displayName} has been equipped for ${selectedSlots.length === 2 ? "T and CT" : "the selected team"}.`,
+                                `${selected.displayName} has been equipped${selectedTeamsDescription === "globally" ? " globally" : ` for ${selectedTeamsDescription}`}.`,
                               )
                             : undefined
                         }
                       >
                         <Check aria-hidden="true" />{" "}
-                        {pending ? "Saving…" : "Equip"}
+                        {pending ? "Saving…" : equipActionLabel}
                       </button>
                       <button
                         type="button"
@@ -647,13 +616,20 @@ export function InventoryManager({
                     in a loadout slot.
                   </p>
                 ) : null}
+                </div>
 
                 {canCustomize ? (
-                  <details className="inventory-customize-panel">
-                    <summary>
-                      <span><Sticker aria-hidden="true" /> Customize</span>
+                  <section
+                    className="inventory-customize-panel"
+                    aria-labelledby="inventory-customize-heading"
+                  >
+                    <header className="inventory-management-panel-heading">
+                      <div className="inventory-management-panel-title">
+                        <Sticker aria-hidden="true" />
+                        <h4 id="inventory-customize-heading">Customize</h4>
+                      </div>
                       <small>Name tag, charm, stickers</small>
-                    </summary>
+                    </header>
                     <div className="inventory-customize-panel-body">
                 {itemSupportsNametag(selected) ? (
                   <fieldset className="form-panel">
@@ -825,13 +801,24 @@ export function InventoryManager({
                   </fieldset>
                 ) : null}
                     </div>
-                  </details>
+                  </section>
                 ) : null}
-                <details className="inventory-sell-panel">
-                  <summary>
-                    <span><Coins aria-hidden="true" /> Sell to market</span>
-                    <small>10% buyback</small>
-                  </summary>
+                </div>
+                <aside className="inventory-management-aside" aria-label="Market selling options">
+                <section className="inventory-sell-panel" aria-labelledby="inventory-sell-heading">
+                  <header className="inventory-management-panel-heading">
+                    <div className="inventory-management-panel-title">
+                      <Coins aria-hidden="true" />
+                      <h4 id="inventory-sell-heading">Sell to market</h4>
+                    </div>
+                    <small>
+                      {saleUnavailableReason
+                        ? "Unavailable"
+                        : salePriceIsKnown
+                          ? `${formatTokens(selectedSalePayout)} Tokens`
+                          : "Market quote"}
+                    </small>
+                  </header>
                   <div className="inventory-sell-panel-body">
                     {saleUnavailableReason ? (
                       <p className="empty-copy">{saleUnavailableReason}</p>
@@ -899,7 +886,9 @@ export function InventoryManager({
                       </>
                     )}
                   </div>
-                </details>
+                </section>
+                </aside>
+              </div>
           </section>, inventoryModalHost) : null}
         </div>
       ) : (

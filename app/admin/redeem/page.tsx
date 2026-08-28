@@ -54,6 +54,7 @@ export default async function RedeemCodeAdminPage({
         <nav className="staff-tabs" aria-label="Economy administration">
           <Link href="/admin">Staff panel</Link>
           <Link href="/admin/items">Items</Link>
+          <Link href="/admin/inventories">Inventories</Link>
           <Link className="active" href="/admin/redeem"><TicketCheck aria-hidden="true" /> Redeem codes</Link>
         </nav>
         <RedeemCodeAdmin
