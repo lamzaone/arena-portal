@@ -127,9 +127,10 @@ function authoritativeCrateRarity(
   fallback: number,
 ) {
   // A container entry stores the actual tier it rolled at. This is more
-  // reliable than legacy catalogue ranks for knives, gloves, and cache-era
-  // finishes, and keeps inventory and trade cards aligned with crate odds.
-  if (bool(attributes.rareSpecial)) return 7;
+  // reliable than legacy catalogue ranks for cache-era finishes, and keeps
+  // inventory and trade cards aligned with crate odds. Knives and gloves
+  // retain their special-pool probability, but are presented as Covert.
+  if (bool(attributes.rareSpecial)) return 6;
   switch (integer(attributes.rarityChanceBps)) {
     case 7_992:
       return 3;
@@ -140,18 +141,24 @@ function authoritativeCrateRarity(
     case 64:
       return 6;
     case 26:
-      return 7;
+      return 6;
     default:
       return fallback;
   }
 }
 
-function isGoldTierSpecial(itemType: string, displayName: string) {
-  return (
-    itemType === "knife" ||
-    itemType === "glove" ||
-    /\bm4a4\s*\|\s*howl\b/iu.test(displayName)
-  );
+function isGoldTierContraband(displayName: string) {
+  return /\bm4a4\s*\|\s*howl\b/iu.test(displayName);
+}
+
+function presentationRarity(
+  itemType: string,
+  displayName: string,
+  rarityRank: number,
+) {
+  if (itemType === "knife" || itemType === "glove") return 6;
+  if (isGoldTierContraband(displayName)) return 7;
+  return rarityRank;
 }
 
 function stringArray(value: unknown) {
@@ -280,16 +287,15 @@ export function toEconomyItem(value: unknown): EconomyItemView {
       firstDefined(record, ["rarityRank", "rarityLevel"]),
       integer(firstDefined(catalogue, ["rarityRank", "rarityLevel"]), 0),
     ) ?? 0;
-  // Knives, gloves, and the Contraband M4A4 | Howl are gold-tier CS items
-  // even if a legacy catalogue stored a finish rarity. Crate previews also
-  // place per-entry attributes in metadata for the remaining item types.
+  // Knives and gloves are Covert in this economy. M4A4 | Howl remains the
+  // single Contraband/Extraordinary exception. Crate previews also place
+  // per-entry attributes in metadata for the remaining item types.
   const rarityRank =
-    isGoldTierSpecial(itemType, displayName)
-      ? 7
-      : authoritativeCrateRarity(
-          { ...metadata, ...attributes },
-          storedRarityRank,
-        );
+    presentationRarity(
+      itemType,
+      displayName,
+      authoritativeCrateRarity({ ...metadata, ...attributes }, storedRarityRank),
+    );
   const nestedPrice = isRecord(record.price)
     ? record.price
     : isRecord(catalogue.price)

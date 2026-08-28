@@ -7,6 +7,10 @@ import {
   isStattrakMarketplaceItem,
 } from "@/lib/economy/market-pricing";
 import {
+  cacheMarketplaceVariantQuote,
+  getCachedMarketplaceVariantFallback,
+} from "@/lib/economy/market-variant-cache";
+import {
   economyJsonError,
   economyJsonSuccess,
   economyMutationFailure,
@@ -46,6 +50,22 @@ export async function POST(request: Request) {
       itemId,
     );
     const catalogue = item?.catalogue;
+    const fallbackPrice =
+      item && catalogue && item.catalogueId !== null
+        ? await getCachedMarketplaceVariantFallback({
+            catalogueId: item.catalogueId,
+            floatValue: item.floatValue,
+            stattrak: item.stattrak,
+            standardFallback:
+              !item.stattrak && catalogue.price && !isLegacySteamPrice(catalogue.price.source)
+                ? {
+                    eurCents: catalogue.price.euroCents,
+                    source: catalogue.price.source,
+                    sourceReference: catalogue.price.sourceReference,
+                  }
+                : null,
+          })
+        : null;
     const [quote] = catalogue &&
       (!item.stattrak || isStattrakMarketplaceItem(item.itemType))
       ? await getMarketplacePriceQuotes([
@@ -68,17 +88,18 @@ export async function POST(request: Request) {
             seed: item.seed,
             stattrak: item.stattrak,
             exactPatternQuote: true,
-            fallbackPrice:
-              !item.stattrak && catalogue.price && !isLegacySteamPrice(catalogue.price.source)
-                ? {
-                    eurCents: catalogue.price.euroCents,
-                    source: catalogue.price.source,
-                    sourceReference: catalogue.price.sourceReference,
-                  }
-                : null,
+            fallbackPrice,
           },
         ])
       : [null];
+    if (item && item.catalogueId !== null) {
+      await cacheMarketplaceVariantQuote({
+        catalogueId: item.catalogueId,
+        stattrak: item.stattrak,
+        imageUrl: null,
+        quote,
+      });
+    }
 
     const result = await sellEconomyItem({
       steamId: context.session.steamId,

@@ -7,6 +7,9 @@ import {
   type EconomyInventoryPage,
 } from "@/lib/data/portal-repository";
 import {
+  getCachedMarketplaceVariantFallbacks,
+} from "@/lib/economy/market-variant-cache";
+import {
   getMarketplacePriceQuotes,
   isStattrakMarketplaceItem,
 } from "@/lib/economy/market-pricing";
@@ -40,8 +43,26 @@ async function withCurrentMarketPrices(items: EconomyInventoryItem[]) {
       (!item.stattrak || isStattrakMarketplaceItem(item.itemType)),
   );
   if (!quoteable.length) return items;
-  const quotes = await getMarketplacePriceQuotes(
+  const cachedFallbacks = await getCachedMarketplaceVariantFallbacks(
     quoteable.map((item) => {
+      const catalogue = item.catalogue!;
+      return {
+        catalogueId: item.catalogueId!,
+        floatValue: item.floatValue,
+        stattrak: item.stattrak,
+        standardFallback:
+          !item.stattrak && catalogue.price && !isLegacySteamPrice(catalogue.price.source)
+            ? {
+                eurCents: catalogue.price.euroCents,
+                source: catalogue.price.source,
+                sourceReference: catalogue.price.sourceReference,
+              }
+            : null,
+      };
+    }),
+  );
+  const quotes = await getMarketplacePriceQuotes(
+    quoteable.map((item, index) => {
       const catalogue = item.catalogue!;
       return {
         itemType: item.itemType,
@@ -61,14 +82,7 @@ async function withCurrentMarketPrices(items: EconomyInventoryItem[]) {
         floatValue: item.floatValue,
         seed: item.seed,
         stattrak: item.stattrak,
-        fallbackPrice:
-          !item.stattrak && catalogue.price && !isLegacySteamPrice(catalogue.price.source)
-            ? {
-                eurCents: catalogue.price.euroCents,
-                source: catalogue.price.source,
-                sourceReference: catalogue.price.sourceReference,
-              }
-            : null,
+        fallbackPrice: cachedFallbacks[index],
       };
     }),
   );

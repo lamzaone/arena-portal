@@ -17,6 +17,10 @@ import {
   isFloatPricedMarketplaceItem,
   isStattrakMarketplaceItem,
 } from "@/lib/economy/market-pricing";
+import {
+  cacheMarketplaceVariantQuote,
+  getCachedMarketplaceVariantFallback,
+} from "@/lib/economy/market-variant-cache";
 
 function optionalFloat(value: unknown): number | undefined | null {
   if (value === undefined || value === null || value === "") return undefined;
@@ -100,6 +104,19 @@ export async function POST(request: Request) {
           `Choose a float between ${minimumFloat.toFixed(6)} and ${maximumFloat.toFixed(6)} for this item.`,
         );
       }
+      const fallbackPrice = await getCachedMarketplaceVariantFallback({
+        catalogueId,
+        floatValue,
+        stattrak,
+        standardFallback:
+          !stattrak && catalogue.price && !isLegacySteamPrice(catalogue.price.source)
+            ? {
+                eurCents: catalogue.price.euroCents,
+                source: catalogue.price.source,
+                sourceReference: catalogue.price.sourceReference,
+              }
+            : null,
+      });
       const [quote] = await getMarketplacePriceQuotes([
         {
           itemType: catalogue.itemType,
@@ -112,14 +129,7 @@ export async function POST(request: Request) {
           seed: metadataSeed(catalogue.metadata),
           stattrak,
           exactPatternQuote: true,
-          fallbackPrice:
-            !stattrak && catalogue.price && !isLegacySteamPrice(catalogue.price.source)
-              ? {
-                  eurCents: catalogue.price.euroCents,
-                  source: catalogue.price.source,
-                  sourceReference: catalogue.price.sourceReference,
-                }
-              : null,
+          fallbackPrice,
         },
       ]);
       if (!quote || quote.floatValue !== floatValue || !quote.wear) {
@@ -130,6 +140,12 @@ export async function POST(request: Request) {
             : "No current public price matched this float. Ask staff to set a last-known price.",
         );
       }
+      await cacheMarketplaceVariantQuote({
+        catalogueId,
+        stattrak,
+        imageUrl: catalogue.imageUrl,
+        quote,
+      });
       resolvedMarketQuote = {
         baseEuroCents: quote.baseEuroCents,
         euroCents: quote.eurCents,

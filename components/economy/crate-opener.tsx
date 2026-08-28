@@ -182,16 +182,13 @@ function finiteNumber(value: unknown, fallback: number | null = null) {
 }
 
 function crateLootPresentation(item: EconomyItemView): EconomyItemView {
-  // CS containers put knives and gloves in the rare-special slot. Older and
-  // custom loot tables can omit `rareSpecial`, leaving the catalogue's skin
-  // finish rank (normally Covert) in the response. At the opening surface the
-  // container category is still authoritative, so make the special tier
-  // explicit for the odds, reel, and completed reward alike.
+  // The special-pool probability is kept server-side, but knives and gloves
+  // are intentionally presented as Covert throughout this economy.
   if (item.itemType !== "knife" && item.itemType !== "glove") return item;
   return {
     ...item,
-    rarityRank: 7,
-    rarity: rarityName(7),
+    rarityRank: 6,
+    rarity: rarityName(6),
   };
 }
 
@@ -257,8 +254,8 @@ function rewardWithDropArtwork(
 
   // The item instance returned by the opening endpoint carries the item's
   // legacy catalogue rarity. The selected loot entry is authoritative for a
-  // case opening, notably for rare-special knives and gloves: retain its
-  // Extraordinary tier after merging the instance details.
+  // case opening, including its precise art and float limits, after merging
+  // the instance details.
   return crateLootPresentation({
     ...matchingDrop.item,
     ...reward,

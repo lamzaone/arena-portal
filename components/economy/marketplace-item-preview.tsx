@@ -149,6 +149,9 @@ export function MarketplaceItemPreview({
         : null,
     [enableMarketPreview, item.catalogueId, previewFloat],
   );
+  const prefersWearPreview =
+    previewFloat !== null &&
+    ["skin", "knife", "glove"].includes(item.itemType);
   const Icon = fallbackIcon(item.itemType);
   const previewImageUrl = previewImageUrls.find(
     (imageUrl) => !failedPreviewImageUrls.includes(imageUrl),
@@ -185,7 +188,7 @@ export function MarketplaceItemPreview({
     if (
       !isVisible ||
       !previewRequestUrl ||
-      directImageUrl
+      (!prefersWearPreview && directImageUrl)
     ) {
       setState(directImageUrl ? "ready" : "idle");
       return;
@@ -215,9 +218,18 @@ export function MarketplaceItemPreview({
       });
 
     return () => controller.abort();
-  }, [directImageKey, directImageUrl, isVisible, previewRequestUrl]);
+  }, [
+    directImageKey,
+    directImageUrl,
+    isVisible,
+    prefersWearPreview,
+    previewRequestUrl,
+  ]);
 
-  const imageUrl = directImageUrl ?? previewImageUrl;
+  // A selected float gets Steam's exterior-specific art whenever it is
+  // available; the startup-cached catalogue image stays on screen while that
+  // request resolves and remains the reliable fallback when Steam is down.
+  const imageUrl = previewImageUrl ?? directImageUrl;
   const loading = !imageUrl && state === "loading";
   const label = loading
     ? "Loading item art"

@@ -15,6 +15,8 @@ import {
   deriveMarketplacePriceIdentity,
   getMarketplacePriceQuotes,
   marketplaceFloatDiscountBps,
+  marketplaceWearLabel,
+  normalizeMarketplaceFloatValue,
 } from "@/lib/economy/market-pricing";
 
 type StatRow = RowDataPacket & {
@@ -3078,11 +3080,16 @@ export type RecordEconomyPriceResult = {
   price: EconomyCataloguePrice;
 };
 
-/** A market-addressable catalogue row used by the background price worker. */
+/** A catalogue row with enough game identity to derive public market variants. */
 export type EconomyPublicPriceRefreshCandidate = {
   catalogueId: number;
-  marketHashName: string;
+  itemType: EconomyItemType;
+  displayName: string;
+  marketHashName: string | null;
+  minFloat: number | null;
+  maxFloat: number | null;
   metadata: Record<string, unknown>;
+  imageUrl: string | null;
   currentPrice: EconomyCataloguePrice | null;
 };
 
@@ -3092,6 +3099,34 @@ export type EconomyPublicPriceRefreshUpdate = {
   eurCents: number;
   source: string;
   sourceReference: string;
+};
+
+export type EconomyMarketVariantPrice = {
+  catalogueId: number;
+  stattrak: boolean;
+  wear: string;
+  marketHashName: string;
+  marketVersion: string | null;
+  euroCents: number;
+  source: string;
+  sourceReference: string | null;
+  imageUrl: string | null;
+  observedAt: string;
+  expiresAt: string;
+  stale: boolean;
+};
+
+export type EconomyMarketVariantPriceUpdate = Omit<
+  EconomyMarketVariantPrice,
+  "observedAt" | "expiresAt" | "stale"
+> & {
+  expiresAt?: Date;
+};
+
+export type EconomyMarketVariantPriceLookup = {
+  catalogueId: number;
+  stattrak: boolean;
+  wear: string;
 };
 
 export type EconomyPriceRefreshLockResult<T> = {
@@ -3339,6 +3374,20 @@ type EconomyCatalogueRow = RowDataPacket & {
   observed_at?: Date | string | null;
   loot_table_id?: number | string | null;
   loot_table_code?: string | null;
+};
+
+type EconomyMarketVariantPriceRow = RowDataPacket & {
+  catalogue_id: number | string;
+  stattrak: number | boolean;
+  wear: string;
+  market_hash_name: string;
+  market_version: string | null;
+  market_price_eur_cents: number | string;
+  price_source: string;
+  source_reference: string | null;
+  image_url: string | null;
+  observed_at: Date | string;
+  expires_at: Date | string;
 };
 
 type EconomyInventoryRow = RowDataPacket & {
@@ -3985,28 +4034,12 @@ function economyRarityName(rarityRank: number) {
 }
 
 function economyLootEntryRarityRank(
-  attributes: Record<string, unknown>,
+  _attributes: Record<string, unknown>,
   fallback: number,
 ) {
-  // Legacy catalogue imports sometimes assigned a knife/glove its finish
-  // rarity (or an old cache rank) rather than the case's Extraordinary tier.
-  // A loot entry is the authoritative source while showing or awarding a
-  // container result, so use its explicit odds tier when it has one.
-  if (economyMetadataBoolean(attributes, "rareSpecial")) return 7;
-  switch (economyMetadataInteger(attributes, "rarityChanceBps")) {
-    case 7_992:
-      return 3;
-    case 1_598:
-      return 4;
-    case 320:
-      return 5;
-    case 64:
-      return 6;
-    case 26:
-      return 7;
-    default:
-      return fallback;
-  }
+  // Odds and rarity are separate data. Keep the source catalogue rarity on
+  // every page instead of remapping rare-special pools or named finishes.
+  return fallback;
 }
 
 function economyMetadataImageUrl(metadata: Record<string, unknown>) {
@@ -4075,12 +4108,19 @@ function economyCatalogueFloatRange(
   };
 }
 
-function economyIsGoldTierSpecial(itemType: EconomyItemType, displayName: string) {
-  return (
-    itemType === "knife" ||
-    itemType === "glove" ||
-    /\bm4a4\s*\|\s*howl\b/iu.test(displayName)
-  );
+function economyPresentationRarity(
+  _itemType: EconomyItemType,
+  _displayName: string,
+  rarityRank: number,
+) {
+  return rarityRank;
+}
+
+function economyDisplayName(itemType: EconomyItemType, displayName: string) {
+  const normalized = displayName.trim();
+  return itemType === "knife" && normalized && !normalized.startsWith("\u2605")
+    ? `\u2605 ${normalized}`
+    : normalized;
 }
 
 function toEconomyCatalogueItem(
@@ -4088,12 +4128,13 @@ function toEconomyCatalogueItem(
 ): EconomyCatalogueItem {
   const itemType = economyItemType(String(row.item_type));
   const storedRarityRank = economyNumber(row.rarity_rank, "catalogue rarity");
-  const displayName = String(row.display_name);
-  // Knives, gloves, and the Contraband M4A4 | Howl are gold-tier CS items.
-  // Imported rows can retain their finish rarity, but player-facing market
-  // filtering and sorting must use the actual extraordinary tier.
-  const rarityRank =
-    economyIsGoldTierSpecial(itemType, displayName) ? 7 : storedRarityRank;
+  const displayName = economyDisplayName(itemType, String(row.display_name));
+  // The public CS2 catalogue is authoritative for player-facing rarity.
+  const rarityRank = economyPresentationRarity(
+    itemType,
+    displayName,
+    storedRarityRank,
+  );
   const price = toEconomyCataloguePrice(row);
   const metadata = economyRecord(row.metadata);
   const floatRange = economyCatalogueFloatRange(itemType, metadata);
@@ -4159,17 +4200,18 @@ function toEconomyInventoryItem(
           source_reference: row.source_reference,
           observed_at: row.observed_at,
         });
-  const displayName = row.display_name
+  const displayName = economyDisplayName(itemType, row.display_name
     ? String(row.display_name)
-    : economyCustomDisplayName(attributes, itemType);
+    : economyCustomDisplayName(attributes, itemType));
   const storedRarityRank = economyNumber(row.rarity_rank, "inventory rarity");
   const catalogueRarityRank =
     row.catalogue_rarity_rank === null
       ? storedRarityRank
       : economyNumber(row.catalogue_rarity_rank, "catalogue rarity");
-  const rarityRank = economyLootEntryRarityRank(
-    attributes,
-    catalogueRarityRank,
+  const rarityRank = economyPresentationRarity(
+    itemType,
+    displayName,
+    economyLootEntryRarityRank(attributes, catalogueRarityRank),
   );
   return {
     id: economyItemId(String(row.id)),
@@ -4780,11 +4822,12 @@ const economyCatalogueFloatMinimumSql =
 const economyCatalogueFloatMaximumSql =
   "COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.maxFloat')) AS DECIMAL(8, 6)), CAST(JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.floatMax')) AS DECIMAL(8, 6)), CAST(JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.wearMax')) AS DECIMAL(8, 6)), 1)";
 
-// Use the same player-facing tier in SQL filters and ordering as the portal
-// cards. This keeps rare-special and Contraband items out of the Covert group
-// while preserving the raw catalogue rank for sync/audit purposes.
-const economyCataloguePresentationRaritySql =
-  "CASE WHEN c.item_type IN ('knife', 'glove') OR LOWER(c.display_name) LIKE '%m4a4%howl%' THEN 7 ELSE c.rarity_rank END";
+// Never translate rarity ranks at read time. Filters, sorting, cards, and
+// crate previews all use the exact rank obtained from the catalogue source.
+const economyCataloguePresentationRaritySql = "c.rarity_rank";
+
+const economyInventoryPresentationRaritySql =
+  "COALESCE(c.rarity_rank, i.rarity_rank)";
 
 function economyFilterStates(values: EconomyItemState[] | undefined) {
   if (!values) return [];
@@ -5041,16 +5084,52 @@ export async function getMarketplaceCatalogue(
   // the price resolver derives from `marketBaseName` and its display float.
   // We deliberately do not write buyer-specific float quotes into the one
   // shared catalogue-price row during browsing.
+  const variantLookups = catalogue.items.map((item) => {
+    const floatValue = normalizeMarketplaceFloatValue({
+      itemType: item.itemType,
+      minFloat: item.minFloat,
+      maxFloat: item.maxFloat,
+    });
+    // Stickers, charms, music kits, cases, and other non-wearable items are
+    // quoted as their one "Standard" market variant. Keeping them in this
+    // batch means the portal can use the persisted last-known price whenever
+    // an upstream public price source is briefly unavailable.
+    const wear = marketplaceWearLabel(floatValue) ?? "Standard";
+    return { catalogueId: item.id, stattrak: false, wear };
+  });
+  let cachedVariants: Array<EconomyMarketVariantPrice | null> = catalogue.items.map(
+    () => null,
+  );
+  try {
+    const populatedLookups = variantLookups.flatMap((lookup, index) =>
+      lookup ? [{ lookup, index }] : [],
+    );
+    const values = await getEconomyMarketVariantPrices(
+      populatedLookups.map((value) => value.lookup),
+    );
+    for (let index = 0; index < populatedLookups.length; index += 1)
+      cachedVariants[populatedLookups[index].index] = values[index];
+  } catch {
+    // The public snapshot remains usable during the narrow rollout window
+    // before a game server creates the persistent variant-cache table.
+  }
   const publicPrices = await getMarketplacePriceQuotes(
-    catalogue.items.map((item) => ({
+    catalogue.items.map((item, index) => ({
       itemType: item.itemType,
       displayName: item.displayName,
       marketHashName: item.marketHashName,
       metadata: item.metadata,
       minFloat: item.minFloat,
       maxFloat: item.maxFloat,
-      fallbackPrice:
-        item.price && !economyPriceIsLegacySteam(item.price)
+      fallbackPrice: cachedVariants[index]
+        ? {
+            eurCents: cachedVariants[index].euroCents,
+            source: cachedVariants[index].stale
+              ? `${cachedVariants[index].source}-last-known`
+              : cachedVariants[index].source,
+            sourceReference: cachedVariants[index].sourceReference,
+          }
+        : item.price && !economyPriceIsLegacySteam(item.price)
           ? {
               eurCents: item.price.euroCents,
               source: item.price.source,
@@ -5117,16 +5196,18 @@ function toEconomyRedeemCodeReward(
   row: EconomyRedeemCodeRewardRow,
 ): EconomyRedeemCodeReward {
   const itemType = economyItemType(String(row.item_type));
-  const displayName = String(row.display_name);
+  const displayName = economyDisplayName(itemType, String(row.display_name));
   const storedRarityRank = economyNumber(row.rarity_rank, "reward rarity");
   return {
     catalogueId: economyNumber(row.catalogue_id, "reward catalogue ID"),
     quantity: economyNumber(row.quantity, "reward quantity", 1),
     displayName,
     itemType,
-    rarityRank: economyIsGoldTierSpecial(itemType, displayName)
-      ? 7
-      : storedRarityRank,
+    rarityRank: economyPresentationRarity(
+      itemType,
+      displayName,
+      storedRarityRank,
+    ),
     imageUrl: economyMetadataImageUrl(economyRecord(row.metadata)),
   };
 }
@@ -5573,9 +5654,9 @@ export async function redeemEconomyCode(
 }
 
 /**
- * Returns every enabled catalogue item that has an exact public market name.
- * This deliberately excludes custom/unmapped entries: a last-known or custom
- * price must never be replaced by a quote for a guessed identity.
+ * Returns every enabled item with a verified public-market identity. Public
+ * CS2 imports intentionally store a base name (rather than one fixed wear),
+ * so a skin can be refreshed even when its legacy market_hash_name is empty.
  */
 export async function getEconomyPublicPriceRefreshCandidates(): Promise<
   EconomyPublicPriceRefreshCandidate[]
@@ -5584,19 +5665,176 @@ export async function getEconomyPublicPriceRefreshCandidates(): Promise<
   if (!pool) return [];
   const [rows] = await pool.query<EconomyCatalogueRow[]>(
     economyCatalogueSelect +
-      "WHERE c.enabled = TRUE AND c.market_hash_name IS NOT NULL " +
-      "AND TRIM(c.market_hash_name) <> '' ORDER BY c.id ASC",
+      "WHERE c.enabled = TRUE AND (" +
+      "(c.market_hash_name IS NOT NULL AND TRIM(c.market_hash_name) <> '') OR " +
+      "(JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.marketBaseName')) IS NOT NULL " +
+      "AND TRIM(JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.marketBaseName'))) <> '')" +
+      ") ORDER BY c.id ASC",
   );
-  return rows.map((row) => ({
-    catalogueId: economyNumber(row.id, "catalogue ID", 1),
+  return rows.map((row) => {
+    const item = toEconomyCatalogueItem(row);
+    return {
+      catalogueId: item.id,
+      itemType: item.itemType,
+      displayName: item.displayName,
+      marketHashName: item.marketHashName,
+      minFloat: item.minFloat,
+      maxFloat: item.maxFloat,
+      metadata: item.metadata,
+      imageUrl: item.imageUrl,
+      currentPrice: item.price,
+    };
+  });
+}
+
+function toEconomyMarketVariantPrice(
+  row: EconomyMarketVariantPriceRow,
+): EconomyMarketVariantPrice {
+  const expiresAt = economyDateToIso(row.expires_at);
+  if (!expiresAt)
+    economyError(
+      "invalid_database_value",
+      "A cached market variant has an invalid expiry.",
+    );
+  return {
+    catalogueId: economyNumber(row.catalogue_id, "variant catalogue ID", 1),
+    stattrak: economyBoolean(row.stattrak),
+    wear: economyText(row.wear, "market variant wear", 32),
     marketHashName: economyText(
-      String(row.market_hash_name ?? ""),
-      "Public market-hash name",
+      row.market_hash_name,
+      "market variant name",
       255,
     ),
-    metadata: economyRecord(row.metadata),
-    currentPrice: toEconomyCataloguePrice(row),
+    marketVersion: row.market_version ? String(row.market_version) : null,
+    euroCents: economyAmount(
+      economyNumber(
+        row.market_price_eur_cents,
+        "market variant EUR-cent price",
+      ),
+      "market variant EUR-cent price",
+    ),
+    source: economyText(row.price_source, "market variant source", 32),
+    sourceReference: row.source_reference ? String(row.source_reference) : null,
+    imageUrl: row.image_url ? String(row.image_url) : null,
+    observedAt:
+      economyDateToIso(row.observed_at) ?? new Date(0).toISOString(),
+    expiresAt,
+    stale: new Date(expiresAt).getTime() <= Date.now(),
+  };
+}
+
+export async function getEconomyMarketVariantPrice(input: {
+  catalogueId: number;
+  stattrak: boolean;
+  wear: string;
+}): Promise<EconomyMarketVariantPrice | null> {
+  const catalogueId = economyNumber(input.catalogueId, "catalogue ID", 1);
+  const wear = economyText(input.wear, "market variant wear", 32);
+  const pool = getPortalPool();
+  if (!pool) return null;
+  const [rows] = await pool.query<EconomyMarketVariantPriceRow[]>(
+    "SELECT catalogue_id, stattrak, wear, market_hash_name, market_version, market_price_eur_cents, price_source, source_reference, image_url, observed_at, expires_at " +
+      "FROM portal_economy_market_variant_prices WHERE catalogue_id = ? AND stattrak = ? AND wear = ? LIMIT 1",
+    [catalogueId, input.stattrak, wear],
+  );
+  return rows[0] ? toEconomyMarketVariantPrice(rows[0]) : null;
+}
+
+function economyMarketVariantPriceKey(input: EconomyMarketVariantPriceLookup) {
+  return `${input.catalogueId}\u0000${input.stattrak ? "1" : "0"}\u0000${input.wear}`;
+}
+
+/**
+ * Reads a page of cached wear/StatTrak prices in one query. Keeping this
+ * batched matters because Market and Inventory cards must stay useful while a
+ * public provider is briefly unavailable, without doing one DB round-trip per
+ * visible item.
+ */
+export async function getEconomyMarketVariantPrices(
+  input: readonly EconomyMarketVariantPriceLookup[],
+): Promise<Array<EconomyMarketVariantPrice | null>> {
+  if (!input.length) return [];
+  const normalized = input.map((value) => ({
+    catalogueId: economyNumber(value.catalogueId, "catalogue ID", 1),
+    stattrak: value.stattrak === true,
+    wear: economyText(value.wear, "market variant wear", 32),
   }));
+  const unique = [...new Map(
+    normalized.map((value) => [economyMarketVariantPriceKey(value), value]),
+  ).values()];
+  const pool = getPortalPool();
+  if (!pool) return normalized.map(() => null);
+  const [rows] = await pool.query<EconomyMarketVariantPriceRow[]>(
+    "SELECT catalogue_id, stattrak, wear, market_hash_name, market_version, market_price_eur_cents, price_source, source_reference, image_url, observed_at, expires_at " +
+      "FROM portal_economy_market_variant_prices WHERE " +
+      unique.map(() => "(catalogue_id = ? AND stattrak = ? AND wear = ?)").join(" OR "),
+    unique.flatMap((value) => [value.catalogueId, value.stattrak, value.wear]),
+  );
+  const byKey = new Map(
+    rows.map((row) => {
+      const value = toEconomyMarketVariantPrice(row);
+      return [economyMarketVariantPriceKey(value), value] as const;
+    }),
+  );
+  return normalized.map((value) => byKey.get(economyMarketVariantPriceKey(value)) ?? null);
+}
+
+/** Stores short-lived verified exterior/StatTrak quotes for offline fallback. */
+export async function recordEconomyMarketVariantPrices(
+  input: readonly EconomyMarketVariantPriceUpdate[],
+): Promise<number> {
+  if (!input.length) return 0;
+  const pool = getPortalPool();
+  if (!pool) return 0;
+  const values = input.map((value) => ({
+    catalogueId: economyNumber(value.catalogueId, "catalogue ID", 1),
+    stattrak: value.stattrak === true,
+    wear: economyText(value.wear, "market variant wear", 32),
+    marketHashName: economyText(value.marketHashName, "market variant name", 255),
+    marketVersion: value.marketVersion
+      ? economyText(value.marketVersion, "market version", 120)
+      : null,
+    euroCents: economyAmount(value.euroCents, "market variant EUR-cent price"),
+    source: economyText(value.source, "market variant source", 32),
+    sourceReference: value.sourceReference
+      ? economyText(value.sourceReference, "market variant source reference", 255)
+      : null,
+    imageUrl: value.imageUrl
+      ? economyText(value.imageUrl, "market variant image", 2_048)
+      : null,
+    expiresAt:
+      value.expiresAt && !Number.isNaN(value.expiresAt.getTime())
+        ? value.expiresAt
+        : new Date(Date.now() + 6 * 60 * 60 * 1_000),
+  }));
+  const connection = await pool.getConnection();
+  try {
+    const batchSize = 250;
+    for (let offset = 0; offset < values.length; offset += batchSize) {
+      const batch = values.slice(offset, offset + batchSize);
+      await connection.execute(
+        "INSERT INTO portal_economy_market_variant_prices " +
+          "(catalogue_id, stattrak, wear, market_hash_name, market_version, market_price_eur_cents, price_source, source_reference, image_url, expires_at) VALUES " +
+          batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ") +
+          " ON DUPLICATE KEY UPDATE market_hash_name = VALUES(market_hash_name), market_version = VALUES(market_version), market_price_eur_cents = VALUES(market_price_eur_cents), price_source = VALUES(price_source), source_reference = VALUES(source_reference), image_url = VALUES(image_url), observed_at = CURRENT_TIMESTAMP, expires_at = VALUES(expires_at)",
+        batch.flatMap((value) => [
+          value.catalogueId,
+          value.stattrak,
+          value.wear,
+          value.marketHashName,
+          value.marketVersion,
+          value.euroCents,
+          value.source,
+          value.sourceReference,
+          value.imageUrl,
+          value.expiresAt,
+        ]),
+      );
+    }
+    return values.length;
+  } finally {
+    connection.release();
+  }
 }
 
 /**
@@ -5784,7 +6022,9 @@ export async function getEconomyCrateDropPreview(
       "INNER JOIN portal_economy_catalogue AS c ON c.id = e.catalogue_id " +
       "LEFT JOIN portal_economy_catalogue_prices AS p ON p.catalogue_id = c.id AND p.is_current = TRUE " +
       "WHERE l.container_catalogue_id = ? AND l.table_type = 'container' AND l.enabled = TRUE " +
-      "ORDER BY c.rarity_rank DESC, c.display_name ASC, e.id ASC",
+      "ORDER BY " +
+      economyCataloguePresentationRaritySql +
+      " DESC, c.display_name ASC, e.id ASC",
     [catalogueId],
   );
   if (!rows.length) return null;
@@ -5806,9 +6046,10 @@ export async function getEconomyCrateDropPreview(
       const attributes = economyRecord(row.attributes);
       const minFloat = economyDecimal(row.min_float, "loot minimum float");
       const maxFloat = economyDecimal(row.max_float, "loot maximum float");
-      const rarityRank = economyLootEntryRarityRank(
-        attributes,
-        catalogue.rarityRank,
+      const rarityRank = economyPresentationRarity(
+        catalogue.itemType,
+        catalogue.displayName,
+        economyLootEntryRarityRank(attributes, catalogue.rarityRank),
       );
       // Exact container-entry metadata wins over cache-era catalogue metadata.
       // It includes official art and float limits for real case outcomes, and
@@ -5873,7 +6114,10 @@ export async function getPlayerEconomyInventory(
   }
   if (rarityRanks.length) {
     where.push(
-      "COALESCE(c.rarity_rank, i.rarity_rank) IN (" + rarityRanks.map(() => "?").join(", ") + ")",
+      economyInventoryPresentationRaritySql +
+        " IN (" +
+        rarityRanks.map(() => "?").join(", ") +
+        ")",
     );
     values.push(...rarityRanks);
   }
@@ -5938,14 +6182,17 @@ export async function getPlayerEconomyLoadout(
     const item =
       itemId && row.item_type
         ? ({
-            id: itemId,
+          id: itemId,
             itemType: economyItemType(String(row.item_type)),
-            displayName: row.display_name
+            displayName: economyDisplayName(
+              economyItemType(String(row.item_type)),
+              row.display_name
               ? String(row.display_name)
               : economyCustomDisplayName(
                   itemAttributes ?? {},
                   economyItemType(String(row.item_type)),
                 ),
+            ),
             definitionIndex: economyOptionalInteger(
               row.item_definition_index,
               "loadout item definition index",
@@ -5957,14 +6204,23 @@ export async function getPlayerEconomyLoadout(
             floatValue: economyDecimal(row.float_value, "loadout item float"),
             nametag: row.nametag ? String(row.nametag) : null,
             stattrak: economyBoolean(row.stattrak),
-            rarityRank: economyLootEntryRarityRank(
-              itemAttributes ?? {},
-              row.catalogue_rarity_rank === null
-                ? economyNumber(row.rarity_rank, "loadout item rarity")
-                : economyNumber(
-                    row.catalogue_rarity_rank,
-                    "loadout catalogue rarity",
+            rarityRank: economyPresentationRarity(
+              economyItemType(String(row.item_type)),
+              row.display_name
+                ? String(row.display_name)
+                : economyCustomDisplayName(
+                    itemAttributes ?? {},
+                    economyItemType(String(row.item_type)),
                   ),
+              economyLootEntryRarityRank(
+                itemAttributes ?? {},
+                row.catalogue_rarity_rank === null
+                  ? economyNumber(row.rarity_rank, "loadout item rarity")
+                  : economyNumber(
+                      row.catalogue_rarity_rank,
+                      "loadout catalogue rarity",
+                    ),
+              ),
             ),
             attributes: itemAttributes ?? {},
           } satisfies EconomyLoadoutItem)

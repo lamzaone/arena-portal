@@ -7,6 +7,10 @@ import {
   isFloatPricedMarketplaceItem,
   isStattrakMarketplaceItem,
 } from "@/lib/economy/market-pricing";
+import {
+  cacheMarketplaceVariantQuote,
+  getCachedMarketplaceVariantFallback,
+} from "@/lib/economy/market-variant-cache";
 
 function catalogueIdFromSearch(value: string | null) {
   if (!value || !/^\d+$/.test(value)) return null;
@@ -97,6 +101,19 @@ export async function GET(request: Request) {
       );
     }
 
+    const fallbackPrice = await getCachedMarketplaceVariantFallback({
+      catalogueId,
+      floatValue,
+      stattrak,
+      standardFallback:
+        !stattrak && item.price && !legacySteamPrice(item.price.source)
+          ? {
+              eurCents: item.price.euroCents,
+              source: item.price.source,
+              sourceReference: item.price.sourceReference,
+            }
+          : null,
+    });
     const [quote] = await getMarketplacePriceQuotes([
       {
         itemType: item.itemType,
@@ -109,14 +126,7 @@ export async function GET(request: Request) {
         seed: metadataSeed(item.metadata),
         stattrak,
         exactPatternQuote: true,
-        fallbackPrice:
-          !stattrak && item.price && !legacySteamPrice(item.price.source)
-            ? {
-                eurCents: item.price.euroCents,
-                source: item.price.source,
-                sourceReference: item.price.sourceReference,
-              }
-            : null,
+        fallbackPrice,
       },
     ]);
     if (!quote || quote.floatValue !== floatValue || !quote.wear) {
@@ -130,6 +140,12 @@ export async function GET(request: Request) {
         { status: 409 },
       );
     }
+    await cacheMarketplaceVariantQuote({
+      catalogueId,
+      stattrak,
+      imageUrl: item.imageUrl,
+      quote,
+    });
 
     return NextResponse.json(
       {

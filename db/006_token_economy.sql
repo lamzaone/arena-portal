@@ -101,6 +101,28 @@ CREATE TABLE IF NOT EXISTS portal_economy_catalogue_prices (
   CONSTRAINT portal_economy_catalogue_prices_catalogue_fk FOREIGN KEY (catalogue_id) REFERENCES portal_economy_catalogue (id) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
+-- Exterior and StatTrak™ values are separate public-market identities.  This
+-- cache lets the portal keep a verified last-known quote for each identity
+-- without overwriting the catalogue's standard display price or relying on a
+-- live provider during a purchase/sell operation.
+CREATE TABLE IF NOT EXISTS portal_economy_market_variant_prices (
+  catalogue_id BIGINT UNSIGNED NOT NULL,
+  stattrak BOOLEAN NOT NULL DEFAULT FALSE,
+  wear VARCHAR(32) NOT NULL,
+  market_hash_name VARCHAR(255) NOT NULL,
+  market_version VARCHAR(120) NULL,
+  market_price_eur_cents BIGINT UNSIGNED NOT NULL,
+  price_source VARCHAR(32) NOT NULL,
+  source_reference VARCHAR(255) NULL,
+  image_url VARCHAR(2048) NULL,
+  observed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at TIMESTAMP NOT NULL,
+  PRIMARY KEY (catalogue_id, stattrak, wear),
+  KEY portal_economy_market_variant_prices_expiry (expires_at),
+  CONSTRAINT portal_economy_market_variant_prices_price_nonnegative CHECK (market_price_eur_cents >= 0),
+  CONSTRAINT portal_economy_market_variant_prices_catalogue_fk FOREIGN KEY (catalogue_id) REFERENCES portal_economy_catalogue (id) ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS portal_loot_tables (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   code VARCHAR(64) NOT NULL,

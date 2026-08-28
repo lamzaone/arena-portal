@@ -275,11 +275,25 @@ export function deriveMarketplacePriceIdentity(
     addCandidate(baseCandidates, baseName, marketVersion);
   }
   for (const candidate of baseCandidates) {
+    if (!stattrak) {
+      addCandidate(candidates, candidate.marketHashName, candidate.marketVersion);
+      continue;
+    }
+
+    // Steam's actual knife StatTrak identity is `★ StatTrak™ Knife | …`,
+    // rather than `StatTrak™ ★ Knife | …`. Keep the latter as a harmless
+    // compatibility candidate for third-party indexes that normalize it.
+    if (itemType === "knife") {
+      const bareName = stripStarPrefix(candidate.marketHashName);
+      addCandidate(
+        candidates,
+        `★ ${stattrakMarketHashName(bareName)}`,
+        candidate.marketVersion,
+      );
+    }
     addCandidate(
       candidates,
-      stattrak
-        ? stattrakMarketHashName(candidate.marketHashName)
-        : candidate.marketHashName,
+      stattrakMarketHashName(candidate.marketHashName),
       candidate.marketVersion,
     );
   }
@@ -503,10 +517,11 @@ export async function getMarketplacePriceQuotes(
       );
     }
 
-    // A standard last-known value cannot safely price a separate StatTrak™
-    // variant. Staff can add an exact public mapping instead of inheriting a
-    // misleading normal-item fallback.
-    const fallback = identity.stattrak ? null : validFallback(input.fallbackPrice);
+    // Callers supply a fallback only for the same wear/StatTrak market
+    // identity. This now includes the server-warmed variant cache, so a
+    // temporary provider outage does not make a valid StatTrak™ item
+    // impossible to price or sell.
+    const fallback = validFallback(input.fallbackPrice);
     if (!fallback) return null;
     return quoteFromPrice(
       {
