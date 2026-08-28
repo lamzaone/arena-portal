@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Archive, Coins, Gift, MessageSquare, Shield, ShoppingBag, Ticket, TicketCheck, UserRound } from "lucide-react";
 
 const links = [
@@ -12,11 +15,18 @@ const links = [
   { href: "/tickets", label: "Tickets", icon: Ticket }
 ];
 
-export function AccountNav({ current }: { current: string }) {
+export function AccountNav() {
+  const pathname = usePathname();
+
   return (
     <nav className="account-nav" aria-label="Account navigation">
       {links.map(({ href, label, icon: Icon }) => (
-        <Link key={href} href={href} className={current === href ? "active" : ""}>
+        <Link
+          key={href}
+          href={href}
+          className={pathname === href ? "active" : ""}
+          aria-current={pathname === href ? "page" : undefined}
+        >
           <Icon aria-hidden="true" /> {label}
         </Link>
       ))}

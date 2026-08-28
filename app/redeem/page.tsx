@@ -1,6 +1,5 @@
 import { TicketCheck } from "lucide-react";
 
-import { AccountNav } from "@/components/account-nav";
 import { RedeemCodeForm } from "@/components/economy/redeem-code-form";
 import { SignInRequired } from "@/components/sign-in-required";
 import { SiteHeader } from "@/components/site-header";
@@ -19,7 +18,6 @@ export default async function RedeemPage() {
     <main>
       <div className="shell">
         <SiteHeader authenticated />
-        <AccountNav current="/redeem" />
         <section className="page-heading redeem-page-heading">
           <div>
             <p className="eyebrow">

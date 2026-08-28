@@ -2,7 +2,6 @@ import Link from "next/link";
 import { AlertTriangle, ArrowLeft, ArrowRight, Ban, Clock3, Crosshair, ShieldCheck, Target, UserRound, VolumeX } from "lucide-react";
 import type { CSSProperties } from "react";
 
-import { AccountNav } from "@/components/account-nav";
 import { formatDate, formatPlaytime, isActiveSanction } from "@/components/formatters";
 import { GroupBadge } from "@/components/group-badge";
 import { ResilientRemoteImage } from "@/components/resilient-remote-image";
@@ -129,7 +128,6 @@ export function PlayerProfilePage({ profile, steamId, steamProfile, isOwnProfile
     <main className="tapped-page player-profile-page">
       <div className="shell">
         <SiteHeader authenticated={isAuthenticated} />
-        {isOwnProfile ? <AccountNav current="/dashboard" /> : null}
         <section className="public-player-hero shared-profile-hero">
           <div className="public-player-copy">
             {!isOwnProfile ? <Link className="back-link" href="/ranking"><ArrowLeft aria-hidden="true" /> Server ranking</Link> : null}

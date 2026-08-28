@@ -1,6 +1,5 @@
 import { ShoppingBag } from "lucide-react";
 
-import { AccountNav } from "@/components/account-nav";
 import { MarketplaceBrowser } from "@/components/economy/marketplace-browser";
 import { SignInRequired } from "@/components/sign-in-required";
 import { SiteHeader } from "@/components/site-header";
@@ -99,7 +98,6 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
     <main>
       <div className="shell">
         <SiteHeader authenticated />
-        <AccountNav current="/market" />
         <section className="page-heading">
           <div>
             <p className="eyebrow">

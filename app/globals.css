@@ -1089,8 +1089,8 @@ code { padding: 2px 4px; border-radius: 4px; color: #fecdd3; background: rgba(22
 /* Compact portal pass: preserve the visual language while keeping controls and
    collections easier to scan on ordinary laptops, wide displays, and phones. */
 :root {
-  --shell-gutter: clamp(24px, 3vw, 64px);
-  --page-inset: clamp(12px, 1.25vw, 24px);
+  --shell-gutter: clamp(48px, 8vw, 192px);
+  --page-inset: clamp(16px, 1.5vw, 28px);
 }
 
 .portal-content { overflow-x: clip; }
@@ -1112,7 +1112,10 @@ main,
 }
 
 .shell,
-.tapped-page .shell { padding-bottom: 48px; }
+.tapped-page .shell {
+  width: min(1600px, calc(100% - var(--shell-gutter)));
+  padding-bottom: 48px;
+}
 
 .site-header {
   min-height: 60px;
@@ -1657,3 +1660,24 @@ main,
      the complete next row for its three compact form cards. */
   .inventory-management-workspace { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* Root route fallback: every page gets immediate feedback while its server
+   data is streaming in, without adding artificial delays to cached routes. */
+.portal-route-loading { min-height: 100dvh; }
+.portal-route-loading > .shell { display: grid; align-content: start; min-height: 100dvh; }
+.portal-route-loading-navigation, .portal-route-loading-body { min-width: 0; }
+.portal-route-loading-body { display: grid; align-content: start; gap: clamp(18px, 2vw, 28px); }
+.portal-route-loading-status { display: flex; align-items: center; gap: 16px; max-width: 760px; padding: clamp(18px, 2vw, 26px); border: 1px solid rgba(255, 113, 133, .34); background: radial-gradient(circle at 0 0, rgba(225, 29, 72, .18), transparent 42%), linear-gradient(145deg, rgba(61, 7, 17, .84), rgba(10, 2, 7, .96)); box-shadow: 0 18px 42px rgba(0, 0, 0, .24), inset 0 1px 0 rgba(255, 255, 255, .06); }
+.portal-route-loading-emblem { position: relative; display: grid; width: 52px; height: 52px; flex: 0 0 auto; place-items: center; border: 1px solid rgba(255, 145, 164, .54); border-radius: 50%; color: #ff9bad; background: rgba(225, 29, 72, .1); box-shadow: 0 0 24px rgba(225, 29, 72, .14); }
+.portal-route-loading-emblem svg:first-child { width: 22px; height: 22px; }
+.portal-route-loading-emblem svg:last-child { position: absolute; width: 48px; height: 48px; color: #ff6f85; animation: portal-route-loader-spin .9s linear infinite; }
+.portal-route-loading-status .eyebrow { margin: 0 0 5px; }
+.portal-route-loading-status h1 { margin: 0; color: #fff0f2; font-family: var(--font-display); font-size: clamp(1.5rem, 2.6vw, 2.2rem); line-height: 1; }
+.portal-route-loading-status p:not(.eyebrow) { margin: 7px 0 0; color: #caa4ab; font-size: 13px; line-height: 1.5; }
+.portal-route-loading-skeleton { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(220px, .82fr) minmax(220px, .82fr); gap: 12px; width: min(100%, 1040px); }
+.portal-route-loading-card { min-height: 168px; border: 1px solid rgba(255, 113, 133, .17); background: linear-gradient(110deg, rgba(49, 6, 14, .5) 18%, rgba(116, 18, 35, .54) 36%, rgba(49, 6, 14, .5) 54%); background-size: 220% 100%; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04); animation: portal-route-loader-shimmer 1.35s ease-in-out infinite; }
+.portal-route-loading-card-featured { min-height: 218px; }
+@keyframes portal-route-loader-spin { to { transform: rotate(360deg); } }
+@keyframes portal-route-loader-shimmer { from { background-position: 100% 0; } to { background-position: -120% 0; } }
+@media (max-width: 720px) { .portal-route-loading-status { align-items: flex-start; }.portal-route-loading-skeleton { grid-template-columns: 1fr; }.portal-route-loading-card, .portal-route-loading-card-featured { min-height: 116px; } }
+@media (prefers-reduced-motion: reduce) { .portal-route-loading-emblem svg:last-child, .portal-route-loading-card { animation: none; } }

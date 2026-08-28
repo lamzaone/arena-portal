@@ -1,6 +1,5 @@
 import { AlertTriangle, MessageSquareText, Ticket } from "lucide-react";
 
-import { AccountNav } from "@/components/account-nav";
 import { CaseStatusTag } from "@/components/case-status-tag";
 import { CaseConversation } from "@/components/case-conversation";
 import { SignInRequired } from "@/components/sign-in-required";
@@ -67,7 +66,7 @@ export default async function TicketsPage({ searchParams }: TicketsPageProps) {
   const error = params.error === "screenshot" ? "Screenshots must be PNG, JPEG, or WebP, with no more than five files up to 5 MB each." : params.error === "closed" ? "That ticket is closed and cannot receive another reply." : "Ticket could not be submitted. Check the form and portal storage setup.";
 
   return (
-    <main><div className="shell"><SiteHeader authenticated /><AccountNav current="/tickets" />
+    <main><div className="shell"><SiteHeader authenticated />
       <section className="page-heading"><div><p className="eyebrow"><Ticket aria-hidden="true" /> Player support</p><h1>Tickets</h1><p>Open a private ticket for a player report, an admin report, a bug, account help, or a VIP purchase request.</p></div></section>
       {params.submitted && <PortalToast message="Ticket created. You can follow staff updates and reply below." />}
       {params.replied && <PortalToast message="Your reply and any screenshots were sent to staff." />}

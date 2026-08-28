@@ -1,6 +1,5 @@
 import { Gift } from "lucide-react";
 
-import { AccountNav } from "@/components/account-nav";
 import { CrateOpener } from "@/components/economy/crate-opener";
 import { SignInRequired } from "@/components/sign-in-required";
 import { SiteHeader } from "@/components/site-header";
@@ -19,7 +18,7 @@ export default async function CratesPage() {
     getCompletePlayerEconomyInventory(session.steamId)
   ]);
 
-  return <main><div className="shell"><SiteHeader authenticated /><AccountNav current="/crates" />
+  return <main><div className="shell"><SiteHeader authenticated />
     <section className="page-heading"><div><p className="eyebrow"><Gift aria-hidden="true" /> Player economy</p><h1>Crates</h1><p>Open an owned crate or capsule to receive one random item. Crates never require a key.</p></div></section>
     <CrateOpener crates={crates} inventory={inventory} wallet={wallet} csrf={createEconomyActionToken(session)} />
   </div></main>;

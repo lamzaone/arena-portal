@@ -1,6 +1,5 @@
 import { Archive } from "lucide-react";
 
-import { AccountNav } from "@/components/account-nav";
 import { InventoryManager } from "@/components/economy/inventory-manager";
 import { SignInRequired } from "@/components/sign-in-required";
 import { SiteHeader } from "@/components/site-header";
@@ -18,7 +17,7 @@ export default async function InventoryPage() {
     getPlayerEconomyLoadout(session.steamId)
   ]);
 
-  return <main><div className="shell"><SiteHeader authenticated /><AccountNav current="/inventory" />
+  return <main><div className="shell"><SiteHeader authenticated />
     <section className="page-heading"><div><p className="eyebrow"><Archive aria-hidden="true" /> Player economy</p><h1>Inventory</h1><p>Manage the cosmetic items attached to your Token account, then equip eligible owned instances to your server loadout.</p></div></section>
     <InventoryManager inventory={inventory} loadout={loadout} wallet={wallet} csrf={createEconomyActionToken(session)} />
   </div></main>;

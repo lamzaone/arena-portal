@@ -1,6 +1,5 @@
 import { AlertTriangle, Paintbrush, ShieldCheck, Sparkles } from "lucide-react";
 
-import { AccountNav } from "@/components/account-nav";
 import { LoadoutEditor } from "@/components/loadout-editor";
 import { SignInRequired } from "@/components/sign-in-required";
 import { SiteHeader } from "@/components/site-header";
@@ -32,7 +31,7 @@ export default async function SkinsPage() {
   ];
 
   return (
-    <main><div className="shell"><SiteHeader authenticated /><AccountNav current="/skins" />
+    <main><div className="shell"><SiteHeader authenticated />
       <section className="page-heading loadout-page-heading"><div><p className="eyebrow"><Paintbrush aria-hidden="true" /> WeaponSkins</p><h1>Loadout panel</h1><p>Preview and queue your TAPPED.RO cosmetics from the website. The live server remains the final authority for permissions and every item selection.</p></div><div className="loadout-security-mark"><ShieldCheck aria-hidden="true" /><span>Server-validated</span></div></section>
       {!profile.sourceConnected ? <div className="notice notice-info"><AlertTriangle aria-hidden="true" /> Configure the read-only game database first to show your saved WeaponSkins loadout.</div> : null}
       <section className="loadout-grid" aria-label="Saved cosmetic loadout">
