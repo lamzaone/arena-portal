@@ -9,6 +9,12 @@ import mysql, {
   type RowDataPacket,
 } from "mysql2/promise";
 
+import {
+  ensureIdentityCatalogue,
+  getIdentityCatalogueStatus,
+  syncIdentityCatalogue,
+} from "@/lib/data/identity-catalogue";
+
 export type IdentityGroupSource = "custom" | "admins_core" | "vipcore";
 export type IdentityPrivilegeScope = "portal" | "game";
 export type IdentityTradePolicy = "tradable" | "account_bound";
@@ -37,6 +43,22 @@ export type IdentityPrivilege = {
   description: string | null;
   sensitive: boolean;
   enabled: boolean;
+  sources: IdentityPrivilegeSource[];
+};
+
+export type IdentityPrivilegeSource = {
+  sourceKind: string;
+  sourceReference: string | null;
+};
+
+export type IdentityExternalGroupDefinition = {
+  sourceType: Exclude<IdentityGroupSource, "custom">;
+  rankWeight: number;
+  baselinePermissions: string[];
+  capabilityKeys: string[];
+  sourceKind: "config" | "runtime" | "portal";
+  sourceReference: string | null;
+  syncedAt: string;
 };
 
 export type IdentityGroupReward = {
@@ -84,6 +106,7 @@ export type IdentityGroup = {
   badgeSoftColor: string;
   profilePriority: number;
   enabled: boolean;
+  externalDefinition: IdentityExternalGroupDefinition | null;
   memberCount: number;
   tags: IdentityChatTag[];
   privileges: IdentityPrivilege[];
@@ -107,6 +130,12 @@ export type IdentityAdminSnapshot = {
   privileges: IdentityPrivilege[];
   directTagGrants: IdentityPlayerTagGrant[];
   directPrivilegeGrants: IdentityPlayerPrivilegeGrant[];
+  catalogueStatus: {
+    adminsCoreDefinitions: number;
+    vipCoreDefinitions: number;
+    discoveredPrivileges: number;
+    lastSyncedAt: string | null;
+  };
 };
 
 export class IdentityGroupError extends Error {
@@ -175,6 +204,25 @@ type IdentityRewardRow = RowDataPacket & {
   catalogue_enabled?: number | boolean;
 };
 
+type IdentityRewardAwardRow = RowDataPacket & {
+  reward_id: number | string;
+  group_id: number | string;
+  steam_id: string;
+  ordinal: number | string;
+  item_id: string;
+  entitlement_active: number | boolean;
+  item_revoked_by_entitlement: number | boolean;
+  item_state: "available" | "escrowed" | "attached" | "consumed" | "revoked";
+  item_type: string;
+  tradable: number | boolean;
+  group_enabled: number | boolean;
+};
+
+type IdentityRewardMutationResult = {
+  awardedItemIds: string[];
+  restoredItemIds: string[];
+};
+
 type IdentityMembershipRow = RowDataPacket & {
   group_id: number | string;
   steam_id: string;
@@ -195,6 +243,29 @@ type IdentityPlayerPrivilegeGrantRow = IdentityPrivilegeRow & {
   starts_at: Date | string;
   expires_at: Date | string | null;
   grant_reason: string | null;
+};
+
+type IdentityExternalDefinitionRow = RowDataPacket & {
+  group_id: number | string;
+  source_type: Exclude<IdentityGroupSource, "custom">;
+  rank_weight: number | string;
+  baseline_permissions: unknown;
+  capability_keys: unknown;
+  source_kind: string;
+  source_reference: string | null;
+  synced_at: Date | string;
+};
+
+type IdentityPrivilegeSourceRow = RowDataPacket & {
+  privilege_id: number | string;
+  source_kind: string;
+  source_reference: string | null;
+};
+
+type IdentityAdminAuthorizationRow = RowDataPacket & {
+  external_key: string;
+  rank_weight: number | string;
+  baseline_permissions: unknown;
 };
 
 let identityPool: Pool | undefined;
@@ -303,6 +374,16 @@ function identityDefinitionKey(
       `${field} must start with a letter or number and use only lowercase letters, numbers, dots, colons, underscores, dashes${allowWildcard ? ", or wildcards" : ""}.`,
     );
   }
+  if (
+    allowWildcard &&
+    key.includes("*") &&
+    (!key.endsWith(".*") || key.indexOf("*") !== key.length - 1)
+  ) {
+    identityError(
+      "invalid_input",
+      `${field} wildcards are only supported as a final .* suffix.`,
+    );
+  }
   return key;
 }
 
@@ -391,6 +472,28 @@ function asRecord(value: unknown): Record<string, unknown> {
   }
 }
 
+function asStringArray(value: unknown) {
+  let parsed = value;
+  if (Buffer.isBuffer(parsed)) parsed = parsed.toString("utf8");
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(parsed)) return [];
+  return uniqueStrings(
+    parsed
+      .map((entry) => String(entry ?? "").normalize("NFKC").trim())
+      .filter((entry) => entry.length > 0 && entry.length <= 128),
+  ).slice(0, 1_000);
+}
+
+function uniqueStrings(values: string[]) {
+  return [...new Set(values)];
+}
+
 function recordNumber(record: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
     const value = Number(record[key]);
@@ -423,7 +526,10 @@ function toTag(row: IdentityTagRow): IdentityChatTag {
   };
 }
 
-function toPrivilege(row: IdentityPrivilegeRow): IdentityPrivilege {
+function toPrivilege(
+  row: IdentityPrivilegeRow,
+  sources: IdentityPrivilegeSource[] = [],
+): IdentityPrivilege {
   return {
     id: Number(row.id),
     key: String(row.privilege_key),
@@ -432,6 +538,7 @@ function toPrivilege(row: IdentityPrivilegeRow): IdentityPrivilege {
     description: row.description ? String(row.description) : null,
     sensitive: asBoolean(row.is_sensitive),
     enabled: asBoolean(row.enabled),
+    sources,
   };
 }
 
@@ -449,6 +556,7 @@ function emptyGroup(row: IdentityGroupRow): IdentityGroup {
     badgeSoftColor: String(row.badge_soft_color),
     profilePriority: Number(row.profile_priority),
     enabled: asBoolean(row.enabled),
+    externalDefinition: null,
     memberCount: Number(row.member_count ?? 0),
     tags: [],
     privileges: [],
@@ -548,10 +656,28 @@ export async function getIdentityAdminSnapshot(): Promise<IdentityAdminSnapshot>
       privileges: [],
       directTagGrants: [],
       directPrivilegeGrants: [],
+      catalogueStatus: {
+        adminsCoreDefinitions: 0,
+        vipCoreDefinitions: 0,
+        discoveredPrivileges: 0,
+        lastSyncedAt: null,
+      },
     };
   }
 
-  const [groupRows, tagRows, privilegeRows, groupTagRows, groupPrivilegeRows, rewardRows, membershipRows, directTagRows, directPrivilegeRows] =
+  // Initial bootstrap is deliberately fail-soft here: the management page can
+  // still display existing portal records if an optional config file is
+  // malformed or temporarily unavailable. Explicit Founder syncs fail closed.
+  try {
+    await ensureIdentityCatalogue(pool);
+  } catch (error) {
+    console.warn(
+      "Identity catalogue bootstrap could not complete:",
+      error instanceof Error ? error.message : "unknown error",
+    );
+  }
+
+  const [groupRows, tagRows, privilegeRows, groupTagRows, groupPrivilegeRows, rewardRows, membershipRows, directTagRows, directPrivilegeRows, externalDefinitionRows, privilegeSourceRows, catalogueStatus] =
     await Promise.all([
       pool.query<IdentityGroupRow[]>(
         identityGroupSelect +
@@ -582,15 +708,53 @@ export async function getIdentityAdminSnapshot(): Promise<IdentityAdminSnapshot>
       pool.query<IdentityPlayerPrivilegeGrantRow[]>(
         "SELECT assigned.steam_id, assigned.starts_at, assigned.expires_at, assigned.grant_reason, privileges.id, privileges.privilege_key, privileges.scope, privileges.display_name, privileges.description, privileges.is_sensitive, privileges.enabled FROM portal_identity_player_privileges AS assigned INNER JOIN portal_identity_privileges AS privileges ON privileges.id = assigned.privilege_id WHERE assigned.revoked_at IS NULL AND assigned.starts_at <= CURRENT_TIMESTAMP AND (assigned.expires_at IS NULL OR assigned.expires_at > CURRENT_TIMESTAMP) ORDER BY assigned.starts_at DESC, assigned.steam_id, privileges.id",
       ),
+      pool.query<IdentityExternalDefinitionRow[]>(
+        "SELECT group_id, source_type, rank_weight, baseline_permissions, capability_keys, source_kind, source_reference, synced_at FROM portal_identity_external_group_definitions ORDER BY source_type, rank_weight DESC, external_key",
+      ),
+      pool.query<IdentityPrivilegeSourceRow[]>(
+        "SELECT privilege_id, source_kind, source_reference FROM portal_identity_privilege_sources ORDER BY privilege_id, source_kind, source_reference",
+      ),
+      getIdentityCatalogueStatus(pool),
     ]);
 
   const groups = groupRows[0].map(emptyGroup);
   const groupsById = new Map(groups.map((group) => [group.id, group]));
+  const sourcesByPrivilegeId = new Map<number, IdentityPrivilegeSource[]>();
+  for (const row of privilegeSourceRows[0]) {
+    const privilegeId = Number(row.privilege_id);
+    const sources = sourcesByPrivilegeId.get(privilegeId) ?? [];
+    sources.push({
+      sourceKind: String(row.source_kind),
+      sourceReference: row.source_reference ? String(row.source_reference) : null,
+    });
+    sourcesByPrivilegeId.set(privilegeId, sources);
+  }
+  for (const row of externalDefinitionRows[0]) {
+    const sourceKind =
+      row.source_kind === "runtime" || row.source_kind === "portal"
+        ? row.source_kind
+        : "config";
+    const group = groupsById.get(Number(row.group_id));
+    if (!group) continue;
+    group.externalDefinition = {
+      sourceType: row.source_type,
+      rankWeight: Number(row.rank_weight),
+      baselinePermissions: asStringArray(row.baseline_permissions),
+      capabilityKeys: asStringArray(row.capability_keys),
+      sourceKind,
+      sourceReference: row.source_reference ? String(row.source_reference) : null,
+      syncedAt: toIso(row.synced_at) ?? new Date(0).toISOString(),
+    };
+  }
   for (const row of groupTagRows[0]) {
     groupsById.get(Number(row.group_id))?.tags.push(toTag(row));
   }
   for (const row of groupPrivilegeRows[0]) {
-    groupsById.get(Number(row.group_id))?.privileges.push(toPrivilege(row));
+    groupsById
+      .get(Number(row.group_id))
+      ?.privileges.push(
+        toPrivilege(row, sourcesByPrivilegeId.get(Number(row.id)) ?? []),
+      );
   }
   for (const row of rewardRows[0]) {
     groupsById.get(Number(row.group_id))?.rewards.push({
@@ -614,7 +778,9 @@ export async function getIdentityAdminSnapshot(): Promise<IdentityAdminSnapshot>
   return {
     groups,
     tags: tagRows[0].map(toTag),
-    privileges: privilegeRows[0].map(toPrivilege),
+    privileges: privilegeRows[0].map((row) =>
+      toPrivilege(row, sourcesByPrivilegeId.get(Number(row.id)) ?? []),
+    ),
     directTagGrants: directTagRows[0].map((row) => ({
       steamId: String(row.steam_id),
       tag: toTag(row),
@@ -624,12 +790,87 @@ export async function getIdentityAdminSnapshot(): Promise<IdentityAdminSnapshot>
     })),
     directPrivilegeGrants: directPrivilegeRows[0].map((row) => ({
       steamId: String(row.steam_id),
-      privilege: toPrivilege(row),
+      privilege: toPrivilege(
+        row,
+        sourcesByPrivilegeId.get(Number(row.id)) ?? [],
+      ),
       startsAt: toIso(row.starts_at) ?? new Date(0).toISOString(),
       expiresAt: toIso(row.expires_at),
       grantReason: row.grant_reason ? String(row.grant_reason) : null,
     })),
+    catalogueStatus,
   };
+}
+
+export async function syncExternalIdentityCatalogue(input: {
+  actor: IdentityFounderActor;
+  requestKey: string;
+}) {
+  const actorSteamId = requireFounder(input.actor);
+  const requestKey = identityRequestKey(input.requestKey);
+  const pool = getIdentityPool();
+  if (!pool) {
+    identityError(
+      "storage_unavailable",
+      "The portal identity database is not configured.",
+    );
+  }
+  try {
+    return await syncIdentityCatalogue(pool, {
+      force: true,
+      actorSteamId,
+      auditKey: `${requestKey}:catalogue-sync`,
+    });
+  } catch (error) {
+    if (error instanceof IdentityGroupError) throw error;
+    identityError(
+      "catalogue_sync_failed",
+      "The external group catalogue could not be imported from the available configs.",
+    );
+  }
+}
+
+export async function getIdentityAdminAuthorizationDefinitions(): Promise<
+  Array<{ name: string; immunity: number; permissions: string[] }>
+> {
+  const pool = getIdentityPool();
+  if (!pool) return [];
+  try {
+    await ensureIdentityCatalogue(pool);
+    const [rows] = await pool.query<IdentityAdminAuthorizationRow[]>(
+      "SELECT external_key, rank_weight, baseline_permissions " +
+        "FROM portal_identity_external_group_definitions " +
+        "WHERE source_type = 'admins_core' ORDER BY rank_weight, external_key",
+    );
+    return rows.map((row) => ({
+      name: String(row.external_key),
+      immunity: Number(row.rank_weight),
+      permissions: asStringArray(row.baseline_permissions),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function getIdentityVipGroupDefinitions(): Promise<
+  Array<{ name: string; weight: number }>
+> {
+  const pool = getIdentityPool();
+  if (!pool) return [];
+  try {
+    await ensureIdentityCatalogue(pool);
+    const [rows] = await pool.query<IdentityAdminAuthorizationRow[]>(
+      "SELECT external_key, rank_weight, baseline_permissions " +
+        "FROM portal_identity_external_group_definitions " +
+        "WHERE source_type = 'vipcore' ORDER BY rank_weight DESC, external_key",
+    );
+    return rows.map((row) => ({
+      name: String(row.external_key),
+      weight: Number(row.rank_weight),
+    }));
+  } catch {
+    return [];
+  }
 }
 
 function normalizeExternalNames(values: string[] | undefined) {
@@ -895,6 +1136,14 @@ export async function updateIdentityGroup(input: {
         groupId,
       ],
     );
+    const revokedItemIds =
+      asBoolean(previous.enabled) && !input.enabled
+        ? await revokeAccountBoundRewardsForGroup(connection, {
+            groupId,
+            actorSteamId,
+            reason: "group-disabled",
+          })
+        : [];
     await writeIdentityAudit(connection, {
       requestKey: `${requestKey}:group-update`,
       actorSteamId,
@@ -907,9 +1156,10 @@ export async function updateIdentityGroup(input: {
           enabled: asBoolean(previous.enabled),
         },
         next: { displayName, enabled: input.enabled },
+        revokedItemIds,
       },
     });
-    return { groupId };
+    return { groupId, revokedItemIds };
   });
 }
 
@@ -937,15 +1187,20 @@ export async function archiveIdentityGroup(input: {
       "UPDATE portal_identity_group_memberships SET revoked_at = COALESCE(revoked_at, CURRENT_TIMESTAMP), revoked_by_steam_id = COALESCE(revoked_by_steam_id, ?) WHERE group_id = ? AND revoked_at IS NULL",
       [actorSteamId, groupId],
     );
+    const revokedItemIds = await revokeAccountBoundRewardsForGroup(connection, {
+      groupId,
+      actorSteamId,
+      reason: "group-archived",
+    });
     await writeIdentityAudit(connection, {
       requestKey: `${requestKey}:group-archive`,
       actorSteamId,
       action: "identity.group.archived",
       targetType: "identity-group",
       targetId: String(groupId),
-      metadata: { key: group.group_key },
+      metadata: { key: group.group_key, revokedItemIds },
     });
-    return { groupId };
+    return { groupId, revokedItemIds };
   });
 }
 
@@ -976,7 +1231,7 @@ export async function assignIdentityGroup(input: {
         "ON DUPLICATE KEY UPDATE starts_at = CURRENT_TIMESTAMP, expires_at = VALUES(expires_at), granted_by_steam_id = VALUES(granted_by_steam_id), grant_reason = VALUES(grant_reason), revoked_at = NULL, revoked_by_steam_id = NULL",
       [groupId, steamId, expiresAt, actorSteamId, reason],
     );
-    const itemIds = await awardRewardsForGroup(connection, {
+    const rewardResult = await awardRewardsForGroup(connection, {
       groupId,
       steamId,
       actorSteamId,
@@ -991,10 +1246,16 @@ export async function assignIdentityGroup(input: {
         groupId,
         expiresAt: expiresAt?.toISOString() ?? null,
         reason,
-        awardedItemIds: itemIds,
+        awardedItemIds: rewardResult.awardedItemIds,
+        restoredItemIds: rewardResult.restoredItemIds,
       },
     });
-    return { groupId, steamId, awardedItemIds: itemIds };
+    return {
+      groupId,
+      steamId,
+      awardedItemIds: rewardResult.awardedItemIds,
+      restoredItemIds: rewardResult.restoredItemIds,
+    };
   });
 }
 
@@ -1020,15 +1281,33 @@ export async function removeIdentityGroupMembership(input: {
       "UPDATE portal_identity_group_memberships SET revoked_at = CURRENT_TIMESTAMP, revoked_by_steam_id = ? WHERE group_id = ? AND steam_id = ? AND revoked_at IS NULL",
       [actorSteamId, groupId, steamId],
     );
+    const revokedItemIds =
+      result.affectedRows > 0
+        ? await revokeAccountBoundRewardsForGroup(connection, {
+            groupId,
+            steamId,
+            actorSteamId,
+            reason: "group-membership-revoked",
+          })
+        : [];
     await writeIdentityAudit(connection, {
       requestKey: `${requestKey}:membership-remove`,
       actorSteamId,
       action: "identity.membership.revoked",
       targetType: "steam-player",
       targetId: steamId,
-      metadata: { groupId, changed: result.affectedRows > 0 },
+      metadata: {
+        groupId,
+        changed: result.affectedRows > 0,
+        revokedItemIds,
+      },
     });
-    return { groupId, steamId, changed: result.affectedRows > 0 };
+    return {
+      groupId,
+      steamId,
+      changed: result.affectedRows > 0,
+      revokedItemIds,
+    };
   });
 }
 
@@ -1472,6 +1751,303 @@ function rewardTradePolicy(value: unknown): IdentityTradePolicy {
   return value;
 }
 
+async function writeIdentityRewardItemEvent(
+  connection: PoolConnection,
+  input: {
+    itemId: string;
+    actorSteamId: string | null;
+    eventType:
+      | "identity.group_reward.revoked"
+      | "identity.group_reward.restored"
+      | "identity.group_reward.attachment-released";
+    beforeState: Record<string, unknown>;
+    afterState: Record<string, unknown>;
+    metadata: Record<string, unknown>;
+  },
+) {
+  await connection.execute(
+    "INSERT INTO portal_inventory_item_events (item_id, actor_steam_id, event_type, idempotency_key, line_key, before_state, after_state, metadata) VALUES (?, ?, ?, ?, 'entitlement', ?, ?, ?)",
+    [
+      input.itemId,
+      input.actorSteamId,
+      input.eventType,
+      `identity-entitlement:${randomUUID()}`,
+      JSON.stringify(input.beforeState),
+      JSON.stringify(input.afterState),
+      JSON.stringify(input.metadata),
+    ],
+  );
+}
+
+async function enqueueIdentityRewardRefresh(
+  connection: PoolConnection,
+  input: {
+    steamId: string;
+    reason: string;
+    itemIds: string[];
+  },
+) {
+  if (!input.itemIds.length) return;
+  await connection.execute(
+    "INSERT INTO portal_economy_jobs (job_type, target_steam_id, payload, idempotency_key) VALUES ('economy.loadout.refresh', ?, ?, ?) ON DUPLICATE KEY UPDATE id = id",
+    [
+      input.steamId,
+      JSON.stringify({
+        steamId: input.steamId,
+        reason: input.reason,
+        itemIds: uniqueStrings(input.itemIds),
+      }),
+      `identity-entitlement:${randomUUID()}`,
+    ],
+  );
+}
+
+async function loadActiveAccountBoundRewardAwards(
+  connection: PoolConnection,
+  input: { steamId?: string; groupId?: number },
+) {
+  const where = [
+    "awards.entitlement_active = TRUE",
+    "rewards.trade_policy = 'account_bound'",
+    "items.tradable = FALSE",
+    "items.owner_steam_id = awards.steam_id",
+  ];
+  const values: unknown[] = [];
+  if (input.steamId) {
+    where.push("awards.steam_id = ?");
+    values.push(input.steamId);
+  }
+  if (input.groupId) {
+    where.push("rewards.group_id = ?");
+    values.push(input.groupId);
+  }
+  const [rows] = await connection.query<
+    Array<IdentityRewardAwardRow & { source_type: IdentityGroupSource }>
+  >(
+    "SELECT awards.reward_id, rewards.group_id, awards.steam_id, awards.ordinal, awards.item_id, awards.entitlement_active, awards.item_revoked_by_entitlement, " +
+      "items.state AS item_state, items.item_type, items.tradable, groups.enabled AS group_enabled, groups.source_type " +
+      "FROM portal_identity_group_reward_awards AS awards " +
+      "INNER JOIN portal_identity_group_rewards AS rewards ON rewards.id = awards.reward_id " +
+      "INNER JOIN portal_identity_groups AS groups ON groups.id = rewards.group_id " +
+      "INNER JOIN portal_inventory_items AS items ON items.id = awards.item_id " +
+      `WHERE ${where.join(" AND ")} ORDER BY awards.steam_id, awards.reward_id, awards.ordinal FOR UPDATE`,
+    values,
+  );
+  return rows;
+}
+
+async function revokeIdentityRewardAwards(
+  connection: PoolConnection,
+  input: {
+    steamId: string;
+    rows: IdentityRewardAwardRow[];
+    actorSteamId: string | null;
+    reason: string;
+  },
+) {
+  const revokedItemIds: string[] = [];
+  const refreshItemIds: string[] = [];
+  // Revoke awarded stickers before awarded weapons. If both belong to the
+  // removed group, this avoids releasing the sticker to `available` while a
+  // later row still expects its locked `attached` state.
+  const orderedRows = [...input.rows].sort(
+    (left, right) =>
+      Number(right.item_state === "attached") -
+      Number(left.item_state === "attached"),
+  );
+  for (const row of orderedRows) {
+    if (row.item_state === "escrowed") {
+      identityError(
+        "reward_item_escrowed",
+        "An account-bound group reward is unexpectedly escrowed. Cancel the trade or repair the item before removing the group.",
+      );
+    }
+
+    const itemId = String(row.item_id);
+    const shouldRevokeItem =
+      row.item_state !== "revoked" && row.item_state !== "consumed";
+    if (shouldRevokeItem) {
+      const [weaponRows] = await connection.query<
+        Array<RowDataPacket & { weapon_item_id: string }>
+      >(
+        "SELECT weapon_item_id FROM portal_inventory_item_stickers WHERE sticker_item_id = ? FOR UPDATE",
+        [itemId],
+      );
+      if (weaponRows.length) {
+        await connection.execute(
+          "DELETE FROM portal_inventory_item_stickers WHERE sticker_item_id = ?",
+          [itemId],
+        );
+        refreshItemIds.push(
+          ...weaponRows.map((weapon) => String(weapon.weapon_item_id)),
+        );
+      }
+
+      const [stickerRows] = await connection.query<
+        Array<RowDataPacket & { sticker_item_id: string; state: string }>
+      >(
+        "SELECT relations.sticker_item_id, stickers.state FROM portal_inventory_item_stickers AS relations INNER JOIN portal_inventory_items AS stickers ON stickers.id = relations.sticker_item_id WHERE relations.weapon_item_id = ? FOR UPDATE",
+        [itemId],
+      );
+      if (stickerRows.length) {
+        await connection.execute(
+          "DELETE FROM portal_inventory_item_stickers WHERE weapon_item_id = ?",
+          [itemId],
+        );
+        for (const sticker of stickerRows) {
+          if (sticker.state !== "attached") continue;
+          const stickerItemId = String(sticker.sticker_item_id);
+          await connection.execute(
+            "UPDATE portal_inventory_items SET state = 'available' WHERE id = ? AND state = 'attached'",
+            [stickerItemId],
+          );
+          await writeIdentityRewardItemEvent(connection, {
+            itemId: stickerItemId,
+            actorSteamId: input.actorSteamId,
+            eventType: "identity.group_reward.attachment-released",
+            beforeState: { ownerSteamId: input.steamId, state: "attached" },
+            afterState: { ownerSteamId: input.steamId, state: "available" },
+            metadata: {
+              removedWeaponItemId: itemId,
+              groupId: Number(row.group_id),
+              rewardId: Number(row.reward_id),
+              reason: input.reason,
+            },
+          });
+          refreshItemIds.push(stickerItemId);
+        }
+      }
+
+      await connection.execute(
+        "UPDATE portal_loadout_slots SET item_id = NULL WHERE owner_steam_id = ? AND item_id = ?",
+        [input.steamId, itemId],
+      );
+      if (row.item_type === "profile_theme") {
+        await connection.execute(
+          "UPDATE portal_player_settings SET active_theme_id = NULL, active_theme_item_id = NULL WHERE steam_id = ? AND active_theme_item_id = ?",
+          [input.steamId, itemId],
+        );
+      }
+      const [itemResult] = await connection.execute<ResultSetHeader>(
+        "UPDATE portal_inventory_items SET state = 'revoked' WHERE id = ? AND owner_steam_id = ? AND tradable = FALSE AND state = ?",
+        [itemId, input.steamId, row.item_state],
+      );
+      if (itemResult.affectedRows !== 1) {
+        identityError(
+          "reward_item_changed",
+          "A group reward changed while its entitlement was being removed. Try again.",
+        );
+      }
+      await writeIdentityRewardItemEvent(connection, {
+        itemId,
+        actorSteamId: input.actorSteamId,
+        eventType: "identity.group_reward.revoked",
+        beforeState: {
+          ownerSteamId: input.steamId,
+          state: row.item_state,
+          tradable: false,
+        },
+        afterState: {
+          ownerSteamId: input.steamId,
+          state: "revoked",
+          tradable: false,
+        },
+        metadata: {
+          groupId: Number(row.group_id),
+          rewardId: Number(row.reward_id),
+          ordinal: Number(row.ordinal),
+          reason: input.reason,
+        },
+      });
+      revokedItemIds.push(itemId);
+      refreshItemIds.push(itemId);
+    }
+
+    await connection.execute(
+      "UPDATE portal_identity_group_reward_awards SET entitlement_active = FALSE, entitlement_revoked_at = CURRENT_TIMESTAMP, entitlement_revoked_by_steam_id = ?, item_revoked_by_entitlement = ? WHERE reward_id = ? AND steam_id = ? AND ordinal = ? AND entitlement_active = TRUE",
+      [
+        input.actorSteamId,
+        shouldRevokeItem,
+        Number(row.reward_id),
+        input.steamId,
+        Number(row.ordinal),
+      ],
+    );
+  }
+
+  await enqueueIdentityRewardRefresh(connection, {
+    steamId: input.steamId,
+    reason: input.reason,
+    itemIds: refreshItemIds,
+  });
+  return revokedItemIds;
+}
+
+async function revokeAccountBoundRewardsForGroup(
+  connection: PoolConnection,
+  input: {
+    groupId: number;
+    steamId?: string;
+    actorSteamId: string | null;
+    reason: string;
+  },
+) {
+  const rows = await loadActiveAccountBoundRewardAwards(connection, {
+    groupId: input.groupId,
+    steamId: input.steamId,
+  });
+  const rowsBySteamId = new Map<string, IdentityRewardAwardRow[]>();
+  for (const row of rows) {
+    const rowSteamId = String(row.steam_id ?? input.steamId ?? "");
+    if (!rowSteamId) continue;
+    const playerRows = rowsBySteamId.get(rowSteamId) ?? [];
+    playerRows.push(row);
+    rowsBySteamId.set(rowSteamId, playerRows);
+  }
+  const revokedItemIds: string[] = [];
+  for (const [steamId, playerRows] of rowsBySteamId) {
+    revokedItemIds.push(
+      ...(await revokeIdentityRewardAwards(connection, {
+        steamId,
+        rows: playerRows,
+        actorSteamId: input.actorSteamId,
+        reason: input.reason,
+      })),
+    );
+  }
+  return revokedItemIds;
+}
+
+async function reconcileAccountBoundRewardEntitlements(
+  connection: PoolConnection,
+  input: {
+    steamId: string;
+    effectiveGroupIds: Set<number>;
+    authoritativeSources: Set<IdentityGroupSource>;
+    actorSteamId: string | null;
+  },
+) {
+  const rows = await loadActiveAccountBoundRewardAwards(connection, {
+    steamId: input.steamId,
+  });
+  const inactiveRows = rows.filter((row) => {
+    const sourceType = (row as IdentityRewardAwardRow & {
+      source_type: IdentityGroupSource;
+    }).source_type;
+    return (
+      !asBoolean(row.group_enabled) ||
+      (input.authoritativeSources.has(sourceType) &&
+        !input.effectiveGroupIds.has(Number(row.group_id)))
+    );
+  });
+  return revokeIdentityRewardAwards(connection, {
+    steamId: input.steamId,
+    rows: inactiveRows,
+    actorSteamId: input.actorSteamId,
+    reason: "group-membership-inactive",
+  });
+}
+
 async function awardRewardsForGroup(
   connection: PoolConnection,
   input: {
@@ -1486,18 +2062,21 @@ async function awardRewardsForGroup(
       "WHERE rewards.group_id = ? AND rewards.enabled = TRUE AND catalogue.enabled = TRUE ORDER BY rewards.id FOR UPDATE",
     [input.groupId],
   );
-  const awardedItemIds: string[] = [];
+  const result: IdentityRewardMutationResult = {
+    awardedItemIds: [],
+    restoredItemIds: [],
+  };
   for (const reward of rewardRows) {
     const rewardId = Number(reward.id);
     const quantity = Number(reward.quantity);
-    const [awardRows] = await connection.query<
-      Array<RowDataPacket & { ordinal: number | string }>
-    >(
-      "SELECT ordinal FROM portal_identity_group_reward_awards WHERE reward_id = ? AND steam_id = ? ORDER BY ordinal FOR UPDATE",
+    const [awardRows] = await connection.query<IdentityRewardAwardRow[]>(
+      "SELECT awards.reward_id, rewards.group_id, awards.steam_id, awards.ordinal, awards.item_id, awards.entitlement_active, awards.item_revoked_by_entitlement, items.state AS item_state, items.item_type, items.tradable, TRUE AS group_enabled " +
+        "FROM portal_identity_group_reward_awards AS awards INNER JOIN portal_identity_group_rewards AS rewards ON rewards.id = awards.reward_id INNER JOIN portal_inventory_items AS items ON items.id = awards.item_id AND items.owner_steam_id = awards.steam_id " +
+        "WHERE awards.reward_id = ? AND awards.steam_id = ? ORDER BY awards.ordinal FOR UPDATE",
       [rewardId, input.steamId],
     );
-    const awardedOrdinals = new Set(
-      awardRows.map((row) => Number(row.ordinal)),
+    const awardsByOrdinal = new Map(
+      awardRows.map((row) => [Number(row.ordinal), row] as const),
     );
     const metadata = asRecord(reward.metadata);
     const defaultSeed = recordNumber(metadata, ["seed", "defaultSeed"]);
@@ -1524,7 +2103,48 @@ async function awardRewardsForGroup(
     );
     const tradePolicy = rewardTradePolicy(reward.trade_policy);
     for (let ordinal = 1; ordinal <= quantity; ordinal += 1) {
-      if (awardedOrdinals.has(ordinal)) continue;
+      const existingAward = awardsByOrdinal.get(ordinal);
+      if (existingAward) {
+        if (!asBoolean(existingAward.entitlement_active)) {
+          const restoreItem =
+            tradePolicy === "account_bound" &&
+            asBoolean(existingAward.item_revoked_by_entitlement) &&
+            existingAward.item_state === "revoked" &&
+            !asBoolean(existingAward.tradable);
+          if (restoreItem) {
+            await connection.execute(
+              "UPDATE portal_inventory_items SET state = 'available' WHERE id = ? AND owner_steam_id = ? AND state = 'revoked' AND tradable = FALSE",
+              [existingAward.item_id, input.steamId],
+            );
+            await writeIdentityRewardItemEvent(connection, {
+              itemId: String(existingAward.item_id),
+              actorSteamId: input.actorSteamId,
+              eventType: "identity.group_reward.restored",
+              beforeState: {
+                ownerSteamId: input.steamId,
+                state: "revoked",
+                tradable: false,
+              },
+              afterState: {
+                ownerSteamId: input.steamId,
+                state: "available",
+                tradable: false,
+              },
+              metadata: {
+                groupId: input.groupId,
+                rewardId,
+                ordinal,
+              },
+            });
+            result.restoredItemIds.push(String(existingAward.item_id));
+          }
+          await connection.execute(
+            "UPDATE portal_identity_group_reward_awards SET entitlement_active = TRUE, entitlement_revoked_at = NULL, entitlement_revoked_by_steam_id = NULL, item_revoked_by_entitlement = FALSE WHERE reward_id = ? AND steam_id = ? AND ordinal = ? AND entitlement_active = FALSE",
+            [rewardId, input.steamId, ordinal],
+          );
+        }
+        continue;
+      }
       const itemId = randomUUID().toLowerCase();
       const awardKey = `identity-reward:${rewardId}:${input.steamId}:${ordinal}`;
       const source = {
@@ -1580,10 +2200,15 @@ async function awardRewardsForGroup(
         "INSERT INTO portal_identity_group_reward_awards (reward_id, steam_id, ordinal, item_id, awarded_by_steam_id) VALUES (?, ?, ?, ?, ?)",
         [rewardId, input.steamId, ordinal, itemId, input.actorSteamId],
       );
-      awardedItemIds.push(itemId);
+      result.awardedItemIds.push(itemId);
     }
   }
-  return awardedItemIds;
+  await enqueueIdentityRewardRefresh(connection, {
+    steamId: input.steamId,
+    reason: "group-reward-restored",
+    itemIds: result.restoredItemIds,
+  });
+  return result;
 }
 
 export async function addIdentityGroupReward(input: {
@@ -1656,14 +2281,15 @@ export async function addIdentityGroupReward(input: {
       ...trustedExternalMemberSteamIds,
     ]);
     const awardedItemIds: string[] = [];
+    const restoredItemIds: string[] = [];
     for (const steamId of memberSteamIds) {
-      awardedItemIds.push(
-        ...(await awardRewardsForGroup(connection, {
-          groupId,
-          steamId,
-          actorSteamId,
-        })),
-      );
+      const rewardResult = await awardRewardsForGroup(connection, {
+        groupId,
+        steamId,
+        actorSteamId,
+      });
+      awardedItemIds.push(...rewardResult.awardedItemIds);
+      restoredItemIds.push(...rewardResult.restoredItemIds);
     }
     await writeIdentityAudit(connection, {
       requestKey: `${requestKey}:reward-add`,
@@ -1678,9 +2304,10 @@ export async function addIdentityGroupReward(input: {
         tradePolicy,
         externalMemberCount: trustedExternalMemberSteamIds.length,
         awardedItemCount: awardedItemIds.length,
+        restoredItemCount: restoredItemIds.length,
       },
     });
-    return { rewardId, awardedItemIds };
+    return { rewardId, awardedItemIds, restoredItemIds };
   });
 }
 
@@ -1740,16 +2367,37 @@ export async function reconcileIdentityGroupRewards(input: {
       lock: true,
     });
     const awardedItemIds: string[] = [];
+    const restoredItemIds: string[] = [];
     for (const group of groupRows) {
-      awardedItemIds.push(
-        ...(await awardRewardsForGroup(connection, {
-          groupId: Number(group.id),
-          steamId,
-          actorSteamId: null,
-        })),
-      );
+      const rewardResult = await awardRewardsForGroup(connection, {
+        groupId: Number(group.id),
+        steamId,
+        actorSteamId: null,
+      });
+      awardedItemIds.push(...rewardResult.awardedItemIds);
+      restoredItemIds.push(...rewardResult.restoredItemIds);
     }
-    if (awardedItemIds.length) {
+    const effectiveGroupIds = new Set(
+      groupRows.map((group) => Number(group.id)),
+    );
+    const authoritativeSources = new Set<IdentityGroupSource>(["custom"]);
+    if (input.adminGroupNames !== undefined)
+      authoritativeSources.add("admins_core");
+    if (input.vipGroupNames !== undefined) authoritativeSources.add("vipcore");
+    const revokedItemIds = await reconcileAccountBoundRewardEntitlements(
+      connection,
+      {
+        steamId,
+        effectiveGroupIds,
+        authoritativeSources,
+        actorSteamId: null,
+      },
+    );
+    if (
+      awardedItemIds.length ||
+      restoredItemIds.length ||
+      revokedItemIds.length
+    ) {
       await writeIdentityAudit(connection, {
         requestKey: `${requestKey}:reward-reconcile`,
         actorSteamId: null,
@@ -1759,9 +2407,11 @@ export async function reconcileIdentityGroupRewards(input: {
         metadata: {
           groupIds: groupRows.map((group) => Number(group.id)),
           awardedItemIds,
+          restoredItemIds,
+          revokedItemIds,
         },
       });
     }
-    return { steamId, awardedItemIds };
+    return { steamId, awardedItemIds, restoredItemIds, revokedItemIds };
   });
 }

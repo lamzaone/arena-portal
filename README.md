@@ -7,10 +7,12 @@ The player portal for the ARENA CS2 server: Steam sign-in, player dashboard, mod
 1. Copy `.env.example` to `.env.local` and set `SITE_URL` to `http://localhost:3000` for local testing.
 2. Set a long random `SESSION_SECRET` for CSRF protection on sensitive staff actions.
 3. Run `npm install`, then `npm run dev`.
-4. For tickets, appeals, login sessions, player settings, the Token Economy, and portal identity groups, create a separate `utf8mb4` database and run the SQL files in `db/` in numerical order through `013_inventory_profile_theme_equip.sql`. Do not run these migrations in the game database. Migration 012 also pins its identity tables and decorated chat-tag text to `utf8mb4` so symbols remain lossless on servers whose global default differs.
+4. For tickets, appeals, login sessions, player settings, the Token Economy, and portal identity groups, create a separate `utf8mb4` database and run the SQL files in `db/` in numerical order through `015_group_reward_entitlements.sql`. Do not run these migrations in the game database. Migration 012 also pins its identity tables and decorated chat-tag text to `utf8mb4` so symbols remain lossless on servers whose global default differs. Migration 014 stores Admins.Core/VIPCore definitions and permission-discovery provenance; when either external catalogue is empty, the Founder groups page imports its available Swiftly JSON/JSONC config automatically. Migration 015 makes account-bound group rewards follow the granting membership without restoring independently revoked items.
 5. Add a read-only `GAME_DATABASE_URL` to display real data from K4 LevelRanks, VIPCore, and Admins.
 6. Install TAPPED.Inventory with its Swiftly database connection named `portal`, then run `!inventory_sync_catalogue` once after the migration. This imports the retained WeaponSkins catalogue and creates the initial container/drop tables without modifying the legacy cache.
 7. Install GlobalChatTags with its Swiftly database connection named `portal`. Migration 012 supplies the shared Admins.Core, VIPCore, custom-group, tag, badge, privilege, preference, and reward records; deploy `Dapper.dll` beside the plugin DLL.
+
+External identity bootstrap resolves the installed Swiftly tree automatically when the portal is beside `addons/`. For split deployments, set `ARENA_SWIFTLY_CONFIG_ROOT` to the Swiftly `configs` directory, or set `ADMINS_GROUPS_CONFIG_PATH` and `VIP_GROUPS_CONFIG_PATH` to the exact group files. `IDENTITY_PERMISSION_SOURCE_PATHS` accepts a platform-delimited list of optional C# source roots for deployment-time permission discovery; registered command and Admins.Core permissions are also refreshed by GlobalChatTags at runtime.
 
 For local testing with `http://localhost`, the session cookie is deliberately non-secure. Any public deployment must use an `https://` `SITE_URL`; its session cookie is always marked `Secure`.
 
@@ -28,7 +30,7 @@ See [the website plan](docs/website-plan.md) and [the Discord bot plan](docs/dis
 
 ## Token Economy rollout
 
-1. Back up the portal database and run migrations 001 through 013 against it in order; keep the game database read-only. Migration 011 introduces Special/custom item taxonomy and transferability, 012 introduces identity groups, and 013 binds equipped profile themes to concrete owned inventory instances.
+1. Back up the portal database and run migrations 001 through 015 against it in order; keep the game database read-only. Migration 011 introduces Special/custom item taxonomy and transferability, 012 introduces identity groups, 013 binds equipped profile themes to concrete owned inventory instances, 014 persists external Admin/VIP definitions plus discovered permission sources, and 015 makes account-bound reward items follow group membership.
 2. Deploy the TAPPED.Inventory and GlobalChatTags builds (including `Dapper.dll`) and config, then restart/reload the server only after step 1 is complete.
 3. From the server console or an authorised Director/Founder account, run `!inventory_sync_catalogue`. It imports the old cosmetic catalogue and bootstraps the initial crate/capsule/drop tables.
 4. Confirm a player can run `!tokens`, earn a kill/headshot in a normal 4+ human-player match, and browse Inventory, Crates, Market, and Trades in the portal.

@@ -18,12 +18,13 @@ import {
 import { PortalToast } from "@/components/success-toast";
 import { SearchNavigationForm, SearchSubmitButton } from "@/components/ui/search-field";
 import { getStaffAdmins, getStaffAppeals, getStaffModeration, getStaffTickets, getStaffVips, type CaseMessage, type StaffAdmin, type StaffAppeal, type StaffSanction } from "@/lib/data/portal-repository";
+import { getIdentityVipGroupDefinitions } from "@/lib/data/identity-groups";
 import { getSteamProfiles, type SteamProfile } from "@/lib/steam/profiles";
 
 type StaffTab = StaffModerationSection;
 type AdminPageProps = { searchParams: Promise<{ tab?: string; page?: string; q?: string; notice?: string; error?: string }> };
 
-const vipGroups = ["ULTIMATE", "DIAMOND", "GOLD", "SILVER", "STANDARD"];
+const fallbackVipGroups = ["ULTIMATE", "DIAMOND", "GOLD", "SILVER", "STANDARD"];
 
 function getPageNumber(value: string | undefined) {
   const parsed = Number.parseInt(value ?? "1", 10);
@@ -139,13 +140,17 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const tab = requestedTab === "appeals" && !access.canUnban ? "bans" : requestedTab;
   const page = getPageNumber(params.page);
   const query = (params.q ?? "").trim().slice(0, 64);
-  const [moderation, admins, vips, appealPage, ticketPage] = await Promise.all([
+  const [moderation, admins, vips, appealPage, ticketPage, vipGroupDefinitions] = await Promise.all([
     tab === "bans" ? getStaffModeration(page, query) : Promise.resolve(null),
     tab === "admins" ? getStaffAdmins() : Promise.resolve([]),
     tab === "vips" ? getStaffVips() : Promise.resolve([]),
     tab === "appeals" && access.canUnban ? getStaffAppeals(page) : Promise.resolve(null),
-    tab === "tickets" ? getStaffTickets(page) : Promise.resolve(null)
+    tab === "tickets" ? getStaffTickets(page) : Promise.resolve(null),
+    tab === "vips" ? getIdentityVipGroupDefinitions() : Promise.resolve([]),
   ]);
+  const vipGroups = vipGroupDefinitions.length
+    ? vipGroupDefinitions.map((group) => group.name)
+    : fallbackVipGroups;
   const profileIds = [
     ...(moderation?.bans.flatMap((ban) => [ban.steamId, ban.adminSteamId]) ?? []),
     ...(moderation?.sanctions.flatMap((sanction) => [sanction.steamId, sanction.adminSteamId ?? ""]) ?? []),
@@ -157,7 +162,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const actionsReady = adminWriteConfigured();
   const notice = noticeText(params.notice);
   const error = errorText(params.error);
-  const groupDefinitions = getStaffGroupDefinitions();
+  const groupDefinitions = await getStaffGroupDefinitions();
   const totalPages = moderation ? Math.max(1, Math.ceil(Math.max(moderation.banTotal, moderation.sanctionTotal) / moderation.pageSize)) : 1;
   const casePage = appealPage ?? ticketPage;
   const caseTotalPages = casePage ? Math.max(1, Math.ceil(casePage.total / casePage.pageSize)) : 1;

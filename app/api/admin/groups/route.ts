@@ -21,6 +21,7 @@ import {
   retireIdentityGroupReward,
   revokeIdentityPlayerPrivilege,
   revokeIdentityPlayerTag,
+  syncExternalIdentityCatalogue,
   updateIdentityChatTag,
   updateIdentityGroup,
   updateIdentityPrivilege,
@@ -76,6 +77,10 @@ export async function POST(request: Request) {
 
   try {
     switch (action) {
+      case "external-catalogue-sync":
+        await syncExternalIdentityCatalogue({ actor, requestKey });
+        return redirect(request, "notice", "catalogue-synced");
+
       case "group-create":
         await createIdentityGroup({
           actor,

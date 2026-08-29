@@ -5,9 +5,11 @@ import type { CSSProperties } from "react";
 import {
   BadgeCheck,
   Crown,
+  Database,
   Gift,
   KeyRound,
   LockKeyhole,
+  RefreshCw,
   ShieldCheck,
   Star,
   Tags,
@@ -27,7 +29,15 @@ import {
   identityGroupStorageConfigured,
   type IdentityAdminSnapshot,
   type IdentityGroup,
+  type IdentityPrivilege,
 } from "@/lib/data/identity-groups";
+
+import {
+  PermissionPicker,
+  SearchableCatalogue,
+  type PermissionCatalogueOption,
+} from "./groups-controls";
+import styles from "./groups-page.module.css";
 
 type GroupsPageProps = {
   searchParams: Promise<{ notice?: string; error?: string }>;
@@ -71,6 +81,7 @@ const noticeMessages: Record<string, string> = {
   "player-privilege-revoked": "Direct player privilege revoked.",
   "reward-added": "Group reward added and delivered to current custom members.",
   "reward-retired": "Group reward retired. Previously awarded items were retained.",
+  "catalogue-synced": "External group definitions and discovered permissions were synchronized.",
 };
 
 const errorMessages: Record<string, string> = {
@@ -87,7 +98,8 @@ const errorMessages: Record<string, string> = {
   reserved_privilege: "Founder and unrestricted wildcard authority are reserved.",
   request_replayed: "That action was already submitted. Refresh before trying again.",
   storage_unavailable: "The portal identity database is not configured.",
-  database: "The identity action could not be saved. Apply migration 012 and check the portal database.",
+  catalogue_sync_failed: "The external group catalogue could not be imported. Check migration 014 and the configured JSON/JSONC paths.",
+  database: "The identity action could not be saved. Apply migrations through 014 and check the portal database.",
 };
 
 function MutationFields({
@@ -109,9 +121,44 @@ function MutationFields({
 function GroupOption({ group }: { group: IdentityGroup }) {
   return (
     <option value={group.id}>
-      {group.displayName} · {group.sourceType === "custom" ? "Custom" : group.sourceType}
+      {group.displayName} · {sourceLabel(group)}
     </option>
   );
+}
+
+function sourceLabel(group: IdentityGroup) {
+  if (group.sourceType === "admins_core") return "Admins.Core";
+  if (group.sourceType === "vipcore") return "VIPCore";
+  return "Portal custom";
+}
+
+function formatSyncedAt(value: string | null | undefined) {
+  if (!value) return "Not synchronized yet";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Sync time unavailable";
+  return new Intl.DateTimeFormat("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Europe/Bucharest",
+  }).format(date);
+}
+
+function privilegeOptions(privileges: IdentityPrivilege[]): PermissionCatalogueOption[] {
+  return privileges.filter((privilege) => privilege.enabled).map((privilege) => ({
+    id: privilege.id,
+    key: privilege.key,
+    displayName: privilege.displayName,
+    description: privilege.description,
+    scope: privilege.scope,
+    sensitive: privilege.sensitive,
+  }));
+}
+
+function privilegeSourceSummary(privilege: IdentityPrivilege) {
+  if (!privilege.sources.length) return "Portal-defined";
+  return privilege.sources.map((source) => source.sourceReference
+    ? `${source.sourceKind} · ${source.sourceReference}`
+    : source.sourceKind).join(" · ");
 }
 
 function GroupCard({
@@ -130,28 +177,76 @@ function GroupCard({
       : group.badgeIconKey === "badge"
         ? BadgeCheck
         : ShieldCheck;
+  const availablePermissions = privilegeOptions(snapshot.privileges);
+  const externalDefinition = group.externalDefinition;
+  const sourceDescription = group.sourceType === "custom"
+    ? `${group.memberCount} portal member${group.memberCount === 1 ? "" : "s"}`
+    : `External key · ${group.externalKey ?? "Unlinked"}`;
   return (
-    <article className="staff-group-card">
+    <article className="staff-group-card" data-enabled={group.enabled ? "true" : "false"}>
       <div>
-        <h3>
-          <span
-            className="role-badge role-badge-admin"
-            style={{
-              "--role-color": group.badgeColor,
-              "--role-soft": group.badgeSoftColor,
-            } as CSSProperties}
-          >
-            <BadgeIcon aria-hidden="true" /> {group.badgeLabel}
-          </span>{" "}
-          {group.displayName}
-        </h3>
-        <span>
-          {group.sourceType === "custom" ? "Custom" : group.sourceType} · {group.memberCount} portal member
-          {group.memberCount === 1 ? "" : "s"}
-        </span>
+        <div className={styles.cardTitle}>
+          <h3>
+            <span
+              className="role-badge role-badge-admin"
+              style={{
+                "--role-color": group.badgeColor,
+                "--role-soft": group.badgeSoftColor,
+              } as CSSProperties}
+            >
+              <BadgeIcon aria-hidden="true" /> {group.badgeLabel}
+            </span>{" "}
+            {group.displayName}
+          </h3>
+          <span className={styles.sourceBadge} data-source={group.sourceType}>{sourceLabel(group)}</span>
+          <span className={styles.statusBadge} data-enabled={group.enabled ? "true" : "false"}>
+            {group.enabled ? "Enabled" : "Disabled"}
+          </span>
+          <code className={styles.groupKey}>{group.key}</code>
+        </div>
+        <span>{sourceDescription}</span>
       </div>
 
-      <form className="staff-management-form" action="/api/admin/groups" method="post">
+      {externalDefinition ? (
+        <section className={styles.externalDefinition} aria-labelledby={`group-${group.id}-source-title`}>
+          <div className={styles.externalDefinitionHeading}>
+            <div>
+              <span className={styles.controlLabel}>Read-only source definition</span>
+              <strong id={`group-${group.id}-source-title`}>{sourceLabel(group)} baseline</strong>
+            </div>
+            <span>Synced {formatSyncedAt(externalDefinition.syncedAt)}</span>
+          </div>
+          <dl className={styles.definitionFacts}>
+            <div><dt>Rank weight</dt><dd>{externalDefinition.rankWeight}</dd></div>
+            <div><dt>Source</dt><dd>{externalDefinition.sourceKind}</dd></div>
+            <div><dt>Reference</dt><dd>{externalDefinition.sourceReference ?? "Portal discovery"}</dd></div>
+          </dl>
+          <div className={styles.definitionLists}>
+            <div>
+              <strong>Baseline permissions</strong>
+              {externalDefinition.baselinePermissions.length ? (
+                <ul aria-label={`${group.displayName} baseline permissions`}>
+                  {externalDefinition.baselinePermissions.map((permission, index) => <li key={`${permission}:${index}`}><code>{permission}</code></li>)}
+                </ul>
+              ) : <p>No source permission reported.</p>}
+            </div>
+            <div>
+              <strong>Capabilities</strong>
+              {externalDefinition.capabilityKeys.length ? (
+                <ul aria-label={`${group.displayName} capabilities`}>
+                  {externalDefinition.capabilityKeys.map((capability, index) => <li key={`${capability}:${index}`}><code>{capability}</code></li>)}
+                </ul>
+              ) : <p>No source capability reported.</p>}
+            </div>
+          </div>
+        </section>
+      ) : group.sourceType !== "custom" ? (
+        <p className={styles.externalMembershipNote}>
+          This adapter has not received a source definition yet. Synchronize the external catalogue to discover its baseline access.
+        </p>
+      ) : null}
+
+      <form className="staff-management-form" action="/api/admin/groups" method="post" aria-label={`Edit ${group.displayName} definition`}>
         <MutationFields csrf={csrf} />
         <input type="hidden" name="groupId" value={group.id} />
         <label>
@@ -204,8 +299,8 @@ function GroupCard({
         ) : null}
       </form>
 
-      <details>
-        <summary>Tags, privileges, rewards, and members</summary>
+      <details className={styles.groupDetails}>
+        <summary>Tags, additional privileges, rewards{group.sourceType === "custom" ? ", and members" : ""}</summary>
         <div className="staff-group-list">
           <form className="staff-management-form" action="/api/admin/groups" method="post">
             <MutationFields csrf={csrf} />
@@ -226,20 +321,31 @@ function GroupCard({
           </form>
           <p>{group.tags.length ? group.tags.map((tag) => tag.text).join(" · ") : "No group tag. Chat remains untagged."}</p>
 
-          <form className="staff-management-form" action="/api/admin/groups" method="post">
-            <MutationFields csrf={csrf} />
+          <form className={`staff-management-form ${styles.relationshipForm}`} action="/api/admin/groups" method="post">
+            <MutationFields csrf={csrf} action="group-privilege-attach" />
             <input type="hidden" name="groupId" value={group.id} />
-            <label>
-              Privilege
-              <select name="privilegeId" required defaultValue="">
-                <option value="" disabled>Choose a privilege</option>
-                {snapshot.privileges.filter((privilege) => privilege.enabled).map((privilege) => <option key={privilege.id} value={privilege.id}>{privilege.displayName} · {privilege.scope}</option>)}
-              </select>
-            </label>
-            <button className="staff-unban-button" name="action" value="group-privilege-attach" type="submit">Grant privilege</button>
-            <button className="staff-danger-button" name="action" value="group-privilege-detach" type="submit">Remove privilege</button>
+            <PermissionPicker
+              id={`group-${group.id}-permission-search`}
+              label="Additional privilege"
+              permissions={availablePermissions}
+              required
+            />
+            <button className="staff-unban-button" type="submit" disabled={!availablePermissions.length}>Grant privilege</button>
           </form>
-          <p>{group.privileges.length ? group.privileges.map((privilege) => privilege.key).join(" · ") : "No additional portal-managed privileges."}</p>
+          {group.privileges.length ? (
+            <div className={styles.relationshipList} aria-label={`${group.displayName} additional privileges`}>
+              {group.privileges.map((privilege) => (
+                <form className={styles.relationshipRow} action="/api/admin/groups" method="post" key={privilege.id}>
+                  <MutationFields csrf={csrf} action="group-privilege-detach" />
+                  <input type="hidden" name="groupId" value={group.id} />
+                  <input type="hidden" name="privilegeId" value={privilege.id} />
+                  <span><strong>{privilege.displayName}</strong><code>{privilege.key}</code></span>
+                  <span className={styles.scopeBadge} data-scope={privilege.scope}>{privilege.scope}</span>
+                  <button className="staff-danger-button" type="submit">Remove</button>
+                </form>
+              ))}
+            </div>
+          ) : <p className={styles.externalMembershipNote}>No additional portal-managed privileges.</p>}
 
           <form className="staff-management-form" action="/api/admin/groups" method="post">
             <MutationFields csrf={csrf} action="reward-add" />
@@ -273,16 +379,20 @@ function GroupCard({
             </form>
           ))}
 
-          {group.memberships.map((membership) => (
-            <form className="staff-admin-edit" action="/api/admin/groups" method="post" key={membership.steamId}>
-              <MutationFields csrf={csrf} action="membership-remove" />
-              <input type="hidden" name="groupId" value={group.id} />
-              <input type="hidden" name="steamId" value={membership.steamId} />
-              <Link href={`/players/${membership.steamId}`}>{membership.steamId}</Link>
-              <span>{membership.expiresAt ? `Until ${new Date(membership.expiresAt).toLocaleDateString()}` : "Permanent"}</span>
-              <button className="staff-danger-button" type="submit">Remove</button>
-            </form>
-          ))}
+          {group.sourceType === "custom" ? group.memberships.map((membership) => (
+              <form className="staff-admin-edit" action="/api/admin/groups" method="post" key={membership.steamId}>
+                <MutationFields csrf={csrf} action="membership-remove" />
+                <input type="hidden" name="groupId" value={group.id} />
+                <input type="hidden" name="steamId" value={membership.steamId} />
+                <Link href={`/players/${membership.steamId}`}>{membership.steamId}</Link>
+                <span>{membership.expiresAt ? `Until ${new Date(membership.expiresAt).toLocaleDateString()}` : "Permanent"}</span>
+                <button className="staff-danger-button" type="submit">Remove</button>
+              </form>
+            )) : (
+              <p className={styles.externalMembershipNote}>
+                Membership is owned by {sourceLabel(group)} under <code>{group.externalKey}</code>. Manage players from the existing Admins or VIPs staff tab.
+              </p>
+            )}
         </div>
       </details>
     </article>
@@ -318,6 +428,12 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
     privileges: [],
     directTagGrants: [],
     directPrivilegeGrants: [],
+    catalogueStatus: {
+      adminsCoreDefinitions: 0,
+      vipCoreDefinitions: 0,
+      discoveredPrivileges: 0,
+      lastSyncedAt: null,
+    },
   };
   let storageError = !identityGroupStorageConfigured();
   if (!storageError) {
@@ -328,7 +444,10 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
     }
   }
   const csrf = createAdminActionToken(session);
-  const customGroups = snapshot.groups.filter((group) => group.sourceType === "custom" && group.enabled);
+  const externalGroups = snapshot.groups.filter((group) => group.sourceType !== "custom");
+  const customGroupDefinitions = snapshot.groups.filter((group) => group.sourceType === "custom");
+  const customGroups = customGroupDefinitions.filter((group) => group.enabled);
+  const availablePermissions = privilegeOptions(snapshot.privileges);
   const notice = params.notice ? noticeMessages[params.notice] : null;
   const error = params.error ? errorMessages[params.error] ?? "The identity action could not be completed." : null;
 
@@ -351,7 +470,36 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
         <StaffSubmenu access={access} active="groups" />
         {notice ? <PortalToast message={notice} /> : null}
         {error ? <PortalToast variant="danger" message={error} /> : null}
-        {storageError ? <PortalToast variant="danger" message="Identity storage is unavailable. Apply db/012_identity_groups.sql to the portal database." /> : null}
+        {storageError ? <PortalToast variant="danger" message="Identity storage is unavailable. Apply portal migrations through db/014_external_identity_catalogue.sql." /> : null}
+
+        <section className="staff-record-section" aria-labelledby="external-group-definitions-title">
+          <div className="staff-section-heading">
+            <div>
+              <p className="tapped-kicker"><Database aria-hidden="true" /> Connected identities</p>
+              <h2 id="external-group-definitions-title">Admins.Core &amp; VIPCore</h2>
+            </div>
+            <form className={styles.syncForm} action="/api/admin/groups" method="post">
+              <MutationFields csrf={csrf} action="external-catalogue-sync" />
+              <span>Last sync · {formatSyncedAt(snapshot.catalogueStatus.lastSyncedAt)}</span>
+              <button className="staff-unban-button" type="submit" disabled={storageError}>
+                <RefreshCw aria-hidden="true" /> Synchronize catalogue
+              </button>
+            </form>
+          </div>
+          <p className={styles.sectionIntro}>
+            These database-backed adapters define how externally owned groups appear and what they receive in ARENA. Source rank, permissions, capabilities, and membership remain read-only; tags, badges, rewards, and additional grants are portal-managed.
+          </p>
+          <div className={styles.catalogueStatus} aria-label="External identity catalogue status">
+            <div><span>Admins.Core groups</span><strong>{snapshot.catalogueStatus.adminsCoreDefinitions}</strong></div>
+            <div><span>VIPCore groups</span><strong>{snapshot.catalogueStatus.vipCoreDefinitions}</strong></div>
+            <div><span>Discovered permissions</span><strong>{snapshot.catalogueStatus.discoveredPrivileges}</strong></div>
+          </div>
+          {externalGroups.length ? externalGroups.map((group) => (
+            <GroupCard key={group.id} group={group} snapshot={snapshot} csrf={csrf} />
+          )) : (
+            <p className="empty-copy">No external definitions are available. Synchronize the catalogue after applying the identity migrations.</p>
+          )}
+        </section>
 
         <section className="staff-record-section">
           <div className="staff-section-heading"><div><p className="tapped-kicker"><ShieldCheck aria-hidden="true" /> Custom identity</p><h2>Create a group</h2></div><span>{customGroups.length} custom groups</span></div>
@@ -399,19 +547,57 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
         </section>
 
         <section className="staff-record-section">
-          <div className="staff-section-heading"><div><p className="tapped-kicker"><KeyRound aria-hidden="true" /> Authorization</p><h2>Privilege definitions</h2></div><span>{snapshot.privileges.length} privileges</span></div>
+          <div className="staff-section-heading"><div><p className="tapped-kicker"><KeyRound aria-hidden="true" /> Authorization</p><h2>Permission catalogue</h2></div><span>{snapshot.privileges.length} definitions</span></div>
+          <p className={styles.sectionIntro}>
+            Synchronized game permissions and portal-defined privileges share one searchable catalogue. Discovery provenance is read-only; display details, sensitivity, status, and additive group or player grants remain Founder-managed.
+          </p>
           <form className="staff-management-form" action="/api/admin/groups" method="post">
             <MutationFields csrf={csrf} action="privilege-create" />
-            <label>Privilege key<input name="privilegeKey" maxLength={96} required placeholder="portal.showcase.manage" /></label>
+            <label>Privilege key<input name="privilegeKey" pattern="[a-z0-9][a-z0-9.*:_-]{0,95}" maxLength={96} required placeholder="portal.showcase.manage" title="Lowercase letters, numbers, dots, colons, underscores, dashes, or wildcards" /></label>
             <label>Display name<input name="displayName" maxLength={100} required placeholder="Manage showcases" /></label>
             <label>Description<input name="description" maxLength={255} placeholder="What this privilege allows" /></label>
             <label>Scope<select name="scope" defaultValue="portal"><option value="portal">Portal</option><option value="game">Game server</option></select></label>
             <label>Sensitivity<select name="sensitive" defaultValue="false"><option value="false">Standard</option><option value="true">Sensitive</option></select></label>
             <button className="button button-primary" type="submit">Create privilege</button>
           </form>
-          <div className="staff-group-list">
-            {snapshot.privileges.map((privilege) => <form className="staff-admin-edit" action="/api/admin/groups" method="post" key={privilege.id}><MutationFields csrf={csrf} action="privilege-update" /><input type="hidden" name="privilegeId" value={privilege.id} /><strong>{privilege.key}</strong><input name="displayName" defaultValue={privilege.displayName} maxLength={100} required aria-label={`Name for ${privilege.key}`} /><input name="description" defaultValue={privilege.description ?? ""} maxLength={255} aria-label={`Description for ${privilege.key}`} /><select name="sensitive" defaultValue={privilege.sensitive ? "true" : "false"} aria-label={`Sensitivity for ${privilege.key}`}><option value="false">Standard</option><option value="true">Sensitive</option></select><select name="enabled" defaultValue={privilege.enabled ? "true" : "false"} aria-label={`Status for ${privilege.key}`}><option value="true">Enabled</option><option value="false">Disabled</option></select><button className="staff-unban-button" type="submit">Save</button></form>)}
-          </div>
+          <SearchableCatalogue
+            id="permission-catalogue-search"
+            label="Search permission catalogue"
+            placeholder="Permission key, name, scope, source, or description"
+            emptyMessage="No permission definitions match that search."
+            entries={snapshot.privileges.map((privilege) => ({
+              id: String(privilege.id),
+              searchText: [
+                privilege.key,
+                privilege.displayName,
+                privilege.description ?? "",
+                privilege.scope,
+                privilege.sensitive ? "sensitive" : "standard",
+                privilege.enabled ? "enabled" : "disabled",
+                privilegeSourceSummary(privilege),
+              ].join(" "),
+              content: (
+                <form className={`staff-admin-edit ${styles.privilegeEditor}`} action="/api/admin/groups" method="post">
+                  <MutationFields csrf={csrf} action="privilege-update" />
+                  <input type="hidden" name="privilegeId" value={privilege.id} />
+                  <div className={styles.privilegeIdentity}>
+                    <strong>{privilege.displayName}</strong>
+                    <code>{privilege.key}</code>
+                    <div className={styles.privilegeMeta}>
+                      <span className={styles.scopeBadge} data-scope={privilege.scope}>{privilege.scope}</span>
+                      {privilege.sensitive ? <span className={styles.sensitiveBadge}>Sensitive</span> : null}
+                    </div>
+                    <small>{privilegeSourceSummary(privilege)}</small>
+                  </div>
+                  <input name="displayName" defaultValue={privilege.displayName} maxLength={100} required aria-label={`Display name for ${privilege.key}`} />
+                  <input name="description" defaultValue={privilege.description ?? ""} maxLength={255} aria-label={`Description for ${privilege.key}`} />
+                  <select name="sensitive" defaultValue={privilege.sensitive ? "true" : "false"} aria-label={`Sensitivity for ${privilege.key}`}><option value="false">Standard</option><option value="true">Sensitive</option></select>
+                  <select name="enabled" defaultValue={privilege.enabled ? "true" : "false"} aria-label={`Status for ${privilege.key}`}><option value="true">Enabled</option><option value="false">Disabled</option></select>
+                  <button className="staff-unban-button" type="submit" aria-label={`Save ${privilege.key}`}>Save</button>
+                </form>
+              ),
+            }))}
+          />
         </section>
 
         <section className="staff-record-section">
@@ -420,7 +606,11 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
             <MutationFields csrf={csrf} />
             <PlayerSearchField name="steamId" label="Player" mode="target" required includeSelf />
             <label>Chat tag<select name="tagId" defaultValue=""><option value="">No tag selected</option>{snapshot.tags.filter((tag) => tag.enabled).map((tag) => <option key={tag.id} value={tag.id}>{tag.text}</option>)}</select></label>
-            <label>Privilege<select name="privilegeId" defaultValue=""><option value="">No privilege selected</option>{snapshot.privileges.filter((privilege) => privilege.enabled).map((privilege) => <option key={privilege.id} value={privilege.id}>{privilege.displayName}</option>)}</select></label>
+            <PermissionPicker
+              id="direct-player-permission-search"
+              label="Player privilege"
+              permissions={availablePermissions}
+            />
             <label>Duration (minutes)<input name="durationMinutes" type="number" min="0" max="525600" defaultValue="0" required /></label>
             <label>Reason<input name="reason" maxLength={180} placeholder="Optional internal reason" /></label>
             <button className="staff-unban-button" name="action" value="player-tag-grant" type="submit">Grant tag</button>
@@ -458,8 +648,8 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
         </section>
 
         <section className="staff-record-section">
-          <div className="staff-section-heading"><div><p className="tapped-kicker"><ShieldCheck aria-hidden="true" /> Registry</p><h2>All identity groups</h2></div><span>{snapshot.groups.length} definitions</span></div>
-          {snapshot.groups.length ? snapshot.groups.map((group) => <GroupCard key={group.id} group={group} snapshot={snapshot} csrf={csrf} />) : <p className="empty-copy">No groups are available. Apply migration 012 to seed the external adapters.</p>}
+          <div className="staff-section-heading"><div><p className="tapped-kicker"><ShieldCheck aria-hidden="true" /> Registry</p><h2>Custom identity groups</h2></div><span>{customGroupDefinitions.length} definitions</span></div>
+          {customGroupDefinitions.length ? customGroupDefinitions.map((group) => <GroupCard key={group.id} group={group} snapshot={snapshot} csrf={csrf} />) : <p className="empty-copy">No custom groups have been created yet.</p>}
         </section>
       </div>
     </main>

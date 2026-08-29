@@ -2839,7 +2839,16 @@ export async function upsertStaffVip(input: {
         expires,
       ],
     );
+    const [activeRows] = await connection.query<
+      Array<RowDataPacket & { group_name: string }>
+    >(
+      "SELECT DISTINCT `group` AS group_name FROM vip_users WHERE account_id = ? AND sid = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) ORDER BY `group`",
+      [accountId, serverId],
+    );
     await connection.commit();
+    return {
+      vipGroupNames: activeRows.map((row) => String(row.group_name)),
+    };
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -2854,10 +2863,31 @@ export async function removeStaffVip(input: {
 }) {
   const pool = getGamePool();
   if (!pool) throw new Error("Game database is not configured.");
-  await pool.execute(
-    "DELETE FROM vip_users WHERE account_id = ? AND sid = ? AND `group` = ?",
-    [toAccountId(input.steamId), getVipServerId(), input.group],
-  );
+  const accountId = toAccountId(input.steamId);
+  const serverId = getVipServerId();
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.execute(
+      "DELETE FROM vip_users WHERE account_id = ? AND sid = ? AND `group` = ?",
+      [accountId, serverId, input.group],
+    );
+    const [activeRows] = await connection.query<
+      Array<RowDataPacket & { group_name: string }>
+    >(
+      "SELECT DISTINCT `group` AS group_name FROM vip_users WHERE account_id = ? AND sid = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) ORDER BY `group`",
+      [accountId, serverId],
+    );
+    await connection.commit();
+    return {
+      vipGroupNames: activeRows.map((row) => String(row.group_name)),
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -12046,6 +12076,13 @@ export async function staffSetEconomyItemState(
       await context.connection.execute(
         "UPDATE portal_inventory_items SET state = ? WHERE id = ?",
         [input.state, itemId],
+      );
+      // An explicit staff decision owns the resulting state. If this item was
+      // previously revoked by a group entitlement, a later group re-grant must
+      // not silently override the staff action.
+      await context.connection.execute(
+        "UPDATE portal_identity_group_reward_awards SET item_revoked_by_entitlement = FALSE WHERE item_id = ?",
+        [itemId],
       );
       if (input.state === "revoked")
         await clearEconomyLoadoutSlots(context.connection, targetSteamId, [

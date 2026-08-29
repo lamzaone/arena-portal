@@ -1,7 +1,10 @@
 import "server-only";
 
 import { getAdminAuthorization, getPlayerDashboard, portalStorageConfigured } from "@/lib/data/portal-repository";
-import { getEffectiveIdentity } from "@/lib/data/identity-groups";
+import {
+  getEffectiveIdentity,
+  getIdentityAdminAuthorizationDefinitions,
+} from "@/lib/data/identity-groups";
 import {
   configuredGameServerGuid,
   isAssignedToConfiguredGameServer,
@@ -20,7 +23,7 @@ const currentGroups: AdminGroupConfig[] = [
   { name: "Guardian", immunity: 20, permissions: ["admins.notify"] },
   { name: "Enforcer", immunity: 30, permissions: ["admins.notify", "admins.commands.ban"] },
   { name: "Overseer", immunity: 40, permissions: ["admins.notify", "admins.commands.ban", "admins.commands.unban"] },
-  { name: "Director", immunity: 50, permissions: ["admins.notify", "admins.commands.ban", "admins.commands.unban", "admins.commands.admin", "tapped.tokens.admin", "tapped.inventory.admin", "tapped.inventory.grant", "tapped.inventory.manage-loadout"] },
+  { name: "Director", immunity: 50, permissions: ["admins.notify", "admins.commands.ban", "admins.commands.unban", "admins.commands.admin"] },
   { name: "Founder", immunity: 100, permissions: ["*"] }
 ];
 
@@ -47,7 +50,8 @@ export type AdminAccess = {
 };
 
 async function getConfiguredGroups() {
-  return currentGroups;
+  const databaseGroups = await getIdentityAdminAuthorizationDefinitions();
+  return databaseGroups.length ? databaseGroups : currentGroups;
 }
 
 function permissionSet(group: AdminGroupConfig) {
@@ -81,10 +85,11 @@ export async function getAdminAccess(steamId: string): Promise<AdminAccess> {
     vipGroupNames: profile.vipGroups.map((group) => group.name),
     adminGroupNames: admin?.groups ?? [],
   });
-  // Game-scoped privileges are consumed by the Swiftly runtime. Only explicit
-  // portal-scoped grants may extend website authorization.
+  // Founder-managed identity grants are shared with the Swiftly runtime. A
+  // game permission such as admins.commands.ban therefore authorizes the same
+  // tightly-scoped portal action instead of drifting into a second matrix.
   for (const privilege of identity.privileges) {
-    if (privilege.scope === "portal") permissions.add(privilege.key);
+    permissions.add(privilege.key);
   }
 
   const isAssignedToServer = isAssignedToConfiguredGameServer(
@@ -120,8 +125,9 @@ export async function getAdminAccess(steamId: string): Promise<AdminAccess> {
   };
 }
 
-export function getStaffGroupDefinitions() {
-  return currentGroups.map((group) => ({
+export async function getStaffGroupDefinitions() {
+  const groups = await getConfiguredGroups();
+  return groups.map((group) => ({
     name: typeof group.name === "string" ? group.name : "",
     immunity: typeof group.immunity === "number" ? group.immunity : 0
   })).filter((group) => group.name);
