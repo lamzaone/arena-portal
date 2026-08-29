@@ -89,15 +89,15 @@ WHERE catalogue_key LIKE 'tappd:special:vip:%'
    OR item_type = 'vip_membership'
    OR JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.specialKind')) = 'vip_membership';
 
--- Trusted presentation definition. CSS and markup remain code-owned; this row
--- grants only the stable key used by the profile renderer.
+-- Trusted presentation definition. CSS, markup, and supported surfaces remain
+-- code-owned; this row grants only the stable key used by trusted renderers.
 INSERT INTO portal_profile_themes
   (theme_key, display_name, description, preview_image_url, enabled)
 VALUES
   (
     'beta_tester',
     'BETA TESTER',
-    'Cyberpunk blue-and-yellow profile with sharp cuts, animated accents, and custom hover effects.',
+    'Cyberpunk blue-and-yellow profile and ranking entry with sharp cuts, animated accents, and custom hover effects.',
     '/images/economy/profile-themes/beta-tester.svg',
     TRUE
   )
@@ -129,9 +129,10 @@ VALUES
       'source', 'ARENA Portal',
       'customProduct', TRUE,
       'profileThemeKey', 'beta_tester',
+      'themeSurfaces', JSON_ARRAY('profile', 'ranking_entry'),
       'marketEnabled', TRUE,
       'imageUrl', '/images/economy/profile-themes/beta-tester.svg',
-      'description', 'Equip this inventory item to transform your profile with the BETA TESTER cyberpunk blue-and-yellow presentation.'
+      'description', 'Equip this inventory item to transform your profile and ranking entry with the BETA TESTER cyberpunk blue-and-yellow presentation.'
     ),
     TRUE
   )
@@ -141,7 +142,9 @@ ON DUPLICATE KEY UPDATE
   metadata = JSON_SET(
     metadata,
     '$.customProduct', TRUE,
-    '$.profileThemeKey', 'beta_tester'
+    '$.profileThemeKey', 'beta_tester',
+    '$.themeSurfaces', JSON_ARRAY('profile', 'ranking_entry'),
+    '$.description', 'Equip this inventory item to transform your profile and ranking entry with the BETA TESTER cyberpunk blue-and-yellow presentation.'
   );
 
 -- Native products are catalogue-backed trusted custom products. This also

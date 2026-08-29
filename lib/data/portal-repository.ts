@@ -173,6 +173,11 @@ type ProfileThemeRow = RowDataPacket & {
   acquired_at: Date | string;
 };
 
+type EquippedProfileThemeRow = RowDataPacket & {
+  steam_id: string;
+  theme_key: string;
+};
+
 type AdminListRow = RowDataPacket & {
   Id: number;
   SteamId64: string;
@@ -574,6 +579,7 @@ export type LeaderboardPlayer = {
   mvps: number;
   vipGroups: GroupMembership[];
   adminGroups: GroupMembership[];
+  profileThemeKey: string | null;
 };
 
 export type LeaderboardPage = {
@@ -1681,9 +1687,11 @@ export async function getLeaderboard(
       [...filter.values, pageSize, offset],
     ),
   ]);
-  const groupMemberships = await getGroupMembershipsForPlayers(
-    rows.map((row) => String(row.steam)),
-  );
+  const steamIds = rows.map((row) => String(row.steam));
+  const [groupMemberships, profileThemeKeys] = await Promise.all([
+    getGroupMembershipsForPlayers(steamIds),
+    getPlayerProfileThemeKeys(steamIds),
+  ]);
 
   return {
     players: rows.map((row) => ({
@@ -1696,6 +1704,7 @@ export async function getLeaderboard(
       mvps: Number(row.mvps),
       vipGroups: groupMemberships.get(String(row.steam))?.vipGroups ?? [],
       adminGroups: groupMemberships.get(String(row.steam))?.adminGroups ?? [],
+      profileThemeKey: profileThemeKeys.get(String(row.steam)) ?? null,
     })),
     total: Number(totalRows[0]?.total ?? 0),
     page,
@@ -2243,27 +2252,48 @@ export async function getPlayerSettings(
   }
 }
 
+export async function getPlayerProfileThemeKeys(
+  steamIds: string[],
+): Promise<Map<string, string>> {
+  const uniqueSteamIds = [...new Set(steamIds.filter(isSteamId))];
+  const requestedSteamIds = new Set(uniqueSteamIds);
+  const themes = new Map<string, string>();
+  if (!uniqueSteamIds.length) return themes;
+  const pool = getPortalPool();
+  if (!pool) return themes;
+  try {
+    const [rows] = await pool.query<EquippedProfileThemeRow[]>(
+      "SELECT s.steam_id, t.theme_key FROM portal_player_settings AS s " +
+        "INNER JOIN portal_inventory_items AS i ON i.id = s.active_theme_item_id AND i.owner_steam_id = s.steam_id AND i.item_type = 'profile_theme' AND i.state = 'available' " +
+        "INNER JOIN portal_profile_themes AS t ON t.id = s.active_theme_id AND t.catalogue_id = i.catalogue_id AND t.enabled = TRUE " +
+        "WHERE s.steam_id IN (" +
+        uniqueSteamIds.map(() => "?").join(", ") +
+        ")",
+      uniqueSteamIds,
+    );
+    for (const row of rows) {
+      const steamId = String(row.steam_id);
+      const key = row.theme_key ? String(row.theme_key) : null;
+      if (
+        requestedSteamIds.has(steamId) &&
+        isTrustedOwnedProfileThemeKey(key)
+      ) {
+        themes.set(steamId, key);
+      }
+    }
+  } catch {
+    // The game-backed ranking and default profile remain available while
+    // portal settings storage is unavailable or still being migrated.
+  }
+  return themes;
+}
+
 export async function getPlayerProfileThemeKey(
   steamId: string,
 ): Promise<string | null> {
   if (!isSteamId(steamId)) return null;
-  const pool = getPortalPool();
-  if (!pool) return null;
-  try {
-    const [rows] = await pool.query<
-      Array<RowDataPacket & { theme_key: string }>
-    >(
-      "SELECT t.theme_key FROM portal_player_settings AS s " +
-        "INNER JOIN portal_inventory_items AS i ON i.id = s.active_theme_item_id AND i.owner_steam_id = s.steam_id AND i.item_type = 'profile_theme' AND i.state = 'available' " +
-        "INNER JOIN portal_profile_themes AS t ON t.id = s.active_theme_id AND t.catalogue_id = i.catalogue_id AND t.enabled = TRUE " +
-        "WHERE s.steam_id = ? LIMIT 1",
-      [steamId],
-    );
-    const key = rows[0]?.theme_key ? String(rows[0].theme_key) : null;
-    return isTrustedOwnedProfileThemeKey(key) ? key : null;
-  } catch {
-    return null;
-  }
+  const themes = await getPlayerProfileThemeKeys([steamId]);
+  return themes.get(steamId) ?? null;
 }
 
 export async function updatePlayerSettings(input: {

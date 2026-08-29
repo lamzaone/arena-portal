@@ -6,6 +6,7 @@ import { formatDate, formatPlaytime, isActiveSanction } from "@/components/forma
 import { IdentityGroupBadge } from "@/components/identity-group-badge";
 import { ProfileInventoryPreview } from "@/components/profile-inventory-preview";
 import { ProfileSettingsForm, type ProfileSettingsValue } from "@/components/profile-settings-form";
+import { ProfileThemeSurfaceBadge } from "@/components/profile-theme-surface-badge";
 import { ProfileTabs } from "@/components/profile-tabs";
 import { ResilientRemoteImage } from "@/components/resilient-remote-image";
 import { SiteHeader } from "@/components/site-header";
@@ -150,7 +151,7 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
   const showSettings = Boolean(isOwnProfile && settingsOpen && profileSettings);
 
   return (
-    <main className={`tapped-page player-profile-page ${profileTheme.className}`} data-profile-theme={profileTheme.key}>
+    <main className={`tapped-page player-profile-page ${profileTheme.surfaces.profile.className}`} data-profile-theme={profileTheme.key}>
       <div className="shell">
         <SiteHeader authenticated={isAuthenticated} />
         <section className="public-player-hero shared-profile-hero">
@@ -169,7 +170,7 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
                 <p className="tapped-kicker"><UserRound aria-hidden="true" /> {isOwnProfile ? "Your player profile" : "Player profile"}<span className="profile-presence" title={presenceLabel}><i aria-hidden="true" /> {presenceLabel}</span></p>
                 <h1>{displayName}</h1>
                 <a className="public-player-steam-identity" href={steamProfileUrl} target="_blank" rel="noreferrer" title={`Open ${displayName}'s Steam profile`}>{steamId}</a>
-                {betaTesterTheme ? <span className="beta-tester-theme-badge"><Zap aria-hidden="true" /><span>BETA TESTER</span><small>Profile theme</small></span> : null}
+                <ProfileThemeSurfaceBadge themeKey={profileTheme.key} surface="profile" />
               </div>
             </div>
           </div>

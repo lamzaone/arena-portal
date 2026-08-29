@@ -6,6 +6,7 @@ import {
   LockKeyhole,
   Palette,
   Save,
+  Trophy,
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -208,8 +209,9 @@ export function ProfileSettingsForm({
           <strong>Select a theme owned by your account.</strong>
         </legend>
         <p className="empty-copy">
-          Themes change this profile only. Buy a Profile Theme item from the
-          Market, then equip its owned inventory instance here or from Inventory.
+          Themes always style your profile. Selected themes can also extend to
+          public surfaces such as your ranking entry. Buy one from the Market,
+          then equip its owned inventory instance here or from Inventory.
         </p>
         <div className="settings-theme-grid">
           <label
@@ -230,36 +232,49 @@ export function ProfileSettingsForm({
               <small>The original TAPPED.RO crimson profile.</small>
             </span>
           </label>
-          {initialSettings.ownedThemes.map((theme) => (
-            <label
-              className={`settings-theme-card${activeThemeItemId === theme.inventoryItemId ? " is-selected" : ""}`}
-              key={theme.inventoryItemId}
-            >
-              <input
-                type="radio"
-                name="activeThemeItemId"
-                value={theme.inventoryItemId}
-                checked={activeThemeItemId === theme.inventoryItemId}
-                onChange={() => setActiveThemeItemId(theme.inventoryItemId)}
-              />
-              <span className="settings-theme-preview">
-                {getTrustedProfileTheme(theme.key).previewImageUrl ? (
-                  <Image
-                    src={getTrustedProfileTheme(theme.key).previewImageUrl!}
-                    alt=""
-                    width={108}
-                    height={108}
-                  />
-                ) : (
-                  <ImageIcon aria-hidden="true" />
-                )}
-              </span>
-              <span>
-                <strong>{theme.displayName}</strong>
-                <small>{theme.description}</small>
-              </span>
-            </label>
-          ))}
+          {initialSettings.ownedThemes.map((theme) => {
+            const trustedTheme = getTrustedProfileTheme(theme.key);
+            const extendsToRanking = Boolean(
+              trustedTheme.surfaces.rankingEntry,
+            );
+
+            return (
+              <label
+                className={`settings-theme-card${activeThemeItemId === theme.inventoryItemId ? " is-selected" : ""}`}
+                key={theme.inventoryItemId}
+              >
+                <input
+                  type="radio"
+                  name="activeThemeItemId"
+                  value={theme.inventoryItemId}
+                  checked={activeThemeItemId === theme.inventoryItemId}
+                  onChange={() => setActiveThemeItemId(theme.inventoryItemId)}
+                />
+                <span className="settings-theme-preview">
+                  {trustedTheme.previewImageUrl ? (
+                    <Image
+                      src={trustedTheme.previewImageUrl}
+                      alt=""
+                      width={108}
+                      height={108}
+                    />
+                  ) : (
+                    <ImageIcon aria-hidden="true" />
+                  )}
+                </span>
+                <span>
+                  <strong>{theme.displayName}</strong>
+                  <small>{theme.description}</small>
+                  {extendsToRanking ? (
+                    <small className="settings-theme-surface-note">
+                      <Trophy aria-hidden="true" /> Also styles your ranking
+                      entry
+                    </small>
+                  ) : null}
+                </span>
+              </label>
+            );
+          })}
         </div>
         {!initialSettings.ownedThemes.length ? (
           <p className="settings-owned-empty">

@@ -4,10 +4,12 @@ import { ChevronLeft, ChevronRight, Crown, Crosshair, Medal, Trophy, UsersRound 
 import { SiteHeader } from "@/components/site-header";
 import { GroupBadge } from "@/components/group-badge";
 import { PlayerSearchField } from "@/components/player-search-field";
+import { ProfileThemeSurfaceBadge } from "@/components/profile-theme-surface-badge";
 import { ResilientRemoteImage } from "@/components/resilient-remote-image";
 import { SearchNavigationForm, SearchSubmitButton } from "@/components/ui/search-field";
 import { getSession } from "@/lib/auth/session";
 import { getLevelRank } from "@/lib/content/levelranks";
+import { getTrustedProfileThemeSurface } from "@/lib/content/profile-themes";
 import { getLeaderboard } from "@/lib/data/portal-repository";
 import { getSteamProfiles } from "@/lib/steam/profiles";
 
@@ -74,13 +76,126 @@ export default async function RankingPage({ searchParams }: RankingPageProps) {
               <span>Page {page} / {totalPages}</span>
             </div>
           </div>
-          {leaderboard.players.length ? <div className="leaderboard-scroll"><table className="leaderboard-table"><thead><tr><th scope="col">Position</th><th scope="col">K4 rank</th><th scope="col">Player</th><th scope="col">Points</th><th scope="col">K</th><th scope="col">D</th><th scope="col">MVPs</th></tr></thead><tbody>{leaderboard.players.map((player, index) => {
-            const profile = profiles.get(player.steamId);
-            const displayName = profile?.name || player.name;
-            const position = (page - 1) * leaderboard.pageSize + index + 1;
-            const levelRank = getLevelRank(player.points);
-            return <tr key={player.steamId}><td><span className={`leaderboard-position position-${Math.min(position, 3)}`}>{position <= 3 ? <Medal aria-hidden="true" /> : `#${position}`}</span></td><td><span className="leaderboard-level-rank" style={{ color: levelRank.hex }}><strong>{levelRank.tag}</strong><small>{levelRank.name}</small></span></td><td><Link className="leaderboard-player" href={`/players/${player.steamId}`}><ResilientRemoteImage src={profile?.avatarFull} alt="" referrerPolicy="no-referrer" fallback={<span className="player-avatar-fallback" aria-hidden="true">{avatarInitial(displayName)}</span>} /><div><strong>{displayName}</strong><small>{player.steamId}</small><span className="leaderboard-role-badges">{player.vipGroups.map((group) => <GroupBadge key={`vip-${group.name}`} kind="vip" group={group.name} />)}{player.adminGroups.map((group) => <GroupBadge key={`admin-${group.name}`} kind="admin" group={group.name} />)}</span></div></Link></td><td className="points-cell">{player.points.toLocaleString()}</td><td>{player.kills.toLocaleString()}</td><td>{player.deaths.toLocaleString()}</td><td>{player.mvps.toLocaleString()}</td></tr>;
-          })}</tbody></table></div> : <div className="ranking-empty"><UsersRound aria-hidden="true" /><h2>No ranking data yet.</h2><p>Players appear here after K4 LevelRanks has created their server record.</p></div>}
+          {leaderboard.players.length ? (
+            <div className="leaderboard-scroll">
+              <table className="leaderboard-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Position</th>
+                    <th scope="col">K4 rank</th>
+                    <th scope="col">Player</th>
+                    <th scope="col">Points</th>
+                    <th scope="col">K</th>
+                    <th scope="col">D</th>
+                    <th scope="col">MVPs</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leaderboard.players.map((player, index) => {
+                    const profile = profiles.get(player.steamId);
+                    const displayName = profile?.name || player.name;
+                    const position =
+                      (page - 1) * leaderboard.pageSize + index + 1;
+                    const levelRank = getLevelRank(player.points);
+                    const rankingTheme = getTrustedProfileThemeSurface(
+                      player.profileThemeKey,
+                      "rankingEntry",
+                    );
+
+                    return (
+                      <tr
+                        className={`leaderboard-player-row${rankingTheme ? ` ${rankingTheme.className}` : ""}`}
+                        data-profile-theme={
+                          rankingTheme ? player.profileThemeKey : undefined
+                        }
+                        key={player.steamId}
+                      >
+                        <td>
+                          <span
+                            className={`leaderboard-position position-${Math.min(position, 3)}`}
+                          >
+                            {position <= 3 ? (
+                              <Medal aria-hidden="true" />
+                            ) : (
+                              `#${position}`
+                            )}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            className="leaderboard-level-rank"
+                            style={{ color: levelRank.hex }}
+                          >
+                            <strong>{levelRank.tag}</strong>
+                            <small>{levelRank.name}</small>
+                          </span>
+                        </td>
+                        <td>
+                          <Link
+                            className="leaderboard-player"
+                            href={`/players/${player.steamId}`}
+                          >
+                            <ResilientRemoteImage
+                              src={profile?.avatarFull}
+                              alt=""
+                              referrerPolicy="no-referrer"
+                              fallback={
+                                <span
+                                  className="player-avatar-fallback"
+                                  aria-hidden="true"
+                                >
+                                  {avatarInitial(displayName)}
+                                </span>
+                              }
+                            />
+                            <div>
+                              <strong>{displayName}</strong>
+                              <small>{player.steamId}</small>
+                              <ProfileThemeSurfaceBadge
+                                themeKey={player.profileThemeKey}
+                                surface="rankingEntry"
+                              />
+                              <span className="leaderboard-role-badges">
+                                {player.vipGroups.map((group) => (
+                                  <GroupBadge
+                                    key={`vip-${group.name}`}
+                                    kind="vip"
+                                    group={group.name}
+                                  />
+                                ))}
+                                {player.adminGroups.map((group) => (
+                                  <GroupBadge
+                                    key={`admin-${group.name}`}
+                                    kind="admin"
+                                    group={group.name}
+                                  />
+                                ))}
+                              </span>
+                            </div>
+                          </Link>
+                        </td>
+                        <td className="points-cell">
+                          {player.points.toLocaleString()}
+                        </td>
+                        <td>{player.kills.toLocaleString()}</td>
+                        <td>{player.deaths.toLocaleString()}</td>
+                        <td>{player.mvps.toLocaleString()}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="ranking-empty">
+              <UsersRound aria-hidden="true" />
+              <h2>No ranking data yet.</h2>
+              <p>
+                Players appear here after K4 LevelRanks has created their
+                server record.
+              </p>
+            </div>
+          )}
           <nav className="pagination" aria-label="Leaderboard pages"><Link className={page <= 1 ? "is-disabled" : ""} aria-disabled={page <= 1} href={rankingLink(Math.max(1, page - 1), query)}><ChevronLeft aria-hidden="true" /> Previous</Link><span>Page {page} of {totalPages}</span><Link className={page >= totalPages ? "is-disabled" : ""} aria-disabled={page >= totalPages} href={rankingLink(Math.min(totalPages, page + 1), query)}>Next <ChevronRight aria-hidden="true" /></Link></nav>
         </section>
       </div>

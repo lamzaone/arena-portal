@@ -1,22 +1,64 @@
-export type TrustedProfileTheme = {
-  key: string;
+export type ProfileThemeSurface = "profile" | "rankingEntry";
+
+export type ProfileThemeSurfacePresentation = {
   className: string;
-  previewImageUrl: string | null;
+  badge?: {
+    className: string;
+    detail: string;
+    icon: "zap";
+    label: string;
+  };
 };
 
-// Theme presentation stays in source control. A database entitlement only
-// unlocks one of these keys and can never inject CSS, markup, or remote assets
-// into a player's public profile.
+type ProfileThemeSurfaces = Partial<
+  Record<ProfileThemeSurface, ProfileThemeSurfacePresentation>
+> & {
+  profile: ProfileThemeSurfacePresentation;
+};
+
+export type TrustedProfileTheme = {
+  key: string;
+  displayName: string;
+  previewImageUrl: string | null;
+  surfaces: ProfileThemeSurfaces;
+};
+
+// Theme presentation and surface support stay in source control. A database
+// entitlement only unlocks one of these keys and can never inject CSS, markup,
+// or remote assets into a player's profile or another public portal surface.
 const trustedProfileThemes = {
   default: {
     key: "default",
-    className: "profile-theme-default",
+    displayName: "ARENA default",
     previewImageUrl: null,
+    surfaces: {
+      profile: { className: "profile-theme-default" },
+    },
   },
   beta_tester: {
     key: "beta_tester",
-    className: "profile-theme-beta-tester",
+    displayName: "BETA TESTER",
     previewImageUrl: "/images/economy/profile-themes/beta-tester.svg",
+    surfaces: {
+      profile: {
+        className: "profile-theme-beta-tester",
+        badge: {
+          className: "beta-tester-theme-badge",
+          detail: "Profile theme",
+          icon: "zap",
+          label: "BETA TESTER",
+        },
+      },
+      rankingEntry: {
+        className: "ranking-theme-beta-tester",
+        badge: {
+          className: "leaderboard-theme-badge",
+          detail: "Theme",
+          icon: "zap",
+          label: "BETA TESTER",
+        },
+      },
+    },
   },
 } satisfies Record<string, TrustedProfileTheme>;
 
@@ -28,7 +70,7 @@ export function isTrustedProfileThemeKey(
 
 export function isTrustedOwnedProfileThemeKey(
   value: string | null | undefined,
-) {
+): value is Exclude<keyof typeof trustedProfileThemes, "default"> {
   return value !== "default" && isTrustedProfileThemeKey(value);
 }
 
@@ -38,4 +80,11 @@ export function getTrustedProfileTheme(
   return isTrustedProfileThemeKey(value)
     ? trustedProfileThemes[value]
     : trustedProfileThemes.default;
+}
+
+export function getTrustedProfileThemeSurface(
+  value: string | null | undefined,
+  surface: ProfileThemeSurface,
+): ProfileThemeSurfacePresentation | null {
+  return getTrustedProfileTheme(value).surfaces[surface] ?? null;
 }

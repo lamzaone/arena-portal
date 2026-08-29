@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     });
     return economyJsonSuccess({
       ...result,
-      message: `${result.displayName} is now equipped on your player profile.`,
+      message: `${result.displayName} is now equipped across all of its supported surfaces.`,
     });
   } catch (error) {
     return economyMutationFailure(error);

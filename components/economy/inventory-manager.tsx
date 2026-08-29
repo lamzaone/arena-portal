@@ -862,9 +862,9 @@ export function InventoryManager({
                   <fieldset className="form-panel inventory-profile-theme-equip">
                     <legend>Equip profile theme</legend>
                     <p className="empty-copy">
-                      Apply this owned theme only to your shareable player profile.
-                      The item stays in your inventory and can be changed again from
-                      profile settings.
+                      Apply this owned theme to your shareable player profile and
+                      every public surface it supports. The item stays in your
+                      inventory and can be changed again from profile settings.
                     </p>
                     <button
                       type="button"
@@ -874,12 +874,12 @@ export function InventoryManager({
                         runAction(
                           "/api/economy/items/profile-theme/equip",
                           { itemId: selected.id },
-                          `${selected.displayName} is now equipped on your profile.`,
+                          `${selected.displayName} is now equipped for your account.`,
                         )
                       }
                     >
                       <Palette aria-hidden="true" />{" "}
-                      {pending ? "Equipping…" : "Equip on profile"}
+                      {pending ? "Equipping…" : "Equip theme"}
                     </button>
                   </fieldset>
                 ) : null}
