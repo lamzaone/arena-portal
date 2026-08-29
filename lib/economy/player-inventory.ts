@@ -1,11 +1,13 @@
 import "server-only";
 
 import {
+  getAuthoritativeExternalIdentityMemberships,
   getPlayerEconomyInventory,
   type EconomyInventoryFilter,
   type EconomyInventoryItem,
   type EconomyInventoryPage,
 } from "@/lib/data/portal-repository";
+import { reconcileIdentityGroupRewards } from "@/lib/data/identity-groups";
 import {
   getCachedMarketplaceVariantFallbacks,
 } from "@/lib/economy/market-variant-cache";
@@ -126,6 +128,15 @@ export async function getCompletePlayerEconomyInventory(
   steamId: string,
   filter: Omit<EconomyInventoryFilter, "page" | "pageSize"> = {},
 ): Promise<EconomyInventoryPage> {
+  try {
+    const memberships = await getAuthoritativeExternalIdentityMemberships(
+      steamId,
+    );
+    await reconcileIdentityGroupRewards({ steamId, ...memberships });
+  } catch {
+    // Never interpret an unavailable game or identity database as an empty
+    // Admin/VIP membership set. The runtime or a later request retries safely.
+  }
   const first = await getPlayerEconomyInventory(steamId, {
     ...filter,
     page: 1,

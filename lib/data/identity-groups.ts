@@ -1236,6 +1236,19 @@ export async function assignIdentityGroup(input: {
       steamId,
       actorSteamId,
     });
+    // Previously awarded account-bound items remain tied to membership even
+    // if their reward definition was later retired. Re-assigning the group
+    // therefore restores those exact instances as well as active rewards.
+    const reactivated = await reactivateAccountBoundRewardsForGroup(connection, {
+      groupId,
+      steamId,
+      actorSteamId,
+      reason: "group-membership-assigned",
+    });
+    const restoredItemIds = uniqueStrings([
+      ...rewardResult.restoredItemIds,
+      ...reactivated.restoredItemIds,
+    ]);
     await writeIdentityAudit(connection, {
       requestKey: `${requestKey}:membership-assign`,
       actorSteamId,
@@ -1247,14 +1260,15 @@ export async function assignIdentityGroup(input: {
         expiresAt: expiresAt?.toISOString() ?? null,
         reason,
         awardedItemIds: rewardResult.awardedItemIds,
-        restoredItemIds: rewardResult.restoredItemIds,
+        restoredItemIds,
+        reactivatedItemIds: reactivated.reactivatedItemIds,
       },
     });
     return {
       groupId,
       steamId,
       awardedItemIds: rewardResult.awardedItemIds,
-      restoredItemIds: rewardResult.restoredItemIds,
+      restoredItemIds,
     };
   });
 }
@@ -1802,16 +1816,18 @@ async function enqueueIdentityRewardRefresh(
   );
 }
 
-async function loadActiveAccountBoundRewardAwards(
+async function loadAccountBoundRewardAwards(
   connection: PoolConnection,
-  input: { steamId?: string; groupId?: number },
+  input: { steamId?: string; groupId?: number; activeOnly?: boolean },
 ) {
   const where = [
-    "awards.entitlement_active = TRUE",
     "rewards.trade_policy = 'account_bound'",
     "items.tradable = FALSE",
     "items.owner_steam_id = awards.steam_id",
   ];
+  if (input.activeOnly !== false) {
+    where.unshift("awards.entitlement_active = TRUE");
+  }
   const values: unknown[] = [];
   if (input.steamId) {
     where.push("awards.steam_id = ?");
@@ -1992,7 +2008,7 @@ async function revokeAccountBoundRewardsForGroup(
     reason: string;
   },
 ) {
-  const rows = await loadActiveAccountBoundRewardAwards(connection, {
+  const rows = await loadAccountBoundRewardAwards(connection, {
     groupId: input.groupId,
     steamId: input.steamId,
   });
@@ -2018,6 +2034,94 @@ async function revokeAccountBoundRewardsForGroup(
   return revokedItemIds;
 }
 
+async function reactivateIdentityRewardAwards(
+  connection: PoolConnection,
+  input: {
+    steamId: string;
+    rows: IdentityRewardAwardRow[];
+    actorSteamId: string | null;
+    reason: string;
+  },
+) {
+  const restoredItemIds: string[] = [];
+  const reactivatedItemIds: string[] = [];
+  for (const row of input.rows) {
+    if (asBoolean(row.entitlement_active)) continue;
+    const itemId = String(row.item_id);
+    const restoreItem =
+      asBoolean(row.item_revoked_by_entitlement) &&
+      row.item_state === "revoked" &&
+      !asBoolean(row.tradable);
+    if (restoreItem) {
+      const [itemResult] = await connection.execute<ResultSetHeader>(
+        "UPDATE portal_inventory_items SET state = 'available' WHERE id = ? AND owner_steam_id = ? AND state = 'revoked' AND tradable = FALSE",
+        [itemId, input.steamId],
+      );
+      if (itemResult.affectedRows !== 1) {
+        identityError(
+          "reward_item_changed",
+          "A group reward changed while its entitlement was being restored. Try again.",
+        );
+      }
+      await writeIdentityRewardItemEvent(connection, {
+        itemId,
+        actorSteamId: input.actorSteamId,
+        eventType: "identity.group_reward.restored",
+        beforeState: {
+          ownerSteamId: input.steamId,
+          state: "revoked",
+          tradable: false,
+        },
+        afterState: {
+          ownerSteamId: input.steamId,
+          state: "available",
+          tradable: false,
+        },
+        metadata: {
+          groupId: Number(row.group_id),
+          rewardId: Number(row.reward_id),
+          ordinal: Number(row.ordinal),
+          reason: input.reason,
+        },
+      });
+      restoredItemIds.push(itemId);
+    }
+    await connection.execute(
+      "UPDATE portal_identity_group_reward_awards SET entitlement_active = TRUE, entitlement_revoked_at = NULL, entitlement_revoked_by_steam_id = NULL, item_revoked_by_entitlement = FALSE WHERE reward_id = ? AND steam_id = ? AND ordinal = ? AND entitlement_active = FALSE",
+      [Number(row.reward_id), input.steamId, Number(row.ordinal)],
+    );
+    reactivatedItemIds.push(itemId);
+  }
+  await enqueueIdentityRewardRefresh(connection, {
+    steamId: input.steamId,
+    reason: input.reason,
+    itemIds: restoredItemIds,
+  });
+  return { restoredItemIds, reactivatedItemIds };
+}
+
+async function reactivateAccountBoundRewardsForGroup(
+  connection: PoolConnection,
+  input: {
+    groupId: number;
+    steamId: string;
+    actorSteamId: string | null;
+    reason: string;
+  },
+) {
+  const rows = await loadAccountBoundRewardAwards(connection, {
+    groupId: input.groupId,
+    steamId: input.steamId,
+    activeOnly: false,
+  });
+  return reactivateIdentityRewardAwards(connection, {
+    steamId: input.steamId,
+    rows: rows.filter((row) => !asBoolean(row.entitlement_active)),
+    actorSteamId: input.actorSteamId,
+    reason: input.reason,
+  });
+}
+
 async function reconcileAccountBoundRewardEntitlements(
   connection: PoolConnection,
   input: {
@@ -2027,25 +2131,46 @@ async function reconcileAccountBoundRewardEntitlements(
     actorSteamId: string | null;
   },
 ) {
-  const rows = await loadActiveAccountBoundRewardAwards(connection, {
+  const rows = await loadAccountBoundRewardAwards(connection, {
     steamId: input.steamId,
+    activeOnly: false,
   });
-  const inactiveRows = rows.filter((row) => {
+  const inactiveRows: IdentityRewardAwardRow[] = [];
+  const activeAgainRows: IdentityRewardAwardRow[] = [];
+  for (const row of rows) {
     const sourceType = (row as IdentityRewardAwardRow & {
       source_type: IdentityGroupSource;
     }).source_type;
-    return (
-      !asBoolean(row.group_enabled) ||
-      (input.authoritativeSources.has(sourceType) &&
-        !input.effectiveGroupIds.has(Number(row.group_id)))
-    );
-  });
-  return revokeIdentityRewardAwards(connection, {
+    const groupEnabled = asBoolean(row.group_enabled);
+    const sourceIsAuthoritative = input.authoritativeSources.has(sourceType);
+    if (!groupEnabled || (sourceIsAuthoritative && !input.effectiveGroupIds.has(Number(row.group_id)))) {
+      if (asBoolean(row.entitlement_active)) inactiveRows.push(row);
+    } else if (
+      sourceIsAuthoritative &&
+      input.effectiveGroupIds.has(Number(row.group_id)) &&
+      !asBoolean(row.entitlement_active)
+    ) {
+      activeAgainRows.push(row);
+    }
+  }
+  const revokedItemIds = await revokeIdentityRewardAwards(connection, {
     steamId: input.steamId,
     rows: inactiveRows,
     actorSteamId: input.actorSteamId,
     reason: "group-membership-inactive",
   });
+  const reactivated = await reactivateIdentityRewardAwards(connection, {
+    steamId: input.steamId,
+    rows: activeAgainRows,
+    actorSteamId: input.actorSteamId,
+    reason: "group-membership-effective-again",
+  });
+  return {
+    revokedItemIds,
+    deactivatedItemIds: inactiveRows.map((row) => String(row.item_id)),
+    restoredItemIds: reactivated.restoredItemIds,
+    reactivatedItemIds: reactivated.reactivatedItemIds,
+  };
 }
 
 async function awardRewardsForGroup(
@@ -2384,7 +2509,7 @@ export async function reconcileIdentityGroupRewards(input: {
     if (input.adminGroupNames !== undefined)
       authoritativeSources.add("admins_core");
     if (input.vipGroupNames !== undefined) authoritativeSources.add("vipcore");
-    const revokedItemIds = await reconcileAccountBoundRewardEntitlements(
+    const entitlementResult = await reconcileAccountBoundRewardEntitlements(
       connection,
       {
         steamId,
@@ -2393,10 +2518,15 @@ export async function reconcileIdentityGroupRewards(input: {
         actorSteamId: null,
       },
     );
+    restoredItemIds.push(...entitlementResult.restoredItemIds);
+    const uniqueRestoredItemIds = uniqueStrings(restoredItemIds);
+    const revokedItemIds = entitlementResult.revokedItemIds;
     if (
       awardedItemIds.length ||
-      restoredItemIds.length ||
-      revokedItemIds.length
+      uniqueRestoredItemIds.length ||
+      revokedItemIds.length ||
+      entitlementResult.deactivatedItemIds.length ||
+      entitlementResult.reactivatedItemIds.length
     ) {
       await writeIdentityAudit(connection, {
         requestKey: `${requestKey}:reward-reconcile`,
@@ -2407,11 +2537,20 @@ export async function reconcileIdentityGroupRewards(input: {
         metadata: {
           groupIds: groupRows.map((group) => Number(group.id)),
           awardedItemIds,
-          restoredItemIds,
+          restoredItemIds: uniqueRestoredItemIds,
+          reactivatedItemIds: entitlementResult.reactivatedItemIds,
+          deactivatedItemIds: entitlementResult.deactivatedItemIds,
           revokedItemIds,
         },
       });
     }
-    return { steamId, awardedItemIds, restoredItemIds, revokedItemIds };
+    return {
+      steamId,
+      awardedItemIds,
+      restoredItemIds: uniqueRestoredItemIds,
+      revokedItemIds,
+      deactivatedItemIds: entitlementResult.deactivatedItemIds,
+      reactivatedItemIds: entitlementResult.reactivatedItemIds,
+    };
   });
 }

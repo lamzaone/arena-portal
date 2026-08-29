@@ -1482,6 +1482,35 @@ async function getGroupMembershipsForPlayers(steamIds: string[]) {
 }
 
 /**
+ * Reads both external membership providers without the dashboard's optional,
+ * fail-soft query wrappers. Reward reconciliation must distinguish "no groups"
+ * from "the game database could not be read" or it could revoke valid items.
+ */
+export async function getAuthoritativeExternalIdentityMemberships(
+  steamId: string,
+) {
+  if (!isSteamId(steamId)) throw new Error("Invalid SteamID64.");
+  const pool = getGamePool();
+  if (!pool) throw new Error("Game database is not configured.");
+  const [vipResult, adminResult] = await Promise.all([
+    pool.query<VipUserRow[]>(
+      "SELECT account_id, name, lastvisit, sid, `group`, expires FROM vip_users WHERE account_id = ? AND sid = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) ORDER BY `group`",
+      [toAccountId(steamId), getVipServerId()],
+    ),
+    pool.query<Array<RowDataPacket & { Groups: string; Servers: string }>>(
+      "SELECT Groups, Servers FROM admins WHERE SteamId64 = ? LIMIT 1",
+      [steamId],
+    ),
+  ]);
+  return {
+    vipGroupNames: toVipMemberships(vipResult[0]).map((group) => group.name),
+    adminGroupNames: toScopedAdminMemberships(adminResult[0][0]).map(
+      (group) => group.name,
+    ),
+  };
+}
+
+/**
  * Resolves authoritative external membership for Founder-managed reward
  * backfills. Admins.Core memberships are limited to this configured server;
  * VIPCore is already scoped by its server ID.

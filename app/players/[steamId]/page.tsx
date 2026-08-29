@@ -21,7 +21,7 @@ export default async function PublicPlayerProfilePage({ params, searchParams }: 
   const session = await getSession();
   const isOwnProfile = session?.steamId === steamId;
   const settingsOpen = Boolean(isOwnProfile && query.settings === "1");
-  const [profile, steamProfiles, profileInventory, profileThemeKey, settings] = await Promise.all([
+  const [profile, steamProfiles, initialProfileInventory, initialProfileThemeKey, initialSettings] = await Promise.all([
     isOwnProfile ? getPlayerDashboard(steamId) : getPublicPlayerProfile(steamId),
     getSteamProfiles([steamId]),
     getPlayerProfileInventoryPage(session?.steamId ?? null, steamId),
@@ -46,6 +46,10 @@ export default async function PublicPlayerProfilePage({ params, searchParams }: 
     );
   }
 
+  let profileInventory = initialProfileInventory;
+  let profileThemeKey = initialProfileThemeKey;
+  let settings = initialSettings;
+
   const identity = await getEffectiveIdentity({
     steamId,
     vipGroupNames: profile.vipGroups.map((group) => group.name),
@@ -56,11 +60,26 @@ export default async function PublicPlayerProfilePage({ params, searchParams }: 
   // game database. Reconcile their catalogue rewards when that player opens
   // their own authenticated profile; public visitors never trigger grants.
   if (isOwnProfile) {
-    await reconcileIdentityGroupRewards({
+    const rewardChanges = await reconcileIdentityGroupRewards({
       steamId,
       vipGroupNames: profile.vipGroups.map((group) => group.name),
       adminGroupNames: profile.adminGroups.map((group) => group.name),
     }).catch(() => null);
+    if (
+      rewardChanges &&
+      (rewardChanges.awardedItemIds.length ||
+        rewardChanges.restoredItemIds.length ||
+        rewardChanges.revokedItemIds.length)
+    ) {
+      // Re-read the presentation data after a membership transition so this
+      // response never renders an item or equipped theme that was just revoked
+      // (and newly restored rewards appear without a manual refresh).
+      [profileInventory, profileThemeKey, settings] = await Promise.all([
+        getPlayerProfileInventoryPage(session?.steamId ?? null, steamId),
+        getPlayerProfileThemeKey(steamId),
+        settingsOpen ? getPlayerSettings(steamId) : Promise.resolve(null),
+      ]);
+    }
   }
 
   return <PlayerProfilePage profile={profile} identity={identity} steamId={steamId} steamProfile={steamProfiles.get(steamId)} isOwnProfile={Boolean(isOwnProfile)} isAuthenticated={Boolean(session)} profileInventory={profileInventory} profileThemeKey={profileThemeKey} settingsOpen={settingsOpen} profileSettings={settings && session ? { csrf: createProfileActionToken(session), initialSettings: { inventoryVisibility: settings.inventoryVisibility, activeThemeId: settings.activeThemeId, activeThemeItemId: settings.activeThemeItemId, ownedThemes: settings.ownedThemes } } : undefined} />;
