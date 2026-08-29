@@ -2822,6 +2822,16 @@ fieldset.settings-section { padding-top: 20px; }
   align-items: center;
   gap: 5px;
 }
+.profile-steam-theme-row {
+  display: flex;
+  max-width: min(100%, 720px);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+}
+.profile-steam-theme-row .public-player-steam-identity,
+.profile-steam-theme-row .profile-theme-surface-badge { margin-top: 0; }
 .profile-identity-badge-rack {
   display: flex;
   max-width: min(100%, 720px);
@@ -2830,7 +2840,6 @@ fieldset.settings-section { padding-top: 20px; }
   gap: 7px;
   margin-top: 9px;
 }
-.profile-identity-badge-rack .profile-theme-surface-badge { margin-top: 0; }
 .profile-identity-badge-rack .identity-group-badge { max-width: 180px; }
 .identity-group-badge {
   display: inline-flex;
@@ -2883,6 +2892,100 @@ fieldset.settings-section { padding-top: 20px; }
   --beta-text: #f5fbff;
   --beta-muted: #b8cfdf;
   --beta-border: rgba(56, 189, 248, .43);
+  --beta-blue-glow: rgba(56, 189, 248, .3);
+  --beta-yellow-glow: rgba(250, 204, 21, .28);
+}
+
+body:has(.player-profile-page.profile-theme-beta-tester) {
+  background:
+    radial-gradient(circle at 70% -12%, rgba(56, 189, 248, .13), transparent 35rem),
+    radial-gradient(circle at 8% 72%, rgba(250, 204, 21, .055), transparent 28rem),
+    #02080f;
+}
+
+body:has(.player-profile-page.profile-theme-beta-tester)::before {
+  background-image: linear-gradient(rgba(56, 189, 248, .045) 1px, transparent 1px);
+}
+
+body:has(.player-profile-page.profile-theme-beta-tester) .cursor-grid-background {
+  background: radial-gradient(960px 760px at var(--cursor-grid-x) var(--cursor-grid-y), rgba(56, 189, 248, .065), transparent 78%);
+}
+
+body:has(.player-profile-page.profile-theme-beta-tester) .cursor-grid-background::before {
+  background-image:
+    linear-gradient(rgba(56, 189, 248, .14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, .14) 1px, transparent 1px),
+    linear-gradient(rgba(250, 204, 21, .05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(250, 204, 21, .05) 1px, transparent 1px);
+}
+
+body:has(.player-profile-page.profile-theme-beta-tester) .cursor-grid-background::after {
+  background-image:
+    linear-gradient(rgba(245, 251, 255, .36) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245, 251, 255, .36) 1px, transparent 1px),
+    radial-gradient(640px 520px at calc(var(--cursor-grid-x) + 96px) calc(var(--cursor-grid-y) + 96px), rgba(56, 189, 248, .18), transparent 76%);
+  filter: drop-shadow(0 0 13px rgba(56, 189, 248, .24));
+}
+
+@keyframes beta-neon-sweep {
+  0%, 14% { opacity: 0; transform: translate3d(-165%, 0, 0) skewX(-18deg); }
+  22% { opacity: .72; }
+  42% { opacity: 0; transform: translate3d(465%, 0, 0) skewX(-18deg); }
+  100% { opacity: 0; transform: translate3d(465%, 0, 0) skewX(-18deg); }
+}
+
+@keyframes beta-vertical-scan {
+  0%, 10% { opacity: 0; transform: translate3d(0, -190%, 0); }
+  18% { opacity: .5; }
+  46% { opacity: 0; transform: translate3d(0, 480%, 0); }
+  100% { opacity: 0; transform: translate3d(0, 480%, 0); }
+}
+
+@keyframes beta-badge-charge {
+  0%, 100% {
+    border-color: color-mix(in srgb, var(--identity-badge-color) 68%, var(--beta-blue));
+    box-shadow: inset 3px 0 0 var(--identity-badge-color), 0 0 8px color-mix(in srgb, var(--identity-badge-color) 14%, transparent);
+  }
+  50% {
+    border-color: color-mix(in srgb, var(--identity-badge-color) 78%, var(--beta-yellow));
+    box-shadow: inset 3px 0 0 var(--identity-badge-color), 0 0 17px color-mix(in srgb, var(--identity-badge-color) 32%, transparent), 0 0 5px var(--beta-blue-glow);
+  }
+}
+
+@keyframes beta-neon-frame {
+  0%, 100% { box-shadow: inset 3px 0 0 var(--beta-yellow), 0 0 8px rgba(56, 189, 248, .1); }
+  50% { box-shadow: inset 3px 0 0 var(--beta-yellow), 0 0 20px rgba(56, 189, 248, .28), 0 0 5px rgba(250, 204, 21, .12); }
+}
+
+@keyframes beta-icon-charge {
+  0%, 100% { opacity: .62; filter: drop-shadow(0 0 2px currentColor); }
+  50% { opacity: 1; filter: drop-shadow(0 0 8px currentColor); }
+}
+
+@keyframes beta-text-signal {
+  0%, 8%, 11%, 100% { opacity: 1; text-shadow: 2px 2px 0 rgba(56, 189, 248, .2), -1px -1px 0 rgba(250, 204, 21, .12); }
+  9% { opacity: .84; text-shadow: -2px 0 5px rgba(250, 204, 21, .32), 2px 0 5px rgba(56, 189, 248, .44); }
+  10% { opacity: .96; text-shadow: 3px 0 7px rgba(56, 189, 248, .34), -2px 0 4px rgba(250, 204, 21, .2); }
+}
+
+@keyframes beta-tab-rail {
+  0%, 100% { opacity: .7; transform: scaleX(.62); }
+  50% { opacity: 1; transform: scaleX(1); }
+}
+
+@keyframes beta-node-pulse {
+  0%, 100% { opacity: .34; transform: scale(.7); box-shadow: 0 0 3px currentColor; }
+  50% { opacity: 1; transform: scale(1); box-shadow: 0 0 10px currentColor; }
+}
+
+@keyframes beta-count-pulse {
+  0%, 100% { opacity: .76; box-shadow: inset 0 0 8px rgba(56, 189, 248, .1), 0 0 5px rgba(250, 204, 21, .08); }
+  50% { opacity: 1; box-shadow: inset 0 0 10px rgba(56, 189, 248, .22), 0 0 11px rgba(250, 204, 21, .2); }
+}
+
+@keyframes beta-progress-charge {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
 }
 
 .leaderboard-table tbody tr.ranking-theme-beta-tester > td {
@@ -2957,7 +3060,76 @@ fieldset.settings-section { padding-top: 20px; }
   text-shadow: 0 0 12px rgba(250, 204, 21, .22);
 }
 
+:is(.player-profile-page.profile-theme-beta-tester, .leaderboard-player-row.ranking-theme-beta-tester) .identity-group-badge {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--identity-badge-color) 68%, var(--beta-blue));
+  border-radius: 1px;
+  color: color-mix(in srgb, var(--identity-badge-soft) 90%, white);
+  background:
+    linear-gradient(115deg, color-mix(in srgb, var(--identity-badge-color) 24%, rgba(4, 17, 28, .98)), rgba(4, 17, 28, .96) 68%),
+    var(--beta-bg);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--identity-badge-color) 48%, transparent);
+  animation: beta-badge-charge 4.2s ease-in-out infinite;
+}
+
+:is(.player-profile-page.profile-theme-beta-tester, .leaderboard-player-row.ranking-theme-beta-tester) .identity-group-badge::before {
+  position: absolute;
+  z-index: 0;
+  top: -30%;
+  bottom: -30%;
+  left: 0;
+  width: 24%;
+  content: "";
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--identity-badge-color) 46%, white), transparent);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation: beta-neon-sweep 5.4s ease-in-out infinite;
+}
+
+:is(.player-profile-page.profile-theme-beta-tester, .leaderboard-player-row.ranking-theme-beta-tester) .identity-group-badge::after {
+  position: absolute;
+  z-index: 0;
+  right: 2px;
+  bottom: 2px;
+  width: 5px;
+  height: 2px;
+  content: "";
+  background: var(--beta-yellow);
+  box-shadow: 0 0 7px var(--beta-yellow);
+  opacity: .72;
+}
+
+:is(.player-profile-page.profile-theme-beta-tester, .leaderboard-player-row.ranking-theme-beta-tester) .identity-group-badge > :is(svg, span) {
+  position: relative;
+  z-index: 1;
+}
+
+:is(.player-profile-page.profile-theme-beta-tester, .leaderboard-player-row.ranking-theme-beta-tester) .identity-group-badge > svg {
+  animation: beta-icon-charge 3.1s ease-in-out infinite;
+}
+
+:is(.player-profile-page.profile-theme-beta-tester, .leaderboard-player-row.ranking-theme-beta-tester) .identity-group-badge-list .identity-group-badge:nth-child(2n),
+.player-profile-page.profile-theme-beta-tester .group-membership-cards article:nth-child(2n) .identity-group-badge {
+  animation-delay: -.8s;
+}
+
+:is(.player-profile-page.profile-theme-beta-tester, .leaderboard-player-row.ranking-theme-beta-tester) .identity-group-badge-list .identity-group-badge:nth-child(3n),
+.player-profile-page.profile-theme-beta-tester .group-membership-cards article:nth-child(3n) .identity-group-badge {
+  animation-delay: -1.6s;
+}
+
+.player-profile-page.profile-theme-beta-tester .profile-primary-group-badge .identity-group-badge {
+  border-bottom-color: var(--beta-yellow);
+  box-shadow: inset 3px 0 0 var(--identity-badge-color), 0 6px 18px rgba(0, 0, 0, .52), 0 0 18px color-mix(in srgb, var(--identity-badge-color) 32%, transparent);
+  filter: drop-shadow(0 5px 8px rgba(0, 0, 0, .46)) drop-shadow(0 0 8px color-mix(in srgb, var(--identity-badge-color) 28%, transparent));
+}
+
 .leaderboard-theme-badge {
+  position: relative;
+  isolation: isolate;
   display: inline-flex;
   width: max-content;
   max-width: 100%;
@@ -2978,6 +3150,26 @@ fieldset.settings-section { padding-top: 20px; }
   text-transform: uppercase;
   pointer-events: none;
 }
+
+.ranking-theme-beta-tester .leaderboard-theme-badge {
+  overflow: hidden;
+  animation: beta-neon-frame 4.6s ease-in-out infinite;
+}
+
+.ranking-theme-beta-tester .leaderboard-theme-badge::before {
+  position: absolute;
+  z-index: 0;
+  top: -30%;
+  bottom: -30%;
+  left: 0;
+  width: 25%;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(245, 251, 255, .72), transparent);
+  opacity: 0;
+  animation: beta-neon-sweep 5.8s ease-in-out infinite -1.4s;
+}
+
+.ranking-theme-beta-tester .leaderboard-theme-badge > * { position: relative; z-index: 1; }
 
 .leaderboard-badge-rack {
   display: flex !important;
@@ -3013,20 +3205,19 @@ fieldset.settings-section { padding-top: 20px; }
 .player-profile-page.profile-theme-beta-tester {
   color: var(--beta-text);
   color-scheme: dark;
-  background-color: var(--beta-bg);
+  background-color: transparent;
   background-image:
     linear-gradient(rgba(56, 189, 248, .035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(56, 189, 248, .035) 1px, transparent 1px),
     radial-gradient(circle at 72% 18%, rgba(56, 189, 248, .13), transparent 30rem),
-    radial-gradient(circle at 12% 62%, rgba(250, 204, 21, .07), transparent 25rem),
-    linear-gradient(145deg, #04111c, #02080f 78%);
-  background-size: 42px 42px, 42px 42px, auto, auto, auto;
+    radial-gradient(circle at 12% 62%, rgba(250, 204, 21, .07), transparent 25rem);
+  background-size: 42px 42px, 42px 42px, auto, auto;
   animation: beta-profile-grid-drift 24s linear infinite;
 }
 
 @keyframes beta-profile-grid-drift {
-  from { background-position: 0 0, 0 0, center, center, center; }
-  to { background-position: 42px 42px, 42px 42px, center, center, center; }
+  from { background-position: 0 0, 0 0, center, center; }
+  to { background-position: 42px 42px, 42px 42px, center, center; }
 }
 
 @keyframes beta-profile-signal {
@@ -3035,10 +3226,144 @@ fieldset.settings-section { padding-top: 20px; }
 }
 
 .player-profile-page.profile-theme-beta-tester .site-header {
+  isolation: isolate;
+  overflow: hidden;
   border-color: var(--beta-border);
   border-radius: 0;
   background: rgba(4, 17, 28, .94);
   box-shadow: inset 3px 0 0 var(--beta-yellow), 0 16px 38px rgba(0, 0, 0, .34);
+}
+
+.player-profile-page.profile-theme-beta-tester .site-header::after {
+  position: absolute;
+  z-index: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  content: "";
+  background: linear-gradient(90deg, transparent 0 18%, var(--beta-blue) 36%, var(--beta-yellow) 50%, var(--beta-blue) 64%, transparent 82% 100%);
+  background-size: 240% 100%;
+  opacity: .8;
+  filter: drop-shadow(0 0 5px var(--beta-blue));
+  animation: beta-progress-charge 7s linear infinite;
+}
+
+.player-profile-page.profile-theme-beta-tester .site-header > * { position: relative; z-index: 1; }
+
+.player-profile-page.profile-theme-beta-tester .account-nav {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid var(--beta-border);
+  border-left: 3px solid var(--beta-yellow);
+  border-radius: 0;
+  background:
+    linear-gradient(115deg, rgba(56, 189, 248, .12), transparent 34%),
+    rgba(4, 17, 28, .94);
+  box-shadow: inset 0 1px 0 rgba(245, 251, 255, .045), 0 0 24px rgba(56, 189, 248, .08);
+  scrollbar-color: var(--beta-blue) rgba(4, 17, 28, .9);
+}
+
+.player-profile-page.profile-theme-beta-tester .account-nav::after {
+  position: absolute;
+  z-index: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  content: "";
+  background: linear-gradient(90deg, var(--beta-yellow), var(--beta-blue) 30%, transparent 78%);
+  background-size: 220% 100%;
+  opacity: .82;
+  filter: drop-shadow(0 0 5px var(--beta-blue));
+  pointer-events: none;
+  animation: beta-progress-charge 7s linear infinite;
+}
+
+.player-profile-page.profile-theme-beta-tester .account-nav a {
+  position: relative;
+  z-index: 1;
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-right-color: rgba(56, 189, 248, .13);
+  border-radius: 0;
+  color: var(--beta-muted);
+  background: rgba(4, 17, 28, .34);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .065em;
+  text-transform: uppercase;
+  text-shadow: 0 0 8px rgba(56, 189, 248, .1);
+  transition: color .18s ease, border-color .18s ease, background-color .18s ease, box-shadow .18s ease;
+}
+
+.player-profile-page.profile-theme-beta-tester .account-nav a::before {
+  position: absolute;
+  right: 5px;
+  top: 5px;
+  width: 3px;
+  height: 3px;
+  content: "";
+  color: var(--beta-blue);
+  background: currentColor;
+  opacity: .34;
+  box-shadow: 0 0 5px currentColor;
+}
+
+.player-profile-page.profile-theme-beta-tester .account-nav a > svg {
+  color: var(--beta-blue);
+  filter: drop-shadow(0 0 3px rgba(56, 189, 248, .42));
+  transition: color .18s ease, filter .18s ease;
+}
+
+.player-profile-page.profile-theme-beta-tester .account-nav a:hover,
+.player-profile-page.profile-theme-beta-tester .account-nav a:focus-visible {
+  border-color: var(--beta-blue);
+  color: var(--beta-yellow);
+  background: rgba(56, 189, 248, .12);
+  box-shadow: inset 0 0 14px rgba(56, 189, 248, .1), 0 0 12px rgba(56, 189, 248, .12);
+}
+
+.player-profile-page.profile-theme-beta-tester .account-nav a:hover > svg,
+.player-profile-page.profile-theme-beta-tester .account-nav a:focus-visible > svg {
+  color: var(--beta-yellow);
+  filter: drop-shadow(0 0 7px rgba(250, 204, 21, .72));
+}
+
+.player-profile-page.profile-theme-beta-tester .account-nav a.active {
+  border-color: var(--beta-yellow);
+  color: #04111c;
+  background:
+    linear-gradient(135deg, #fde047, var(--beta-yellow) 58%, #eab308),
+    var(--beta-yellow);
+  box-shadow: inset 0 0 0 1px rgba(245, 251, 255, .28), 0 0 17px rgba(250, 204, 21, .25), 4px 4px 0 rgba(56, 189, 248, .13);
+  text-shadow: none;
+}
+
+.player-profile-page.profile-theme-beta-tester .account-nav a.active::before {
+  color: #04111c;
+  opacity: .7;
+  animation: beta-node-pulse 2.8s ease-in-out infinite;
+}
+
+.player-profile-page.profile-theme-beta-tester .account-nav a.active > svg {
+  color: #04111c;
+  filter: drop-shadow(0 0 4px rgba(4, 17, 28, .24));
+}
+
+.player-profile-page.profile-theme-beta-tester .account-nav-note {
+  position: relative;
+  z-index: 1;
+  color: var(--beta-blue);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.player-profile-page.profile-theme-beta-tester .account-nav-note > svg {
+  color: var(--beta-yellow);
+  filter: drop-shadow(0 0 5px rgba(250, 204, 21, .4));
 }
 
 .player-profile-page.profile-theme-beta-tester .brand-mark {
@@ -3065,6 +3390,9 @@ fieldset.settings-section { padding-top: 20px; }
 }
 
 .player-profile-page.profile-theme-beta-tester .public-player-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   border: 1px solid var(--beta-border);
   border-left: 3px solid var(--beta-yellow);
   background:
@@ -3073,6 +3401,38 @@ fieldset.settings-section { padding-top: 20px; }
     rgba(4, 17, 28, .78);
   box-shadow: inset 0 1px 0 rgba(245, 251, 255, .06), 0 24px 64px rgba(0, 0, 0, .2);
 }
+
+.player-profile-page.profile-theme-beta-tester .public-player-hero::before {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: clamp(42px, 7vw, 104px);
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(56, 189, 248, .12), rgba(245, 251, 255, .08), transparent);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation: beta-neon-sweep 8.5s ease-in-out infinite;
+}
+
+.player-profile-page.profile-theme-beta-tester .public-player-hero::after {
+  position: absolute;
+  z-index: 0;
+  right: 14px;
+  top: 14px;
+  width: 52px;
+  height: 18px;
+  border-top: 1px solid var(--beta-yellow);
+  border-right: 1px solid var(--beta-blue);
+  content: "";
+  opacity: .74;
+  filter: drop-shadow(0 0 5px var(--beta-blue));
+  animation: beta-icon-charge 3.8s ease-in-out infinite;
+}
+
+.player-profile-page.profile-theme-beta-tester .public-player-hero > * { position: relative; z-index: 1; }
 
 .player-profile-page.profile-theme-beta-tester .back-link {
   color: var(--beta-blue);
@@ -3092,14 +3452,31 @@ fieldset.settings-section { padding-top: 20px; }
   color: var(--beta-text);
   letter-spacing: -.045em;
   text-shadow: 2px 2px 0 rgba(56, 189, 248, .2), -1px -1px 0 rgba(250, 204, 21, .12);
+  animation: beta-text-signal 8.6s linear infinite;
 }
 
 .player-profile-page.profile-theme-beta-tester .public-player-avatar {
+  isolation: isolate;
   border: 2px solid var(--beta-blue);
   border-radius: 0;
   background: linear-gradient(145deg, #10304a, var(--beta-bg));
   box-shadow: 0 0 0 4px rgba(56, 189, 248, .1), 6px 6px 0 rgba(250, 204, 21, .16);
   clip-path: polygon(13px 0, 100% 0, 100% calc(100% - 13px), calc(100% - 13px) 100%, 0 100%, 0 13px);
+}
+
+.player-profile-page.profile-theme-beta-tester .public-player-avatar::before {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  left: 0;
+  top: 0;
+  height: 18%;
+  content: "";
+  background: linear-gradient(180deg, transparent, rgba(56, 189, 248, .3), rgba(250, 204, 21, .15), transparent);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation: beta-vertical-scan 5.6s ease-in-out infinite -1.2s;
 }
 
 .player-profile-page.profile-theme-beta-tester .public-player-avatar > img,
@@ -3128,6 +3505,8 @@ fieldset.settings-section { padding-top: 20px; }
 .beta-tester-avatar-mark svg { width: 16px; height: 16px; stroke-width: 3; }
 
 .beta-tester-theme-badge {
+  position: relative;
+  isolation: isolate;
   display: flex;
   width: max-content;
   max-width: 100%;
@@ -3146,7 +3525,26 @@ fieldset.settings-section { padding-top: 20px; }
   letter-spacing: .11em;
   line-height: 1;
   text-transform: uppercase;
+  overflow: hidden;
+  animation: beta-neon-frame 4s ease-in-out infinite;
 }
+
+.beta-tester-theme-badge::before {
+  position: absolute;
+  z-index: 0;
+  top: -35%;
+  bottom: -35%;
+  left: 0;
+  width: 24%;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(245, 251, 255, .76), transparent);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation: beta-neon-sweep 5s ease-in-out infinite -.7s;
+}
+
+.beta-tester-theme-badge > * { position: relative; z-index: 1; }
 
 .beta-tester-theme-badge > svg { width: 14px; height: 14px; flex: 0 0 auto; color: var(--beta-yellow); stroke-width: 3; }
 .beta-tester-theme-badge > span { white-space: nowrap; }
@@ -3186,6 +3584,7 @@ fieldset.settings-section { padding-top: 20px; }
   border-color: rgba(250, 204, 21, .34);
   border-radius: 0;
   transform: rotate(45deg);
+  animation: beta-icon-charge 4.2s ease-in-out infinite;
 }
 
 .player-profile-page.profile-theme-beta-tester .public-rank-card > span {
@@ -3235,18 +3634,87 @@ fieldset.settings-section { padding-top: 20px; }
 }
 
 .player-profile-page.profile-theme-beta-tester .profile-content-tabs {
+  position: relative;
+  isolation: isolate;
   border-color: var(--beta-border);
+}
+
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs::after {
+  position: absolute;
+  z-index: 0;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 1px;
+  content: "";
+  background: linear-gradient(90deg, var(--beta-yellow), var(--beta-blue) 28%, transparent 76%);
+  background-size: 220% 100%;
+  opacity: .78;
+  filter: drop-shadow(0 0 5px var(--beta-blue));
+  animation: beta-progress-charge 7.5s linear infinite;
 }
 
 .player-profile-page.profile-theme-beta-tester .profile-content-tabs > div {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  overflow: hidden;
   border-color: var(--beta-border);
   border-radius: 0;
-  background: rgba(4, 17, 28, .9);
-  box-shadow: inset 3px 0 0 var(--beta-yellow);
+  background:
+    linear-gradient(135deg, rgba(56, 189, 248, .1), transparent 48%),
+    rgba(4, 17, 28, .94);
+  box-shadow: inset 3px 0 0 var(--beta-yellow), 5px 5px 0 rgba(56, 189, 248, .08), 0 0 22px rgba(56, 189, 248, .08);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+}
+
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs > div::before {
+  position: absolute;
+  z-index: 0;
+  top: -25%;
+  bottom: -25%;
+  left: 0;
+  width: 14%;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(56, 189, 248, .15), rgba(245, 251, 255, .12), transparent);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation: beta-neon-sweep 6.8s ease-in-out infinite -2s;
 }
 
 .player-profile-page.profile-theme-beta-tester .profile-content-tabs button {
+  z-index: 1;
+  min-height: 46px;
+  border-right: 1px solid rgba(56, 189, 248, .13);
   color: var(--beta-muted);
+  letter-spacing: .085em;
+  text-shadow: 0 0 8px rgba(56, 189, 248, .12);
+}
+
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs button::before {
+  position: absolute;
+  right: 7px;
+  top: 6px;
+  width: 4px;
+  height: 4px;
+  content: "";
+  color: var(--beta-blue);
+  background: currentColor;
+  opacity: .34;
+  box-shadow: 0 0 5px currentColor;
+  animation: beta-node-pulse 3.4s ease-in-out infinite;
+}
+
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs button:nth-child(2)::before { animation-delay: -.8s; }
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs button:nth-child(3)::before { animation-delay: -1.6s; }
+
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs button:last-child { border-right: 0; }
+
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs button > svg {
+  color: var(--beta-blue);
+  filter: drop-shadow(0 0 3px rgba(56, 189, 248, .45));
+  transition: color .18s ease, filter .18s ease, transform .18s ease;
 }
 
 .player-profile-page.profile-theme-beta-tester .profile-content-tabs button:hover,
@@ -3256,14 +3724,32 @@ fieldset.settings-section { padding-top: 20px; }
   box-shadow: inset 0 0 0 1px var(--beta-blue);
 }
 
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs button:hover > svg,
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs button:focus-visible > svg,
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs button[aria-selected="true"] > svg {
+  color: var(--beta-yellow);
+  filter: drop-shadow(0 0 8px rgba(250, 204, 21, .78));
+  transform: scale(1.08);
+}
+
 .player-profile-page.profile-theme-beta-tester .profile-content-tabs button[aria-selected="true"] {
   color: var(--beta-text);
-  background: linear-gradient(135deg, rgba(56, 189, 248, .24), rgba(4, 17, 28, .36));
+  background:
+    linear-gradient(135deg, rgba(56, 189, 248, .27), rgba(4, 17, 28, .36)),
+    repeating-linear-gradient(90deg, transparent 0 12px, rgba(250, 204, 21, .025) 12px 13px);
+  box-shadow: inset 0 0 18px rgba(56, 189, 248, .11);
+  text-shadow: 0 0 10px rgba(56, 189, 248, .44);
+}
+
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs button[aria-selected="true"]::before {
+  color: var(--beta-yellow);
 }
 
 .player-profile-page.profile-theme-beta-tester .profile-content-tabs button[aria-selected="true"]::after {
   background: var(--beta-yellow);
   box-shadow: 0 0 12px rgba(250, 204, 21, .42);
+  transform-origin: center;
+  animation: beta-tab-rail 2.4s ease-in-out infinite;
 }
 
 .player-profile-page.profile-theme-beta-tester .profile-content-tabs button > span {
@@ -3271,6 +3757,12 @@ fieldset.settings-section { padding-top: 20px; }
   border-radius: 0;
   color: var(--beta-yellow);
   background: rgba(56, 189, 248, .08);
+  box-shadow: inset 0 0 8px rgba(56, 189, 248, .1), 0 0 7px rgba(250, 204, 21, .08);
+  animation: beta-count-pulse 3.2s ease-in-out infinite -1s;
+}
+
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs .profile-content-settings-toggle {
+  background-image: linear-gradient(135deg, transparent 38%, rgba(56, 189, 248, .08) 38% 62%, transparent 62%);
 }
 
 .player-profile-page.profile-theme-beta-tester :where(.public-player-stat-grid article, .panel, .profile-inventory-panel) {
@@ -3298,6 +3790,20 @@ fieldset.settings-section { padding-top: 20px; }
 .player-profile-page.profile-theme-beta-tester .public-player-stat-grid svg,
 .player-profile-page.profile-theme-beta-tester .combat-stat-grid svg {
   color: rgba(56, 189, 248, .7);
+  animation: beta-icon-charge 3.8s ease-in-out infinite;
+}
+
+.player-profile-page.profile-theme-beta-tester .public-player-stat-grid article:nth-child(2n) svg { animation-delay: -.9s; }
+.player-profile-page.profile-theme-beta-tester .public-player-stat-grid article:nth-child(3n) svg { animation-delay: -1.7s; }
+
+.player-profile-page.profile-theme-beta-tester :where(.panel-heading h2, .panel-heading h3, .profile-settings-view-heading h2, .profile-inventory-heading h2) {
+  text-shadow: 0 0 11px rgba(56, 189, 248, .16);
+  transition: color .18s ease, text-shadow .18s ease;
+}
+
+.player-profile-page.profile-theme-beta-tester :where(.panel, .profile-inventory-panel):hover :where(.panel-heading h2, .panel-heading h3, .profile-inventory-heading h2) {
+  color: color-mix(in srgb, var(--beta-text) 82%, var(--beta-yellow));
+  text-shadow: 0 0 15px rgba(56, 189, 248, .38), 0 0 5px rgba(250, 204, 21, .18);
 }
 
 .player-profile-page.profile-theme-beta-tester :where(.group-role-section, .combat-stat-grid, .hit-map-list) {
@@ -3307,15 +3813,42 @@ fieldset.settings-section { padding-top: 20px; }
 }
 
 .player-profile-page.profile-theme-beta-tester :where(.group-membership-cards article, .combat-stat-grid > div, .hit-map-list > div) {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   border-radius: 0;
   background-color: rgba(4, 17, 28, .88);
   transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease;
+}
+
+.player-profile-page.profile-theme-beta-tester :where(.group-membership-cards article, .combat-stat-grid > div, .hit-map-list > div)::before {
+  position: absolute;
+  z-index: 0;
+  top: -35%;
+  bottom: -35%;
+  left: 0;
+  width: 24%;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(56, 189, 248, .16), transparent);
+  opacity: 0;
+  transform: translate3d(-170%, 0, 0) skewX(-18deg);
+  transition: opacity .2s ease, transform .65s cubic-bezier(.2, .8, .2, 1);
+  pointer-events: none;
 }
 
 .player-profile-page.profile-theme-beta-tester :where(.group-membership-cards article, .combat-stat-grid > div, .hit-map-list > div):hover {
   border-color: var(--beta-yellow);
   background-color: rgba(11, 34, 53, .98);
   box-shadow: inset 3px 0 0 var(--beta-blue), 0 0 18px rgba(56, 189, 248, .1);
+}
+
+.player-profile-page.profile-theme-beta-tester :where(.group-membership-cards article, .combat-stat-grid > div, .hit-map-list > div):hover::before {
+  opacity: 1;
+  transform: translate3d(520%, 0, 0) skewX(-18deg);
+}
+
+.player-profile-page.profile-theme-beta-tester .group-membership-cards article:hover .identity-group-badge {
+  filter: brightness(1.16) saturate(1.12);
 }
 
 .player-profile-page.profile-theme-beta-tester :where(.group-role-section h3, .combat-stat-grid span, .hit-map-list span, .hit-map-figure figcaption, .hit-map-damage) {
@@ -3336,6 +3869,18 @@ fieldset.settings-section { padding-top: 20px; }
 
 .player-profile-page.profile-theme-beta-tester .rank-progress-track {
   background: rgba(56, 189, 248, .18);
+}
+
+.player-profile-page.profile-theme-beta-tester .rank-progress-track i {
+  background-image: linear-gradient(90deg, currentColor, var(--beta-yellow), #f5fbff, var(--beta-blue), currentColor);
+  background-size: 220% 100%;
+  box-shadow: 0 0 13px currentColor, 0 0 7px var(--beta-blue);
+  animation: beta-progress-charge 2.8s linear infinite;
+}
+
+.player-profile-page.profile-theme-beta-tester .profile-presence i,
+.player-profile-page.profile-theme-beta-tester .public-player-steam-identity::before {
+  animation: beta-node-pulse 2.2s ease-in-out infinite;
 }
 
 .player-profile-page.profile-theme-beta-tester .rank-progress > div:first-child {
@@ -3404,6 +3949,18 @@ fieldset.settings-section { padding-top: 20px; }
 }
 
 @media (max-width: 520px) {
+  .player-profile-page.profile-theme-beta-tester .public-player-copy { width: 100%; min-width: 0; }
+  .player-profile-page.profile-theme-beta-tester .public-player-identity {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 62px minmax(0, 1fr);
+  }
+  .player-profile-page.profile-theme-beta-tester .public-player-identity > div:last-child {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .player-profile-page.profile-theme-beta-tester .profile-identity-badge-rack { width: 100%; }
   .beta-tester-avatar-mark {
     right: -5px;
     top: -5px;
@@ -3435,13 +3992,33 @@ fieldset.settings-section { padding-top: 20px; }
 @media (forced-colors: active) {
   .beta-tester-avatar-mark,
   .beta-tester-theme-badge,
-  .leaderboard-theme-badge {
+  .leaderboard-theme-badge,
+  :is(.player-profile-page.profile-theme-beta-tester, .leaderboard-player-row.ranking-theme-beta-tester) .identity-group-badge {
     border: 2px solid ButtonText;
     color: ButtonText;
     background: Canvas;
     box-shadow: none;
     clip-path: none;
     filter: none;
+    text-shadow: none;
+    animation: none;
+  }
+
+  :is(.player-profile-page.profile-theme-beta-tester, .leaderboard-player-row.ranking-theme-beta-tester) .identity-group-badge::before,
+  :is(.player-profile-page.profile-theme-beta-tester, .leaderboard-player-row.ranking-theme-beta-tester) .identity-group-badge::after { display: none; }
+
+  .player-profile-page.profile-theme-beta-tester .account-nav,
+  .player-profile-page.profile-theme-beta-tester .account-nav a {
+    border-color: CanvasText;
+    color: LinkText;
+    background: Canvas;
+    box-shadow: none;
+    text-shadow: none;
+  }
+
+  .player-profile-page.profile-theme-beta-tester .account-nav a.active {
+    color: HighlightText;
+    background: Highlight;
   }
 
   .leaderboard-table tbody tr.ranking-theme-beta-tester > td {

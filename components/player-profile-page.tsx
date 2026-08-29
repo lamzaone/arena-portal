@@ -173,11 +173,13 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
               <div>
                 <p className="tapped-kicker"><UserRound aria-hidden="true" /> {isOwnProfile ? "Your player profile" : "Player profile"}<span className="profile-presence" title={presenceLabel}><i aria-hidden="true" /> {presenceLabel}</span></p>
                 <h1>{displayName}</h1>
-                <a className="public-player-steam-identity" href={steamProfileUrl} target="_blank" rel="noreferrer" title={`Open ${displayName}'s Steam profile`}>{steamId}</a>
-                <div className="profile-identity-badge-rack">
-                  <IdentityGroupBadgeList groups={secondaryIdentityGroups} compact />
+                <div className="profile-steam-theme-row">
+                  <a className="public-player-steam-identity" href={steamProfileUrl} target="_blank" rel="noreferrer" title={`Open ${displayName}'s Steam profile`}>{steamId}</a>
                   <ProfileThemeSurfaceBadge themeKey={profileTheme.key} surface="profile" />
                 </div>
+                {secondaryIdentityGroups.length > 0 ? <div className="profile-identity-badge-rack">
+                  <IdentityGroupBadgeList groups={secondaryIdentityGroups} compact />
+                </div> : null}
               </div>
             </div>
           </div>
