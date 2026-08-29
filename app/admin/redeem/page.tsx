@@ -3,8 +3,8 @@ import { LockKeyhole } from "lucide-react";
 
 import { RedeemCodeAdmin } from "@/components/economy/redeem-code-admin";
 import { SignInRequired } from "@/components/sign-in-required";
-import { SiteHeader } from "@/components/site-header";
 import { StaffSubmenu } from "@/components/staff-submenu";
+import { PortalShell } from "@/components/ui/portal-shell";
 import { getAdminAccess } from "@/lib/admin/access";
 import { createAdminActionToken, getSession } from "@/lib/auth/session";
 import {
@@ -30,18 +30,15 @@ export default async function RedeemCodeAdminPage({
   const access = await getAdminAccess(session.steamId);
   if (!access.canManageEconomy)
     return (
-      <main className="tapped-page">
-        <div className="shell">
-          <SiteHeader authenticated />
-          <section className="staff-denied">
-            <LockKeyhole aria-hidden="true" />
-            <p className="tapped-kicker">Restricted area</p>
-            <h1>Economy management required.</h1>
-            <p>Your staff role cannot create or alter Token redeem campaigns.</p>
-            <Link className="button button-secondary" href="/admin/items">Back to item management</Link>
-          </section>
-        </div>
-      </main>
+      <PortalShell authenticated>
+        <section className="staff-denied">
+          <LockKeyhole aria-hidden="true" />
+          <p className="tapped-kicker">Restricted area</p>
+          <h1>Economy management required.</h1>
+          <p>Your staff role cannot create or alter Token redeem campaigns.</p>
+          <Link className="button button-secondary" href="/admin/items">Back to item management</Link>
+        </section>
+      </PortalShell>
     );
   const searchQuery = (params.q ?? "").trim().slice(0, 100);
   const [catalogue, codePage] = await Promise.all([
@@ -49,17 +46,14 @@ export default async function RedeemCodeAdminPage({
     getEconomyRedeemCodes({ pageSize: 100 }),
   ]);
   return (
-    <main className="tapped-page">
-      <div className="shell">
-        <SiteHeader authenticated />
-        <StaffSubmenu access={access} active="redeem" />
-        <RedeemCodeAdmin
-          csrf={createAdminActionToken(session)}
-          catalogue={catalogue.items}
-          codes={codePage.codes}
-          searchQuery={searchQuery}
-        />
-      </div>
-    </main>
+    <PortalShell authenticated>
+      <StaffSubmenu access={access} active="redeem" />
+      <RedeemCodeAdmin
+        csrf={createAdminActionToken(session)}
+        catalogue={catalogue.items}
+        codes={codePage.codes}
+        searchQuery={searchQuery}
+      />
+    </PortalShell>
   );
 }

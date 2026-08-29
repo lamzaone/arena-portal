@@ -4,6 +4,7 @@ import { Box, Coins, LockKeyhole, Tag } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
+import { Panel } from "@/components/ui/panel";
 import {
   formatTokens,
   humanize,
@@ -114,9 +115,9 @@ export function EconomyItemCard({
     );
   }
 
-  return <article className={`panel economy-item-card ${className}`.trim()}>{content}</article>;
+  return <Panel as="article" className={`economy-item-card ${className}`.trim()}>{content}</Panel>;
 }
 
 export function EconomyEmptyState({ title, description, icon = <Box aria-hidden="true" /> }: { title: string; description: string; icon?: ReactNode }) {
-  return <section className="panel"><div className="icon-box">{icon}</div><h2>{title}</h2><p className="empty-copy">{description}</p></section>;
+  return <Panel><div className="icon-box">{icon}</div><h2>{title}</h2><p className="empty-copy">{description}</p></Panel>;
 }

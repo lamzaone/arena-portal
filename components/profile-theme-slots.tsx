@@ -24,7 +24,12 @@ export function GlobalThemeDocumentEffects({
   themeKey,
 }: ThemeSlotProps) {
   const { surface } = resolvePortalThemeSurface(themeKey, "global");
-  return <ThemeDocumentEffects effects={surface.documentEffects} />;
+  return (
+    <ThemeDocumentEffects
+      effects={{ cursorGrid: surface.documentEffects?.cursorGrid ?? "visible" }}
+      priority={0}
+    />
+  );
 }
 
 export function ProfileThemeBackground({ themeKey }: ThemeSlotProps) {
@@ -56,5 +61,10 @@ export function ProfileThemeDocumentEffects({
   themeKey,
 }: ThemeSlotProps) {
   const { surface } = resolvePortalThemeSurface(themeKey, "profile");
-  return <ThemeDocumentEffects effects={surface.documentEffects} />;
+  return (
+    <ThemeDocumentEffects
+      effects={{ cursorGrid: surface.documentEffects?.cursorGrid ?? "visible" }}
+      priority={100}
+    />
+  );
 }

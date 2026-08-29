@@ -26,7 +26,7 @@ For local testing with `http://localhost`, the session cookie is deliberately no
 - Public price refresh is used only for an exact market-hash name (and an optional `marketVersion`, `skinportVersion`, or `priceVersion` catalogue metadata field for phase variants). The retained WeaponSkins cache lacks exterior/StatTrak variants for many skins, so staff must record an appropriate last-known EUR-cent snapshot or set the exact variant name in Staff > Item management before those imported items can be sold.
 - The old WeaponSkins portal Loadout API/page and server plugin are intentionally retained as disabled backups. Do not turn either legacy feature back on alongside TAPPED.Inventory.
 
-See [the website plan](docs/website-plan.md) and [the Discord bot plan](docs/discord-bot-plan.md) for the next milestones.
+See [the theme system](docs/theme-system.md), [the website plan](docs/website-plan.md), and [the Discord bot plan](docs/discord-bot-plan.md) for extension guidance and the next milestones.
 
 ## Token Economy rollout
 

@@ -7,21 +7,38 @@ import { AccountNav } from "@/components/account-nav";
 import { PlayerIdentity } from "@/components/player-identity";
 import { PrimaryNavigation } from "@/components/primary-navigation";
 import { getSteamProfiles } from "@/lib/steam/profiles";
+import { resolvePortalThemeSurface } from "@/lib/themes/registry";
 
 type SiteHeaderProps = {
   authenticated?: boolean;
+  themeKey?: string | null;
 };
 
-export async function SiteHeader({ authenticated = false }: SiteHeaderProps) {
+export async function SiteHeader({
+  authenticated = false,
+  themeKey,
+}: SiteHeaderProps) {
   const session = authenticated ? await getSession() : null;
   const steamProfile = session ? (await getSteamProfiles([session.steamId])).get(session.steamId) : null;
   const staffAccess = session ? await getAdminAccess(session.steamId) : null;
   const displayName = steamProfile?.name ?? "Steam account";
   const profileHref = session ? `/players/${session.steamId}` : "/api/auth/steam";
+  const effectiveThemeKey =
+    themeKey === undefined ? session?.profileThemeKey : themeKey;
+  const { theme: globalTheme } = resolvePortalThemeSurface(
+    effectiveThemeKey,
+    "global",
+  );
 
   return (
     <>
-      <header className="site-header">
+      {/* The route may override the viewer theme when another surface owns the
+          full page, such as a viewed player's profile. */}
+      <header
+        className="site-header"
+        data-theme={globalTheme.key}
+        data-theme-surface="global"
+      >
         <Link className="brand" href="/" aria-label="TAPPED.RO home">
           <span className="brand-mark"><ShieldCheck aria-hidden="true" /></span>
           <span>TAPPED<span className="brand-accent">.</span>RO</span>
@@ -51,7 +68,9 @@ export async function SiteHeader({ authenticated = false }: SiteHeaderProps) {
           <Link className="button button-primary" href="/api/auth/steam"><LogIn aria-hidden="true" /> Steam login</Link>
         )}
       </header>
-      {session ? <AccountNav profileHref={profileHref} /> : null}
+      {session ? (
+        <AccountNav profileHref={profileHref} themeKey={globalTheme.key} />
+      ) : null}
     </>
   );
 }

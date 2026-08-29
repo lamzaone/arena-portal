@@ -30,7 +30,7 @@ import {
   type EconomyTradeItemView,
   type EconomyTradeView,
 } from "@/components/economy/economy-view-model";
-import { ResilientRemoteImage } from "@/components/resilient-remote-image";
+import { PlayerIdentity } from "@/components/player-identity";
 import {
   PlayerSearchField,
   type PlayerSearchResult,
@@ -40,12 +40,14 @@ import { PortalToast } from "@/components/success-toast";
 import { AsyncButton } from "@/components/ui/async-button";
 import { SearchField } from "@/components/ui/search-field";
 import { economyItemTypeLabel } from "@/lib/economy/item-taxonomy";
+import type { PlayerIdentityData } from "@/lib/player-identities";
 
 type TradeManagerProps = {
   inventory: unknown;
   wallet: unknown;
   trades: unknown;
   csrf: string;
+  counterpartyIdentities: Readonly<Record<string, PlayerIdentityData>>;
 };
 
 type TradePlayer = PlayerSearchResult;
@@ -234,26 +236,12 @@ function TradeItemButton({
   );
 }
 
-function PlayerAvatar({ player }: { player: TradePlayer }) {
-  return (
-    <ResilientRemoteImage
-      src={player.avatarUrl}
-      alt=""
-      referrerPolicy="no-referrer"
-      fallback={
-        <span className="trade-player-avatar-fallback" aria-hidden="true">
-          {player.displayName.slice(0, 1).toUpperCase() || <UserRound />}
-        </span>
-      }
-    />
-  );
-}
-
 export function TradeManager({
   inventory,
   wallet,
   trades,
   csrf,
+  counterpartyIdentities,
 }: TradeManagerProps) {
   const router = useRouter();
   const inventoryItems = useMemo(() => economyItems(inventory), [inventory]);
@@ -597,11 +585,17 @@ export function TradeManager({
           </div>
           {selectedPlayer ? (
             <div className="trade-selected-player">
-              <PlayerAvatar player={selectedPlayer} />
-              <span>
-                <strong>{selectedPlayer.displayName}</strong>
-                <small>{selectedPlayer.steamId}</small>
-              </span>
+              <PlayerIdentity
+                player={{
+                  steamId: selectedPlayer.steamId,
+                  displayName: selectedPlayer.displayName,
+                  avatarUrl: selectedPlayer.avatarUrl,
+                  presence: selectedPlayer.presence,
+                  profileThemeKey: selectedPlayer.profileThemeKey,
+                  identityGroups: [],
+                }}
+                variant="compact"
+              />
               <button
                 type="button"
                 onClick={() => clearPlayer()}
@@ -857,7 +851,17 @@ export function TradeManager({
                           ? "Sent offer"
                           : "Trade offer"}
                     </h3>
-                    <p>{trade.counterpartySteamId}</p>
+                    <PlayerIdentity
+                      player={counterpartyIdentities[trade.counterpartySteamId] ?? {
+                        steamId: trade.counterpartySteamId,
+                        displayName: trade.counterpartySteamId,
+                        avatarUrl: null,
+                        presence: "unknown",
+                        profileThemeKey: null,
+                        identityGroups: [],
+                      }}
+                      variant="compact"
+                    />
                   </div>
                 </div>
                 <TradeItems

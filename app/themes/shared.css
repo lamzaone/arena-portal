@@ -6,6 +6,17 @@
   display: contents;
 }
 
+.player-profile-page[data-theme-owner="profile"] {
+  min-height: 100vh;
+}
+
+/* A successful player profile is a full-page theme boundary. Its profile
+   background replaces the signed-in viewer's global background for this route. */
+body:has(.player-profile-page[data-theme-owner="profile"])
+  > .theme-background-slot[data-theme-background-surface="global"] {
+  display: none;
+}
+
 :is(
   [data-theme-surface="global"],
   .global-theme-default,
@@ -23,7 +34,10 @@
   .global-theme-tap-god
 ) :is(.portal-content, .portal-page, [data-page-shell="portal"]) {
   color: var(--theme-text);
-  background-color: var(--theme-page-bg);
+  /* Theme effects live in the fixed backdrop layer below portal content.
+     Keep page canvases transparent so the BETA grid and TAP GOD rain remain
+     visible; the opaque fallback color is owned by html/body above. */
+  background-color: transparent;
 }
 
 :is(

@@ -5,21 +5,36 @@
  */
 :root,
 [data-theme="default"] {
-  --theme-page-bg: var(--bg);
-  --theme-surface: var(--surface);
-  --theme-surface-raised: var(--surface-strong);
+  --default-bg: #050304;
+  --default-surface: #120709;
+  --default-surface-strong: #1b080b;
+  --default-text: #fff5f5;
+  --default-muted: #d2afb4;
+  --default-subtle: #98767b;
+  --default-accent: #e11d48;
+  --default-accent-bright: #ff7185;
+  --default-accent-soft: #ff91a4;
+  --default-accent-text: #ffd1d8;
+  --default-accent-muted: #a98189;
+  --default-border: rgba(255, 91, 108, .18);
+  --default-border-bright: rgba(255, 72, 94, .52);
+  --default-accent-border: rgba(255, 113, 133, .3);
+  --default-accent-surface: rgba(225, 29, 72, .14);
+  --theme-page-bg: var(--default-bg);
+  --theme-surface: var(--default-surface);
+  --theme-surface-raised: var(--default-surface-strong);
   --theme-surface-muted: rgba(15, 3, 6, .8);
-  --theme-text: var(--text);
-  --theme-text-muted: var(--muted);
-  --theme-text-subtle: var(--subtle);
-  --theme-accent: var(--accent);
-  --theme-accent-strong: var(--accent-bright);
-  --theme-accent-soft: var(--accent-soft);
-  --theme-border: var(--border);
-  --theme-border-strong: var(--border-bright);
-  --theme-focus-ring: var(--accent-soft);
+  --theme-text: var(--default-text);
+  --theme-text-muted: var(--default-muted);
+  --theme-text-subtle: var(--default-subtle);
+  --theme-accent: var(--default-accent);
+  --theme-accent-strong: var(--default-accent-bright);
+  --theme-accent-soft: var(--default-accent-soft);
+  --theme-border: var(--default-border);
+  --theme-border-strong: var(--default-border-bright);
+  --theme-focus-ring: var(--default-accent-soft);
   --theme-control-bg: rgba(18, 7, 9, .86);
-  --theme-control-hover: var(--accent-surface);
+  --theme-control-hover: var(--default-accent-surface);
   --theme-table-head: rgba(18, 7, 9, .92);
   --theme-table-row: rgba(15, 3, 6, .8);
   --theme-table-hover: rgba(225, 29, 72, .1);
@@ -27,12 +42,63 @@
   --theme-shadow: 0 12px 34px rgba(0, 0, 0, .22);
 }
 
+:is(
+  [data-theme="default"][data-theme-surface~="global"],
+  [data-theme="default"][data-theme-surface~="profile"],
+  .global-theme-default
+) {
+  --bg: var(--default-bg);
+  --surface: var(--default-surface);
+  --surface-strong: var(--default-surface-strong);
+  --text: var(--default-text);
+  --muted: var(--default-muted);
+  --subtle: var(--default-subtle);
+  --accent: var(--default-accent);
+  --accent-bright: var(--default-accent-bright);
+  --accent-soft: var(--default-accent-soft);
+  --accent-text: var(--default-accent-text);
+  --accent-muted: var(--default-accent-muted);
+  --accent-border: var(--default-accent-border);
+  --accent-surface: var(--default-accent-surface);
+  --border: var(--default-border);
+  --border-bright: var(--default-border-bright);
+  --purple: var(--default-accent);
+  --purple-bright: var(--default-accent-bright);
+}
+
+html:has(.player-profile-page[data-theme-owner="profile"].profile-theme-default) {
+  background-color: var(--default-bg);
+}
+
+body:has(.player-profile-page[data-theme-owner="profile"].profile-theme-default) {
+  background:
+    radial-gradient(circle at 78% 6%, rgba(225, 29, 72, .24), transparent 24rem),
+    radial-gradient(circle at 8% 54%, rgba(127, 12, 29, .18), transparent 26rem),
+    var(--default-bg);
+}
+
+body:has(.player-profile-page[data-theme-owner="profile"].profile-theme-default)::before {
+  background-image: linear-gradient(rgba(255, 118, 132, .045) 1px, transparent 1px);
+}
+
+body:has(.player-profile-page[data-theme-owner="profile"].profile-theme-default) .cursor-grid-background {
+  opacity: 1;
+  visibility: visible;
+}
+
+.player-profile-page[data-theme-owner="profile"].profile-theme-default {
+  min-height: 100vh;
+  color: var(--default-text);
+  color-scheme: dark;
+  background-color: transparent;
+}
+
 /* Surface names are part of the public theme contract. Keep overrides scoped
  * to these selectors so profile, global, and compact presentation can evolve
  * independently without changing component markup.
  */
 [data-theme="default"][data-theme-surface~="global"],
-[data-theme="default"][data-theme-surface="profile"],
+[data-theme="default"][data-theme-surface~="profile"],
 [data-theme="default"][data-theme-surface="small-profile"] {
   color: var(--theme-text);
 }

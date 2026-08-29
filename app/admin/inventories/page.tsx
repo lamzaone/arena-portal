@@ -3,23 +3,23 @@ import {
   Archive,
   ArrowRight,
   Boxes,
-  ChevronLeft,
-  ChevronRight,
   LockKeyhole,
   ShieldCheck,
   UserRoundSearch,
 } from "lucide-react";
 
 import { StaffInventoryPanel } from "@/components/economy/staff-inventory-panel";
+import { PlayerIdentity } from "@/components/player-identity";
 import { PlayerSearchField } from "@/components/player-search-field";
 import { SignInRequired } from "@/components/sign-in-required";
-import { SiteHeader } from "@/components/site-header";
 import { StaffSubmenu } from "@/components/staff-submenu";
 import { PortalToast } from "@/components/success-toast";
 import {
   SearchNavigationForm,
   SearchSubmitButton,
 } from "@/components/ui/search-field";
+import { LinkPagination } from "@/components/ui/link-pagination";
+import { PortalShell } from "@/components/ui/portal-shell";
 import { getAdminAccess } from "@/lib/admin/access";
 import { createAdminActionToken, getSession } from "@/lib/auth/session";
 import {
@@ -27,6 +27,7 @@ import {
   getEconomyCatalogue,
   getStaffEconomyAccount,
 } from "@/lib/data/portal-repository";
+import { resolvePlayerIdentities } from "@/lib/player-identities";
 
 type AdminInventoriesPageProps = {
   searchParams: Promise<{
@@ -132,7 +133,7 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
 
   const access = await getAdminAccess(session.steamId);
   if (!access.isAdmin || !access.canViewEconomy) {
-    return <main className="tapped-page"><div className="shell"><SiteHeader authenticated /><section className="staff-denied"><LockKeyhole aria-hidden="true" /><p className="tapped-kicker">Restricted area</p><h1>Economy staff access required.</h1><p>Your staff group does not have a TAPPED Token economy permission.</p><Link className="button button-secondary" href="/admin">Back to staff panel</Link></section></div></main>;
+    return <PortalShell authenticated><section className="staff-denied"><LockKeyhole aria-hidden="true" /><p className="tapped-kicker">Restricted area</p><h1>Economy staff access required.</h1><p>Your staff group does not have a TAPPED Token economy permission.</p><Link className="button button-secondary" href="/admin">Back to staff panel</Link></section></PortalShell>;
   }
 
   const query = (params.q ?? "").trim().slice(0, 64);
@@ -147,6 +148,15 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
     steamId && access.canGrantEconomyItems
       ? getEconomyCatalogue({ includeDisabled: true, pageSize: 100 })
       : Promise.resolve(null),
+  ]);
+  const playerIdentities = await resolvePlayerIdentities([
+    ...players.accounts.map((player) => ({
+      steamId: player.steamId,
+      displayName: player.displayName,
+    })),
+    ...(account
+      ? [{ steamId: account.steamId, displayName: account.displayName }]
+      : []),
   ]);
   const notice = feedback(params.notice, "notice");
   const error = feedback(params.error, "error");
@@ -163,9 +173,7 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
   });
 
   return (
-    <main className="tapped-page staff-page economy-admin-page">
-      <div className="shell">
-        <SiteHeader authenticated />
+    <PortalShell authenticated className="staff-page economy-admin-page">
         <section className="page-heading">
           <div>
             <p className="eyebrow"><ShieldCheck aria-hidden="true" /> Staff economy</p>
@@ -198,20 +206,27 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
             <div className="staff-player-results">
               {players.accounts.length ? players.accounts.map((player) => {
                 const selected = player.steamId === steamId;
-                return <Link key={player.steamId} className={selected ? "is-selected" : ""} href={inventoriesHref({ query, page: players.page, steamId: player.steamId })} scroll={false} aria-current={selected ? "page" : undefined}>
-                  <span className="staff-player-initial" aria-hidden="true">{player.displayName.slice(0, 1).toUpperCase() || "?"}</span>
-                  <span className="staff-player-result-copy"><strong>{player.displayName}</strong><small>{player.steamId}</small><span><Boxes aria-hidden="true" /> {player.inventoryCount} items <b>·</b> {formatTokens(player.wallet.balance)} Tokens</span></span>
-                  <ArrowRight aria-hidden="true" />
-                </Link>;
+                const identity = playerIdentities[player.steamId] ?? {
+                  steamId: player.steamId,
+                  displayName: player.displayName,
+                  avatarUrl: null,
+                  presence: "unknown" as const,
+                  profileThemeKey: null,
+                  identityGroups: [],
+                };
+                return <div key={player.steamId} className={`staff-player-result-row${selected ? " is-selected" : ""}`}>
+                  <PlayerIdentity player={identity} variant="compact" />
+                  <span className="staff-player-result-meta"><Boxes aria-hidden="true" /> {player.inventoryCount} items <b>·</b> {formatTokens(player.wallet.balance)} Tokens</span>
+                  <Link className="staff-player-inspect" href={inventoriesHref({ query, page: players.page, steamId: player.steamId })} scroll={false} aria-current={selected ? "page" : undefined}>Inspect <ArrowRight aria-hidden="true" /></Link>
+                </div>;
               }) : <div className="staff-player-empty"><Archive aria-hidden="true" /><strong>No wallet accounts found.</strong><p>Try a player name or SteamID64. Awarding Tokens or an item creates an account automatically.</p></div>}
             </div>
-            {playerPageCount > 1 ? <nav className="pagination staff-player-pagination" aria-label="Player results pages"><Link className={previousPlayerHref ? "" : "is-disabled"} href={previousPlayerHref ?? "#"} scroll={false}><ChevronLeft aria-hidden="true" /> Previous</Link><span>{players.page} / {playerPageCount}</span><Link className={nextPlayerHref ? "" : "is-disabled"} href={nextPlayerHref ?? "#"} scroll={false}>Next <ChevronRight aria-hidden="true" /></Link></nav> : null}
+            {playerPageCount > 1 ? <LinkPagination className="staff-player-pagination" page={players.page} totalPages={playerPageCount} label="Player results pages" hrefForPage={(targetPage) => inventoriesHref({ query, page: targetPage, steamId, inventoryPage })} /> : null}
           </aside>
           <div className="staff-inventory-workspace">
-            {account ? <StaffInventoryPanel account={account} csrf={createAdminActionToken(session)} canAdjustTokens={access.canAdjustEconomyTokens} canGrant={access.canGrantEconomyItems} canManage={access.canManageEconomy} canManageLoadouts={access.canManageEconomyLoadouts} grantCatalogue={grantCatalogue?.items ?? []} mutationAction={mutationAction} pagination={{ previousHref: previousInventoryHref, nextHref: nextInventoryHref }} /> : <section className="panel staff-inventory-empty"><div className="staff-inventory-empty-icon"><Archive aria-hidden="true" /></div><p className="eyebrow">Select a player</p><h2>Choose an inventory to inspect.</h2><p>Search the directory by player name or SteamID64. Selecting a player opens their wallet, loadout controls, and preview-rich inventory right here.</p></section>}
+            {account ? <StaffInventoryPanel account={account} playerIdentity={playerIdentities[account.steamId]} csrf={createAdminActionToken(session)} canAdjustTokens={access.canAdjustEconomyTokens} canGrant={access.canGrantEconomyItems} canManage={access.canManageEconomy} canManageLoadouts={access.canManageEconomyLoadouts} grantCatalogue={grantCatalogue?.items ?? []} mutationAction={mutationAction} pagination={{ previousHref: previousInventoryHref, nextHref: nextInventoryHref }} /> : <section className="panel staff-inventory-empty"><div className="staff-inventory-empty-icon"><Archive aria-hidden="true" /></div><p className="eyebrow">Select a player</p><h2>Choose an inventory to inspect.</h2><p>Search the directory by player name or SteamID64. Selecting a player opens their wallet, loadout controls, and preview-rich inventory right here.</p></section>}
           </div>
         </section>
-      </div>
-    </main>
+    </PortalShell>
   );
 }

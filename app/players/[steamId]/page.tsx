@@ -3,10 +3,11 @@ import { ArrowLeft, Trophy } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { PlayerProfilePage } from "@/components/player-profile-page";
-import { SiteHeader } from "@/components/site-header";
+import { PortalShell } from "@/components/ui/portal-shell";
 import { createProfileActionToken, getSession } from "@/lib/auth/session";
 import { getPlayerDashboard, getPlayerProfileInventoryPage, getPlayerProfileThemeKey, getPlayerSettings, getPublicPlayerProfile } from "@/lib/data/portal-repository";
 import { getEffectiveIdentity, reconcileIdentityGroupRewards } from "@/lib/data/identity-groups";
+import { resolvePlayerIdentities } from "@/lib/player-identities";
 import { getSteamProfiles } from "@/lib/steam/profiles";
 
 type PlayerProfilePageProps = {
@@ -31,18 +32,15 @@ export default async function PublicPlayerProfilePage({ params, searchParams }: 
 
   if (!profile) {
     return (
-      <main className="tapped-page player-profile-page">
-        <div className="shell">
-          <SiteHeader authenticated={Boolean(session)} />
-          <section className="public-player-empty">
-            <Trophy aria-hidden="true" />
-            <p className="tapped-kicker">Player profile</p>
-            <h1>No ranking record found.</h1>
-            <p>This Steam account has not created a K4 LevelRanks record on ARENA.TAPPED.RO yet.</p>
-            <Link className="button button-secondary" href="/ranking"><ArrowLeft aria-hidden="true" /> Back to ranking</Link>
-          </section>
-        </div>
-      </main>
+      <PortalShell authenticated={Boolean(session)} className="player-profile-page">
+        <section className="public-player-empty">
+          <Trophy aria-hidden="true" />
+          <p className="tapped-kicker">Player profile</p>
+          <h1>No ranking record found.</h1>
+          <p>This Steam account has not created a K4 LevelRanks record on ARENA.TAPPED.RO yet.</p>
+          <Link className="button button-secondary" href="/ranking"><ArrowLeft aria-hidden="true" /> Back to ranking</Link>
+        </section>
+      </PortalShell>
     );
   }
 
@@ -50,11 +48,22 @@ export default async function PublicPlayerProfilePage({ params, searchParams }: 
   let profileThemeKey = initialProfileThemeKey;
   let settings = initialSettings;
 
-  const identity = await getEffectiveIdentity({
-    steamId,
-    vipGroupNames: profile.vipGroups.map((group) => group.externalKey ?? group.name),
-    adminGroupNames: profile.adminGroups.map((group) => group.externalKey ?? group.name),
-  });
+  const moderationActorIds = "bans" in profile
+    ? [
+        ...profile.bans.map((ban) => ban.adminSteamId ?? ""),
+        ...profile.sanctions.map((sanction) => sanction.adminSteamId ?? ""),
+      ]
+    : [];
+  const [identity, relatedPlayerIdentities] = await Promise.all([
+    getEffectiveIdentity({
+      steamId,
+      vipGroupNames: profile.vipGroups.map((group) => group.externalKey ?? group.name),
+      adminGroupNames: profile.adminGroups.map((group) => group.externalKey ?? group.name),
+    }),
+    resolvePlayerIdentities(
+      moderationActorIds.map((actorSteamId) => ({ steamId: actorSteamId })),
+    ),
+  ]);
 
   // External Admins.Core and VIPCore memberships remain authoritative in the
   // game database. Reconcile their catalogue rewards when that player opens
@@ -82,5 +91,5 @@ export default async function PublicPlayerProfilePage({ params, searchParams }: 
     }
   }
 
-  return <PlayerProfilePage profile={profile} identity={identity} steamId={steamId} steamProfile={steamProfiles.get(steamId)} isOwnProfile={Boolean(isOwnProfile)} isAuthenticated={Boolean(session)} profileInventory={profileInventory} profileThemeKey={profileThemeKey} settingsOpen={settingsOpen} profileSettings={settings && session ? { csrf: createProfileActionToken(session), initialSettings: { inventoryVisibility: settings.inventoryVisibility, activeThemeId: settings.activeThemeId, activeThemeItemId: settings.activeThemeItemId, ownedThemes: settings.ownedThemes } } : undefined} />;
+  return <PlayerProfilePage profile={profile} identity={identity} steamId={steamId} steamProfile={steamProfiles.get(steamId)} isOwnProfile={Boolean(isOwnProfile)} isAuthenticated={Boolean(session)} profileInventory={profileInventory} profileThemeKey={profileThemeKey} relatedPlayerIdentities={relatedPlayerIdentities} settingsOpen={settingsOpen} profileSettings={settings && session ? { csrf: createProfileActionToken(session), initialSettings: { inventoryVisibility: settings.inventoryVisibility, activeThemeId: settings.activeThemeId, activeThemeItemId: settings.activeThemeItemId, ownedThemes: settings.ownedThemes } } : undefined} />;
 }

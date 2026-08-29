@@ -16,11 +16,13 @@ import {
 } from "@/components/profile-theme-slots";
 import { ProfileThemeSurfaceBadge } from "@/components/profile-theme-surface-badge";
 import { ProfileTabs } from "@/components/profile-tabs";
+import { PlayerIdentity } from "@/components/player-identity";
 import { ResilientRemoteImage } from "@/components/resilient-remote-image";
 import { SiteHeader } from "@/components/site-header";
 import { getLevelRank, getNextLevelRank, getRankProgress } from "@/lib/content/levelranks";
 import type { HitboxStats, PlayerDashboard, PlayerProfileInventoryPage, PublicPlayerProfile } from "@/lib/data/portal-repository";
 import type { EffectiveIdentity, EffectiveIdentityGroup } from "@/lib/data/identity-groups";
+import type { PlayerIdentityData } from "@/lib/player-identities";
 import type { SteamProfile } from "@/lib/steam/profiles";
 import { resolvePortalThemeSurface } from "@/lib/themes/registry";
 
@@ -35,6 +37,7 @@ type PlayerProfilePageProps = {
   isAuthenticated: boolean;
   profileInventory: PlayerProfileInventoryPage;
   profileThemeKey?: string | null;
+  relatedPlayerIdentities?: Readonly<Record<string, PlayerIdentityData>>;
   settingsOpen?: boolean;
   profileSettings?: {
     csrf: string;
@@ -135,7 +138,7 @@ function identityMembershipLabel(
   return "Custom portal group";
 }
 
-export function PlayerProfilePage({ profile, identity, steamId, steamProfile, isOwnProfile, isAuthenticated, profileInventory, profileThemeKey, settingsOpen = false, profileSettings }: PlayerProfilePageProps) {
+export function PlayerProfilePage({ profile, identity, steamId, steamProfile, isOwnProfile, isAuthenticated, profileInventory, profileThemeKey, relatedPlayerIdentities = {}, settingsOpen = false, profileSettings }: PlayerProfilePageProps) {
   const displayName = steamProfile?.name ?? profile.displayName ?? "ARENA player";
   const dashboard = isDashboard(profile) ? profile : null;
   const activeBan = dashboard?.bans.find((ban) => isActiveSanction(ban.expiresAt));
@@ -165,11 +168,15 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
       data-profile-theme={profileTheme.key}
       data-theme={profileTheme.key}
       data-theme-surface="profile"
+      data-theme-owner="profile"
     >
       <ProfileThemeDocumentEffects themeKey={profileTheme.key} />
       <ProfileThemeBackground themeKey={profileTheme.key} />
       <div className="shell">
-        <SiteHeader authenticated={isAuthenticated} />
+        <SiteHeader
+          authenticated={isAuthenticated}
+          themeKey={profileThemeKey ?? null}
+        />
         <section className="public-player-hero shared-profile-hero">
           <div className="public-player-copy">
             {!isOwnProfile ? <Link className="back-link" href="/ranking"><ArrowLeft aria-hidden="true" /> Server ranking</Link> : null}
@@ -258,8 +265,8 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
         {isOwnProfile && dashboard ? <section className="history-section" aria-labelledby="moderation-title">
           <div className="section-heading compact"><p className="eyebrow"><ShieldCheck aria-hidden="true" /> Private record</p><h2 id="moderation-title">Moderation history</h2></div>
           <div className="history-grid">
-            <article className="panel history-panel"><div className="panel-heading"><h3>Bans</h3><Link href="/appeals">Appeals <ArrowRight aria-hidden="true" /></Link></div>{dashboard.bans.length ? <ul className="record-list">{dashboard.bans.map((ban) => <li key={ban.id}><div><strong>{ban.reason}</strong><span>By {ban.adminSteamId ? <Link href={`/players/${ban.adminSteamId}`}>{ban.adminName || "Admin"}</Link> : ban.adminName || "Console"} · {formatDate(ban.createdAt)}</span></div><b className={isActiveSanction(ban.expiresAt) ? "badge badge-danger" : "badge"}>{isActiveSanction(ban.expiresAt) ? "Active" : "Expired"}</b></li>)}</ul> : <p className="empty-copy">No ban history found.</p>}</article>
-            <article className="panel history-panel"><div className="panel-heading"><h3>Gags &amp; mutes</h3><span>{dashboard.sanctions.length} record{dashboard.sanctions.length === 1 ? "" : "s"}</span></div>{dashboard.sanctions.length ? <ul className="record-list">{dashboard.sanctions.map((sanction) => <li key={sanction.id}><div><strong>{sanction.kind} · {sanction.reason}</strong><span>By {sanction.adminSteamId ? <Link href={`/players/${sanction.adminSteamId}`}>{sanction.adminName || "Admin"}</Link> : sanction.adminName || "Console"} · {formatDate(sanction.createdAt)}</span></div><b className={isActiveSanction(sanction.expiresAt) ? "badge badge-warning" : "badge"}>{isActiveSanction(sanction.expiresAt) ? "Active" : "Expired"}</b></li>)}</ul> : <p className="empty-copy">No gag or mute history found.</p>}</article>
+            <article className="panel history-panel"><div className="panel-heading"><h3>Bans</h3><Link href="/appeals">Appeals <ArrowRight aria-hidden="true" /></Link></div>{dashboard.bans.length ? <ul className="record-list">{dashboard.bans.map((ban) => { const moderator = ban.adminSteamId ? relatedPlayerIdentities[ban.adminSteamId] : undefined; return <li key={ban.id}><div><strong>{ban.reason}</strong><span>By {moderator ? <PlayerIdentity player={moderator} variant="inline" showSteamId={false} /> : ban.adminName || "Console"} · {formatDate(ban.createdAt)}</span></div><b className={isActiveSanction(ban.expiresAt) ? "badge badge-danger" : "badge"}>{isActiveSanction(ban.expiresAt) ? "Active" : "Expired"}</b></li>; })}</ul> : <p className="empty-copy">No ban history found.</p>}</article>
+            <article className="panel history-panel"><div className="panel-heading"><h3>Gags &amp; mutes</h3><span>{dashboard.sanctions.length} record{dashboard.sanctions.length === 1 ? "" : "s"}</span></div>{dashboard.sanctions.length ? <ul className="record-list">{dashboard.sanctions.map((sanction) => { const moderator = sanction.adminSteamId ? relatedPlayerIdentities[sanction.adminSteamId] : undefined; return <li key={sanction.id}><div><strong>{sanction.kind} · {sanction.reason}</strong><span>By {moderator ? <PlayerIdentity player={moderator} variant="inline" showSteamId={false} /> : sanction.adminName || "Console"} · {formatDate(sanction.createdAt)}</span></div><b className={isActiveSanction(sanction.expiresAt) ? "badge badge-warning" : "badge"}>{isActiveSanction(sanction.expiresAt) ? "Active" : "Expired"}</b></li>; })}</ul> : <p className="empty-copy">No gag or mute history found.</p>}</article>
             <article className="panel history-panel"><div className="panel-heading"><h3>Kick history</h3><span>Audit bridge</span></div><p className="empty-copy">The current game stack does not persist kicks. The Swiftly audit bridge can add kick reasons here without changing existing moderation tables.</p></article>
           </div>
         </section> : null}

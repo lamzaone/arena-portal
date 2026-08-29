@@ -40,7 +40,11 @@
   --theme-shadow: 0 18px 44px rgba(0, 0, 0, .5);
 }
 
-:is([data-theme="tap_god"][data-theme-surface~="global"], .global-theme-tap-god) {
+:is(
+  [data-theme="tap_god"][data-theme-surface~="global"],
+  [data-theme="tap_god"][data-theme-surface~="profile"],
+  .global-theme-tap-god
+) {
   --bg: var(--theme-page-bg);
   --surface: var(--theme-surface);
   --surface-strong: var(--theme-surface-raised);
@@ -72,40 +76,33 @@
 }
 
 :is(
-  html.global-theme-tap-god,
-  html[data-theme="tap_god"][data-theme-surface~="global"]
+  html.global-theme-tap-god:not(:has(.player-profile-page[data-theme-owner="profile"])),
+  html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profile-page[data-theme-owner="profile"]))
 ) body,
-body:has(.player-profile-page.profile-theme-tap-god) {
+body:has(.player-profile-page[data-theme-owner="profile"].profile-theme-tap-god) {
   background:
     radial-gradient(circle at 70% -8%, rgba(225, 29, 72, .18), transparent 34rem),
     radial-gradient(circle at 12% 70%, rgba(127, 5, 35, .15), transparent 30rem),
     #020102;
 }
 
+html:has(.player-profile-page[data-theme-owner="profile"].profile-theme-tap-god) {
+  background-color: #020102;
+}
+
 :is(
-  html.global-theme-tap-god,
-  html[data-theme="tap_god"][data-theme-surface~="global"]
+  html.global-theme-tap-god:not(:has(.player-profile-page[data-theme-owner="profile"])),
+  html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profile-page[data-theme-owner="profile"]))
 ) body::before,
-body:has(.player-profile-page.profile-theme-tap-god)::before {
+body:has(.player-profile-page[data-theme-owner="profile"].profile-theme-tap-god)::before {
   background-image: linear-gradient(rgba(225, 29, 72, .045) 1px, transparent 1px);
 }
 
-body:has(.player-profile-page.profile-theme-tap-god) .cursor-grid-background,
-html.global-theme-tap-god .cursor-grid-background,
-html[data-theme="tap_god"][data-theme-surface~="global"] .cursor-grid-background {
+body:has(.player-profile-page[data-theme-owner="profile"].profile-theme-tap-god) .cursor-grid-background,
+html.global-theme-tap-god:not(:has(.player-profile-page[data-theme-owner="profile"])) .cursor-grid-background,
+html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profile-page[data-theme-owner="profile"])) .cursor-grid-background {
   opacity: 0;
   visibility: hidden;
-}
-
-/* A viewer and the viewed player can both own TAP GOD. The global rain already
-   covers the viewport, so suppress the nested profile copy instead of doubling
-   44 fixed animated drops. */
-:is(
-  html.global-theme-tap-god,
-  html[data-theme="tap_god"][data-theme-surface~="global"]
-) .player-profile-page[data-theme="tap_god"]
-  .theme-background-slot[data-theme-background-theme="tap_god"][data-theme-background-surface="profile"] {
-  display: none;
 }
 
 @keyframes tap-god-background-drift {
@@ -482,9 +479,12 @@ html[data-theme="tap_god"][data-theme-surface~="global"] .cursor-grid-background
   animation: tap-god-rain-flash 12.5s ease-out -4.2s infinite;
 }
 
-.player-profile-page.profile-theme-tap-god .site-header {
+/* Navigation reads its effective global theme from the component boundary.
+   Profile routes can therefore give the viewed player priority without
+   changing the signed-in viewer's document theme. */
+.site-header[data-theme="tap_god"][data-theme-surface~="global"] {
+  z-index: 40;
   isolation: isolate;
-  overflow: hidden;
   border-color: var(--tap-border);
   border-left: 3px solid var(--tap-red);
   border-radius: 0;
@@ -492,8 +492,8 @@ html[data-theme="tap_god"][data-theme-surface~="global"] .cursor-grid-background
   box-shadow: inset 0 -1px 0 rgba(225, 29, 72, .12), 0 17px 42px rgba(0, 0, 0, .48), 0 0 25px rgba(225, 29, 72, .08);
 }
 
-.player-profile-page.profile-theme-tap-god .site-header::after,
-.player-profile-page.profile-theme-tap-god .account-nav::after,
+.site-header[data-theme="tap_god"][data-theme-surface~="global"]::after,
+.account-nav[data-theme="tap_god"][data-theme-surface~="global"]::after,
 .player-profile-page.profile-theme-tap-god .profile-content-tabs::after {
   position: absolute;
   z-index: 0;
@@ -510,9 +510,9 @@ html[data-theme="tap_god"][data-theme-surface~="global"] .cursor-grid-background
   animation: tap-god-bloodline 5.8s linear infinite;
 }
 
-.player-profile-page.profile-theme-tap-god .site-header > * { position: relative; z-index: 1; }
+.site-header[data-theme="tap_god"][data-theme-surface~="global"] > * { position: relative; z-index: 1; }
 
-.player-profile-page.profile-theme-tap-god .brand-mark {
+.site-header[data-theme="tap_god"][data-theme-surface~="global"] .brand-mark {
   border: 1px solid var(--tap-red);
   border-radius: 0;
   color: var(--tap-rose);
@@ -521,21 +521,21 @@ html[data-theme="tap_god"][data-theme-surface~="global"] .cursor-grid-background
   clip-path: polygon(50% 0, 100% 20%, 90% 84%, 50% 100%, 10% 84%, 0 20%);
 }
 
-.player-profile-page.profile-theme-tap-god :where(.main-nav a, .mobile-nav nav a) { color: var(--tap-muted); }
+.site-header[data-theme="tap_god"][data-theme-surface~="global"] :is(.main-nav a, .mobile-nav nav a) { color: var(--tap-muted); }
 
-.player-profile-page.profile-theme-tap-god :where(.main-nav a, .mobile-nav nav a):hover,
-.player-profile-page.profile-theme-tap-god :where(.main-nav a, .mobile-nav nav a):focus-visible {
+.site-header[data-theme="tap_god"][data-theme-surface~="global"] :is(.main-nav a, .mobile-nav nav a):hover,
+.site-header[data-theme="tap_god"][data-theme-surface~="global"] :is(.main-nav a, .mobile-nav nav a):focus-visible {
   color: var(--tap-red);
   background-color: rgba(225, 29, 72, .11);
   text-shadow: 0 0 10px rgba(225, 29, 72, .4);
 }
 
-.player-profile-page.profile-theme-tap-god :where(a, button, summary, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+.player-profile-page.profile-theme-tap-god :where(a, button, summary, input, select, textarea, [tabindex]:not([tabindex="-1"])):not(:where(.site-header *, .account-nav *)):focus-visible {
   outline: 2px solid var(--tap-red) !important;
   outline-offset: 3px;
 }
 
-.player-profile-page.profile-theme-tap-god .account-nav {
+.account-nav[data-theme="tap_god"][data-theme-surface~="global"] {
   position: relative;
   isolation: isolate;
   border: 1px solid var(--tap-border);
@@ -548,7 +548,7 @@ html[data-theme="tap_god"][data-theme-surface~="global"] .cursor-grid-background
   scrollbar-color: var(--tap-crimson) var(--tap-bg);
 }
 
-.player-profile-page.profile-theme-tap-god .account-nav a {
+.account-nav[data-theme="tap_god"][data-theme-surface~="global"] a {
   position: relative;
   z-index: 1;
   min-height: 38px;
@@ -565,7 +565,7 @@ html[data-theme="tap_god"][data-theme-surface~="global"] .cursor-grid-background
   transition: color .18s ease, border-color .18s ease, background-color .18s ease, box-shadow .18s ease;
 }
 
-.player-profile-page.profile-theme-tap-god .account-nav a::before {
+.account-nav[data-theme="tap_god"][data-theme-surface~="global"] a::before {
   position: absolute;
   right: 5px;
   top: 5px;
@@ -578,17 +578,17 @@ html[data-theme="tap_god"][data-theme-surface~="global"] .cursor-grid-background
   box-shadow: 0 0 5px currentColor;
 }
 
-.player-profile-page.profile-theme-tap-god .account-nav a > svg { color: var(--tap-crimson); filter: drop-shadow(0 0 4px rgba(225, 29, 72, .42)); }
+.account-nav[data-theme="tap_god"][data-theme-surface~="global"] a > svg { color: var(--tap-crimson); filter: drop-shadow(0 0 4px rgba(225, 29, 72, .42)); }
 
-.player-profile-page.profile-theme-tap-god .account-nav a:hover,
-.player-profile-page.profile-theme-tap-god .account-nav a:focus-visible {
+.account-nav[data-theme="tap_god"][data-theme-surface~="global"] a:hover,
+.account-nav[data-theme="tap_god"][data-theme-surface~="global"] a:focus-visible {
   border-color: var(--tap-crimson);
   color: var(--tap-rose);
   background: rgba(225, 29, 72, .13);
   box-shadow: inset 0 0 17px rgba(225, 29, 72, .12), 0 0 13px rgba(225, 29, 72, .16);
 }
 
-.player-profile-page.profile-theme-tap-god .account-nav a.active {
+.account-nav[data-theme="tap_god"][data-theme-surface~="global"] a.active {
   border-color: var(--tap-red);
   color: var(--tap-text);
   background: linear-gradient(135deg, rgba(225, 29, 72, .72), rgba(91, 7, 25, .9));
@@ -596,10 +596,10 @@ html[data-theme="tap_god"][data-theme-surface~="global"] .cursor-grid-background
   text-shadow: 0 0 9px rgba(255, 241, 242, .34);
 }
 
-.player-profile-page.profile-theme-tap-god .account-nav a.active::before { color: var(--tap-rose); animation: tap-god-ember-pulse 2.7s ease-in-out infinite; }
-.player-profile-page.profile-theme-tap-god .account-nav a.active > svg { color: var(--tap-rose); filter: drop-shadow(0 0 7px rgba(255, 113, 133, .68)); }
-.player-profile-page.profile-theme-tap-god .account-nav-note { color: #bd8591; font-size: 9px; letter-spacing: .04em; text-transform: uppercase; }
-.player-profile-page.profile-theme-tap-god .account-nav-note > svg { color: var(--tap-crimson); }
+.account-nav[data-theme="tap_god"][data-theme-surface~="global"] a.active::before { color: var(--tap-rose); animation: tap-god-ember-pulse 2.7s ease-in-out infinite; }
+.account-nav[data-theme="tap_god"][data-theme-surface~="global"] a.active > svg { color: var(--tap-rose); filter: drop-shadow(0 0 7px rgba(255, 113, 133, .68)); }
+.account-nav[data-theme="tap_god"][data-theme-surface~="global"] .account-nav-note { color: #bd8591; font-size: 9px; letter-spacing: .04em; text-transform: uppercase; }
+.account-nav[data-theme="tap_god"][data-theme-surface~="global"] .account-nav-note > svg { color: var(--tap-crimson); }
 
 .player-profile-page.profile-theme-tap-god .public-player-hero {
   position: relative;
@@ -807,7 +807,7 @@ html[data-theme="tap_god"][data-theme-surface~="global"] .cursor-grid-background
 .player-profile-page.profile-theme-tap-god .public-rank-card > div > span { color: var(--tap-muted); }
 .player-profile-page.profile-theme-tap-god .public-rank-card > div { border-color: var(--tap-border); }
 
-.player-profile-page.profile-theme-tap-god .button-primary {
+.player-profile-page.profile-theme-tap-god .button-primary:not(:where(.site-header *)) {
   border-color: var(--tap-red);
   border-radius: 0;
   color: var(--tap-text);
@@ -815,18 +815,18 @@ html[data-theme="tap_god"][data-theme-surface~="global"] .cursor-grid-background
   box-shadow: 4px 4px 0 rgba(54, 2, 14, .72), 0 0 15px rgba(225, 29, 72, .18);
 }
 
-.player-profile-page.profile-theme-tap-god .button-primary:hover,
-.player-profile-page.profile-theme-tap-god .button-primary:focus-visible { border-color: var(--tap-rose); color: #fff; background: linear-gradient(135deg, var(--tap-red), #9f1239); }
+.player-profile-page.profile-theme-tap-god .button-primary:not(:where(.site-header *)):hover,
+.player-profile-page.profile-theme-tap-god .button-primary:not(:where(.site-header *)):focus-visible { border-color: var(--tap-rose); color: #fff; background: linear-gradient(135deg, var(--tap-red), #9f1239); }
 
-.player-profile-page.profile-theme-tap-god .button-secondary {
+.player-profile-page.profile-theme-tap-god .button-secondary:not(:where(.site-header *)) {
   border-color: var(--tap-crimson);
   border-radius: 0;
   color: var(--tap-rose);
   background: rgba(225, 29, 72, .08);
 }
 
-.player-profile-page.profile-theme-tap-god .button-secondary:hover,
-.player-profile-page.profile-theme-tap-god .button-secondary:focus-visible { border-color: var(--tap-red); color: var(--tap-text); background: rgba(225, 29, 72, .16); box-shadow: 0 0 14px rgba(225, 29, 72, .15); }
+.player-profile-page.profile-theme-tap-god .button-secondary:not(:where(.site-header *)):hover,
+.player-profile-page.profile-theme-tap-god .button-secondary:not(:where(.site-header *)):focus-visible { border-color: var(--tap-red); color: var(--tap-text); background: rgba(225, 29, 72, .16); box-shadow: 0 0 14px rgba(225, 29, 72, .15); }
 
 .player-profile-page.profile-theme-tap-god .profile-content-tabs { position: relative; isolation: isolate; border-color: var(--tap-border); }
 

@@ -24,11 +24,11 @@ import {
   type EconomyItemType,
 } from "@/lib/data/portal-repository";
 import { SignInRequired } from "@/components/sign-in-required";
-import { SiteHeader } from "@/components/site-header";
 import { StaffSubmenu } from "@/components/staff-submenu";
 import { PortalToast } from "@/components/success-toast";
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
 import { DiscountRuleAdmin } from "@/components/economy/discount-rule-admin";
+import { PortalShell } from "@/components/ui/portal-shell";
 import {
   SearchNavigationForm,
   SearchSubmitButton,
@@ -273,22 +273,19 @@ export default async function AdminItemsPage({
   const access = await getAdminAccess(session.steamId);
   if (!access.isAdmin || !access.canViewEconomy)
     return (
-      <main className="tapped-page">
-        <div className="shell">
-          <SiteHeader authenticated />
-          <section className="staff-denied">
-            <LockKeyhole aria-hidden="true" />
-            <p className="tapped-kicker">Restricted area</p>
-            <h1>Economy staff access required.</h1>
-            <p>
-              Your staff group does not have a TAPPED Token economy permission.
-            </p>
-            <Link className="button button-secondary" href="/admin">
-              Back to staff panel
-            </Link>
-          </section>
-        </div>
-      </main>
+      <PortalShell authenticated>
+        <section className="staff-denied">
+          <LockKeyhole aria-hidden="true" />
+          <p className="tapped-kicker">Restricted area</p>
+          <h1>Economy staff access required.</h1>
+          <p>
+            Your staff group does not have a TAPPED Token economy permission.
+          </p>
+          <Link className="button button-secondary" href="/admin">
+            Back to staff panel
+          </Link>
+        </section>
+      </PortalShell>
     );
 
   const selectedCrateId = validCatalogueId(params.crate);
@@ -422,9 +419,7 @@ export default async function AdminItemsPage({
   });
 
   return (
-    <main className="tapped-page staff-page economy-admin-page">
-      <div className="shell">
-        <SiteHeader authenticated />
+    <PortalShell authenticated className="staff-page economy-admin-page">
         <section className="page-heading">
           <div>
             <p className="eyebrow">
@@ -1351,7 +1346,6 @@ export default async function AdminItemsPage({
             )}
           </section>
         ) : null}
-      </div>
-    </main>
+    </PortalShell>
   );
 }

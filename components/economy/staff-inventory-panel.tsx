@@ -11,6 +11,8 @@ import {
 
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
 import { PlayerSearchField } from "@/components/player-search-field";
+import { PlayerIdentity } from "@/components/player-identity";
+import { LinkPagination } from "@/components/ui/link-pagination";
 import {
   StaffGrantItemForm,
   type GrantCatalogueItem,
@@ -22,6 +24,7 @@ import {
   type EconomyLoadoutSlot,
   type StaffEconomyAccount,
 } from "@/lib/data/portal-repository";
+import type { PlayerIdentityData } from "@/lib/player-identities";
 
 type Pagination = {
   previousHref: string | null;
@@ -227,6 +230,7 @@ function ItemEditor({
 
 export function StaffInventoryPanel({
   account,
+  playerIdentity,
   csrf,
   canAdjustTokens,
   canGrant,
@@ -237,6 +241,7 @@ export function StaffInventoryPanel({
   pagination,
 }: {
   account: StaffEconomyAccount;
+  playerIdentity?: PlayerIdentityData;
   csrf: string;
   canAdjustTokens: boolean;
   canGrant: boolean;
@@ -248,13 +253,28 @@ export function StaffInventoryPanel({
 }) {
   const availableItems = account.inventory.items.filter((item) => item.state === "available");
   const hasMultiplePages = account.inventory.total > account.inventory.pageSize;
+  const inventoryPageCount = Math.max(
+    1,
+    Math.ceil(account.inventory.total / account.inventory.pageSize),
+  );
+  const resolvedPlayerIdentity: PlayerIdentityData = playerIdentity ?? {
+    steamId: account.steamId,
+    displayName: account.displayName,
+    avatarUrl: null,
+    presence: "unknown",
+    profileThemeKey: null,
+    identityGroups: [],
+  };
   return (
     <section className="staff-inventory-detail" aria-label={`${account.displayName} inventory`}>
       <header className="staff-inventory-detail-heading">
         <div>
           <p className="eyebrow"><Archive aria-hidden="true" /> Player inventory</p>
-          <h2>{account.displayName}</h2>
-          <p>{account.steamId} · Showing {account.inventory.items.length} of {account.inventory.total} items</p>
+          <PlayerIdentity
+            player={resolvedPlayerIdentity}
+            variant="compact"
+            secondary={`Showing ${account.inventory.items.length} of ${account.inventory.total} items`}
+          />
         </div>
         {canGrant ? <Link className="button button-secondary" href="#staff-grant-item">Grant item</Link> : null}
       </header>
@@ -275,7 +295,7 @@ export function StaffInventoryPanel({
           action={mutationAction}
           catalogue={grantCatalogue}
           csrf={csrf}
-          displayName={account.displayName}
+          playerIdentity={resolvedPlayerIdentity}
           steamId={account.steamId}
         />
       ) : null}
@@ -306,7 +326,19 @@ export function StaffInventoryPanel({
       <section className="economy-admin-inventory">
         <div className="section-heading compact"><p className="eyebrow"><Archive aria-hidden="true" /> Full inventory</p><h2>{account.inventory.total} instances</h2></div>
         {account.inventory.items.length ? <div className="economy-admin-item-grid">{account.inventory.items.map((item) => <ItemEditor key={item.id} item={item} steamId={account.steamId} csrf={csrf} canManage={canManage} action={mutationAction} />)}</div> : <p className="empty-copy">This player has no inventory items yet.</p>}
-        {hasMultiplePages ? <nav className="pagination staff-inventory-pagination" aria-label="Inventory pages"><Link className={pagination.previousHref ? "" : "is-disabled"} href={pagination.previousHref ?? "#"} scroll={false}>Previous</Link><span>Page {account.inventory.page} of {Math.ceil(account.inventory.total / account.inventory.pageSize)}</span><Link className={pagination.nextHref ? "" : "is-disabled"} href={pagination.nextHref ?? "#"} scroll={false}>Next</Link></nav> : null}
+        {hasMultiplePages ? (
+          <LinkPagination
+            className="staff-inventory-pagination"
+            page={account.inventory.page}
+            totalPages={inventoryPageCount}
+            label="Inventory pages"
+            hrefForPage={(targetPage) =>
+              targetPage < account.inventory.page
+                ? pagination.previousHref!
+                : pagination.nextHref!
+            }
+          />
+        ) : null}
       </section>
     </section>
   );

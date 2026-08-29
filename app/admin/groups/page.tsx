@@ -17,11 +17,12 @@ import {
   identityGroupBadgeIconOptions,
 } from "@/components/identity-group-badge";
 import { PlayerSearchField } from "@/components/player-search-field";
+import { PlayerIdentity } from "@/components/player-identity";
 import { CatalogueSearchField } from "@/components/economy/catalogue-search-field";
 import { SignInRequired } from "@/components/sign-in-required";
-import { SiteHeader } from "@/components/site-header";
 import { StaffSubmenu } from "@/components/staff-submenu";
 import { PortalToast } from "@/components/success-toast";
+import { PortalShell } from "@/components/ui/portal-shell";
 import { getAdminAccess } from "@/lib/admin/access";
 import { createAdminActionToken, getSession } from "@/lib/auth/session";
 import {
@@ -31,6 +32,10 @@ import {
   type IdentityGroup,
   type IdentityPrivilege,
 } from "@/lib/data/identity-groups";
+import {
+  resolvePlayerIdentities,
+  type PlayerIdentityData,
+} from "@/lib/player-identities";
 
 import {
   PermissionPicker,
@@ -166,10 +171,12 @@ function GroupCard({
   group,
   snapshot,
   csrf,
+  playerIdentities,
 }: {
   group: IdentityGroup;
   snapshot: IdentityAdminSnapshot;
   csrf: string;
+  playerIdentities: Readonly<Record<string, PlayerIdentityData>>;
 }) {
   const availablePermissions = privilegeOptions(snapshot.privileges);
   const externalDefinition = group.externalDefinition;
@@ -368,7 +375,7 @@ function GroupCard({
                 <MutationFields csrf={csrf} action="membership-remove" />
                 <input type="hidden" name="groupId" value={group.id} />
                 <input type="hidden" name="steamId" value={membership.steamId} />
-                <Link href={`/players/${membership.steamId}`}>{membership.steamId}</Link>
+                <PlayerIdentity player={playerIdentities[membership.steamId] ?? { steamId: membership.steamId, displayName: membership.steamId, avatarUrl: null, presence: "unknown", profileThemeKey: null, identityGroups: [] }} variant="compact" />
                 <span>{membership.expiresAt ? `Until ${new Date(membership.expiresAt).toLocaleDateString()}` : "Permanent"}</span>
                 <button className="staff-danger-button" type="submit">Remove</button>
               </form>
@@ -391,18 +398,15 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
   const access = await getAdminAccess(session.steamId);
   if (!access.isAdmin || !access.isFounder || !access.canManageGroups) {
     return (
-      <main className="tapped-page">
-        <div className="shell">
-          <SiteHeader authenticated />
-          <section className="staff-denied">
-            <LockKeyhole aria-hidden="true" />
-            <p className="tapped-kicker">Founder restricted</p>
-            <h1>Identity group access denied.</h1>
-            <p>Only the exact Founder assignment from Admins.Core on this server can open this control surface.</p>
-            <Link className="button button-secondary" href={`/players/${session.steamId}`}>Back to profile</Link>
-          </section>
-        </div>
-      </main>
+      <PortalShell authenticated>
+        <section className="staff-denied">
+          <LockKeyhole aria-hidden="true" />
+          <p className="tapped-kicker">Founder restricted</p>
+          <h1>Identity group access denied.</h1>
+          <p>Only the exact Founder assignment from Admins.Core on this server can open this control surface.</p>
+          <Link className="button button-secondary" href={`/players/${session.steamId}`}>Back to profile</Link>
+        </section>
+      </PortalShell>
     );
   }
 
@@ -428,6 +432,11 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
     }
   }
   const csrf = createAdminActionToken(session);
+  const playerIdentities = await resolvePlayerIdentities([
+    ...snapshot.groups.flatMap((group) => group.memberships.map((membership) => ({ steamId: membership.steamId }))),
+    ...snapshot.directTagGrants.map((grant) => ({ steamId: grant.steamId })),
+    ...snapshot.directPrivilegeGrants.map((grant) => ({ steamId: grant.steamId })),
+  ]);
   const externalGroups = snapshot.groups.filter((group) => group.sourceType !== "custom");
   const customGroupDefinitions = snapshot.groups.filter((group) => group.sourceType === "custom");
   const customGroups = customGroupDefinitions.filter((group) => group.enabled);
@@ -436,9 +445,7 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
   const error = params.error ? errorMessages[params.error] ?? "The identity action could not be completed." : null;
 
   return (
-    <main className="tapped-page staff-page">
-      <div className="shell">
-        <SiteHeader authenticated />
+    <PortalShell authenticated className="staff-page">
         <section className="staff-hero">
           <div>
             <p className="tapped-kicker"><UsersRound aria-hidden="true" /> Identity control</p>
@@ -479,7 +486,7 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
             <div><span>Discovered permissions</span><strong>{snapshot.catalogueStatus.discoveredPrivileges}</strong></div>
           </div>
           {externalGroups.length ? externalGroups.map((group) => (
-            <GroupCard key={group.id} group={group} snapshot={snapshot} csrf={csrf} />
+            <GroupCard key={group.id} group={group} snapshot={snapshot} csrf={csrf} playerIdentities={playerIdentities} />
           )) : (
             <p className="empty-copy">No external definitions are available. Synchronize the catalogue after applying the identity migrations.</p>
           )}
@@ -608,7 +615,7 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
                 <MutationFields csrf={csrf} action="player-tag-revoke" />
                 <input type="hidden" name="steamId" value={grant.steamId} />
                 <input type="hidden" name="tagId" value={grant.tag.id} />
-                <Link href={`/players/${grant.steamId}`}>{grant.steamId}</Link>
+                <PlayerIdentity player={playerIdentities[grant.steamId] ?? { steamId: grant.steamId, displayName: grant.steamId, avatarUrl: null, presence: "unknown", profileThemeKey: null, identityGroups: [] }} variant="compact" />
                 <strong>{grant.tag.text}</strong>
                 <span>{grant.expiresAt ? `Until ${new Date(grant.expiresAt).toLocaleDateString()}` : "Permanent"}</span>
                 <button className="staff-danger-button" type="submit">Revoke tag</button>
@@ -619,7 +626,7 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
                 <MutationFields csrf={csrf} action="player-privilege-revoke" />
                 <input type="hidden" name="steamId" value={grant.steamId} />
                 <input type="hidden" name="privilegeId" value={grant.privilege.id} />
-                <Link href={`/players/${grant.steamId}`}>{grant.steamId}</Link>
+                <PlayerIdentity player={playerIdentities[grant.steamId] ?? { steamId: grant.steamId, displayName: grant.steamId, avatarUrl: null, presence: "unknown", profileThemeKey: null, identityGroups: [] }} variant="compact" />
                 <strong>{grant.privilege.displayName}</strong>
                 <span>{grant.expiresAt ? `Until ${new Date(grant.expiresAt).toLocaleDateString()}` : "Permanent"}</span>
                 <button className="staff-danger-button" type="submit">Revoke privilege</button>
@@ -633,9 +640,8 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
 
         <section className="staff-record-section">
           <div className="staff-section-heading"><div><p className="tapped-kicker"><ShieldCheck aria-hidden="true" /> Registry</p><h2>Custom identity groups</h2></div><span>{customGroupDefinitions.length} definitions</span></div>
-          {customGroupDefinitions.length ? customGroupDefinitions.map((group) => <GroupCard key={group.id} group={group} snapshot={snapshot} csrf={csrf} />) : <p className="empty-copy">No custom groups have been created yet.</p>}
+          {customGroupDefinitions.length ? customGroupDefinitions.map((group) => <GroupCard key={group.id} group={group} snapshot={snapshot} csrf={csrf} playerIdentities={playerIdentities} />) : <p className="empty-copy">No custom groups have been created yet.</p>}
         </section>
-      </div>
-    </main>
+    </PortalShell>
   );
 }

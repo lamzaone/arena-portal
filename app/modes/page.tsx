@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Check, Crosshair, Shield, Sparkles, Swords } from "lucide-react";
 
-import { SiteHeader } from "@/components/site-header";
+import { PortalShell } from "@/components/ui/portal-shell";
 import { getSession } from "@/lib/auth/session";
 import { duelFlow, duelLengths, duelTypes, getArenaModes } from "@/lib/content/game-catalogue";
 
@@ -11,9 +11,7 @@ export default async function ModesPage() {
   const profileHref = session ? `/players/${session.steamId}` : "/api/auth/steam";
 
   return (
-    <main className="tapped-page catalog-page">
-      <div className="shell">
-        <SiteHeader authenticated={Boolean(session)} />
+    <PortalShell authenticated={Boolean(session)} className="catalog-page modes-page">
         <section className="catalog-hero" aria-labelledby="modes-title">
           <div>
             <p className="tapped-kicker"><Crosshair aria-hidden="true" /> ARENA.TAPPED.RO playbook</p>
@@ -47,7 +45,6 @@ export default async function ModesPage() {
           </div>
           <div className="mode-login-callout"><div><p className="tapped-kicker"><Swords aria-hidden="true" /> Ready to compete?</p><h2>Bring a challenger.</h2></div><Link className="button button-secondary" href={profileHref}>{session ? "Open player profile" : "Login with Steam"}<ArrowRight aria-hidden="true" /></Link></div>
         </section>
-      </div>
-    </main>
+    </PortalShell>
   );
 }

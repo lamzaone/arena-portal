@@ -16,6 +16,7 @@ import { PortalToast } from "@/components/success-toast";
 import { ProfileShowcases } from "@/components/profile-showcases";
 import { AsyncButton } from "@/components/ui/async-button";
 import { getTrustedProfileTheme } from "@/lib/content/profile-themes";
+import { getPortalTheme } from "@/lib/themes/registry";
 
 type InventoryVisibility = "private" | "public";
 
@@ -235,9 +236,13 @@ export function ProfileSettingsForm({
           </label>
           {initialSettings.ownedThemes.map((theme) => {
             const trustedTheme = getTrustedProfileTheme(theme.key);
+            const configuredTheme = getPortalTheme(theme.key);
             const themedSurfaces = [
-              trustedTheme.surfaces.global ? "portal UI" : null,
-              trustedTheme.surfaces.rankingEntry ? "profile mentions" : null,
+              configuredTheme.surfaces.profile ? "profile page" : null,
+              configuredTheme.surfaces.global ? "portal UI" : null,
+              configuredTheme.surfaces.smallProfile
+                ? "profile mentions"
+                : null,
             ].filter(Boolean);
 
             return (
@@ -269,8 +274,8 @@ export function ProfileSettingsForm({
                   <small>{theme.description}</small>
                   {themedSurfaces.length ? (
                     <small className="settings-theme-surface-note">
-                      <Trophy aria-hidden="true" /> Also styles{" "}
-                      {themedSurfaces.join(" and ")}
+                      <Trophy aria-hidden="true" /> Styles{" "}
+                      {themedSurfaces.join(", ")}
                     </small>
                   ) : null}
                 </span>

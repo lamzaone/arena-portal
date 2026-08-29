@@ -8,6 +8,7 @@ import { createEconomyActionToken, getSession } from "@/lib/auth/session";
 import { getTokenWallet } from "@/lib/data/portal-repository";
 import { getCompletePlayerEconomyInventory } from "@/lib/economy/player-inventory";
 import { getCompletePlayerEconomyTrades } from "@/lib/economy/player-trades";
+import { resolvePlayerIdentities } from "@/lib/player-identities";
 
 export default async function TradesPage() {
   const session = await getSession();
@@ -18,9 +19,12 @@ export default async function TradesPage() {
     getCompletePlayerEconomyInventory(session.steamId),
     getCompletePlayerEconomyTrades(session.steamId)
   ]);
+  const counterpartyIdentities = await resolvePlayerIdentities(
+    trades.trades.map((trade) => ({ steamId: trade.counterpartySteamId })),
+  );
 
   return <PortalShell authenticated className="tapped-page">
     <PageHeading eyebrow={<><ArrowLeftRight aria-hidden="true" /> Player economy</>} title="Trades" description="Find another player, compare both inventories, and build a secure item or Token offer." />
-    <TradeManager inventory={inventory} wallet={wallet} trades={trades} csrf={createEconomyActionToken(session)} />
+    <TradeManager inventory={inventory} wallet={wallet} trades={trades} csrf={createEconomyActionToken(session)} counterpartyIdentities={counterpartyIdentities} />
   </PortalShell>;
 }

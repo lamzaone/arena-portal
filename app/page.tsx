@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Check, Crosshair, Crown, Gamepad2, Paintbrush, ShieldCheck, Sparkles, Swords, Trophy, Zap } from "lucide-react";
 
-import { SiteHeader } from "@/components/site-header";
+import { PortalShell } from "@/components/ui/portal-shell";
 import { getSession } from "@/lib/auth/session";
 import { getServerStatus } from "@/lib/server-status";
 
@@ -14,9 +14,7 @@ export default async function HomePage() {
   const playerLabel = status.players !== null && status.maxPlayers !== null ? `${status.players} / ${status.maxPlayers}` : "—";
 
   return (
-    <main className="tapped-page">
-      <div className="shell">
-        <SiteHeader authenticated={Boolean(session)} />
+    <PortalShell authenticated={Boolean(session)} className="home-page">
 
         <section className="tapped-hero" id="server" aria-labelledby="hero-title">
           <div className="hero-copy hero-reveal">
@@ -60,7 +58,6 @@ export default async function HomePage() {
         </section>
 
         <footer className="tapped-footer"><span>TAPPED.RO <i /> ARENA.TAPPED.RO</span><a href={connectUrl}>Connect now <ArrowRight aria-hidden="true" /></a></footer>
-      </div>
-    </main>
+    </PortalShell>
   );
 }

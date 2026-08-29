@@ -1,5 +1,7 @@
 import { BadgeCheck, LayoutPanelTop, Trophy } from "lucide-react";
 
+import { Panel } from "@/components/ui/panel";
+
 const upcomingShowcases = [
   {
     title: "Loadout showcase",
@@ -21,7 +23,7 @@ const upcomingShowcases = [
 /** Static roadmap content shared by Settings and its async route fallback. */
 export function ProfileShowcases() {
   return (
-    <section className="panel settings-section" aria-labelledby="showcase-heading">
+    <Panel className="settings-section" aria-labelledby="showcase-heading">
       <div className="settings-section-heading">
         <div>
           <p className="eyebrow">Profile showcases</p>
@@ -39,6 +41,6 @@ export function ProfileShowcases() {
           </article>
         ))}
       </div>
-    </section>
+    </Panel>
   );
 }

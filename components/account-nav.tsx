@@ -14,7 +14,12 @@ const accountLinks = [
   { href: "/tickets", label: "Tickets", icon: Ticket }
 ];
 
-export function AccountNav({ profileHref }: { profileHref: string }) {
+type AccountNavProps = {
+  profileHref: string;
+  themeKey: string;
+};
+
+export function AccountNav({ profileHref, themeKey }: AccountNavProps) {
   const pathname = usePathname();
   const links = [
     { href: profileHref, label: "Profile", icon: UserRound },
@@ -22,7 +27,12 @@ export function AccountNav({ profileHref }: { profileHref: string }) {
   ];
 
   return (
-    <nav className="account-nav" aria-label="Account navigation">
+    <nav
+      className="account-nav"
+      aria-label="Account navigation"
+      data-theme={themeKey}
+      data-theme-surface="global"
+    >
       {links.map(({ href, label, icon: Icon }) => (
         <Link
           key={href}

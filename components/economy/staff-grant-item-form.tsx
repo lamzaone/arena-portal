@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Gift } from "lucide-react";
 
+import { PlayerIdentity } from "@/components/player-identity";
+import { Panel, PanelHeader } from "@/components/ui/panel";
 import type {
   EconomyCatalogueItem,
   EconomyItemType,
@@ -12,6 +14,7 @@ import {
   economyItemTypeLabel,
   isCustomProductItemType,
 } from "@/lib/economy/item-taxonomy";
+import type { PlayerIdentityData } from "@/lib/player-identities";
 
 const customItemTypes: EconomyItemType[] = ECONOMY_ITEM_TYPES.filter(
   (itemType) =>
@@ -29,18 +32,18 @@ export function StaffGrantItemForm({
   action,
   catalogue,
   csrf,
-  displayName,
+  playerIdentity,
   steamId,
 }: {
   action: string;
   catalogue: GrantCatalogueItem[];
   csrf: string;
-  displayName: string;
+  playerIdentity: PlayerIdentityData;
   steamId: string;
 }) {
   return (
-    <section className="panel economy-admin-section" id="staff-grant-item">
-      <div className="panel-heading">
+    <Panel className="economy-admin-section" id="staff-grant-item">
+      <PanelHeader>
         <div>
           <p className="eyebrow">
             <Gift aria-hidden="true" /> Grant an item
@@ -52,7 +55,7 @@ export function StaffGrantItemForm({
             configured loot table.
           </p>
         </div>
-      </div>
+      </PanelHeader>
       <datalist id={`economy-catalogue-options-${steamId}`}>
         {catalogue.map((item) => (
           <option key={item.id} value={item.id}>
@@ -74,10 +77,10 @@ export function StaffGrantItemForm({
         />
         <input type="hidden" name="steamId" value={steamId} />
         <div className="form-grid">
-          <label>
-            Target player
-            <input value={`${displayName} · ${steamId}`} readOnly />
-          </label>
+          <div className="economy-admin-target">
+            <span>Target player</span>
+            <PlayerIdentity player={playerIdentity} variant="compact" />
+          </div>
           <label>
             Catalogue ID
             <input
@@ -209,9 +212,9 @@ export function StaffGrantItemForm({
           />
         </label>
         <button className="button button-primary" type="submit">
-          Grant item to {displayName}
+          Grant item
         </button>
       </form>
-    </section>
+    </Panel>
   );
 }
