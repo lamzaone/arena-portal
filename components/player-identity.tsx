@@ -22,6 +22,8 @@ export type PlayerIdentityProps = {
   showSteamId?: boolean;
   showBadges?: boolean;
   hoverCard?: boolean;
+  /** Controls whether profile navigation lives on the identity, hover card, or neither. */
+  profileLink?: "identity" | "hover-card" | "none";
 };
 
 const steamId64Pattern = /^7656119\d{10}$/;
@@ -41,9 +43,10 @@ export function PlayerIdentity({
   variant = "compact",
   className = "",
   secondary,
-  showSteamId = variant !== "inline",
+  showSteamId = false,
   showBadges = variant === "table",
   hoverCard = true,
+  profileLink = "identity",
 }: PlayerIdentityProps) {
   const steamId = player.steamId.trim();
   const isPlayer = steamId64Pattern.test(steamId);
@@ -53,7 +56,12 @@ export function PlayerIdentity({
     player.profileThemeKey,
     "smallProfile",
   );
-  const secondaryContent = secondary === undefined ? steamId : secondary;
+  const secondaryContent =
+    secondary === undefined
+      ? showSteamId && isPlayer
+        ? steamId
+        : null
+      : secondary;
   const Frame = variant === "inline" ? "span" : "div";
   const StaticIdentity = variant === "inline" ? "span" : "div";
   const frameClassName = [
@@ -65,22 +73,23 @@ export function PlayerIdentity({
   const identityClassName = [
     "player-identity",
     `player-identity-${variant}`,
+    variant === "table" ? "leaderboard-player" : undefined,
     styles.identity,
     className,
   ].filter(Boolean).join(" ");
 
   const copy = (
     <>
-      <b className={styles.name}>{displayName}</b>
+      <strong className={`player-identity-name ${styles.name}`}>{displayName}</strong>
       {variant === "inline" ? (
         showSteamId && isPlayer ? (
-          <small className={styles.inlineSteamId}>· {steamId}</small>
+          <small className={`player-identity-secondary ${styles.inlineSteamId}`}>· {steamId}</small>
         ) : null
       ) : secondaryContent ? (
-        <small className={styles.secondary}>{secondaryContent}</small>
+        <small className={`player-identity-secondary ${styles.secondary}`}>{secondaryContent}</small>
       ) : null}
       {variant === "table" || (showBadges && player.identityGroups.length) ? (
-        <span className={styles.badges}>
+        <span className={`player-identity-badges ${styles.badges}`}>
           {variant === "table" ? (
             <ProfileThemeSurfaceBadge
               themeKey={player.profileThemeKey}
@@ -101,12 +110,12 @@ export function PlayerIdentity({
     <>
       {variant !== "inline" ? (
         <ResilientRemoteImage
-          className={styles.avatar}
+          className={`player-identity-avatar ${styles.avatar}`}
           src={player.avatarUrl}
           alt=""
           referrerPolicy="no-referrer"
           fallback={
-            <span className={styles.avatarFallback} aria-hidden="true">
+            <span className={`player-avatar-fallback player-identity-avatar-fallback ${styles.avatarFallback}`} aria-hidden="true">
               {avatarInitial(displayName)}
             </span>
           }
@@ -129,7 +138,7 @@ export function PlayerIdentity({
       data-theme-surface="small-profile"
       data-profile-theme={themeSurface ? theme.key : undefined}
     >
-      {isPlayer ? (
+      {isPlayer && profileLink === "identity" ? (
         <Link
           className={identityClassName}
           href={`/players/${steamId}`}
@@ -140,8 +149,12 @@ export function PlayerIdentity({
       ) : (
         <StaticIdentity className={identityClassName}>{content}</StaticIdentity>
       )}
-      {isPlayer && hoverCard ? (
-        <span className={styles.hoverCard} aria-hidden="true">
+      {isPlayer && hoverCard && profileLink !== "none" ? (
+        <Link
+          className={`player-identity-hover-card ${styles.hoverCard}`}
+          href={`/players/${steamId}`}
+          aria-label={`Open ${displayName}'s player profile`}
+        >
           <span className={styles.hoverHeading}>
             <strong>{displayName}</strong>
             <small>SteamID64 {steamId}</small>
@@ -159,7 +172,7 @@ export function PlayerIdentity({
               label={`${displayName}'s player groups`}
             />
           ) : null}
-        </span>
+        </Link>
       ) : null}
     </Frame>
   );

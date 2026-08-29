@@ -11,10 +11,10 @@ import { PlayerIdentity } from "@/components/player-identity";
 import { DataTable } from "@/components/ui/data-table";
 import { LinkPagination } from "@/components/ui/link-pagination";
 import { PortalShell } from "@/components/ui/portal-shell";
+import { ThemedPlayerTableRow } from "@/components/ui/themed-player-table-row";
 import { getSession } from "@/lib/auth/session";
 import { getVipTiers, type VipTier } from "@/lib/content/game-catalogue";
 import { identityExternalBadgeLookupKey } from "@/lib/content/identity-group-badges";
-import { getTrustedProfileThemeSurface } from "@/lib/content/profile-themes";
 import {
   getIdentityGroupBadgeCatalogue,
   type IdentityGroupBadgeData,
@@ -146,10 +146,6 @@ export default async function VipPage({ searchParams }: VipPageProps) {
                 {vipRoster.vips.map((vip) => {
                   const profile = steamProfiles.get(vip.steamId);
                   const name = profile?.name || vip.name;
-                  const smallProfileTheme = getTrustedProfileThemeSurface(
-                    vip.profileThemeKey,
-                    "smallProfile",
-                  );
                   const vipGroup = vip.identityGroups.find(
                     (group) =>
                       group.sourceType === "vipcore" &&
@@ -167,14 +163,8 @@ export default async function VipPage({ searchParams }: VipPageProps) {
                   );
 
                   return (
-                    <tr
-                      className={`leaderboard-player-row${smallProfileTheme ? ` ${smallProfileTheme.className}` : ""}`}
-                      data-theme={
-                        smallProfileTheme ? vip.profileThemeKey : undefined
-                      }
-                      data-theme-surface={
-                        smallProfileTheme ? "small-profile" : undefined
-                      }
+                    <ThemedPlayerTableRow
+                      profileThemeKey={vip.profileThemeKey}
                       key={`${vip.steamId}-${vip.group}`}
                     >
                       <td>
@@ -188,6 +178,7 @@ export default async function VipPage({ searchParams }: VipPageProps) {
                             identityGroups: customGroups,
                           }}
                           variant="table"
+                          showSteamId={false}
                         />
                       </td>
                       <td>
@@ -214,7 +205,7 @@ export default async function VipPage({ searchParams }: VipPageProps) {
                             : `Until ${formatDate(vip.expiresAt)}`}
                         </strong>
                       </td>
-                    </tr>
+                    </ThemedPlayerTableRow>
                   );
                 })}
               </tbody>

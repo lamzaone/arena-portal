@@ -6,9 +6,9 @@ import { DataTable } from "@/components/ui/data-table";
 import { LinkPagination } from "@/components/ui/link-pagination";
 import { PortalShell } from "@/components/ui/portal-shell";
 import { SearchNavigationForm, SearchSubmitButton } from "@/components/ui/search-field";
+import { ThemedPlayerTableRow } from "@/components/ui/themed-player-table-row";
 import { getSession } from "@/lib/auth/session";
 import { getLevelRank } from "@/lib/content/levelranks";
-import { getTrustedProfileThemeSurface } from "@/lib/content/profile-themes";
 import { getLeaderboard } from "@/lib/data/portal-repository";
 import { getSteamProfiles } from "@/lib/steam/profiles";
 
@@ -89,18 +89,9 @@ export default async function RankingPage({ searchParams }: RankingPageProps) {
                     const position =
                       (page - 1) * leaderboard.pageSize + index + 1;
                     const levelRank = getLevelRank(player.points);
-                    const rankingTheme = getTrustedProfileThemeSurface(
-                      player.profileThemeKey,
-                      "rankingEntry",
-                    );
-
                     return (
-                      <tr
-                        className={`leaderboard-player-row${rankingTheme ? ` ${rankingTheme.className}` : ""}`}
-                        data-theme={
-                          rankingTheme ? player.profileThemeKey : undefined
-                        }
-                        data-theme-surface={rankingTheme ? "small-profile" : undefined}
+                      <ThemedPlayerTableRow
+                        profileThemeKey={player.profileThemeKey}
                         key={player.steamId}
                       >
                         <td>
@@ -134,6 +125,7 @@ export default async function RankingPage({ searchParams }: RankingPageProps) {
                               identityGroups: player.identityGroups,
                             }}
                             variant="table"
+                            showSteamId={false}
                           />
                         </td>
                         <td className="points-cell">
@@ -142,7 +134,7 @@ export default async function RankingPage({ searchParams }: RankingPageProps) {
                         <td>{player.kills.toLocaleString()}</td>
                         <td>{player.deaths.toLocaleString()}</td>
                         <td>{player.mvps.toLocaleString()}</td>
-                      </tr>
+                      </ThemedPlayerTableRow>
                     );
                   })}
                 </tbody>

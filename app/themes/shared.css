@@ -266,6 +266,20 @@ body:has(.player-profile-page[data-theme-owner="profile"])
   background: var(--theme-table-hover);
 }
 
+/* A player row is its own small-profile theme boundary. This deliberately
+   outranks the viewer's global table theme so every table reflects the player
+   represented by that row. */
+.leaderboard-table tbody tr.leaderboard-player-row > td {
+  border-color: var(--theme-border);
+  color: var(--theme-text-muted);
+  background: var(--theme-table-row);
+}
+
+.leaderboard-table tbody tr.leaderboard-player-row:hover > td {
+  color: var(--theme-text);
+  background: var(--theme-table-hover);
+}
+
 :is(
   [data-theme-surface="global"],
   .global-theme-default,

@@ -151,9 +151,22 @@ a.identity:focus-visible {
   color: var(--theme-text, #e9cfd4);
   background: color-mix(in srgb, var(--player-identity-card, var(--theme-surface-raised, #160509)) 96%, transparent);
   box-shadow: var(--theme-shadow, 0 16px 42px rgba(0, 0, 0, 0.5));
-  pointer-events: none;
+  text-decoration: none;
+  pointer-events: auto;
   transform: translateY(-4px);
-  transition: opacity 150ms ease, transform 150ms ease, visibility 150ms ease;
+  transition:
+    opacity 150ms ease 1s,
+    transform 150ms ease 1s,
+    visibility 0s linear 1.15s;
+}
+
+.hoverCard::before {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  height: 9px;
+  content: "";
 }
 
 .frame:hover .hoverCard,
@@ -161,6 +174,12 @@ a.identity:focus-visible {
   visibility: visible;
   opacity: 1;
   transform: translateY(0);
+  transition-delay: 0s;
+}
+
+.hoverCard:focus-visible {
+  outline: 2px solid var(--player-identity-focus, var(--theme-focus-ring, rgba(255, 113, 133, 0.68)));
+  outline-offset: 3px;
 }
 
 .hoverHeading {
@@ -227,8 +246,14 @@ a.identity:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .name,
-  .hoverCard {
+  .name {
     transition: none;
+  }
+
+  .hoverCard {
+    transform: none;
+    transition:
+      opacity 0s linear 1s,
+      visibility 0s linear 1s;
   }
 }

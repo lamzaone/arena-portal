@@ -8,6 +8,8 @@ export type EconomyActionResult = {
   totalPriceTokens?: number;
   quantity?: number;
   itemIds?: string[];
+  skippedItemIds?: string[];
+  skippedItems?: Array<{ itemId: string; displayName: string }>;
   crateItemIds?: string[];
   openings?: unknown[];
   dropPools?: unknown[];

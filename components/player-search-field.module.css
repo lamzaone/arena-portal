@@ -182,11 +182,13 @@
   font: inherit;
   font-weight: 400;
   text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
   transition: border-color 160ms ease, background-color 160ms ease;
 }
 
 .root .resultWithMeta {
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .root .result:hover,
@@ -202,28 +204,29 @@
   min-width: 0;
 }
 
-.root .selectResult {
-  min-height: 30px;
-  padding: 6px 8px;
-  border: 1px solid var(--theme-border-strong, rgba(255, 113, 133, 0.32));
-  border-radius: var(--theme-control-radius, 4px);
-  color: var(--theme-text, #ffd9df);
-  background: var(--theme-control-hover, rgba(225, 29, 72, 0.12));
-  font: inherit;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: border-color 160ms ease, background-color 160ms ease;
+.root .result:focus-visible {
+  border-color: var(--theme-accent-strong, #ff91a4);
+  outline: 2px solid var(--theme-focus-ring, rgba(225, 29, 72, 0.45));
+  outline-offset: -2px;
 }
 
-.root .selectResult:hover,
-.root .selectResult:focus-visible,
-.root .selectResult[aria-selected="true"] {
-  border-color: var(--theme-accent-strong, #ff91a4);
-  outline: 0;
-  background: color-mix(in srgb, var(--theme-accent, #e11d48) 28%, transparent);
+.root .result:focus-visible :global(.player-identity-hover-card) {
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0s;
+}
+
+/* Keep the floating profile inside the scrollable result panel for lower
+   matches, while preserving the same pointer bridge and one-second grace. */
+.root .result:nth-child(n + 5) :global(.player-identity-hover-card) {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+
+.root .result:nth-child(n + 5) :global(.player-identity-hover-card)::before {
+  top: 100%;
+  bottom: auto;
 }
 
 .root .selectedProfile {
@@ -377,7 +380,6 @@
 @media (prefers-reduced-motion: reduce) {
   .root .combobox,
   .root .result,
-  .root .selectResult,
   .root button.trailing {
     transition: none;
   }

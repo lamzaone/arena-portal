@@ -97,8 +97,12 @@ export async function POST(request: Request) {
           floatValue: item.floatValue,
           seed: item.seed,
           stattrak: item.stattrak,
-          exactPatternQuote: true,
+          // A live exact float/seed lookup is the recovery path for an item
+          // that has no reusable last-known variant price. Already-priced
+          // entries remain database-only, keeping the common bulk path fast.
+          exactPatternQuote: fallbacks[index] === null,
           fallbackPrice: fallbacks[index],
+          fallbackOnly: fallbacks[index] !== null,
         })),
       );
       await cacheMarketplaceVariantQuotes(
@@ -112,9 +116,27 @@ export async function POST(request: Request) {
       const quotesByItemId = new Map(
         quoteItems.map((item, index) => [item.id, quotes[index]] as const),
       );
+      // A custom/legacy skin identity may genuinely have no public listing.
+      // Do not let that one row poison an otherwise valid atomic batch: live
+      // providers have already been checked above, so leave it unsold and
+      // return it to the client for a later retry or staff price correction.
+      const skippedItems = quoteItems.flatMap((item, index) =>
+        quotes[index] || fallbacks[index]
+          ? []
+          : [{ itemId: item.id, displayName: item.displayName }],
+      );
+      const skippedItemIds = new Set(skippedItems.map((item) => item.itemId));
+      const saleItemIds = itemIds.filter((itemId) => !skippedItemIds.has(itemId));
+      if (!saleItemIds.length) {
+        return economyJsonError(
+          "No online market listing matched the selected item variants. Nothing was sold.",
+          409,
+        );
+      }
       const result = await sellEconomyItems({
         steamId: context.session.steamId,
-        items: itemIds.map((itemId) => {
+        requestedItemIds: itemIds,
+        items: saleItemIds.map((itemId) => {
           const quote = quotesByItemId.get(itemId);
           return {
             itemId,
@@ -126,6 +148,7 @@ export async function POST(request: Request) {
                     source: quote.source,
                     sourceReference: quote.sourceReference,
                     floatValue: quote.floatValue,
+                    seed: quote.seed,
                     floatDiscountBps: quote.floatDiscountBps,
                     fromFallback: quote.fromFallback,
                     fallbackStale: quote.fallbackStale,
@@ -140,7 +163,9 @@ export async function POST(request: Request) {
       return economyJsonSuccess({
         ...result,
         balance: result.wallet.balance,
-        message: `${result.itemIds.length} ${result.itemIds.length === 1 ? "item" : "items"} sold for ${result.payoutTokens} Tokens.`,
+        skippedItemIds: skippedItems.map((item) => item.itemId),
+        skippedItems,
+        message: `${result.itemIds.length} ${result.itemIds.length === 1 ? "item" : "items"} sold for ${result.payoutTokens} Tokens.${skippedItems.length ? ` ${skippedItems.length} ${skippedItems.length === 1 ? "item was" : "items were"} left unsold because no online price matched.` : ""}`,
       });
     } catch (error) {
       return economyMutationFailure(error);
@@ -222,6 +247,7 @@ export async function POST(request: Request) {
               source: quote.source,
               sourceReference: quote.sourceReference,
               floatValue: quote.floatValue,
+              seed: quote.seed,
               floatDiscountBps: quote.floatDiscountBps,
               fromFallback: quote.fromFallback,
               fallbackStale: quote.fallbackStale,

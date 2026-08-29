@@ -40,6 +40,7 @@ import { PortalToast } from "@/components/success-toast";
 import { AsyncButton } from "@/components/ui/async-button";
 import { SearchField } from "@/components/ui/search-field";
 import { economyItemTypeLabel } from "@/lib/economy/item-taxonomy";
+import { economyItemDisplayName } from "@/lib/economy/item-display-name";
 import type { PlayerIdentityData } from "@/lib/player-identities";
 
 type TradeManagerProps = {
@@ -87,10 +88,11 @@ function nullableNumber(value: unknown) {
 function parsePartnerItem(value: unknown): EconomyTradeItemView | null {
   if (!isRecord(value)) return null;
   const id = text(value.id) || text(value.itemId);
-  const displayName = text(value.displayName);
+  const baseDisplayName = text(value.displayName);
   const itemType = text(value.itemType);
-  if (!id || !displayName || !itemType) return null;
+  if (!id || !baseDisplayName || !itemType) return null;
   const rarityRank = Math.max(0, integer(value.rarityRank));
+  const stattrak = value.stattrak === true;
   return {
     id,
     catalogueId:
@@ -98,7 +100,7 @@ function parsePartnerItem(value: unknown): EconomyTradeItemView | null {
         ? null
         : integer(value.catalogueId),
     itemType,
-    displayName,
+    displayName: economyItemDisplayName(baseDisplayName, stattrak),
     rarity: rarityName(rarityRank),
     rarityRank,
     tradable: value.tradable !== false && value.tradable !== 0,
@@ -107,7 +109,7 @@ function parsePartnerItem(value: unknown): EconomyTradeItemView | null {
       value.floatValue === null || value.floatValue === undefined
         ? null
         : nullableNumber(value.floatValue),
-    stattrak: value.stattrak === true,
+    stattrak,
     stattrakCount: Math.max(0, integer(value.stattrakCount)),
     nametag: text(value.nametag) || null,
   };

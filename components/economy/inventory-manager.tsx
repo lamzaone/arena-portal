@@ -520,14 +520,32 @@ export function InventoryManager({
             (itemId): itemId is string => typeof itemId === "string",
           )
         : [];
-      if (soldIds.length !== saleItems.length)
+      const requestedIds = new Set(itemIds);
+      const skippedIds = Array.isArray(result.skippedItemIds)
+        ? result.skippedItemIds.filter(
+            (itemId): itemId is string => typeof itemId === "string",
+          )
+        : [];
+      const soldIdSet = new Set(soldIds);
+      const skippedIdSet = new Set(skippedIds);
+      if (
+        !soldIds.length ||
+        soldIdSet.size !== soldIds.length ||
+        skippedIdSet.size !== skippedIds.length ||
+        soldIds.some((itemId) => !requestedIds.has(itemId)) ||
+        skippedIds.some(
+          (itemId) => !requestedIds.has(itemId) || soldIdSet.has(itemId),
+        ) ||
+        soldIdSet.size + skippedIdSet.size !== requestedIds.size
+      )
         throw new Error(
           "The sale completed, but its item summary was incomplete. Reload Inventory to verify it.",
         );
+      const unsoldIds = itemIds.filter((itemId) => skippedIdSet.has(itemId));
       const payoutTokens =
         typeof result.payoutTokens === "number" ? result.payoutTokens : 0;
       setSoldItemIds((current) => new Set([...current, ...soldIds]));
-      setBulkSelectedIds(new Set());
+      setBulkSelectedIds(new Set(unsoldIds));
       setDisplayWallet((current) => ({
         ...current,
         balance:
@@ -540,9 +558,11 @@ export function InventoryManager({
       bulkSaleRequestRef.current = null;
       setNotice({
         type: "success",
-        text: `${soldIds.length} ${soldIds.length === 1 ? "item" : "items"} sold for ${formatTokens(payoutTokens)} Tokens.`,
+        text:
+          result.message ||
+          `${soldIds.length} ${soldIds.length === 1 ? "item" : "items"} sold for ${formatTokens(payoutTokens)} Tokens.`,
       });
-      setSelectionMode(false);
+      setSelectionMode(unsoldIds.length > 0);
     } catch (error) {
       setNotice({
         type: "error",
@@ -826,7 +846,6 @@ export function InventoryManager({
                     ) : null}
                     <div className="tag-list inventory-detail-tags" aria-label="Item details">
                       <span className="tag">{humanize(selected.state)}</span>
-                      {selected.stattrak ? <span className="tag">StatTrak {selected.stattrakCount.toLocaleString()}</span> : null}
                       {selected.floatValue !== null ? <span className="tag">Float {selected.floatValue.toFixed(6)}</span> : null}
                       {selected.seed !== null ? <span className="tag">Seed {selected.seed}</span> : null}
                       {selected.equippedSlots.map((slot) => <span key={slot} className="tag tag-vip">Equipped: {humanize(slot)}</span>)}

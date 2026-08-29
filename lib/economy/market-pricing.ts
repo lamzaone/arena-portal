@@ -67,6 +67,9 @@ export type MarketplacePriceInput = MarketplacePriceIdentityInput & {
   // caller when the public database does not have this exact market identity.
   // It is intentionally only a fallback; Skinport is always preferred.
   fallbackPrice?: MarketplacePriceFallback | null | undefined;
+  // Bulk mutations can reuse an already verified matching variant and reserve
+  // remote provider work for entries that are actually missing a price.
+  fallbackOnly?: boolean | null | undefined;
 };
 
 export type MarketplacePriceQuote = {
@@ -436,7 +439,9 @@ export async function getMarketplacePriceQuotes(
   const identities = inputs.map(deriveMarketplacePriceIdentity);
   const lookups: MarketplacePriceCandidate[] = [];
   const lookupIndexes = new Map<string, number>();
-  for (const identity of identities) {
+  for (let index = 0; index < identities.length; index += 1) {
+    if (inputs[index].fallbackOnly === true) continue;
+    const identity = identities[index];
     for (const candidate of identity.candidates) {
       const key = `${normalizedKey(candidate.marketHashName)}\u0000${normalizedKey(candidate.marketVersion)}`;
       if (lookupIndexes.has(key)) continue;
@@ -489,6 +494,7 @@ export async function getMarketplacePriceQuotes(
   const exactQuotes = await Promise.all(
     inputs.map(async (input, index) => {
       if (input.exactPatternQuote !== true) return null;
+      if (input.fallbackOnly === true) return null;
       const identity = identities[index];
       if (identity.floatValue === null && identity.seed === null) return null;
       // A named phase/version must remain on a source that exposes that exact

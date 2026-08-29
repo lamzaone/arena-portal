@@ -25,6 +25,7 @@ import {
   isEconomyItemType,
   type EconomyItemType,
 } from "@/lib/economy/item-taxonomy";
+import { economyItemDisplayName } from "@/lib/economy/item-display-name";
 import {
   adjustedMarketplaceEuroCents,
   deriveMarketplacePriceIdentity,
@@ -3577,6 +3578,7 @@ export type ResolvedEconomyMarketSalePrice = {
   source: string;
   sourceReference: string | null;
   floatValue: number | null;
+  seed: number | null;
   floatDiscountBps: number | null;
   fromFallback: boolean;
   fallbackStale: boolean;
@@ -3592,6 +3594,9 @@ export type SellEconomyItemResult = {
 
 export type SellEconomyItemsInput = {
   steamId: string;
+  // The original browser command remains the idempotency identity even when
+  // the route omits entries for which no online price could be recovered.
+  requestedItemIds?: string[];
   items: Array<{
     itemId: string;
     // Quotes are resolved by the authenticated route in one provider batch;
@@ -5320,6 +5325,7 @@ function toEconomyInventoryItem(
 ): EconomyInventoryItem {
   const itemType = economyItemType(String(row.item_type));
   const attributes = economyRecord(row.attributes);
+  const stattrak = economyBoolean(row.stattrak);
   const catalogueId = economyOptionalInteger(
     row.catalogue_id,
     "inventory catalogue ID",
@@ -5335,9 +5341,12 @@ function toEconomyInventoryItem(
           source_reference: row.source_reference,
           observed_at: row.observed_at,
         });
-  const displayName = economyDisplayName(itemType, row.display_name
-    ? String(row.display_name)
-    : economyCustomDisplayName(attributes, itemType));
+  const displayName = economyItemDisplayName(
+    economyDisplayName(itemType, row.display_name
+      ? String(row.display_name)
+      : economyCustomDisplayName(attributes, itemType)),
+    stattrak,
+  );
   const storedRarityRank = economyNumber(row.rarity_rank, "inventory rarity");
   const catalogueRarityRank =
     row.catalogue_rarity_rank === null
@@ -5361,7 +5370,7 @@ function toEconomyInventoryItem(
     paintkit: economyOptionalInteger(row.paintkit, "inventory paintkit"),
     seed: economyOptionalInteger(row.seed, "inventory seed"),
     floatValue: economyDecimal(row.float_value, "inventory float"),
-    stattrak: economyBoolean(row.stattrak),
+    stattrak,
     stattrakCount: economyNumber(
       row.stattrak_count,
       "inventory StatTrak count",
@@ -7600,20 +7609,30 @@ export async function getPlayerEconomyLoadout(
     const itemId = row.item_id ? economyItemId(String(row.item_id)) : null;
     const itemAttributes =
       itemId && row.item_type ? economyRecord(row.attributes) : null;
+    const itemStattrak = Boolean(
+      itemId && row.item_type && economyBoolean(row.stattrak),
+    );
+    const itemDisplayName =
+      itemId && row.item_type
+        ? economyItemDisplayName(
+            economyDisplayName(
+              economyItemType(String(row.item_type)),
+              row.display_name
+                ? String(row.display_name)
+                : economyCustomDisplayName(
+                    itemAttributes ?? {},
+                    economyItemType(String(row.item_type)),
+                  ),
+            ),
+            itemStattrak,
+          )
+        : null;
     const item =
       itemId && row.item_type
         ? ({
           id: itemId,
             itemType: economyItemType(String(row.item_type)),
-            displayName: economyDisplayName(
-              economyItemType(String(row.item_type)),
-              row.display_name
-              ? String(row.display_name)
-              : economyCustomDisplayName(
-                  itemAttributes ?? {},
-                  economyItemType(String(row.item_type)),
-                ),
-            ),
+            displayName: itemDisplayName ?? economyItemType(String(row.item_type)),
             definitionIndex: economyOptionalInteger(
               row.item_definition_index,
               "loadout item definition index",
@@ -7624,7 +7643,7 @@ export async function getPlayerEconomyLoadout(
             ),
             floatValue: economyDecimal(row.float_value, "loadout item float"),
             nametag: row.nametag ? String(row.nametag) : null,
-            stattrak: economyBoolean(row.stattrak),
+            stattrak: itemStattrak,
             rarityRank: economyPresentationRarity(
               economyItemType(String(row.item_type)),
               row.display_name
@@ -9584,6 +9603,7 @@ function economyResolvedMarketSalePrice(
     255,
   );
   const floatValue = economyFloat(quote.floatValue, "Quoted float");
+  const seed = economySeed(quote.seed, "Quoted seed");
   if (
     quote.floatDiscountBps !== null &&
     (!Number.isSafeInteger(quote.floatDiscountBps) ||
@@ -9599,6 +9619,7 @@ function economyResolvedMarketSalePrice(
     source,
     sourceReference,
     floatValue,
+    seed,
     floatDiscountBps: quote.floatDiscountBps,
     ...fallbackMetadata,
   };
@@ -10351,6 +10372,7 @@ export async function sellEconomyItem(
           priceSourceReference:
             marketQuote?.sourceReference ?? fallbackPrice?.sourceReference,
           floatValue: marketQuote?.floatValue ?? item.floatValue,
+          seed: marketQuote?.seed ?? item.seed,
           floatDiscountBps: marketQuote?.floatDiscountBps ?? null,
           priceFromFallback: marketQuote?.fromFallback ?? false,
           priceFallbackStale: marketQuote?.fallbackStale ?? false,
@@ -10379,6 +10401,7 @@ export async function sellEconomyItem(
           priceSourceReference:
             marketQuote?.sourceReference ?? fallbackPrice?.sourceReference,
           floatValue: marketQuote?.floatValue ?? item.floatValue,
+          seed: marketQuote?.seed ?? item.seed,
           floatDiscountBps: marketQuote?.floatDiscountBps ?? null,
           priceFromFallback: marketQuote?.fromFallback ?? false,
           priceFallbackStale: marketQuote?.fallbackStale ?? false,
@@ -10423,6 +10446,17 @@ export async function sellEconomyItems(
   }));
   if (new Set(sales.map((sale) => sale.itemId)).size !== sales.length)
     economyError("invalid_input", "Each inventory item can only be sold once.");
+  const requestedItemIds = (input.requestedItemIds ?? sales.map((sale) => sale.itemId))
+    .map((itemId) => economyItemId(itemId))
+    .sort((left, right) => left.localeCompare(right));
+  if (
+    requestedItemIds.length < sales.length ||
+    requestedItemIds.length > 50 ||
+    new Set(requestedItemIds).size !== requestedItemIds.length ||
+    sales.some((sale) => !requestedItemIds.includes(sale.itemId))
+  ) {
+    economyError("invalid_input", "The requested sale batch is invalid.");
+  }
   const orderedSales = [...sales].sort((left, right) =>
     left.itemId.localeCompare(right.itemId),
   );
@@ -10434,7 +10468,7 @@ export async function sellEconomyItems(
     // Provider quotes are resolved server-side and may change between a
     // committed request and a browser retry. Hash only the logical command so
     // the same idempotency key can replay the original committed result.
-    request: { itemIds: orderedSales.map((sale) => sale.itemId) },
+    request: { itemIds: requestedItemIds },
     work: async (context) => {
       const itemIds = orderedSales.map((sale) => sale.itemId);
       const wallets = await lockTokenAccounts(context.connection, [steamId]);
@@ -10533,6 +10567,7 @@ export async function sellEconomyItems(
             priceSourceReference:
               sale.marketQuote?.sourceReference ?? fallbackPrice?.sourceReference,
             floatValue: sale.marketQuote?.floatValue ?? item.floatValue,
+            seed: sale.marketQuote?.seed ?? item.seed,
             floatDiscountBps: sale.marketQuote?.floatDiscountBps ?? null,
             priceFromFallback: sale.marketQuote?.fromFallback ?? false,
             priceFallbackStale: sale.marketQuote?.fallbackStale ?? false,
@@ -10571,6 +10606,7 @@ export async function sellEconomyItems(
             priceSourceReference:
               sale.marketQuote?.sourceReference ?? fallbackPrice?.sourceReference,
             floatValue: sale.marketQuote?.floatValue ?? item.floatValue,
+            seed: sale.marketQuote?.seed ?? item.seed,
             floatDiscountBps: sale.marketQuote?.floatDiscountBps ?? null,
             priceFromFallback: sale.marketQuote?.fromFallback ?? false,
             priceFallbackStale: sale.marketQuote?.fallbackStale ?? false,
@@ -10714,6 +10750,10 @@ export async function openEconomyCrate(
       const openingId = Number(openingResult.insertId);
       const globalAnnouncementQueued =
         reward.rarityRank >= ECONOMY_PINK_RARITY_RANK;
+      const rewardDisplayName = economyItemDisplayName(
+        reward.displayName,
+        reward.stattrak,
+      );
       await createEconomyNotification({
         connection: context.connection,
         steamId,
@@ -10722,7 +10762,7 @@ export async function openEconomyCrate(
           openingId,
           crateItemId,
           rewardItemId: reward.id,
-          displayName: reward.displayName,
+          displayName: rewardDisplayName,
           rarityRank: reward.rarityRank,
         },
       });
@@ -10743,7 +10783,7 @@ export async function openEconomyCrate(
             containerName: crate.displayName,
             containerItemType: crate.itemType,
             itemId: reward.id,
-            itemName: reward.displayName,
+            itemName: rewardDisplayName,
             itemType: reward.itemType,
             rarityRank: reward.rarityRank,
             openingId,
@@ -11065,6 +11105,10 @@ export async function openEconomyCrates(
         const openingId = Number(openingResult.insertId);
         const globalAnnouncementQueued =
           draft.reward.rarityRank >= ECONOMY_PINK_RARITY_RANK;
+        const rewardDisplayName = economyItemDisplayName(
+          draft.reward.displayName,
+          draft.reward.stattrak,
+        );
         await createEconomyNotification({
           connection: context.connection,
           steamId,
@@ -11073,7 +11117,7 @@ export async function openEconomyCrates(
             openingId,
             crateItemId: draft.crate.id,
             rewardItemId: draft.reward.id,
-            displayName: draft.reward.displayName,
+            displayName: rewardDisplayName,
             rarityRank: draft.reward.rarityRank,
           },
         });
@@ -11092,7 +11136,7 @@ export async function openEconomyCrates(
               containerName: draft.crate.displayName,
               containerItemType: draft.crate.itemType,
               itemId: draft.reward.id,
-              itemName: draft.reward.displayName,
+              itemName: rewardDisplayName,
               itemType: draft.reward.itemType,
               rarityRank: draft.reward.rarityRank,
               openingId,

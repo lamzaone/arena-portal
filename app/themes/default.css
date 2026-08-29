@@ -4,7 +4,8 @@
  * provide overrides in its own stylesheet.
  */
 :root,
-[data-theme="default"] {
+[data-theme="default"],
+.small-profile-theme-default {
   --default-bg: #050304;
   --default-surface: #120709;
   --default-surface-strong: #1b080b;

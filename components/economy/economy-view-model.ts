@@ -2,6 +2,7 @@ import {
   economyRarityName as taxonomyRarityName,
   economyRarityRankClass,
 } from "@/lib/economy/item-taxonomy";
+import { economyItemDisplayName } from "@/lib/economy/item-display-name";
 
 export type EconomyItemView = {
   id: string;
@@ -285,7 +286,7 @@ export function toEconomyItem(value: unknown): EconomyItemView {
     integer(firstDefined(record, ["catalogueId", "catalogId"])) ??
     integer(firstDefined(catalogue, ["id", "catalogueId", "catalogId"])) ??
     integer(firstDefined(record, ["id"]));
-  const displayName = text(
+  const baseDisplayName = text(
     firstDefined(record, ["displayName", "name", "title"]),
     text(
       firstDefined(catalogue, ["displayName", "name", "title"]),
@@ -295,6 +296,8 @@ export function toEconomyItem(value: unknown): EconomyItemView {
       ),
     ),
   );
+  const stattrak = bool(firstDefined(record, ["stattrak", "statTrak"]));
+  const displayName = economyItemDisplayName(baseDisplayName, stattrak);
   const stickersValue = firstDefined(record, ["stickers", "attachedStickers"]);
   const storedRarityRank =
     integer(
@@ -497,7 +500,7 @@ export function toEconomyItem(value: unknown): EconomyItemView {
     ),
     floatValue: float(firstDefined(record, ["floatValue", "float", "wear"])),
     seed: integer(firstDefined(record, ["seed", "patternSeed"])),
-    stattrak: bool(firstDefined(record, ["stattrak", "statTrak"])),
+    stattrak,
     stattrakCount:
       integer(firstDefined(record, ["stattrakCount", "statTrakCount"]), 0) ?? 0,
     nametag: text(firstDefined(record, ["nametag", "nameTag"]), "") || null,

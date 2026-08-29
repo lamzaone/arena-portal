@@ -394,8 +394,8 @@ export function PlayerSearchField({
             player={playerIdentity(selected)}
             variant="inline"
             className={styles.selectedProfile}
-            showSteamId
             hoverCard={false}
+            profileLink="none"
           />
         ) : helpText ?? defaultHelp}
       </p>
@@ -420,33 +420,37 @@ export function PlayerSearchField({
           )) : searchState === "ready" && results.length ? results.map((player, index) => (
             <div
               className={`${styles.result}${showInventoryVisibility ? ` ${styles.resultWithMeta}` : ""}`}
+              id={`${inputId}-option-${index}`}
               key={player.steamId}
-              role="presentation"
+              role="option"
+              tabIndex={0}
+              aria-label={`Select ${player.displayName}`}
+              aria-selected={activeIndex === index}
               data-active={activeIndex === index ? "true" : "false"}
               onMouseEnter={() => setActiveIndex(index)}
               onFocusCapture={() => setActiveIndex(index)}
+              onClick={(event) => {
+                if ((event.target as HTMLElement).closest("a")) return;
+                choosePlayer(player);
+              }}
+              onKeyDown={(event) => {
+                if ((event.target as HTMLElement).closest("a")) return;
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                choosePlayer(player);
+              }}
             >
               <PlayerIdentity
                 player={playerIdentity(player)}
                 variant="compact"
                 className={styles.resultProfile}
+                profileLink="hover-card"
               />
               {showInventoryVisibility ? (
                 <span className={`${styles.visibility} ${player.inventoryVisibility === "public" ? styles.public : styles.private}`}>
                   {player.inventoryVisibility === "public" ? "Public" : <><LockKeyhole aria-hidden="true" /> Private</>}
                 </span>
               ) : null}
-              <button
-                className={styles.selectResult}
-                id={`${inputId}-option-${index}`}
-                type="button"
-                role="option"
-                aria-label={`Select ${player.displayName}`}
-                aria-selected={activeIndex === index}
-                onClick={() => choosePlayer(player)}
-              >
-                Select
-              </button>
             </div>
           )) : (
             <p className={styles.empty}>

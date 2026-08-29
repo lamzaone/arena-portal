@@ -961,6 +961,15 @@ export function CrateOpener({
     () => inventoryCrates.filter((crate) => !consumedCrateIds.has(crate.id)),
     [consumedCrateIds, inventoryCrates],
   );
+  const displayedOwnedCrates = useMemo(
+    () =>
+      inventoryCrates.filter(
+        (crate) =>
+          !consumedCrateIds.has(crate.id) ||
+          crate.id === retainedOpenedCrate?.id,
+      ),
+    [consumedCrateIds, inventoryCrates, retainedOpenedCrate?.id],
+  );
   const walletView = useMemo(() => economyWallet(wallet), [wallet]);
   const [activeTab, setActiveTab] = useState<CrateTab>("owned");
   const [ownedPage, setOwnedPage] = useState(1);
@@ -1013,17 +1022,20 @@ export function CrateOpener({
 
   const ownedPageCount = Math.max(
     1,
-    Math.ceil(ownedCrates.length / OWNED_CRATE_PAGE_SIZE),
+    Math.ceil(displayedOwnedCrates.length / OWNED_CRATE_PAGE_SIZE),
   );
   const visibleOwnedPage = Math.min(ownedPage, ownedPageCount);
   const ownedPageStart = (visibleOwnedPage - 1) * OWNED_CRATE_PAGE_SIZE;
-  const visibleOwnedCrates = ownedCrates.slice(
+  const visibleOwnedCrates = displayedOwnedCrates.slice(
     ownedPageStart,
     ownedPageStart + OWNED_CRATE_PAGE_SIZE,
   );
+  const visibleUnopenedCrates = visibleOwnedCrates.filter(
+    (crate) => !consumedCrateIds.has(crate.id),
+  );
   const ownedPageEnd = Math.min(
     ownedCrates.length,
-    ownedPageStart + visibleOwnedCrates.length,
+    ownedPageStart + visibleUnopenedCrates.length,
   );
   const bulkSelectedCrates = ownedCrates.filter((crate) =>
     bulkSelectedCrateIds.has(crate.id),
@@ -1044,28 +1056,16 @@ export function CrateOpener({
   );
   const busy = pending || activeAction !== null || bulkAnimating;
   const openingCrateId = opening?.crate.id ?? null;
-  const selectedInventoryCrateIndex = inventoryCrates.findIndex(
-    (item) => item.id === selectedCrateId,
-  );
   const selectedVisibleCrateIndex = visibleOwnedCrates.findIndex(
     (item) => item.id === selectedCrateId,
   );
-  const hasRetainedOwnedOpener =
-    selectedCrateId !== "" &&
-    selectedOwnedCrate !== null &&
-    selectedVisibleCrateIndex < 0 &&
-    (opening?.crate.id === selectedCrateId ||
-      unboxedCrateId === selectedCrateId);
   const selectedCatalogueId = selectedCrate?.catalogueId ?? null;
   const selectedDrops = dropState.status === "ready" ? dropState.drops : [];
-  const selectedCrateRowIndex = selectedVisibleCrateIndex >= 0
-    ? selectedVisibleCrateIndex
-    : selectedInventoryCrateIndex;
   const ownedInlineOpenerIndex = selectedVisibleCrateIndex < 0 || !visibleOwnedCrates.length
     ? -1
     : Math.min(
         visibleOwnedCrates.length - 1,
-        Math.ceil((selectedCrateRowIndex + 1) / ownedGridColumns) *
+        Math.ceil((selectedVisibleCrateIndex + 1) / ownedGridColumns) *
           ownedGridColumns -
           1,
       );
@@ -1511,6 +1511,7 @@ export function CrateOpener({
       const next = new Set(current);
       for (const crate of visibleOwnedCrates) {
         if (next.size >= MAX_BULK_OPEN_CRATES) break;
+        if (consumedCrateIds.has(crate.id)) continue;
         next.add(crate.id);
       }
       return next;
@@ -1844,7 +1845,7 @@ export function CrateOpener({
             </div>
             <div className="economy-bulk-toolbar-actions">
               {selectionMode ? <>
-                <button type="button" className="button button-quiet" disabled={busy || !visibleOwnedCrates.length || bulkSelectedCrates.length >= MAX_BULK_OPEN_CRATES} onClick={selectOwnedPage}>Select page</button>
+                <button type="button" className="button button-quiet" disabled={busy || !visibleUnopenedCrates.length || bulkSelectedCrates.length >= MAX_BULK_OPEN_CRATES} onClick={selectOwnedPage}>Select page</button>
                 <button type="button" className="button button-quiet" disabled={busy || !bulkSelectedCrates.length} onClick={() => { setBulkSelectedCrateIds(new Set()); setBulkOpenConfirming(false); }}>Clear</button>
               </> : null}
               {selectionMode && bulkSelectedCrates.length ? (
@@ -1877,27 +1878,41 @@ export function CrateOpener({
             onDismiss={() => setBulkOpeningRows([])}
           />
 
-          {ownedCrates.length || hasRetainedOwnedOpener ? <>
+          {displayedOwnedCrates.length ? <>
             <p className="crate-owned-page-summary" aria-live="polite">
-              {ownedCrates.length ? `Showing ${ownedPageStart + 1}-${ownedPageEnd} of ${ownedCrates.length} owned crates` : "No unopened crates remain"}
+              {retainedOpenedCrate
+                ? ownedCrates.length
+                  ? `${ownedCrates.length} unopened crate${ownedCrates.length === 1 ? "" : "s"} remain`
+                  : "No unopened crates remain"
+                : ownedCrates.length
+                  ? `Showing ${ownedPageStart + 1}-${ownedPageEnd} of ${ownedCrates.length} owned crates`
+                  : "No unopened crates remain"}
             </p>
             <div ref={ownedGridRef} id="crate-owned-panel" className="feature-grid crate-item-grid crate-owned-grid" role="tabpanel" aria-labelledby="crate-owned-tab">
-            {visibleOwnedCrates.map((crate, index) => <Fragment key={crate.id}>
-              <EconomyItemCard
-                item={crate}
-                selected={selectionMode ? bulkSelectedCrateIds.has(crate.id) : selectedCrateId === crate.id}
-                onSelect={() => selectionMode ? toggleCrateSelection(crate) : toggleOwnedCrate(crate.id)}
-                selectionLabel={selectionMode ? `${bulkSelectedCrateIds.has(crate.id) ? "Remove" : "Add"} ${crate.displayName} ${bulkSelectedCrateIds.has(crate.id) ? "from" : "to"} opening selection` : `Open ${crate.displayName} options`}
-                selectionControls={!selectionMode && selectedCrateId === crate.id ? `crate-opening-${crate.id}` : undefined}
-                enableMarketPreview
-                disabled={busy}
-                className={openingCrateId === crate.id ? "is-opening" : ""}
-              />
-              {!selectionMode && index === ownedInlineOpenerIndex && selectedOwnedCrate ? <OwnedCrateInlineOpener crate={selectedOwnedCrate} dropState={dropState} opening={opening} reward={unboxedCrateId === selectedOwnedCrate.id ? unboxed : null} rewardMessage={unboxedCrateId === selectedOwnedCrate.id ? unboxMessage : null} busy={busy} onOpen={openCrate} onClose={() => closeOwnedCrate(selectedOwnedCrate.id)} onRevealComplete={() => revealComplete.current?.()} onTick={playReelTick} /> : null}
-            </Fragment>)}
-            {!selectionMode && ownedInlineOpenerIndex < 0 && hasRetainedOwnedOpener && selectedOwnedCrate ? <OwnedCrateInlineOpener crate={selectedOwnedCrate} dropState={dropState} opening={opening} reward={unboxed} rewardMessage={unboxMessage} busy={busy} onOpen={openCrate} onClose={() => closeOwnedCrate(selectedOwnedCrate.id)} onRevealComplete={() => revealComplete.current?.()} onTick={playReelTick} /> : null}
+            {visibleOwnedCrates.map((crate, index) => {
+              const isRetainedConsumedSlot =
+                crate.id === retainedOpenedCrate?.id &&
+                consumedCrateIds.has(crate.id);
+              const isSelected = selectionMode
+                ? bulkSelectedCrateIds.has(crate.id)
+                : selectedCrateId === crate.id;
+
+              return <Fragment key={crate.id}>
+                <EconomyItemCard
+                  item={crate}
+                  selected={!isRetainedConsumedSlot && isSelected}
+                  onSelect={isRetainedConsumedSlot ? undefined : () => selectionMode ? toggleCrateSelection(crate) : toggleOwnedCrate(crate.id)}
+                  selectionLabel={isRetainedConsumedSlot ? undefined : selectionMode ? `${bulkSelectedCrateIds.has(crate.id) ? "Remove" : "Add"} ${crate.displayName} ${bulkSelectedCrateIds.has(crate.id) ? "from" : "to"} opening selection` : `Open ${crate.displayName} options`}
+                  selectionControls={!isRetainedConsumedSlot && !selectionMode && selectedCrateId === crate.id ? `crate-opening-${crate.id}` : undefined}
+                  enableMarketPreview={!isRetainedConsumedSlot}
+                  disabled={busy || isRetainedConsumedSlot}
+                  className={isRetainedConsumedSlot ? "crate-consumed-slot" : openingCrateId === crate.id ? "is-opening" : ""}
+                />
+                {!selectionMode && index === ownedInlineOpenerIndex && selectedOwnedCrate ? <OwnedCrateInlineOpener crate={selectedOwnedCrate} dropState={dropState} opening={opening} reward={unboxedCrateId === selectedOwnedCrate.id ? unboxed : null} rewardMessage={unboxedCrateId === selectedOwnedCrate.id ? unboxMessage : null} busy={busy} onOpen={openCrate} onClose={() => closeOwnedCrate(selectedOwnedCrate.id)} onRevealComplete={() => revealComplete.current?.()} onTick={playReelTick} /> : null}
+              </Fragment>;
+            })}
             </div>
-            <PaginationControls page={visibleOwnedPage} pageSize={OWNED_CRATE_PAGE_SIZE} totalItems={ownedCrates.length} disabled={busy} label="Owned crate pages" onPageChange={changeOwnedPage} />
+            <PaginationControls page={visibleOwnedPage} pageSize={OWNED_CRATE_PAGE_SIZE} totalItems={displayedOwnedCrates.length} disabled={busy} label="Owned crate pages" onPageChange={changeOwnedPage} />
           </> : <div id="crate-owned-panel" role="tabpanel" aria-labelledby="crate-owned-tab"><EconomyEmptyState title="You do not have a crate yet" description="Crates can arrive as match drops, hourly drops, map-end drops, or direct marketplace purchases in the Market tab." icon={<Gift aria-hidden="true" />} /></div>}
         </> : <>
           <form className="panel form-panel crate-catalogue-filters" onSubmit={(event) => event.preventDefault()}>

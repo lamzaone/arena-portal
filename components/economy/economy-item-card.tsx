@@ -1,6 +1,6 @@
 "use client";
 
-import { Box, Coins, LockKeyhole, Tag } from "lucide-react";
+import { Box, Coins, LockKeyhole } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
@@ -12,6 +12,7 @@ import {
   type EconomyItemView,
 } from "@/components/economy/economy-view-model";
 import { economyItemTypeLabel } from "@/lib/economy/item-taxonomy";
+import { economyItemDisplayName } from "@/lib/economy/item-display-name";
 
 type EconomyItemCardProps = {
   item: EconomyItemView;
@@ -49,6 +50,7 @@ export function EconomyItemCard({
       basePrice > price,
   );
   const itemKind = economyItemTypeLabel(item.itemType);
+  const displayName = economyItemDisplayName(item.displayName, item.stattrak);
   const content = (
     <>
       <MarketplaceItemPreview
@@ -64,20 +66,11 @@ export function EconomyItemCard({
           >
             {item.rarity}
           </span>
-          <h3>{item.displayName}</h3>
+          <h3>{displayName}</h3>
           <p>{itemKind}{item.nametag ? ` · “${item.nametag}”` : ""}</p>
         </div>
       </div>
       <div className="tag-list" aria-label="Item details">
-        {item.stattrak ? (
-          <span
-            className="badge stattrak-badge"
-            aria-label={`StatTrak™: ${item.stattrakCount.toLocaleString()} kills`}
-          >
-            <Tag aria-hidden="true" /> StatTrak™
-            <small>{item.stattrakCount.toLocaleString()}</small>
-          </span>
-        ) : null}
         {item.floatValue !== null ? <span className="tag">Float {item.floatValue.toFixed(6)}</span> : null}
         {item.seed !== null ? <span className="tag">Seed {item.seed}</span> : null}
         {!item.tradable ? (
@@ -109,7 +102,7 @@ export function EconomyItemCard({
 
   if (onSelect) {
     return (
-      <button type="button" className={`panel economy-item-card ${selected ? "is-selected" : ""} ${className}`.trim()} aria-pressed={selected} aria-expanded={selectionControls ? selected : undefined} aria-controls={selected ? selectionControls : undefined} onClick={onSelect} aria-label={selectionLabel ?? `Select ${item.displayName}`} disabled={disabled}>
+      <button type="button" className={`panel economy-item-card ${selected ? "is-selected" : ""} ${className}`.trim()} aria-pressed={selected} aria-expanded={selectionControls ? selected : undefined} aria-controls={selected ? selectionControls : undefined} onClick={onSelect} aria-label={selectionLabel ?? `Select ${displayName}`} disabled={disabled}>
         {content}
       </button>
     );
