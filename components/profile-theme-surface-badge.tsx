@@ -1,4 +1,4 @@
-import { Zap } from "lucide-react";
+import { Crown, Zap } from "lucide-react";
 
 import {
   getTrustedProfileTheme,
@@ -15,7 +15,7 @@ const surfaceClassNames: Record<ProfileThemeSurface, string> = {
   rankingEntry: "is-ranking-entry",
 };
 
-const badgeIcons = { zap: Zap };
+const badgeIcons = { crown: Crown, zap: Zap };
 
 export function ProfileThemeSurfaceBadge({
   surface,

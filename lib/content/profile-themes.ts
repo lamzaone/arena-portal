@@ -5,7 +5,7 @@ export type ProfileThemeSurfacePresentation = {
   badge?: {
     className: string;
     detail: string;
-    icon: "zap";
+    icon: "crown" | "zap";
     label: string;
   };
 };
@@ -56,6 +56,31 @@ const trustedProfileThemes = {
           detail: "Theme",
           icon: "zap",
           label: "BETA TESTER",
+        },
+      },
+    },
+  },
+  tap_god: {
+    key: "tap_god",
+    displayName: "TAP GOD",
+    previewImageUrl: "/images/economy/profile-themes/tap-god.svg",
+    surfaces: {
+      profile: {
+        className: "profile-theme-tap-god",
+        badge: {
+          className: "tap-god-theme-badge",
+          detail: "Profile theme",
+          icon: "crown",
+          label: "TAP GOD",
+        },
+      },
+      rankingEntry: {
+        className: "ranking-theme-tap-god",
+        badge: {
+          className: "leaderboard-theme-badge tap-god-leaderboard-theme-badge",
+          detail: "Theme",
+          icon: "crown",
+          label: "TAP GOD",
         },
       },
     },

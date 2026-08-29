@@ -57,6 +57,7 @@ body {
   overflow: hidden;
   pointer-events: none;
   background: radial-gradient(960px 760px at var(--cursor-grid-x) var(--cursor-grid-y), rgba(211, 20, 57, .055), transparent 78%);
+  transition: opacity .28s ease, visibility .28s ease;
 }
 
 .cursor-grid-background::before,
@@ -3948,19 +3949,891 @@ body:has(.player-profile-page.profile-theme-beta-tester) .cursor-grid-background
   background: rgba(4, 17, 28, .7);
 }
 
+/* TAP GOD is a source-controlled Special theme. Its gothic presentation is
+   intentionally scoped to entitled profile and ranking surfaces. */
+:is(.player-profile-page.profile-theme-tap-god, .leaderboard-player-row.ranking-theme-tap-god) {
+  --tap-bg: #030102;
+  --tap-surface: #0b0205;
+  --tap-surface-strong: #18040a;
+  --tap-crimson: #e11d48;
+  --tap-red: #ff334f;
+  --tap-deep: #72051f;
+  --tap-rose: #fecdd3;
+  --tap-text: #fff1f2;
+  --tap-muted: #d6aab3;
+  --tap-border: rgba(225, 29, 72, .52);
+  --tap-glow: rgba(225, 29, 72, .34);
+  /* The shared ranking badge shell reads these established aliases. */
+  --beta-bg: var(--tap-bg);
+  --beta-blue: var(--tap-crimson);
+  --beta-yellow: var(--tap-red);
+  --beta-muted: var(--tap-muted);
+}
+
+body:has(.player-profile-page.profile-theme-tap-god) {
+  background:
+    radial-gradient(circle at 70% -8%, rgba(225, 29, 72, .18), transparent 34rem),
+    radial-gradient(circle at 12% 70%, rgba(127, 5, 35, .15), transparent 30rem),
+    #020102;
+}
+
+body:has(.player-profile-page.profile-theme-tap-god)::before {
+  background-image: linear-gradient(rgba(225, 29, 72, .045) 1px, transparent 1px);
+}
+
+body:has(.player-profile-page.profile-theme-tap-god) .cursor-grid-background,
+html.tap-god-theme-active .cursor-grid-background {
+  opacity: 0;
+  visibility: hidden;
+}
+
+@keyframes tap-god-background-drift {
+  from { background-position: 0 0, 0 0, center, center, center; }
+  to { background-position: 72px 72px, -72px 72px, center, center, center; }
+}
+
+@keyframes tap-god-red-rain-fall {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -32vh, 0) rotate(7deg) scaleY(.72);
+  }
+  8% { opacity: var(--rain-opacity); }
+  86% { opacity: var(--rain-opacity); }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--rain-drift), 124vh, 0) rotate(7deg) scaleY(1.08);
+  }
+}
+
+@keyframes tap-god-rain-haze-drift {
+  0%, 100% { opacity: .34; transform: translate3d(-3%, -1%, 0) scale(1); }
+  48% { opacity: .58; transform: translate3d(4%, 2%, 0) scale(1.08); }
+}
+
+@keyframes tap-god-rain-flash {
+  0%, 68%, 72%, 77%, 100% { opacity: 0; }
+  69% { opacity: .16; }
+  70% { opacity: .035; }
+  73% { opacity: .1; }
+}
+
+@keyframes tap-god-cathedral-rise {
+  0%, 100% { opacity: .17; transform: translate3d(0, 0, 0); }
+  50% { opacity: .28; transform: translate3d(0, -7px, 0); }
+}
+
+@keyframes tap-god-bloodline {
+  from { background-position: 220% 0; }
+  to { background-position: -220% 0; }
+}
+
+@keyframes tap-god-slash {
+  0%, 12% { opacity: 0; transform: translate3d(-190%, 0, 0) skewX(-24deg); }
+  20% { opacity: .72; }
+  43% { opacity: 0; transform: translate3d(560%, 0, 0) skewX(-24deg); }
+  100% { opacity: 0; transform: translate3d(560%, 0, 0) skewX(-24deg); }
+}
+
+@keyframes tap-god-relic-pulse {
+  0%, 100% { filter: brightness(.92) saturate(1); box-shadow: inset 3px 0 0 var(--identity-badge-color), 0 0 7px color-mix(in srgb, var(--identity-badge-color) 15%, transparent); }
+  50% { filter: brightness(1.13) saturate(1.18); box-shadow: inset 3px 0 0 var(--identity-badge-color), 0 0 18px color-mix(in srgb, var(--identity-badge-color) 37%, transparent), 0 0 7px var(--tap-glow); }
+}
+
+@keyframes tap-god-frame-pulse {
+  0%, 100% { filter: brightness(.94); box-shadow: inset 3px 0 0 var(--tap-deep), 0 0 10px rgba(225, 29, 72, .14); }
+  50% { filter: brightness(1.13); box-shadow: inset 3px 0 0 var(--tap-red), 0 0 23px rgba(225, 29, 72, .34), 0 0 7px rgba(255, 113, 133, .2); }
+}
+
+@keyframes tap-god-crown-rite {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-2deg); filter: drop-shadow(0 5px 9px rgba(0, 0, 0, .62)) drop-shadow(0 0 5px rgba(225, 29, 72, .42)); }
+  50% { transform: translate3d(0, -3px, 0) rotate(2deg); filter: drop-shadow(0 8px 12px rgba(0, 0, 0, .72)) drop-shadow(0 0 13px rgba(255, 51, 79, .78)); }
+}
+
+@keyframes tap-god-title-haunt {
+  0%, 7%, 10%, 48%, 51%, 100% { opacity: 1; transform: translateX(0); text-shadow: 3px 2px 0 rgba(127, 5, 35, .72), -2px -1px 0 rgba(255, 51, 79, .2), 0 0 20px rgba(225, 29, 72, .16); }
+  8% { opacity: .82; transform: translateX(-2px); text-shadow: 5px 0 8px rgba(255, 51, 79, .55), -5px 0 7px rgba(71, 4, 20, .8); }
+  9%, 49% { opacity: .95; transform: translateX(2px); }
+  50% { opacity: .72; transform: translateX(-1px); text-shadow: -4px 0 7px rgba(255, 51, 79, .58), 5px 0 8px rgba(72, 5, 24, .84); }
+}
+
+@keyframes tap-god-sigil-turn {
+  from { transform: rotate(45deg); }
+  to { transform: rotate(405deg); }
+}
+
+@keyframes tap-god-ember-pulse {
+  0%, 100% { opacity: .32; box-shadow: 0 0 4px currentColor; transform: scale(.72) rotate(45deg); }
+  50% { opacity: 1; box-shadow: 0 0 13px currentColor; transform: scale(1) rotate(135deg); }
+}
+
+@keyframes tap-god-arch-breathe {
+  0%, 100% { opacity: .22; filter: drop-shadow(0 0 5px rgba(225, 29, 72, .18)); }
+  50% { opacity: .58; filter: drop-shadow(0 0 16px rgba(225, 29, 72, .46)); }
+}
+
+.leaderboard-table tbody tr.ranking-theme-tap-god > td {
+  border-top: 1px solid var(--tap-border);
+  border-bottom: 1px solid var(--tap-border);
+  color: var(--tap-muted);
+  background:
+    radial-gradient(circle at 78% 50%, rgba(225, 29, 72, .12), transparent 32%),
+    repeating-linear-gradient(115deg, rgba(225, 29, 72, .035) 0 1px, transparent 1px 34px),
+    rgba(3, 1, 2, .97);
+  transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease;
+}
+
+.leaderboard-table tbody tr.ranking-theme-tap-god > td:first-child {
+  border-left: 3px solid var(--tap-red);
+  box-shadow: inset 4px 0 0 rgba(91, 7, 25, .72), -5px 0 18px rgba(225, 29, 72, .12);
+}
+
+.leaderboard-table tbody tr.ranking-theme-tap-god > td:last-child { border-right: 1px solid var(--tap-crimson); }
+
+.leaderboard-table tbody tr.ranking-theme-tap-god:hover > td {
+  border-color: rgba(255, 51, 79, .82);
+  background-color: rgba(24, 4, 10, .98);
+  box-shadow: inset 0 1px 0 rgba(255, 241, 242, .04), 0 0 20px rgba(225, 29, 72, .08);
+}
+
+.ranking-theme-tap-god .leaderboard-position,
+.ranking-theme-tap-god .points-cell {
+  color: var(--tap-red) !important;
+  text-shadow: 0 0 13px rgba(255, 51, 79, .48);
+}
+
+.ranking-theme-tap-god .leaderboard-player strong {
+  color: var(--tap-text);
+  font-family: Georgia, "Times New Roman", serif;
+  text-shadow: 2px 1px 0 rgba(114, 5, 31, .72), 0 0 12px rgba(225, 29, 72, .16);
+}
+
+.ranking-theme-tap-god .leaderboard-player small,
+.ranking-theme-tap-god .leaderboard-level-rank small { color: var(--tap-muted); }
+
+.ranking-theme-tap-god .leaderboard-player:hover strong,
+.ranking-theme-tap-god .leaderboard-player:focus-visible strong { color: #ff7185; }
+
+.ranking-theme-tap-god .leaderboard-player:focus-visible {
+  border-radius: 0;
+  outline: 2px solid var(--tap-red);
+  outline-offset: 4px;
+}
+
+.ranking-theme-tap-god .leaderboard-player img,
+.ranking-theme-tap-god .player-avatar-fallback {
+  border: 1px solid var(--tap-red);
+  border-radius: 0;
+  color: var(--tap-rose);
+  background: linear-gradient(145deg, #270711, var(--tap-bg));
+  box-shadow: 4px 4px 0 rgba(114, 5, 31, .64), 0 0 15px rgba(225, 29, 72, .16);
+  clip-path: polygon(12% 0, 88% 0, 100% 18%, 100% 82%, 88% 100%, 12% 100%, 0 82%, 0 18%);
+}
+
+.tap-god-leaderboard-theme-badge {
+  overflow: hidden;
+  border-color: var(--tap-red);
+  color: var(--tap-rose);
+  background: linear-gradient(115deg, rgba(225, 29, 72, .28), rgba(3, 1, 2, .98) 68%);
+  box-shadow: inset 3px 0 0 var(--tap-deep), 0 0 15px rgba(225, 29, 72, .2);
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+  animation: beta-neon-frame 3.8s ease-in-out infinite;
+}
+
+.tap-god-leaderboard-theme-badge::before {
+  position: absolute;
+  z-index: 0;
+  top: -35%;
+  bottom: -35%;
+  left: 0;
+  width: 28%;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(255, 113, 133, .7), transparent);
+  opacity: 0;
+  animation: tap-god-slash 5.2s ease-in-out infinite -1.3s;
+}
+
+.tap-god-leaderboard-theme-badge > * { position: relative; z-index: 1; }
+
+:is(.player-profile-page.profile-theme-tap-god, .leaderboard-player-row.ranking-theme-tap-god) .identity-group-badge {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--identity-badge-color) 58%, var(--tap-crimson));
+  border-radius: 0;
+  color: color-mix(in srgb, var(--identity-badge-soft) 86%, var(--tap-text));
+  background:
+    linear-gradient(115deg, color-mix(in srgb, var(--identity-badge-color) 19%, rgba(12, 2, 6, .98)), rgba(3, 1, 2, .98) 72%),
+    var(--tap-bg);
+  text-shadow: 0 0 9px color-mix(in srgb, var(--identity-badge-color) 48%, transparent);
+  animation: tap-god-relic-pulse 4.4s ease-in-out infinite;
+}
+
+:is(.player-profile-page.profile-theme-tap-god, .leaderboard-player-row.ranking-theme-tap-god) .identity-group-badge::before {
+  position: absolute;
+  z-index: 0;
+  top: -35%;
+  bottom: -35%;
+  left: 0;
+  width: 26%;
+  content: "";
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--identity-badge-color) 42%, #fff1f2), transparent);
+  opacity: 0;
+  animation: tap-god-slash 5.8s ease-in-out infinite;
+}
+
+:is(.player-profile-page.profile-theme-tap-god, .leaderboard-player-row.ranking-theme-tap-god) .identity-group-badge::after {
+  position: absolute;
+  z-index: 0;
+  right: 4px;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  content: "";
+  color: var(--tap-red);
+  background: currentColor;
+  animation: tap-god-ember-pulse 3.2s ease-in-out infinite;
+}
+
+:is(.player-profile-page.profile-theme-tap-god, .leaderboard-player-row.ranking-theme-tap-god) .identity-group-badge > :is(svg, span) {
+  position: relative;
+  z-index: 1;
+}
+
+.player-profile-page.profile-theme-tap-god {
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  color: var(--tap-text);
+  color-scheme: dark;
+  background-color: transparent;
+  background-image:
+    repeating-linear-gradient(115deg, rgba(225, 29, 72, .026) 0 1px, transparent 1px 72px),
+    repeating-linear-gradient(65deg, rgba(91, 7, 25, .035) 0 1px, transparent 1px 72px),
+    radial-gradient(ellipse at 72% 17%, rgba(225, 29, 72, .17), transparent 34rem),
+    radial-gradient(ellipse at 8% 68%, rgba(91, 7, 25, .18), transparent 30rem),
+    linear-gradient(rgba(225, 29, 72, .025) 1px, transparent 1px);
+  background-size: auto, auto, auto, auto, 100% 5px;
+  animation: tap-god-background-drift 32s linear infinite;
+}
+
+.player-profile-page.profile-theme-tap-god > .shell {
+  position: relative;
+  z-index: 2;
+}
+
+.tap-god-rain-background {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 52% -12%, rgba(255, 31, 68, .2), transparent 50%),
+    radial-gradient(ellipse at 9% 62%, rgba(114, 5, 31, .17), transparent 35%),
+    linear-gradient(180deg, rgba(10, 1, 4, .3), rgba(2, 0, 1, .66));
+}
+
+.tap-god-rain-background::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, .76), transparent 20% 80%, rgba(0, 0, 0, .78)),
+    linear-gradient(180deg, transparent 54%, rgba(0, 0, 0, .58));
+}
+
+.tap-god-rain-background::after {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  content: "";
+  background-image:
+    linear-gradient(rgba(255, 51, 79, .025) 1px, transparent 1px),
+    radial-gradient(ellipse at center, transparent 38%, rgba(0, 0, 0, .48) 100%);
+  background-size: 100% 4px, auto;
+  mix-blend-mode: screen;
+}
+
+.tap-god-rain-architecture {
+  position: absolute;
+  z-index: 0;
+  right: -8vw;
+  bottom: -12vh;
+  left: -8vw;
+  height: 58vh;
+  background:
+    linear-gradient(69deg, transparent 46%, rgba(225, 29, 72, .11) 46.25% 46.55%, transparent 46.8%),
+    linear-gradient(111deg, transparent 46%, rgba(225, 29, 72, .11) 46.25% 46.55%, transparent 46.8%),
+    repeating-linear-gradient(90deg, transparent 0 9vw, rgba(114, 5, 31, .13) 9vw calc(9vw + 1px), transparent calc(9vw + 1px) 18vw);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 36%, #000);
+  mask-image: linear-gradient(to bottom, transparent, #000 36%, #000);
+  filter: drop-shadow(0 -9px 28px rgba(225, 29, 72, .08));
+  animation: tap-god-cathedral-rise 11s ease-in-out infinite;
+}
+
+.tap-god-rain-haze {
+  position: absolute;
+  z-index: 1;
+  inset: -24%;
+  background:
+    radial-gradient(ellipse at 27% 58%, rgba(225, 29, 72, .18), transparent 24%),
+    radial-gradient(ellipse at 72% 34%, rgba(114, 5, 31, .24), transparent 28%),
+    radial-gradient(ellipse at 56% 82%, rgba(255, 51, 79, .1), transparent 22%);
+  filter: blur(32px);
+  animation: tap-god-rain-haze-drift 17s ease-in-out infinite;
+}
+
+.tap-god-rain-field {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  overflow: hidden;
+}
+
+.tap-god-rain-field i {
+  position: absolute;
+  top: 0;
+  left: var(--rain-x);
+  width: var(--rain-width);
+  height: var(--rain-length);
+  border-radius: 999px;
+  background: linear-gradient(to bottom, transparent, #72051f 18%, #e11d48 66%, #ff7185 92%, #fff1f2);
+  box-shadow: 0 0 5px rgba(255, 51, 79, .72), 0 0 13px rgba(225, 29, 72, .22);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: tap-god-red-rain-fall var(--rain-duration) linear var(--rain-delay) infinite;
+}
+
+.tap-god-rain-field i.is-heavy {
+  background: linear-gradient(to bottom, transparent, #9f1239 14%, #ff1744 70%, #fff1f2);
+  box-shadow: 0 0 7px rgba(255, 51, 79, .86), 0 0 20px rgba(225, 29, 72, .35);
+}
+
+.tap-god-rain-field i.is-distant {
+  filter: blur(.45px);
+  mix-blend-mode: screen;
+}
+
+.tap-god-rain-field i::after {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  content: "";
+  background: rgba(255, 113, 133, .76);
+  box-shadow: 0 0 9px rgba(255, 51, 79, .78);
+}
+
+.tap-god-rain-flash {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 52% 0%, rgba(255, 225, 230, .62), rgba(255, 51, 79, .18) 23%, transparent 58%);
+  mix-blend-mode: screen;
+  opacity: 0;
+  animation: tap-god-rain-flash 12.5s ease-out -4.2s infinite;
+}
+
+.player-profile-page.profile-theme-tap-god .site-header {
+  isolation: isolate;
+  overflow: hidden;
+  border-color: var(--tap-border);
+  border-left: 3px solid var(--tap-red);
+  border-radius: 0;
+  background: rgba(3, 1, 2, .95);
+  box-shadow: inset 0 -1px 0 rgba(225, 29, 72, .12), 0 17px 42px rgba(0, 0, 0, .48), 0 0 25px rgba(225, 29, 72, .08);
+}
+
+.player-profile-page.profile-theme-tap-god .site-header::after,
+.player-profile-page.profile-theme-tap-god .account-nav::after,
+.player-profile-page.profile-theme-tap-god .profile-content-tabs::after {
+  position: absolute;
+  z-index: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  content: "";
+  background: linear-gradient(90deg, transparent 0 8%, var(--tap-deep) 24%, var(--tap-red) 50%, var(--tap-deep) 76%, transparent 92% 100%);
+  background-size: 240% 100%;
+  opacity: .88;
+  filter: drop-shadow(0 0 7px var(--tap-crimson));
+  pointer-events: none;
+  animation: tap-god-bloodline 5.8s linear infinite;
+}
+
+.player-profile-page.profile-theme-tap-god .site-header > * { position: relative; z-index: 1; }
+
+.player-profile-page.profile-theme-tap-god .brand-mark {
+  border: 1px solid var(--tap-red);
+  border-radius: 0;
+  color: var(--tap-rose);
+  background: #0b0205;
+  box-shadow: inset 0 0 13px rgba(225, 29, 72, .22), 4px 4px 0 rgba(114, 5, 31, .58), 0 0 16px rgba(225, 29, 72, .2);
+  clip-path: polygon(50% 0, 100% 20%, 90% 84%, 50% 100%, 10% 84%, 0 20%);
+}
+
+.player-profile-page.profile-theme-tap-god :where(.main-nav a, .mobile-nav nav a) { color: var(--tap-muted); }
+
+.player-profile-page.profile-theme-tap-god :where(.main-nav a, .mobile-nav nav a):hover,
+.player-profile-page.profile-theme-tap-god :where(.main-nav a, .mobile-nav nav a):focus-visible {
+  color: var(--tap-red);
+  background-color: rgba(225, 29, 72, .11);
+  text-shadow: 0 0 10px rgba(225, 29, 72, .4);
+}
+
+.player-profile-page.profile-theme-tap-god :where(a, button, summary, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--tap-red) !important;
+  outline-offset: 3px;
+}
+
+.player-profile-page.profile-theme-tap-god .account-nav {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid var(--tap-border);
+  border-left: 3px solid var(--tap-red);
+  border-radius: 0;
+  background:
+    repeating-linear-gradient(115deg, rgba(225, 29, 72, .035) 0 1px, transparent 1px 34px),
+    rgba(3, 1, 2, .95);
+  box-shadow: inset 0 0 22px rgba(225, 29, 72, .055), 0 0 24px rgba(225, 29, 72, .08);
+  scrollbar-color: var(--tap-crimson) var(--tap-bg);
+}
+
+.player-profile-page.profile-theme-tap-god .account-nav a {
+  position: relative;
+  z-index: 1;
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-right-color: rgba(225, 29, 72, .15);
+  border-radius: 0;
+  color: var(--tap-muted);
+  background: rgba(3, 1, 2, .42);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .075em;
+  text-transform: uppercase;
+  transition: color .18s ease, border-color .18s ease, background-color .18s ease, box-shadow .18s ease;
+}
+
+.player-profile-page.profile-theme-tap-god .account-nav a::before {
+  position: absolute;
+  right: 5px;
+  top: 5px;
+  width: 4px;
+  height: 4px;
+  content: "";
+  color: var(--tap-crimson);
+  background: currentColor;
+  transform: rotate(45deg);
+  box-shadow: 0 0 5px currentColor;
+}
+
+.player-profile-page.profile-theme-tap-god .account-nav a > svg { color: var(--tap-crimson); filter: drop-shadow(0 0 4px rgba(225, 29, 72, .42)); }
+
+.player-profile-page.profile-theme-tap-god .account-nav a:hover,
+.player-profile-page.profile-theme-tap-god .account-nav a:focus-visible {
+  border-color: var(--tap-crimson);
+  color: var(--tap-rose);
+  background: rgba(225, 29, 72, .13);
+  box-shadow: inset 0 0 17px rgba(225, 29, 72, .12), 0 0 13px rgba(225, 29, 72, .16);
+}
+
+.player-profile-page.profile-theme-tap-god .account-nav a.active {
+  border-color: var(--tap-red);
+  color: var(--tap-text);
+  background: linear-gradient(135deg, rgba(225, 29, 72, .72), rgba(91, 7, 25, .9));
+  box-shadow: inset 3px 0 0 var(--tap-red), inset 0 0 18px rgba(255, 113, 133, .14), 0 0 18px rgba(225, 29, 72, .24);
+  text-shadow: 0 0 9px rgba(255, 241, 242, .34);
+}
+
+.player-profile-page.profile-theme-tap-god .account-nav a.active::before { color: var(--tap-rose); animation: tap-god-ember-pulse 2.7s ease-in-out infinite; }
+.player-profile-page.profile-theme-tap-god .account-nav a.active > svg { color: var(--tap-rose); filter: drop-shadow(0 0 7px rgba(255, 113, 133, .68)); }
+.player-profile-page.profile-theme-tap-god .account-nav-note { color: #bd8591; font-size: 9px; letter-spacing: .04em; text-transform: uppercase; }
+.player-profile-page.profile-theme-tap-god .account-nav-note > svg { color: var(--tap-crimson); }
+
+.player-profile-page.profile-theme-tap-god .public-player-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid var(--tap-border);
+  border-top: 3px solid var(--tap-red);
+  border-bottom-color: rgba(225, 29, 72, .72);
+  background:
+    radial-gradient(ellipse at 22% 108%, rgba(225, 29, 72, .18), transparent 38%),
+    linear-gradient(135deg, rgba(114, 5, 31, .2), transparent 36%),
+    rgba(3, 1, 2, .8);
+  box-shadow: inset 0 0 58px rgba(225, 29, 72, .06), 0 28px 70px rgba(0, 0, 0, .36), 0 0 25px rgba(225, 29, 72, .08);
+  clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%, 0 14px);
+}
+
+.player-profile-page.profile-theme-tap-god .public-player-hero::before {
+  position: absolute;
+  z-index: 0;
+  top: -25%;
+  bottom: -25%;
+  left: 0;
+  width: clamp(48px, 8vw, 120px);
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(225, 29, 72, .18), rgba(255, 241, 242, .09), transparent);
+  opacity: 0;
+  pointer-events: none;
+  animation: tap-god-slash 7.4s ease-in-out infinite;
+}
+
+.player-profile-page.profile-theme-tap-god .public-player-hero::after {
+  position: absolute;
+  z-index: 0;
+  right: clamp(18px, 5vw, 84px);
+  bottom: -96px;
+  width: clamp(150px, 21vw, 300px);
+  height: clamp(240px, 30vw, 420px);
+  border: 1px solid rgba(225, 29, 72, .45);
+  border-bottom: 0;
+  border-radius: 50% 50% 0 0;
+  content: "";
+  background: repeating-linear-gradient(90deg, transparent 0 31px, rgba(225, 29, 72, .055) 31px 32px);
+  pointer-events: none;
+  animation: tap-god-arch-breathe 4.6s ease-in-out infinite;
+}
+
+.player-profile-page.profile-theme-tap-god .public-player-hero > * { position: relative; z-index: 1; }
+.player-profile-page.profile-theme-tap-god .back-link,
+.player-profile-page.profile-theme-tap-god .public-player-identity .tapped-kicker,
+.player-profile-page.profile-theme-tap-god :where(.eyebrow, .panel-heading p) { color: var(--tap-crimson); }
+.player-profile-page.profile-theme-tap-god .back-link:hover,
+.player-profile-page.profile-theme-tap-god .back-link:focus-visible { color: var(--tap-rose); text-shadow: 0 0 9px var(--tap-glow); }
+
+.player-profile-page.profile-theme-tap-god .public-player-identity h1 {
+  color: var(--tap-text);
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 800;
+  letter-spacing: -.055em;
+  animation: tap-god-title-haunt 9.4s linear infinite;
+}
+
+.player-profile-page.profile-theme-tap-god .public-player-avatar {
+  isolation: isolate;
+  border: 2px solid var(--tap-red);
+  border-radius: 0;
+  background: linear-gradient(145deg, #260611, var(--tap-bg));
+  box-shadow: 0 0 0 4px rgba(225, 29, 72, .11), 7px 7px 0 rgba(91, 7, 25, .68), 0 0 26px rgba(225, 29, 72, .21);
+  clip-path: polygon(14% 0, 86% 0, 100% 15%, 100% 84%, 86% 100%, 14% 100%, 0 84%, 0 15%);
+}
+
+.player-profile-page.profile-theme-tap-god .public-player-avatar::before {
+  position: absolute;
+  z-index: 2;
+  right: -20%;
+  left: -20%;
+  top: 0;
+  height: 20%;
+  content: "";
+  background: linear-gradient(180deg, transparent, rgba(255, 51, 79, .34), rgba(255, 241, 242, .1), transparent);
+  opacity: 0;
+  pointer-events: none;
+  animation: beta-vertical-scan 4.8s ease-in-out infinite -.8s;
+}
+
+.player-profile-page.profile-theme-tap-god .public-player-avatar > img,
+.player-profile-page.profile-theme-tap-god .public-player-avatar > .public-player-avatar-fallback {
+  color: var(--tap-rose);
+  background: linear-gradient(145deg, #260611, var(--tap-bg));
+}
+
+.tap-god-avatar-mark {
+  position: absolute;
+  z-index: 3;
+  right: -8px;
+  top: -8px;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 2px solid var(--tap-red);
+  color: var(--tap-rose);
+  background: #090104;
+  clip-path: polygon(50% 0, 100% 22%, 88% 84%, 50% 100%, 12% 84%, 0 22%);
+  animation: tap-god-crown-rite 3.2s ease-in-out infinite;
+}
+
+.tap-god-avatar-mark svg { width: 17px; height: 17px; stroke-width: 2.7; }
+
+.tap-god-theme-badge {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  width: max-content;
+  max-width: 100%;
+  min-height: 32px;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+  padding: 6px 12px 6px 9px;
+  overflow: hidden;
+  border: 1px solid var(--tap-red);
+  color: var(--tap-rose);
+  background: linear-gradient(115deg, rgba(225, 29, 72, .3), rgba(3, 1, 2, .97) 66%);
+  box-shadow: inset 3px 0 0 var(--tap-deep), 0 0 17px rgba(225, 29, 72, .2);
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .11em;
+  line-height: 1;
+  text-transform: uppercase;
+  animation: tap-god-frame-pulse 3.8s ease-in-out infinite;
+}
+
+.tap-god-theme-badge::before {
+  position: absolute;
+  z-index: 0;
+  top: -35%;
+  bottom: -35%;
+  left: 0;
+  width: 26%;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(255, 113, 133, .7), transparent);
+  opacity: 0;
+  animation: tap-god-slash 4.8s ease-in-out infinite -.6s;
+}
+
+.tap-god-theme-badge::after {
+  position: absolute;
+  right: 5px;
+  bottom: 4px;
+  width: 5px;
+  height: 5px;
+  content: "";
+  color: var(--tap-red);
+  background: currentColor;
+  animation: tap-god-ember-pulse 2.8s ease-in-out infinite;
+}
+
+.tap-god-theme-badge > * { position: relative; z-index: 1; }
+.tap-god-theme-badge > svg { width: 15px; height: 15px; flex: 0 0 auto; color: var(--tap-red); filter: drop-shadow(0 0 7px rgba(255, 51, 79, .68)); }
+.tap-god-theme-badge > span { white-space: nowrap; }
+.tap-god-theme-badge > small { padding-left: 7px; border-left: 1px solid rgba(225, 29, 72, .42); color: var(--tap-muted); font-family: var(--font-body); font-size: 8px; font-weight: 800; letter-spacing: .07em; white-space: nowrap; }
+
+.player-profile-page.profile-theme-tap-god .profile-steam-theme-row .tap-god-theme-badge { margin-top: 0; }
+
+.player-profile-page.profile-theme-tap-god .profile-primary-group-badge .identity-group-badge {
+  border-bottom-color: var(--tap-red);
+  filter: drop-shadow(0 6px 9px rgba(0, 0, 0, .62)) drop-shadow(0 0 9px color-mix(in srgb, var(--identity-badge-color) 28%, transparent));
+}
+
+.player-profile-page.profile-theme-tap-god .public-player-steam-identity {
+  border-color: color-mix(in srgb, var(--profile-presence-color) 42%, var(--tap-crimson));
+  border-radius: 0;
+  color: color-mix(in srgb, var(--profile-presence-color) 56%, var(--tap-text));
+  background: rgba(11, 2, 5, .94);
+  box-shadow: inset 3px 0 0 rgba(114, 5, 31, .48);
+}
+
+.player-profile-page.profile-theme-tap-god .public-player-steam-identity:hover,
+.player-profile-page.profile-theme-tap-god .public-player-steam-identity:focus-visible { color: var(--tap-text); background: rgba(225, 29, 72, .13); box-shadow: inset 3px 0 0 var(--tap-crimson), 0 0 14px rgba(225, 29, 72, .14); }
+
+.player-profile-page.profile-theme-tap-god .public-rank-card {
+  border: 1px solid var(--tap-crimson);
+  border-top: 3px solid var(--tap-red);
+  border-radius: 0;
+  background: linear-gradient(145deg, rgba(24, 4, 10, .97), rgba(3, 1, 2, .99));
+  box-shadow: inset 0 0 48px rgba(225, 29, 72, .09), 8px 8px 0 rgba(91, 7, 25, .42), 0 0 24px rgba(225, 29, 72, .1);
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+
+.player-profile-page.profile-theme-tap-god .public-rank-card::after {
+  right: -51px;
+  bottom: -58px;
+  border-color: rgba(225, 29, 72, .42);
+  border-radius: 50% 50% 0 0;
+  animation: tap-god-sigil-turn 19s linear infinite;
+}
+
+.player-profile-page.profile-theme-tap-god .public-rank-card > span { color: var(--tap-red); }
+.player-profile-page.profile-theme-tap-god .public-rank-card > strong,
+.player-profile-page.profile-theme-tap-god .public-rank-card > div > small { color: var(--tap-text); }
+.player-profile-page.profile-theme-tap-god .public-rank-card > strong { font-family: Georgia, "Times New Roman", serif; text-shadow: 3px 2px 0 rgba(114, 5, 31, .7), 0 0 18px rgba(225, 29, 72, .18); }
+.player-profile-page.profile-theme-tap-god .public-rank-card > small,
+.player-profile-page.profile-theme-tap-god .public-rank-card > div > span { color: var(--tap-muted); }
+.player-profile-page.profile-theme-tap-god .public-rank-card > div { border-color: var(--tap-border); }
+
+.player-profile-page.profile-theme-tap-god .button-primary {
+  border-color: var(--tap-red);
+  border-radius: 0;
+  color: var(--tap-text);
+  background: linear-gradient(135deg, var(--tap-crimson), var(--tap-deep));
+  box-shadow: 4px 4px 0 rgba(54, 2, 14, .72), 0 0 15px rgba(225, 29, 72, .18);
+}
+
+.player-profile-page.profile-theme-tap-god .button-primary:hover,
+.player-profile-page.profile-theme-tap-god .button-primary:focus-visible { border-color: var(--tap-rose); color: #fff; background: linear-gradient(135deg, var(--tap-red), #9f1239); }
+
+.player-profile-page.profile-theme-tap-god .button-secondary {
+  border-color: var(--tap-crimson);
+  border-radius: 0;
+  color: var(--tap-rose);
+  background: rgba(225, 29, 72, .08);
+}
+
+.player-profile-page.profile-theme-tap-god .button-secondary:hover,
+.player-profile-page.profile-theme-tap-god .button-secondary:focus-visible { border-color: var(--tap-red); color: var(--tap-text); background: rgba(225, 29, 72, .16); box-shadow: 0 0 14px rgba(225, 29, 72, .15); }
+
+.player-profile-page.profile-theme-tap-god .profile-content-tabs { position: relative; isolation: isolate; border-color: var(--tap-border); }
+
+.player-profile-page.profile-theme-tap-god .profile-content-tabs > div {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  overflow: hidden;
+  border-color: var(--tap-border);
+  border-radius: 0;
+  background:
+    repeating-linear-gradient(115deg, rgba(225, 29, 72, .04) 0 1px, transparent 1px 28px),
+    rgba(3, 1, 2, .96);
+  box-shadow: inset 3px 0 0 var(--tap-red), 6px 6px 0 rgba(91, 7, 25, .35), 0 0 21px rgba(225, 29, 72, .1);
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+
+.player-profile-page.profile-theme-tap-god .profile-content-tabs > div::before {
+  position: absolute;
+  z-index: 0;
+  top: -25%;
+  bottom: -25%;
+  left: 0;
+  width: 18%;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(225, 29, 72, .18), rgba(255, 241, 242, .08), transparent);
+  opacity: 0;
+  animation: tap-god-slash 6.2s ease-in-out infinite -1.4s;
+}
+
+.player-profile-page.profile-theme-tap-god .profile-content-tabs button {
+  z-index: 1;
+  min-height: 46px;
+  border-right: 1px solid rgba(225, 29, 72, .15);
+  color: var(--tap-muted);
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: .08em;
+  text-shadow: 0 0 8px rgba(225, 29, 72, .13);
+}
+
+.player-profile-page.profile-theme-tap-god .profile-content-tabs button::before {
+  position: absolute;
+  right: 7px;
+  top: 6px;
+  width: 4px;
+  height: 4px;
+  content: "";
+  color: var(--tap-crimson);
+  background: currentColor;
+  animation: tap-god-ember-pulse 3.1s ease-in-out infinite;
+}
+
+.player-profile-page.profile-theme-tap-god .profile-content-tabs button:last-child { border-right: 0; }
+.player-profile-page.profile-theme-tap-god .profile-content-tabs button > svg { color: var(--tap-crimson); filter: drop-shadow(0 0 4px rgba(225, 29, 72, .45)); transition: color .18s ease, filter .18s ease; }
+
+.player-profile-page.profile-theme-tap-god .profile-content-tabs button:hover,
+.player-profile-page.profile-theme-tap-god .profile-content-tabs button:focus-visible { color: var(--tap-rose); background: rgba(225, 29, 72, .12); box-shadow: inset 0 0 0 1px var(--tap-crimson); }
+
+.player-profile-page.profile-theme-tap-god .profile-content-tabs button[aria-selected="true"] {
+  color: var(--tap-text);
+  background: linear-gradient(135deg, rgba(225, 29, 72, .34), rgba(20, 3, 8, .72));
+  box-shadow: inset 0 0 20px rgba(225, 29, 72, .12);
+  text-shadow: 0 0 11px rgba(255, 113, 133, .4);
+}
+
+.player-profile-page.profile-theme-tap-god .profile-content-tabs button[aria-selected="true"]::after { background: var(--tap-red); box-shadow: 0 0 14px rgba(255, 51, 79, .64); animation: beta-tab-rail 2.2s ease-in-out infinite; }
+.player-profile-page.profile-theme-tap-god .profile-content-tabs button[aria-selected="true"] > svg { color: var(--tap-red); filter: drop-shadow(0 0 8px rgba(255, 51, 79, .78)); }
+.player-profile-page.profile-theme-tap-god .profile-content-tabs button > span { border-color: var(--tap-border); border-radius: 0; color: var(--tap-rose); background: rgba(225, 29, 72, .11); box-shadow: inset 0 0 8px rgba(225, 29, 72, .12), 0 0 8px rgba(225, 29, 72, .1); }
+
+.player-profile-page.profile-theme-tap-god :where(.public-player-stat-grid article, .panel, .profile-inventory-panel) {
+  border-color: var(--tap-border);
+  border-radius: 0;
+  background:
+    radial-gradient(circle at 82% 0%, rgba(225, 29, 72, .075), transparent 18rem),
+    linear-gradient(145deg, rgba(24, 4, 10, .88), rgba(3, 1, 2, .95));
+  box-shadow: inset 3px 0 0 rgba(225, 29, 72, .72), inset 0 1px 0 rgba(255, 241, 242, .025), 0 0 20px rgba(225, 29, 72, .045);
+}
+
+.player-profile-page.profile-theme-tap-god .public-player-stat-grid article:nth-child(even) { box-shadow: inset 3px 0 0 rgba(114, 5, 31, .9), inset 0 1px 0 rgba(255, 241, 242, .025), 0 0 20px rgba(225, 29, 72, .045); }
+.player-profile-page.profile-theme-tap-god .public-player-stat-grid article > span:first-child,
+.player-profile-page.profile-theme-tap-god .public-player-stat-grid .stat-foot,
+.player-profile-page.profile-theme-tap-god :where(.empty-copy, .profile-settings-view-heading > p:last-child, .profile-inventory-heading p:last-child) { color: var(--tap-muted); }
+.player-profile-page.profile-theme-tap-god .public-player-stat-grid strong,
+.player-profile-page.profile-theme-tap-god :where(.panel-heading h2, .panel-heading h3, .profile-settings-view-heading h2, .profile-inventory-heading h2) { color: var(--tap-text); font-family: Georgia, "Times New Roman", serif; text-shadow: 2px 1px 0 rgba(114, 5, 31, .58), 0 0 12px rgba(225, 29, 72, .14); }
+.player-profile-page.profile-theme-tap-god .public-player-stat-grid svg,
+.player-profile-page.profile-theme-tap-god .combat-stat-grid svg { color: rgba(225, 29, 72, .72); animation: beta-icon-charge 3.2s ease-in-out infinite; }
+
+.player-profile-page.profile-theme-tap-god :where(.group-role-section, .combat-stat-grid, .hit-map-list) { border-color: var(--tap-border); border-radius: 0; background: rgba(114, 5, 31, .17); }
+
+.player-profile-page.profile-theme-tap-god :where(.group-membership-cards article, .combat-stat-grid > div, .hit-map-list > div) {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 0;
+  background-color: rgba(3, 1, 2, .91);
+  transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease;
+}
+
+.player-profile-page.profile-theme-tap-god :where(.group-membership-cards article, .combat-stat-grid > div, .hit-map-list > div)::before {
+  position: absolute;
+  z-index: 0;
+  top: -35%;
+  bottom: -35%;
+  left: 0;
+  width: 26%;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgba(225, 29, 72, .18), transparent);
+  opacity: 0;
+  transform: translate3d(-190%, 0, 0) skewX(-24deg);
+  transition: opacity .2s ease, transform .68s cubic-bezier(.2, .8, .2, 1);
+  pointer-events: none;
+}
+
+.player-profile-page.profile-theme-tap-god :where(.group-membership-cards article, .combat-stat-grid > div, .hit-map-list > div):hover { border-color: var(--tap-red); background-color: rgba(24, 4, 10, .98); box-shadow: inset 3px 0 0 var(--tap-crimson), 0 0 20px rgba(225, 29, 72, .14); }
+.player-profile-page.profile-theme-tap-god :where(.group-membership-cards article, .combat-stat-grid > div, .hit-map-list > div):hover::before { opacity: 1; transform: translate3d(540%, 0, 0) skewX(-24deg); }
+.player-profile-page.profile-theme-tap-god :where(.group-role-section h3, .combat-stat-grid span, .hit-map-list span, .hit-map-figure figcaption, .hit-map-damage) { color: var(--tap-muted); }
+.player-profile-page.profile-theme-tap-god .hit-map-panel::before { background: radial-gradient(circle at 60% 45%, rgba(225, 29, 72, .17), transparent 62%); }
+.player-profile-page.profile-theme-tap-god .hit-map-figure,
+.player-profile-page.profile-theme-tap-god :where(.record-list li, .hit-map-damage) { border-color: var(--tap-border); }
+.player-profile-page.profile-theme-tap-god .hit-map-outline { stroke: rgba(254, 205, 211, .62); }
+.player-profile-page.profile-theme-tap-god .rank-progress-track { background: rgba(225, 29, 72, .18); }
+.player-profile-page.profile-theme-tap-god .rank-progress-track i { background-image: linear-gradient(90deg, currentColor, var(--tap-crimson), var(--tap-rose), var(--tap-red), currentColor); background-size: 230% 100%; box-shadow: 0 0 14px currentColor, 0 0 8px var(--tap-crimson); animation: tap-god-bloodline 2.4s linear infinite; }
+.player-profile-page.profile-theme-tap-god .rank-progress > div:first-child { color: var(--tap-text); }
+.player-profile-page.profile-theme-tap-god .rank-progress > div:first-child strong { color: var(--tap-muted); }
+
+.player-profile-page.profile-theme-tap-god :where(.settings-choice, .settings-theme-card, .settings-upcoming-grid article, .settings-save-bar) { border-color: var(--tap-border); border-radius: 0; background: rgba(3, 1, 2, .9); }
+.player-profile-page.profile-theme-tap-god :where(.settings-choice, .settings-theme-card):hover,
+.player-profile-page.profile-theme-tap-god :where(.settings-choice, .settings-theme-card):focus-within { border-color: var(--tap-crimson); background: rgba(225, 29, 72, .11); box-shadow: 0 0 15px rgba(225, 29, 72, .1); }
+.player-profile-page.profile-theme-tap-god :where(.settings-choice, .settings-theme-card).is-selected { border-color: var(--tap-red); background: linear-gradient(135deg, rgba(225, 29, 72, .17), rgba(91, 7, 25, .13)); box-shadow: inset 3px 0 0 var(--tap-red), 0 0 16px rgba(225, 29, 72, .12); }
+.player-profile-page.profile-theme-tap-god :where(.settings-choice-icon, .settings-theme-preview) { border-color: var(--tap-border); border-radius: 0; color: var(--tap-red); background: rgba(225, 29, 72, .11); }
+.player-profile-page.profile-theme-tap-god :where(.settings-choice input, .settings-theme-card input) { accent-color: var(--tap-crimson); }
+
+.player-profile-page.profile-theme-tap-god .profile-inventory-artwork-placeholder,
+.player-profile-page.profile-theme-tap-god .profile-inventory-artwork { border-radius: 0; background-color: var(--tap-bg); }
+.player-profile-page.profile-theme-tap-god .profile-inventory-artwork:hover,
+.player-profile-page.profile-theme-tap-god .profile-inventory-artwork:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--rarity-accent) 34%, transparent), 7px 7px 0 rgba(114, 5, 31, .48), 0 0 18px rgba(225, 29, 72, .13); transform: none; }
+.player-profile-page.profile-theme-tap-god .profile-inventory-tooltip { border-radius: 0; border-color: var(--tap-border); color: var(--tap-text); background: rgba(3, 1, 2, .98); }
+.player-profile-page.profile-theme-tap-god .profile-inventory-empty { border-color: var(--tap-border); color: var(--tap-muted); background: rgba(3, 1, 2, .78); }
+
 @media (max-width: 520px) {
-  .player-profile-page.profile-theme-beta-tester .public-player-copy { width: 100%; min-width: 0; }
-  .player-profile-page.profile-theme-beta-tester .public-player-identity {
+  :is(.player-profile-page.profile-theme-beta-tester, .player-profile-page.profile-theme-tap-god) .public-player-copy { width: 100%; min-width: 0; }
+  :is(.player-profile-page.profile-theme-beta-tester, .player-profile-page.profile-theme-tap-god) .public-player-identity {
     display: grid;
     width: 100%;
     grid-template-columns: 62px minmax(0, 1fr);
   }
-  .player-profile-page.profile-theme-beta-tester .public-player-identity > div:last-child {
+  :is(.player-profile-page.profile-theme-beta-tester, .player-profile-page.profile-theme-tap-god) .public-player-identity > div:last-child {
     width: 100%;
     min-width: 0;
     max-width: 100%;
   }
-  .player-profile-page.profile-theme-beta-tester .profile-identity-badge-rack { width: 100%; }
+  :is(.player-profile-page.profile-theme-beta-tester, .player-profile-page.profile-theme-tap-god) .profile-identity-badge-rack { width: 100%; }
   .beta-tester-avatar-mark {
     right: -5px;
     top: -5px;
@@ -3971,6 +4844,13 @@ body:has(.player-profile-page.profile-theme-beta-tester) .cursor-grid-background
   .beta-tester-avatar-mark svg { width: 13px; height: 13px; }
   .beta-tester-theme-badge { gap: 5px; padding-right: 8px; font-size: 8px; letter-spacing: .08em; }
   .beta-tester-theme-badge > small { padding-left: 5px; font-size: 7px; }
+  .tap-god-avatar-mark { right: -5px; top: -5px; width: 27px; height: 27px; }
+  .tap-god-avatar-mark svg { width: 14px; height: 14px; }
+  .tap-god-theme-badge { gap: 5px; padding-right: 8px; font-size: 8px; letter-spacing: .08em; }
+  .tap-god-theme-badge > small { display: none; }
+  .tap-god-rain-field i:nth-child(n + 29) { display: none; }
+  .tap-god-rain-haze { filter: blur(24px); }
+  .tap-god-rain-architecture { right: -28vw; left: -28vw; opacity: .18; }
   .leaderboard-theme-badge { gap: 4px; padding-right: 7px; }
   .leaderboard-theme-badge > small { display: none; }
 }
@@ -3981,19 +4861,39 @@ body:has(.player-profile-page.profile-theme-beta-tester) .cursor-grid-background
   .player-profile-page.profile-theme-beta-tester *::after,
   .leaderboard-player-row.ranking-theme-beta-tester *,
   .leaderboard-player-row.ranking-theme-beta-tester *::before,
-  .leaderboard-player-row.ranking-theme-beta-tester *::after {
+  .leaderboard-player-row.ranking-theme-beta-tester *::after,
+  .player-profile-page.profile-theme-tap-god *,
+  .player-profile-page.profile-theme-tap-god *::before,
+  .player-profile-page.profile-theme-tap-god *::after,
+  .leaderboard-player-row.ranking-theme-tap-god *,
+  .leaderboard-player-row.ranking-theme-tap-god *::before,
+  .leaderboard-player-row.ranking-theme-tap-god *::after {
     animation-duration: .01ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: .01ms !important;
   }
+
+  .tap-god-rain-field {
+    background-image: repeating-linear-gradient(97deg, transparent 0 62px, rgba(225, 29, 72, .1) 63px, transparent 64px 126px);
+  }
+
+  .tap-god-rain-field i { display: none; }
+  .tap-god-rain-haze,
+  .tap-god-rain-flash,
+  .tap-god-rain-architecture { animation: none !important; }
+  .tap-god-rain-haze { opacity: .28; transform: none; }
+  .tap-god-rain-flash { opacity: .035; }
 }
 
 @media (forced-colors: active) {
+  .tap-god-rain-background { display: none; }
   .beta-tester-avatar-mark,
+  .tap-god-avatar-mark,
   .beta-tester-theme-badge,
+  .tap-god-theme-badge,
   .leaderboard-theme-badge,
-  :is(.player-profile-page.profile-theme-beta-tester, .leaderboard-player-row.ranking-theme-beta-tester) .identity-group-badge {
+  :is(.player-profile-page.profile-theme-beta-tester, .leaderboard-player-row.ranking-theme-beta-tester, .player-profile-page.profile-theme-tap-god, .leaderboard-player-row.ranking-theme-tap-god) .identity-group-badge {
     border: 2px solid ButtonText;
     color: ButtonText;
     background: Canvas;
@@ -4004,11 +4904,11 @@ body:has(.player-profile-page.profile-theme-beta-tester) .cursor-grid-background
     animation: none;
   }
 
-  :is(.player-profile-page.profile-theme-beta-tester, .leaderboard-player-row.ranking-theme-beta-tester) .identity-group-badge::before,
-  :is(.player-profile-page.profile-theme-beta-tester, .leaderboard-player-row.ranking-theme-beta-tester) .identity-group-badge::after { display: none; }
+  :is(.player-profile-page.profile-theme-beta-tester, .leaderboard-player-row.ranking-theme-beta-tester, .player-profile-page.profile-theme-tap-god, .leaderboard-player-row.ranking-theme-tap-god) .identity-group-badge::before,
+  :is(.player-profile-page.profile-theme-beta-tester, .leaderboard-player-row.ranking-theme-beta-tester, .player-profile-page.profile-theme-tap-god, .leaderboard-player-row.ranking-theme-tap-god) .identity-group-badge::after { display: none; }
 
-  .player-profile-page.profile-theme-beta-tester .account-nav,
-  .player-profile-page.profile-theme-beta-tester .account-nav a {
+  :is(.player-profile-page.profile-theme-beta-tester, .player-profile-page.profile-theme-tap-god) .account-nav,
+  :is(.player-profile-page.profile-theme-beta-tester, .player-profile-page.profile-theme-tap-god) .account-nav a {
     border-color: CanvasText;
     color: LinkText;
     background: Canvas;
@@ -4016,27 +4916,27 @@ body:has(.player-profile-page.profile-theme-beta-tester) .cursor-grid-background
     text-shadow: none;
   }
 
-  .player-profile-page.profile-theme-beta-tester .account-nav a.active {
+  :is(.player-profile-page.profile-theme-beta-tester, .player-profile-page.profile-theme-tap-god) .account-nav a.active {
     color: HighlightText;
     background: Highlight;
   }
 
-  .leaderboard-table tbody tr.ranking-theme-beta-tester > td {
+  .leaderboard-table tbody tr:is(.ranking-theme-beta-tester, .ranking-theme-tap-god) > td {
     border-color: CanvasText;
     color: CanvasText;
     background: Canvas;
     box-shadow: none;
   }
 
-  .ranking-theme-beta-tester :where(.leaderboard-position, .leaderboard-player strong),
-  .ranking-theme-beta-tester .points-cell,
+  :is(.ranking-theme-beta-tester, .ranking-theme-tap-god) :where(.leaderboard-position, .leaderboard-player strong),
+  :is(.ranking-theme-beta-tester, .ranking-theme-tap-god) .points-cell,
   .leaderboard-theme-badge > small {
     color: CanvasText !important;
     text-shadow: none;
   }
 
-  .ranking-theme-beta-tester .leaderboard-player img,
-  .ranking-theme-beta-tester .player-avatar-fallback {
+  :is(.ranking-theme-beta-tester, .ranking-theme-tap-god) .leaderboard-player img,
+  :is(.ranking-theme-beta-tester, .ranking-theme-tap-god) .player-avatar-fallback {
     border-color: CanvasText;
     color: CanvasText;
     background: Canvas;

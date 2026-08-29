@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowLeft, ArrowRight, Ban, Clock3, Crosshair, Settings2, ShieldCheck, Target, UserRound, VolumeX, Zap } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Ban, Clock3, Crown, Crosshair, Settings2, ShieldCheck, Target, UserRound, VolumeX, Zap } from "lucide-react";
 import type { CSSProperties } from "react";
 
 import { formatDate, formatPlaytime, isActiveSanction } from "@/components/formatters";
@@ -13,6 +13,7 @@ import { ProfileThemeSurfaceBadge } from "@/components/profile-theme-surface-bad
 import { ProfileTabs } from "@/components/profile-tabs";
 import { ResilientRemoteImage } from "@/components/resilient-remote-image";
 import { SiteHeader } from "@/components/site-header";
+import { TapGodRainBackground } from "@/components/tap-god-rain-background";
 import { getLevelRank, getNextLevelRank, getRankProgress } from "@/lib/content/levelranks";
 import { getTrustedProfileTheme } from "@/lib/content/profile-themes";
 import type { HitboxStats, PlayerDashboard, PlayerProfileInventoryPage, PublicPlayerProfile } from "@/lib/data/portal-repository";
@@ -150,12 +151,14 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
   const presenceLabel = presence === "online" ? "Steam online" : presence === "offline" ? "Steam offline" : "Steam status unavailable";
   const profileTheme = getTrustedProfileTheme(profileThemeKey);
   const betaTesterTheme = profileTheme.key === "beta_tester";
+  const tapGodTheme = profileTheme.key === "tap_god";
   const primaryIdentityGroup = identity.groups[0] ?? null;
   const secondaryIdentityGroups = identity.groups.slice(1);
   const showSettings = Boolean(isOwnProfile && settingsOpen && profileSettings);
 
   return (
     <main className={`tapped-page player-profile-page ${profileTheme.surfaces.profile.className}`} data-profile-theme={profileTheme.key}>
+      {tapGodTheme ? <TapGodRainBackground /> : null}
       <div className="shell">
         <SiteHeader authenticated={isAuthenticated} />
         <section className="public-player-hero shared-profile-hero">
@@ -168,6 +171,7 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
                   {isBanned ? <span className="banned-avatar-overlay">BANNED</span> : null}
                 </div>
                 {betaTesterTheme ? <span className="beta-tester-avatar-mark" aria-hidden="true"><Zap /></span> : null}
+                {tapGodTheme ? <span className="tap-god-avatar-mark" aria-hidden="true"><Crown /></span> : null}
                 {primaryIdentityGroup ? <span className="profile-primary-group-badge"><IdentityGroupBadge group={primaryIdentityGroup} compact /></span> : null}
               </div>
               <div>

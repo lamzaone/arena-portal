@@ -245,6 +245,8 @@ type IdentityRewardAwardRow = RowDataPacket & {
   item_type: string;
   tradable: number | boolean;
   group_enabled: number | boolean;
+  reward_enabled?: number | boolean;
+  source_type?: IdentityGroupSource;
 };
 
 type IdentityRewardMutationResult = {
@@ -1412,9 +1414,8 @@ export async function assignIdentityGroup(input: {
       steamId,
       actorSteamId,
     });
-    // Previously awarded account-bound items remain tied to membership even
-    // if their reward definition was later retired. Re-assigning the group
-    // therefore restores those exact instances as well as active rewards.
+    // Re-assigning the group restores only account-bound instances whose
+    // reward definition is still active. Retired rewards must stay revoked.
     const reactivated = await reactivateAccountBoundRewardsForGroup(connection, {
       groupId,
       steamId,
@@ -1994,7 +1995,12 @@ async function enqueueIdentityRewardRefresh(
 
 async function loadAccountBoundRewardAwards(
   connection: PoolConnection,
-  input: { steamId?: string; groupId?: number; activeOnly?: boolean },
+  input: {
+    steamId?: string;
+    groupId?: number;
+    rewardId?: number;
+    activeOnly?: boolean;
+  },
 ) {
   const where = [
     "rewards.trade_policy = 'account_bound'",
@@ -2013,11 +2019,15 @@ async function loadAccountBoundRewardAwards(
     where.push("rewards.group_id = ?");
     values.push(input.groupId);
   }
+  if (input.rewardId) {
+    where.push("rewards.id = ?");
+    values.push(input.rewardId);
+  }
   const [rows] = await connection.query<
     Array<IdentityRewardAwardRow & { source_type: IdentityGroupSource }>
   >(
     "SELECT awards.reward_id, rewards.group_id, awards.steam_id, awards.ordinal, awards.item_id, awards.entitlement_active, awards.item_revoked_by_entitlement, " +
-      "items.state AS item_state, items.item_type, items.tradable, groups.enabled AS group_enabled, groups.source_type " +
+      "items.state AS item_state, items.item_type, items.tradable, groups.enabled AS group_enabled, rewards.enabled AS reward_enabled, groups.source_type " +
       "FROM portal_identity_group_reward_awards AS awards " +
       "INNER JOIN portal_identity_group_rewards AS rewards ON rewards.id = awards.reward_id " +
       "INNER JOIN portal_identity_groups AS groups ON groups.id = rewards.group_id " +
@@ -2210,6 +2220,38 @@ async function revokeAccountBoundRewardsForGroup(
   return revokedItemIds;
 }
 
+async function revokeAccountBoundRewardsForReward(
+  connection: PoolConnection,
+  input: {
+    rewardId: number;
+    actorSteamId: string | null;
+    reason: string;
+  },
+) {
+  const rows = await loadAccountBoundRewardAwards(connection, {
+    rewardId: input.rewardId,
+  });
+  const rowsBySteamId = new Map<string, IdentityRewardAwardRow[]>();
+  for (const row of rows) {
+    const steamId = String(row.steam_id);
+    const playerRows = rowsBySteamId.get(steamId) ?? [];
+    playerRows.push(row);
+    rowsBySteamId.set(steamId, playerRows);
+  }
+  const revokedItemIds: string[] = [];
+  for (const [steamId, playerRows] of rowsBySteamId) {
+    revokedItemIds.push(
+      ...(await revokeIdentityRewardAwards(connection, {
+        steamId,
+        rows: playerRows,
+        actorSteamId: input.actorSteamId,
+        reason: input.reason,
+      })),
+    );
+  }
+  return revokedItemIds;
+}
+
 async function reactivateIdentityRewardAwards(
   connection: PoolConnection,
   input: {
@@ -2292,7 +2334,10 @@ async function reactivateAccountBoundRewardsForGroup(
   });
   return reactivateIdentityRewardAwards(connection, {
     steamId: input.steamId,
-    rows: rows.filter((row) => !asBoolean(row.entitlement_active)),
+    rows: rows.filter(
+      (row) =>
+        asBoolean(row.reward_enabled) && !asBoolean(row.entitlement_active),
+    ),
     actorSteamId: input.actorSteamId,
     reason: input.reason,
   });
@@ -2314,14 +2359,19 @@ async function reconcileAccountBoundRewardEntitlements(
   const inactiveRows: IdentityRewardAwardRow[] = [];
   const activeAgainRows: IdentityRewardAwardRow[] = [];
   for (const row of rows) {
-    const sourceType = (row as IdentityRewardAwardRow & {
-      source_type: IdentityGroupSource;
-    }).source_type;
+    const sourceType = row.source_type;
     const groupEnabled = asBoolean(row.group_enabled);
+    const rewardEnabled = asBoolean(row.reward_enabled);
     const sourceIsAuthoritative = input.authoritativeSources.has(sourceType);
-    if (!groupEnabled || (sourceIsAuthoritative && !input.effectiveGroupIds.has(Number(row.group_id)))) {
+    if (
+      !groupEnabled ||
+      !rewardEnabled ||
+      (sourceIsAuthoritative &&
+        !input.effectiveGroupIds.has(Number(row.group_id)))
+    ) {
       if (asBoolean(row.entitlement_active)) inactiveRows.push(row);
     } else if (
+      rewardEnabled &&
       sourceIsAuthoritative &&
       input.effectiveGroupIds.has(Number(row.group_id)) &&
       !asBoolean(row.entitlement_active)
@@ -2631,6 +2681,14 @@ export async function retireIdentityGroupReward(input: {
       "UPDATE portal_identity_group_rewards SET enabled = FALSE, retired_at = COALESCE(retired_at, CURRENT_TIMESTAMP), retired_by_steam_id = COALESCE(retired_by_steam_id, ?) WHERE id = ?",
       [actorSteamId, rewardId],
     );
+    const revokedItemIds =
+      reward.trade_policy === "account_bound"
+        ? await revokeAccountBoundRewardsForReward(connection, {
+            rewardId,
+            actorSteamId,
+            reason: "group-reward-retired",
+          })
+        : [];
     await writeIdentityAudit(connection, {
       requestKey: `${requestKey}:reward-retire`,
       actorSteamId,
@@ -2640,9 +2698,11 @@ export async function retireIdentityGroupReward(input: {
       metadata: {
         groupId: Number(reward.group_id),
         catalogueId: Number(reward.catalogue_id),
+        tradePolicy: reward.trade_policy,
+        revokedItemIds,
       },
     });
-    return { rewardId };
+    return { rewardId, revokedItemIds };
   });
 }
 

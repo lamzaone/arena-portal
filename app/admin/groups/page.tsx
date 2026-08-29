@@ -80,7 +80,8 @@ const noticeMessages: Record<string, string> = {
   "player-privilege-granted": "Direct player privilege granted.",
   "player-privilege-revoked": "Direct player privilege revoked.",
   "reward-added": "Group reward added and delivered to current custom members.",
-  "reward-retired": "Group reward retired. Previously awarded items were retained.",
+  "reward-retired":
+    "Group reward retired. Account-bound awarded items were removed from inventories; tradable awards were retained.",
   "catalogue-synced": "External group definitions and discovered permissions were synchronized.",
 };
 
