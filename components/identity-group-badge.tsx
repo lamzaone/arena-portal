@@ -8,20 +8,24 @@ import {
 } from "lucide-react";
 import type { CSSProperties } from "react";
 
-import type { EffectiveIdentityGroup } from "@/lib/data/identity-groups";
+import {
+  IDENTITY_GROUP_BADGE_ICON_OPTIONS,
+  isIdentityGroupBadgeIconKey,
+} from "@/lib/content/identity-group-badges";
+import type { IdentityGroupBadgeData } from "@/lib/data/identity-groups";
 
 type IdentityGroupBadgeProps = {
-  group: Pick<
-    EffectiveIdentityGroup,
-    | "displayName"
-    | "badgeLabel"
-    | "badgeIconKey"
-    | "badgeColor"
-    | "badgeSoftColor"
-    | "sourceType"
-  >;
+  group: IdentityGroupBadgeData;
   compact?: boolean;
   className?: string;
+  listItem?: boolean;
+};
+
+type IdentityGroupBadgeListProps = {
+  groups: readonly IdentityGroupBadgeData[];
+  compact?: boolean;
+  className?: string;
+  label?: string;
 };
 
 const icons = {
@@ -33,18 +37,24 @@ const icons = {
   users: UsersRound,
 } as const;
 
+export const identityGroupBadgeIconOptions =
+  IDENTITY_GROUP_BADGE_ICON_OPTIONS;
+
 export function IdentityGroupBadge({
   group,
   compact = false,
   className = "",
+  listItem = false,
 }: IdentityGroupBadgeProps) {
-  const Icon = icons[group.badgeIconKey as keyof typeof icons] ?? BadgeCheck;
+  const Icon = isIdentityGroupBadgeIconKey(group.badgeIconKey)
+    ? icons[group.badgeIconKey]
+    : BadgeCheck;
   const sourceLabel =
     group.sourceType === "admins_core"
-      ? "Admin"
+      ? "Admins.Core"
       : group.sourceType === "vipcore"
-        ? "VIP"
-        : "Group";
+        ? "VIPCore"
+        : "Portal";
 
   return (
     <span
@@ -56,10 +66,37 @@ export function IdentityGroupBadge({
         } as CSSProperties
       }
       title={`${group.displayName} · ${sourceLabel}`}
+      aria-label={`${group.badgeLabel}, ${group.displayName}, ${sourceLabel} group`}
+      role={listItem ? "listitem" : undefined}
     >
       <Icon aria-hidden="true" />
       <span>{group.badgeLabel}</span>
-      {!compact ? <small>{group.displayName}</small> : null}
+    </span>
+  );
+}
+
+export function IdentityGroupBadgeList({
+  groups,
+  compact = false,
+  className = "",
+  label = "Player groups",
+}: IdentityGroupBadgeListProps) {
+  if (!groups.length) return null;
+
+  return (
+    <span
+      className={`identity-group-badge-list ${className}`.trim()}
+      role="list"
+      aria-label={label}
+    >
+      {groups.map((group) => (
+        <IdentityGroupBadge
+          key={`${group.sourceType}:${group.id}`}
+          group={group}
+          compact={compact}
+          listItem
+        />
+      ))}
     </span>
   );
 }

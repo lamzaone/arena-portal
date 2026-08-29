@@ -13,6 +13,10 @@ import { normalizeVipGroup } from "@/lib/content/group-presentation";
 import { isTrustedOwnedProfileThemeKey } from "@/lib/content/profile-themes";
 import { isAssignedToConfiguredGameServer } from "@/lib/admin/server-scope";
 import {
+  getEffectiveIdentityGroupBadgesForPlayers,
+  type IdentityGroupBadgeData,
+} from "@/lib/data/identity-groups";
+import {
   ECONOMY_ITEM_TYPES,
   ECONOMY_MAX_RARITY_RANK,
   ECONOMY_SPECIAL_RARITY_RANK,
@@ -379,6 +383,7 @@ export type ModerationRecord = {
 
 export type GroupMembership = {
   name: string;
+  externalKey?: string;
   expiresAt: number | null;
 };
 
@@ -548,6 +553,7 @@ export type StaffVip = {
 
 export type VipRosterEntry = StaffVip & {
   adminGroups: GroupMembership[];
+  identityGroups: IdentityGroupBadgeData[];
 };
 
 export type VipRosterPage = {
@@ -579,6 +585,7 @@ export type LeaderboardPlayer = {
   mvps: number;
   vipGroups: GroupMembership[];
   adminGroups: GroupMembership[];
+  identityGroups: IdentityGroupBadgeData[];
   profileThemeKey: string | null;
 };
 
@@ -693,7 +700,7 @@ function toGroups(value: unknown) {
 }
 
 function toAdminMemberships(value: unknown): GroupMembership[] {
-  return toGroups(value).map((name) => ({ name, expiresAt: null }));
+  return toGroups(value).map((name) => ({ name, externalKey: name, expiresAt: null }));
 }
 
 function toScopedAdminMemberships(
@@ -709,7 +716,8 @@ function toVipMemberships(
 ): GroupMembership[] {
   const memberships = new Map<string, GroupMembership>();
   for (const row of rows) {
-    const name = normalizeVipGroup(String(row.group ?? ""));
+    const externalKey = String(row.group ?? "").normalize("NFKC").trim();
+    const name = normalizeVipGroup(externalKey);
     if (!name) continue;
     const expiresAt = Number(row.expires ?? 0);
     const groupKey = name.toLowerCase();
@@ -719,7 +727,11 @@ function toVipMemberships(
       (existing.expiresAt !== 0 &&
         (expiresAt === 0 || expiresAt > (existing.expiresAt ?? 0)))
     ) {
-      memberships.set(groupKey, { name, expiresAt: expiresAt || 0 });
+      memberships.set(groupKey, {
+        name,
+        externalKey,
+        expiresAt: expiresAt || 0,
+      });
     }
   }
   return [...memberships.values()].sort((left, right) =>
@@ -1509,9 +1521,11 @@ export async function getAuthoritativeExternalIdentityMemberships(
     ),
   ]);
   return {
-    vipGroupNames: toVipMemberships(vipResult[0]).map((group) => group.name),
+    vipGroupNames: toVipMemberships(vipResult[0]).map(
+      (group) => group.externalKey ?? group.name,
+    ),
     adminGroupNames: toScopedAdminMemberships(adminResult[0][0]).map(
-      (group) => group.name,
+      (group) => group.externalKey ?? group.name,
     ),
   };
 }
@@ -1692,6 +1706,20 @@ export async function getLeaderboard(
     getGroupMembershipsForPlayers(steamIds),
     getPlayerProfileThemeKeys(steamIds),
   ]);
+  const identityGroups = await getEffectiveIdentityGroupBadgesForPlayers(
+    steamIds.map((steamId) => {
+      const memberships = groupMemberships.get(steamId);
+      return {
+        steamId,
+        vipGroupNames: (memberships?.vipGroups ?? []).map(
+          (group) => group.externalKey ?? group.name,
+        ),
+        adminGroupNames: (memberships?.adminGroups ?? []).map(
+          (group) => group.externalKey ?? group.name,
+        ),
+      };
+    }),
+  );
 
   return {
     players: rows.map((row) => ({
@@ -1704,6 +1732,7 @@ export async function getLeaderboard(
       mvps: Number(row.mvps),
       vipGroups: groupMemberships.get(String(row.steam))?.vipGroups ?? [],
       adminGroups: groupMemberships.get(String(row.steam))?.adminGroups ?? [],
+      identityGroups: identityGroups.get(String(row.steam)) ?? [],
       profileThemeKey: profileThemeKeys.get(String(row.steam)) ?? null,
     })),
     total: Number(totalRows[0]?.total ?? 0),
@@ -1865,10 +1894,25 @@ export async function getVipRoster(
     const memberships = await getGroupMembershipsForPlayers(
       vips.map((vip) => vip.steamId),
     );
+    const identityGroups = await getEffectiveIdentityGroupBadgesForPlayers(
+      [...new Set(vips.map((vip) => vip.steamId))].map((steamId) => {
+        const playerMemberships = memberships.get(steamId);
+        return {
+          steamId,
+          vipGroupNames: (playerMemberships?.vipGroups ?? []).map(
+            (group) => group.externalKey ?? group.name,
+          ),
+          adminGroupNames: (playerMemberships?.adminGroups ?? []).map(
+            (group) => group.externalKey ?? group.name,
+          ),
+        };
+      }),
+    );
     return {
       vips: vips.map((vip) => ({
         ...vip,
         adminGroups: memberships.get(vip.steamId)?.adminGroups ?? [],
+        identityGroups: identityGroups.get(vip.steamId) ?? [],
       })),
       total: Number(countRows[0]?.total ?? 0),
       page,

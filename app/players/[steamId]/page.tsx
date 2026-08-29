@@ -52,8 +52,8 @@ export default async function PublicPlayerProfilePage({ params, searchParams }: 
 
   const identity = await getEffectiveIdentity({
     steamId,
-    vipGroupNames: profile.vipGroups.map((group) => group.name),
-    adminGroupNames: profile.adminGroups.map((group) => group.name),
+    vipGroupNames: profile.vipGroups.map((group) => group.externalKey ?? group.name),
+    adminGroupNames: profile.adminGroups.map((group) => group.externalKey ?? group.name),
   });
 
   // External Admins.Core and VIPCore memberships remain authoritative in the
@@ -62,8 +62,8 @@ export default async function PublicPlayerProfilePage({ params, searchParams }: 
   if (isOwnProfile) {
     const rewardChanges = await reconcileIdentityGroupRewards({
       steamId,
-      vipGroupNames: profile.vipGroups.map((group) => group.name),
-      adminGroupNames: profile.adminGroups.map((group) => group.name),
+      vipGroupNames: profile.vipGroups.map((group) => group.externalKey ?? group.name),
+      adminGroupNames: profile.adminGroups.map((group) => group.externalKey ?? group.name),
     }).catch(() => null);
     if (
       rewardChanges &&

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, Crown, Crosshair, Medal, Trophy, UsersRound } from "lucide-react";
 
 import { SiteHeader } from "@/components/site-header";
-import { GroupBadge } from "@/components/group-badge";
+import { IdentityGroupBadgeList } from "@/components/identity-group-badge";
 import { PlayerSearchField } from "@/components/player-search-field";
 import { ProfileThemeSurfaceBadge } from "@/components/profile-theme-surface-badge";
 import { ResilientRemoteImage } from "@/components/resilient-remote-image";
@@ -151,25 +151,16 @@ export default async function RankingPage({ searchParams }: RankingPageProps) {
                             <div>
                               <strong>{displayName}</strong>
                               <small>{player.steamId}</small>
-                              <ProfileThemeSurfaceBadge
-                                themeKey={player.profileThemeKey}
-                                surface="rankingEntry"
-                              />
-                              <span className="leaderboard-role-badges">
-                                {player.vipGroups.map((group) => (
-                                  <GroupBadge
-                                    key={`vip-${group.name}`}
-                                    kind="vip"
-                                    group={group.name}
-                                  />
-                                ))}
-                                {player.adminGroups.map((group) => (
-                                  <GroupBadge
-                                    key={`admin-${group.name}`}
-                                    kind="admin"
-                                    group={group.name}
-                                  />
-                                ))}
+                              <span className="leaderboard-badge-rack">
+                                <ProfileThemeSurfaceBadge
+                                  themeKey={player.profileThemeKey}
+                                  surface="rankingEntry"
+                                />
+                                <IdentityGroupBadgeList
+                                  groups={player.identityGroups}
+                                  compact
+                                  className="leaderboard-role-badges"
+                                />
                               </span>
                             </div>
                           </Link>

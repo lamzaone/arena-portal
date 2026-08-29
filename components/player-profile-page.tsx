@@ -3,7 +3,10 @@ import { AlertTriangle, ArrowLeft, ArrowRight, Ban, Clock3, Crosshair, Settings2
 import type { CSSProperties } from "react";
 
 import { formatDate, formatPlaytime, isActiveSanction } from "@/components/formatters";
-import { IdentityGroupBadge } from "@/components/identity-group-badge";
+import {
+  IdentityGroupBadge,
+  IdentityGroupBadgeList,
+} from "@/components/identity-group-badge";
 import { ProfileInventoryPreview } from "@/components/profile-inventory-preview";
 import { ProfileSettingsForm, type ProfileSettingsValue } from "@/components/profile-settings-form";
 import { ProfileThemeSurfaceBadge } from "@/components/profile-theme-surface-badge";
@@ -114,7 +117,7 @@ function identityMembershipLabel(
   if (group.sourceType === "vipcore") {
     const membership = profile.vipGroups.find(
       (candidate) =>
-        candidate.name.toLocaleLowerCase() ===
+        (candidate.externalKey ?? candidate.name).toLocaleLowerCase() ===
         (group.externalKey ?? group.displayName).toLocaleLowerCase(),
     );
     if (membership?.expiresAt === 0) return "Permanent VIP access";
@@ -148,6 +151,7 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
   const profileTheme = getTrustedProfileTheme(profileThemeKey);
   const betaTesterTheme = profileTheme.key === "beta_tester";
   const primaryIdentityGroup = identity.groups[0] ?? null;
+  const secondaryIdentityGroups = identity.groups.slice(1);
   const showSettings = Boolean(isOwnProfile && settingsOpen && profileSettings);
 
   return (
@@ -170,7 +174,10 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
                 <p className="tapped-kicker"><UserRound aria-hidden="true" /> {isOwnProfile ? "Your player profile" : "Player profile"}<span className="profile-presence" title={presenceLabel}><i aria-hidden="true" /> {presenceLabel}</span></p>
                 <h1>{displayName}</h1>
                 <a className="public-player-steam-identity" href={steamProfileUrl} target="_blank" rel="noreferrer" title={`Open ${displayName}'s Steam profile`}>{steamId}</a>
-                <ProfileThemeSurfaceBadge themeKey={profileTheme.key} surface="profile" />
+                <div className="profile-identity-badge-rack">
+                  <IdentityGroupBadgeList groups={secondaryIdentityGroups} compact />
+                  <ProfileThemeSurfaceBadge themeKey={profileTheme.key} surface="profile" />
+                </div>
               </div>
             </div>
           </div>

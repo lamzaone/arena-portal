@@ -14,6 +14,10 @@ import {
   getIdentityCatalogueStatus,
   syncIdentityCatalogue,
 } from "@/lib/data/identity-catalogue";
+import {
+  identityExternalBadgeLookupKey,
+  isIdentityGroupBadgeIconKey,
+} from "@/lib/content/identity-group-badges";
 
 export type IdentityGroupSource = "custom" | "admins_core" | "vipcore";
 export type IdentityPrivilegeScope = "portal" | "game";
@@ -118,6 +122,27 @@ export type EffectiveIdentityGroup = IdentityGroup & {
   membershipExpiresAt: string | null;
 };
 
+/** The public presentation-only projection used by dense player lists. */
+export type IdentityGroupBadgeData = Pick<
+  IdentityGroup,
+  | "id"
+  | "key"
+  | "displayName"
+  | "sourceType"
+  | "externalKey"
+  | "badgeLabel"
+  | "badgeIconKey"
+  | "badgeColor"
+  | "badgeSoftColor"
+  | "profilePriority"
+>;
+
+export type EffectiveIdentityGroupBadgeInput = {
+  steamId: string;
+  vipGroupNames?: string[];
+  adminGroupNames?: string[];
+};
+
 export type EffectiveIdentity = {
   groups: EffectiveIdentityGroup[];
   tags: IdentityChatTag[];
@@ -163,6 +188,10 @@ type IdentityGroupRow = RowDataPacket & {
   enabled: number | boolean;
   member_count?: number | string;
   membership_expires_at?: Date | string | null;
+};
+
+type IdentityGroupMembershipBadgeRow = IdentityGroupRow & {
+  steam_id: string;
 };
 
 type IdentityTagRow = RowDataPacket & {
@@ -883,6 +912,147 @@ function normalizeExternalNames(values: string[] | undefined) {
   ];
 }
 
+function toIdentityGroupBadgeData(
+  row: IdentityGroupRow,
+): IdentityGroupBadgeData {
+  const group = emptyGroup(row);
+  return {
+    id: group.id,
+    key: group.key,
+    displayName: group.displayName,
+    sourceType: group.sourceType,
+    externalKey: group.externalKey,
+    badgeLabel: group.badgeLabel,
+    badgeIconKey: group.badgeIconKey,
+    badgeColor: group.badgeColor,
+    badgeSoftColor: group.badgeSoftColor,
+    profilePriority: group.profilePriority,
+  };
+}
+
+/**
+ * Loads only badge presentation for player collections. External definitions
+ * are read once and active custom memberships are read once, avoiding the
+ * tags/privileges/rewards work performed by the full single-player resolver.
+ * Public callers remain available while the portal database is unavailable.
+ */
+export async function getEffectiveIdentityGroupBadgesForPlayers(
+  inputs: EffectiveIdentityGroupBadgeInput[],
+): Promise<Map<string, IdentityGroupBadgeData[]>> {
+  const groupsBySteamId = new Map<string, IdentityGroupBadgeData[]>();
+  for (const input of inputs) {
+    groupsBySteamId.set(String(input.steamId).trim(), []);
+  }
+
+  try {
+    const pool = getIdentityPool();
+    if (!pool || !inputs.length) return groupsBySteamId;
+
+    const consolidated = new Map<
+      string,
+      { vipGroupNames: Set<string>; adminGroupNames: Set<string> }
+    >();
+    for (const input of inputs) {
+      const steamId = identitySteamId(input.steamId);
+      const entry = consolidated.get(steamId) ?? {
+        vipGroupNames: new Set<string>(),
+        adminGroupNames: new Set<string>(),
+      };
+      for (const name of normalizeExternalNames(input.vipGroupNames)) {
+        entry.vipGroupNames.add(name);
+      }
+      for (const name of normalizeExternalNames(input.adminGroupNames)) {
+        entry.adminGroupNames.add(name);
+      }
+      consolidated.set(steamId, entry);
+      if (!groupsBySteamId.has(steamId)) groupsBySteamId.set(steamId, []);
+    }
+
+    const steamIds = [...consolidated.keys()];
+    if (!steamIds.length) return groupsBySteamId;
+    const steamPlaceholders = steamIds.map(() => "?").join(", ");
+    const [[externalRows], [customRows]] = await Promise.all([
+      pool.query<IdentityGroupRow[]>(
+        identityGroupSelect +
+          " FROM portal_identity_groups AS g WHERE g.enabled = TRUE AND g.source_type IN ('admins_core', 'vipcore') ORDER BY g.profile_priority DESC, g.display_name, g.id",
+      ),
+      pool.query<IdentityGroupMembershipBadgeRow[]>(
+        identityGroupSelect +
+          ", membership.steam_id FROM portal_identity_groups AS g " +
+          "INNER JOIN portal_identity_group_memberships AS membership ON membership.group_id = g.id " +
+          "WHERE g.enabled = TRUE AND g.source_type = 'custom' AND membership.steam_id IN (" +
+          steamPlaceholders +
+          ") AND membership.revoked_at IS NULL AND membership.starts_at <= CURRENT_TIMESTAMP " +
+          "AND (membership.expires_at IS NULL OR membership.expires_at > CURRENT_TIMESTAMP) " +
+          "ORDER BY g.profile_priority DESC, g.display_name, g.id",
+        steamIds,
+      ),
+    ]);
+
+    const addGroup = (steamId: string, row: IdentityGroupRow) => {
+      const groups = groupsBySteamId.get(steamId);
+      if (!groups || groups.some((group) => group.id === Number(row.id))) return;
+      groups.push(toIdentityGroupBadgeData(row));
+    };
+
+    for (const row of customRows) addGroup(String(row.steam_id), row);
+
+    const externalByKey = new Map<string, IdentityGroupRow>();
+    for (const row of externalRows) {
+      if (!row.external_key || row.source_type === "custom") continue;
+      const key = identityExternalBadgeLookupKey(
+        row.source_type,
+        row.external_key,
+      );
+      if (!externalByKey.has(key)) externalByKey.set(key, row);
+    }
+    for (const [steamId, membership] of consolidated) {
+      for (const name of membership.vipGroupNames) {
+        const row = externalByKey.get(
+          identityExternalBadgeLookupKey("vipcore", name),
+        );
+        if (row) addGroup(steamId, row);
+      }
+      for (const name of membership.adminGroupNames) {
+        const row = externalByKey.get(
+          identityExternalBadgeLookupKey("admins_core", name),
+        );
+        if (row) addGroup(steamId, row);
+      }
+    }
+
+    for (const groups of groupsBySteamId.values()) {
+      groups.sort(
+        (left, right) =>
+          right.profilePriority - left.profilePriority ||
+          left.displayName.localeCompare(right.displayName) ||
+          left.id - right.id,
+      );
+    }
+    return groupsBySteamId;
+  } catch {
+    for (const steamId of groupsBySteamId.keys()) groupsBySteamId.set(steamId, []);
+    return groupsBySteamId;
+  }
+}
+
+/** Lightweight staff-configured badge catalogue for non-player group lists. */
+export async function getIdentityGroupBadgeCatalogue(): Promise<
+  IdentityGroupBadgeData[]
+> {
+  try {
+    const pool = getIdentityPool();
+    if (!pool) return [];
+    const [rows] = await pool.query<IdentityGroupRow[]>(
+      identityGroupSelect +
+        " FROM portal_identity_groups AS g WHERE g.enabled = TRUE ORDER BY g.profile_priority DESC, g.display_name, g.id",
+    );
+    return rows.map(toIdentityGroupBadgeData);
+  } catch {
+    return [];
+  }
+}
+
 async function getEffectiveGroupRows(
   executor: Pick<Pool, "query"> | Pick<PoolConnection, "query">,
   input: {
@@ -1044,6 +1214,9 @@ export async function createIdentityGroup(input: {
     "Badge icon",
     32,
   );
+  if (!isIdentityGroupBadgeIconKey(badgeIconKey)) {
+    identityError("invalid_input", "Select a supported badge icon.");
+  }
   const badgeColor = identityColor(input.badgeColor, "Badge color");
   const badgeSoftColor = identityColor(
     input.badgeSoftColor,
@@ -1108,6 +1281,9 @@ export async function updateIdentityGroup(input: {
     "Badge icon",
     32,
   );
+  if (!isIdentityGroupBadgeIconKey(badgeIconKey)) {
+    identityError("invalid_input", "Select a supported badge icon.");
+  }
   const badgeColor = identityColor(input.badgeColor, "Badge color");
   const badgeSoftColor = identityColor(
     input.badgeSoftColor,

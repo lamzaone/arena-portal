@@ -278,7 +278,7 @@ code { padding: 2px 4px; border-radius: 4px; color: #fecdd3; background: rgba(22
 .vip-card-ultimate { border-color: rgba(255,116,135,.58); background: linear-gradient(155deg, rgba(91,7,22,.86), rgba(17,3,7,.96)); box-shadow: inset 0 0 35px rgba(225,29,72,.13), 0 0 36px rgba(225,29,72,.08); }
 .vip-card-topline { display: flex; align-items: center; justify-content: space-between; min-height: 19px; color: #9b7179; font-family: var(--font-display); font-size: 9px; letter-spacing: .13em; }
 .owned-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 5px; color: #120608; background: var(--vip-tier-soft, #ff91a4); font-family: var(--font-body); font-size: 9px; font-weight: 800; letter-spacing: .04em; }.owned-badge svg { width: 11px; }
-.vip-card h2 { margin: 19px 0 0; font-size: clamp(1.4rem, 1.8vw, 1.82rem); font-weight: 400; letter-spacing: -.04em; }.vip-card h2 .role-badge { transform: scale(1.15); transform-origin: left center; }
+.vip-card h2 { margin: 19px 0 0; font-size: clamp(1.4rem, 1.8vw, 1.82rem); font-weight: 400; letter-spacing: -.04em; }.vip-card h2 .identity-group-badge { min-height: 31px; padding: 6px 10px; font-size: 10px; }
 .vip-price { display: flex; align-items: end; gap: 7px; margin: 10px 0 18px; color: var(--vip-tier-soft, #ff8fa1); font-family: var(--font-display); font-size: 1.28rem; letter-spacing: -.03em; }.vip-price small { padding-bottom: 2px; color: #916a72; font-family: var(--font-body); font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .vip-benefit-list { display: grid; gap: 9px; margin: 0; padding: 16px 0 19px; border-top: 1px solid color-mix(in srgb, var(--vip-tier-color, #ff7185) 20%, transparent); list-style: none; }.vip-benefit-list li { display: grid; grid-template-columns: 15px 1fr; gap: 7px; color: #ffc9d1; }.vip-benefit-list li > svg { width: 13px; height: 13px; margin-top: 2px; color: var(--vip-tier-color, #ff6b82); }.vip-benefit-list span { display: grid; gap: 1px; min-width: 0; }.vip-benefit-list strong { color: #e8c2c8; font-size: 12px; line-height: 1.25; }.vip-benefit-list small { color: #97747b; font-size: 10px; line-height: 1.3; }
 .vip-actions { display: grid; gap: 8px; margin-top: auto; padding-top: 4px; }.purchase-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 39px; padding: 8px 10px; border: 1px solid #ff7185; color: #1a0407; background: #ff7185; font-size: 11px; font-weight: 800; line-height: 1.1; text-align: center; transition: color .2s ease, background-color .2s ease, border-color .2s ease, box-shadow .2s ease; }.purchase-button svg { width: 14px; }.purchase-button:hover, .purchase-button:focus-visible { background: #ff9cac; box-shadow: 0 0 23px rgba(255,65,92,.28); }.purchase-button-secondary { border-color: rgba(255,136,151,.41); color: #f5c7ce; background: rgba(225,29,72,.09); }.purchase-button-secondary:hover, .purchase-button-secondary:focus-visible { border-color: #ff91a4; color: #fff4f5; background: rgba(225,29,72,.24); }.purchase-button.is-disabled, .purchase-button:disabled { border-color: rgba(142,124,128,.35); color: #88767a; background: rgba(102,87,91,.19); box-shadow: none; cursor: not-allowed; }
@@ -370,8 +370,8 @@ code { padding: 2px 4px; border-radius: 4px; color: #fecdd3; background: rgba(22
 @media (max-width: 460px) { .hit-map-list { grid-template-columns: 1fr; }.hit-map-body { max-height: 277px; }.hit-map-panel::before { width: 100%; } }
 
 /* Server-matched VIP and admin rank colour system */
-.role-badge { display: inline-flex; align-items: center; width: max-content; max-width: 100%; gap: 4px; padding: 4px 7px; border: 1px solid color-mix(in srgb, var(--role-color) 68%, transparent); border-radius: 999px; color: var(--role-soft); background: color-mix(in srgb, var(--role-color) 15%, rgba(8,2,4,.85)); box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 0 11px color-mix(in srgb, var(--role-color) 13%, transparent); font-size: 8px; font-weight: 800; letter-spacing: .055em; line-height: 1.1; text-transform: uppercase; white-space: nowrap; }.role-badge svg { width: 11px; height: 11px; color: var(--role-color); filter: drop-shadow(0 0 4px color-mix(in srgb, var(--role-color) 78%, transparent)); }.role-badge > span { color: var(--role-color); font-size: 7px; }.leaderboard-role-badges, .vip-roster-role-badges { display: flex !important; flex-wrap: wrap; gap: 4px; margin-top: 5px; }.leaderboard-role-badges .role-badge { transform: scale(.92); transform-origin: left center; margin-right: -4px; }.vip-roster-role-badges { margin: 0; }.role-empty { color: #8f6c73; font-size: 13px; }
-.group-role-sections { display: grid; gap: 13px; }.group-role-section { padding: 12px; border: 1px solid rgba(255,113,133,.14); background: rgba(8,2,4,.34); }.group-role-section > div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; }.group-role-section h3 { margin: 0; color: #dcbcc2; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }.group-role-section > div:first-child small { color: #8f6c73; font-size: 9px; font-weight: 700; }.group-membership-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 7px; }.group-membership-cards article { display: grid; align-content: space-between; gap: 7px; min-height: 64px; padding: 9px; border: 1px solid color-mix(in srgb, var(--role-color) 32%, rgba(255,113,133,.16)); background: linear-gradient(135deg, color-mix(in srgb, var(--role-color) 10%, rgba(9,2,5,.75)), rgba(8,2,4,.66)); }.group-membership-cards article > small { color: #a47f86; font-size: 9px; line-height: 1.35; }.group-role-empty { margin: 0; color: #8f6b72; font-size: 11px; }.group-role-admin .role-badge { background: color-mix(in srgb, var(--role-color) 13%, rgba(7,2,5,.9)); }
+.leaderboard-role-badges, .vip-roster-role-badges, .vip-roster-player-groups { margin-top: 5px; }.vip-roster-role-badges { margin-top: 0; }.role-empty { color: #8f6c73; font-size: 13px; }
+.group-role-sections { display: grid; gap: 13px; }.group-role-section { padding: 12px; border: 1px solid rgba(255,113,133,.14); background: rgba(8,2,4,.34); }.group-role-section > div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; }.group-role-section h3 { margin: 0; color: #dcbcc2; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }.group-role-section > div:first-child small { color: #8f6c73; font-size: 9px; font-weight: 700; }.group-membership-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 7px; }.group-membership-cards article { display: grid; align-content: space-between; gap: 7px; min-height: 64px; padding: 9px; border: 1px solid color-mix(in srgb, var(--role-color) 32%, rgba(255,113,133,.16)); background: linear-gradient(135deg, color-mix(in srgb, var(--role-color) 10%, rgba(9,2,5,.75)), rgba(8,2,4,.66)); }.group-membership-cards article > small { color: #a47f86; font-size: 9px; line-height: 1.35; }.group-role-empty { margin: 0; color: #8f6b72; font-size: 11px; }
 @media (max-width: 520px) { .group-membership-cards { grid-template-columns: 1fr; }.leaderboard-role-badges { max-width: 185px; } }
 
 /* Profile identity, rank hierarchy, and linked moderation context */
@@ -2815,6 +2815,23 @@ fieldset.settings-section { padding-top: 20px; }
 /* Portal identity badges use founder-controlled, validated presentation
    tokens. The primary badge sits outside the clipped avatar artwork so banned
    overlays and group identity remain independently readable. */
+.identity-group-badge-list {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.profile-identity-badge-rack {
+  display: flex;
+  max-width: min(100%, 720px);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+}
+.profile-identity-badge-rack .profile-theme-surface-badge { margin-top: 0; }
+.profile-identity-badge-rack .identity-group-badge { max-width: 180px; }
 .identity-group-badge {
   display: inline-flex;
   width: max-content;
@@ -2828,7 +2845,7 @@ fieldset.settings-section { padding-top: 20px; }
   color: var(--identity-badge-soft);
   background: color-mix(in srgb, var(--identity-badge-color) 17%, rgba(6, 2, 4, .94));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 0 15px color-mix(in srgb, var(--identity-badge-color) 16%, transparent);
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 900;
   letter-spacing: .065em;
   line-height: 1.1;
@@ -2836,8 +2853,7 @@ fieldset.settings-section { padding-top: 20px; }
 }
 .identity-group-badge > svg { width: 12px; height: 12px; flex: 0 0 auto; color: var(--identity-badge-color); filter: drop-shadow(0 0 4px color-mix(in srgb, var(--identity-badge-color) 70%, transparent)); }
 .identity-group-badge > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.identity-group-badge > small { padding-left: 6px; border-left: 1px solid color-mix(in srgb, var(--identity-badge-color) 30%, transparent); color: color-mix(in srgb, var(--identity-badge-soft) 76%, #b69399); font-size: 7px; letter-spacing: .045em; white-space: nowrap; }
-.identity-group-badge.is-compact { min-height: 23px; max-width: 118px; padding: 4px 7px; font-size: 7px; }
+.identity-group-badge.is-compact { min-height: 24px; max-width: 138px; padding: 4px 7px; font-size: 8px; }
 .identity-group-badge.is-compact > svg { width: 10px; height: 10px; }
 .profile-primary-group-badge { position: absolute; z-index: 3; right: 50%; bottom: -13px; display: block; max-width: 124px; transform: translateX(50%); }
 .profile-primary-group-badge .identity-group-badge { box-shadow: 0 5px 16px rgba(0, 0, 0, .46), 0 0 13px color-mix(in srgb, var(--identity-badge-color) 18%, transparent); }
@@ -2847,7 +2863,8 @@ fieldset.settings-section { padding-top: 20px; }
 
 @media (max-width: 520px) {
   .profile-primary-group-badge { bottom: -12px; }
-  .identity-group-badge.is-compact { max-width: 92px; }
+  .identity-group-badge.is-compact { max-width: 116px; }
+  .profile-identity-badge-rack .identity-group-badge { max-width: 142px; }
 }
 
 @media (forced-colors: active) {
@@ -2960,6 +2977,19 @@ fieldset.settings-section { padding-top: 20px; }
   line-height: 1;
   text-transform: uppercase;
   pointer-events: none;
+}
+
+.leaderboard-badge-rack {
+  display: flex !important;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.leaderboard-badge-rack :where(.leaderboard-theme-badge, .leaderboard-role-badges) {
+  margin-top: 0;
 }
 
 .leaderboard-theme-badge > svg {

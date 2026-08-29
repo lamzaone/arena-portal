@@ -5,7 +5,10 @@ import { adminWriteConfigured, getAdminAccess, getStaffGroupDefinitions } from "
 import { getSession, createAdminActionToken } from "@/lib/auth/session";
 import { CaseStatusTag } from "@/components/case-status-tag";
 import { formatDate, formatPortalDate, isActiveSanction } from "@/components/formatters";
-import { GroupBadge } from "@/components/group-badge";
+import {
+  IdentityGroupBadge,
+  IdentityGroupBadgeList,
+} from "@/components/identity-group-badge";
 import { PlayerSearchField } from "@/components/player-search-field";
 import { ResilientRemoteImage } from "@/components/resilient-remote-image";
 import { SignInRequired } from "@/components/sign-in-required";
@@ -17,8 +20,13 @@ import {
 } from "@/components/staff-submenu";
 import { PortalToast } from "@/components/success-toast";
 import { SearchNavigationForm, SearchSubmitButton } from "@/components/ui/search-field";
+import { identityExternalBadgeLookupKey } from "@/lib/content/identity-group-badges";
 import { getStaffAdmins, getStaffAppeals, getStaffModeration, getStaffTickets, getStaffVips, type CaseMessage, type StaffAdmin, type StaffAppeal, type StaffSanction } from "@/lib/data/portal-repository";
-import { getIdentityVipGroupDefinitions } from "@/lib/data/identity-groups";
+import {
+  getIdentityGroupBadgeCatalogue,
+  getIdentityVipGroupDefinitions,
+  type IdentityGroupBadgeData,
+} from "@/lib/data/identity-groups";
 import { getSteamProfiles, type SteamProfile } from "@/lib/steam/profiles";
 
 type StaffTab = StaffModerationSection;
@@ -47,6 +55,31 @@ function avatarInitial(name: string) {
 
 function isSteamId(value: string) {
   return /^7656119\d{10}$/.test(value);
+}
+
+type ExternalBadgeLookup = Map<string, IdentityGroupBadgeData>;
+
+function configuredExternalBadge(
+  badges: ExternalBadgeLookup,
+  sourceType: "admins_core" | "vipcore",
+  group: string,
+) {
+  return badges.get(identityExternalBadgeLookupKey(sourceType, group)) ?? null;
+}
+
+function ConfiguredExternalGroupBadge({
+  badges,
+  sourceType,
+  group,
+  compact = false,
+}: {
+  badges: ExternalBadgeLookup;
+  sourceType: "admins_core" | "vipcore";
+  group: string;
+  compact?: boolean;
+}) {
+  const badge = configuredExternalBadge(badges, sourceType, group);
+  return badge ? <IdentityGroupBadge group={badge} compact={compact} /> : <>{group}</>;
 }
 
 function ProfileMention({ steamId, name }: { steamId: string | null; name: string }) {
@@ -120,13 +153,13 @@ function AppealBanSource({ appeal, steamProfiles }: { appeal: StaffAppeal; steam
   return <p className="staff-appeal-source"><span>Original ban</span> {appeal.ban.reason} · issued by {appeal.ban.adminSteamId ? <Link href={`/players/${appeal.ban.adminSteamId}`}>{issuerName}</Link> : issuerName} on {formatDate(appeal.ban.createdAt)}</p>;
 }
 
-function AdminAssignments({ admins, csrf, canManage, groupDefinitions }: { admins: StaffAdmin[]; csrf: string; canManage: boolean; groupDefinitions: Array<{ name: string; immunity: number }> }) {
+function AdminAssignments({ admins, csrf, canManage, groupDefinitions, badges }: { admins: StaffAdmin[]; csrf: string; canManage: boolean; groupDefinitions: Array<{ name: string; immunity: number }>; badges: ExternalBadgeLookup }) {
   const grouped = new Map(groupDefinitions.map((group) => [group.name, admins.filter((admin) => admin.groups.includes(group.name))]));
   const unassigned = admins.filter((admin) => !admin.groups.length);
 
   return <section className="staff-record-section"><div className="staff-section-heading"><div><p className="tapped-kicker"><UsersRound aria-hidden="true" /> Admins.Core</p><h2>Admin assignments</h2></div><span>{admins.length.toLocaleString()} admins</span></div>
     {canManage ? <form className="staff-management-form" action="/api/admin/staff" method="post"><input type="hidden" name="csrf" value={csrf} /><input type="hidden" name="action" value="admin-upsert" /><PlayerSearchField name="steamId" label="Staff player" mode="target" required includeSelf companionNameField="username" /><label>Display name<input name="username" maxLength={64} required placeholder="Staff name" /></label><label>Groups<select name="groups" multiple required size={Math.min(6, groupDefinitions.length)}>{groupDefinitions.map((group) => <option key={group.name} value={group.name}>{group.name} · immunity {group.immunity}</option>)}</select><small>Hold Ctrl/Cmd to assign multiple groups.</small></label><button className="button button-primary" type="submit">Save admin</button></form> : <p className="staff-readonly-note">You can review staff assignments, but only admins with <code>admins.commands.admin</code> can add or modify them.</p>}
-    {[...grouped.entries(), ...(unassigned.length ? [["Unassigned", unassigned] as const] : [])].map(([groupName, entries]) => <article className="staff-group-card" key={groupName}><div><h3>{groupName === "Unassigned" ? groupName : <GroupBadge kind="admin" group={groupName} />}</h3><span>{entries.length} member{entries.length === 1 ? "" : "s"}</span></div>{entries.length ? <div className="staff-group-list">{entries.map((admin) => canManage ? <form className="staff-admin-edit" action="/api/admin/staff" method="post" key={admin.id}><input type="hidden" name="csrf" value={csrf} /><input type="hidden" name="action" value="admin-upsert" /><input type="hidden" name="steamId" value={admin.steamId} /><Link href={`/players/${admin.steamId}`}>{admin.username}<small>{admin.steamId}</small></Link><input name="username" defaultValue={admin.username} maxLength={64} required aria-label={`Display name for ${admin.username}`} /><select name="groups" multiple defaultValue={admin.groups} aria-label={`Groups for ${admin.username}`} size={Math.min(4, groupDefinitions.length)}>{groupDefinitions.map((group) => <option key={group.name} value={group.name}>{group.name}</option>)}</select><span>Immunity {admin.immunity}</span><button className="staff-unban-button" type="submit">Save</button></form> : <div className="staff-admin-read" key={admin.id}><Link href={`/players/${admin.steamId}`}>{admin.username}<small>{admin.steamId}</small></Link><span>{admin.groups.join(" + ") || "No group"}</span><span>Immunity {admin.immunity}</span></div>)}</div> : <p className="empty-copy">No admins are assigned to this group.</p>}</article>)}</section>;
+    {[...grouped.entries(), ...(unassigned.length ? [["Unassigned", unassigned] as const] : [])].map(([groupName, entries]) => <article className="staff-group-card" key={groupName}><div><h3>{groupName === "Unassigned" ? groupName : <ConfiguredExternalGroupBadge badges={badges} sourceType="admins_core" group={groupName} />}</h3><span>{entries.length} member{entries.length === 1 ? "" : "s"}</span></div>{entries.length ? <div className="staff-group-list">{entries.map((admin) => canManage ? <form className="staff-admin-edit" action="/api/admin/staff" method="post" key={admin.id}><input type="hidden" name="csrf" value={csrf} /><input type="hidden" name="action" value="admin-upsert" /><input type="hidden" name="steamId" value={admin.steamId} /><Link href={`/players/${admin.steamId}`}>{admin.username}<small>{admin.steamId}</small></Link><input name="username" defaultValue={admin.username} maxLength={64} required aria-label={`Display name for ${admin.username}`} /><select name="groups" multiple defaultValue={admin.groups} aria-label={`Groups for ${admin.username}`} size={Math.min(4, groupDefinitions.length)}>{groupDefinitions.map((group) => <option key={group.name} value={group.name}>{group.name}</option>)}</select><span>Immunity {admin.immunity}</span><button className="staff-unban-button" type="submit">Save</button></form> : <div className="staff-admin-read" key={admin.id}><Link href={`/players/${admin.steamId}`}>{admin.username}<small>{admin.steamId}</small></Link><span>{admin.groups.join(" + ") || "No group"}</span><span>Immunity {admin.immunity}</span></div>)}</div> : <p className="empty-copy">No admins are assigned to this group.</p>}</article>)}</section>;
 }
 
 export default async function AdminPage({ searchParams }: AdminPageProps) {
@@ -140,13 +173,14 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const tab = requestedTab === "appeals" && !access.canUnban ? "bans" : requestedTab;
   const page = getPageNumber(params.page);
   const query = (params.q ?? "").trim().slice(0, 64);
-  const [moderation, admins, vips, appealPage, ticketPage, vipGroupDefinitions] = await Promise.all([
+  const [moderation, admins, vips, appealPage, ticketPage, vipGroupDefinitions, badgeCatalogue] = await Promise.all([
     tab === "bans" ? getStaffModeration(page, query) : Promise.resolve(null),
     tab === "admins" ? getStaffAdmins() : Promise.resolve([]),
     tab === "vips" ? getStaffVips() : Promise.resolve([]),
     tab === "appeals" && access.canUnban ? getStaffAppeals(page) : Promise.resolve(null),
     tab === "tickets" ? getStaffTickets(page) : Promise.resolve(null),
     tab === "vips" ? getIdentityVipGroupDefinitions() : Promise.resolve([]),
+    getIdentityGroupBadgeCatalogue(),
   ]);
   const vipGroups = vipGroupDefinitions.length
     ? vipGroupDefinitions.map((group) => group.name)
@@ -163,12 +197,24 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const notice = noticeText(params.notice);
   const error = errorText(params.error);
   const groupDefinitions = await getStaffGroupDefinitions();
+  const externalBadges: ExternalBadgeLookup = new Map();
+  for (const badge of badgeCatalogue) {
+    if (!badge.externalKey || badge.sourceType === "custom") continue;
+    externalBadges.set(
+      identityExternalBadgeLookupKey(badge.sourceType, badge.externalKey),
+      badge,
+    );
+  }
+  const activeAdminBadges = access.groups.flatMap((group) => {
+    const badge = configuredExternalBadge(externalBadges, "admins_core", group);
+    return badge ? [badge] : [];
+  });
   const totalPages = moderation ? Math.max(1, Math.ceil(Math.max(moderation.banTotal, moderation.sanctionTotal) / moderation.pageSize)) : 1;
   const casePage = appealPage ?? ticketPage;
   const caseTotalPages = casePage ? Math.max(1, Math.ceil(casePage.total / casePage.pageSize)) : 1;
 
   return <main className="tapped-page staff-page"><div className="shell"><SiteHeader authenticated />
-    <section className="staff-hero"><div><p className="tapped-kicker"><ShieldCheck aria-hidden="true" /> Staff operations</p><h1>Command<br /><span>centre.</span></h1><p>Moderate the server, manage access, and respond to player cases from one protected control room.</p></div><aside className="staff-access-card"><span>ACTIVE ROLE</span><strong>{access.groups.join(" + ")}</strong><small>Immunity {access.immunity} · Ban {access.canBan ? "allowed" : "no"} · Unban {access.canUnban ? "allowed" : "no"}</small></aside></section>
+    <section className="staff-hero"><div><p className="tapped-kicker"><ShieldCheck aria-hidden="true" /> Staff operations</p><h1>Command<br /><span>centre.</span></h1><p>Moderate the server, manage access, and respond to player cases from one protected control room.</p></div><aside className="staff-access-card"><span>ACTIVE ROLE</span><strong>{activeAdminBadges.length ? <IdentityGroupBadgeList groups={activeAdminBadges} compact label="Active staff groups" /> : access.groups.join(" + ")}</strong><small>Immunity {access.immunity} · Ban {access.canBan ? "allowed" : "no"} · Unban {access.canUnban ? "allowed" : "no"}</small></aside></section>
     <StaffSubmenu access={access} active={tab} />
     {notice ? <PortalToast message={notice} /> : null}
     {error ? <PortalToast variant="danger" message={error} /> : null}
@@ -181,9 +227,9 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       <nav className="pagination staff-pagination" aria-label="Ban list pages"><Link className={page <= 1 ? "is-disabled" : ""} aria-disabled={page <= 1} href={staffLink("bans", Math.max(1, page - 1), query)}>Previous</Link><span>Page {page} of {totalPages}</span><Link className={page >= totalPages ? "is-disabled" : ""} aria-disabled={page >= totalPages} href={staffLink("bans", Math.min(totalPages, page + 1), query)}>Next</Link></nav>
     </> : null}
 
-    {tab === "admins" ? <AdminAssignments admins={admins} csrf={csrf} canManage={access.canManageAdmins} groupDefinitions={groupDefinitions} /> : null}
+    {tab === "admins" ? <AdminAssignments admins={admins} csrf={csrf} canManage={access.canManageAdmins} groupDefinitions={groupDefinitions} badges={externalBadges} /> : null}
 
-    {tab === "vips" ? <section className="staff-record-section"><div className="staff-section-heading"><div><p className="tapped-kicker">VIPCore</p><h2>VIP assignments</h2></div><span>{vips.length.toLocaleString()} active records</span></div>{access.canManageVips ? <form className="staff-management-form vip" action="/api/admin/staff" method="post"><input type="hidden" name="csrf" value={csrf} /><input type="hidden" name="action" value="vip-upsert" /><PlayerSearchField name="steamId" label="VIP player" mode="target" required includeSelf companionNameField="name" /><label>Player name<input name="name" maxLength={64} placeholder="Filled from the selected profile" /></label><label>VIP tier<select name="group">{vipGroups.map((group) => <option key={group}>{group}</option>)}</select></label><label>Duration (minutes)<input name="durationMinutes" type="number" min="0" max="525600" defaultValue="1440" required /><small>Use 0 for permanent access.</small></label><button className="button button-primary" type="submit">Save VIP</button></form> : <p className="staff-readonly-note">VIP changes require the VIPCore management permission. Your current staff role remains read-only here.</p>}{vipGroups.map((group) => { const entries = vips.filter((vip) => vip.group === group); return <article className="staff-group-card" key={group}><div><h3><GroupBadge kind="vip" group={group} /></h3><span>{entries.length} member{entries.length === 1 ? "" : "s"}</span></div>{entries.length ? <div className="staff-group-list">{entries.map((vip) => access.canManageVips ? <form className="staff-vip-edit" action="/api/admin/staff" method="post" key={`${vip.steamId}-${vip.group}`}><input type="hidden" name="csrf" value={csrf} /><input type="hidden" name="steamId" value={vip.steamId} /><input type="hidden" name="previousGroup" value={vip.group} /><Link href={`/players/${vip.steamId}`}>{vip.name}<small>{vip.steamId}</small></Link><input name="name" defaultValue={vip.name} maxLength={64} required aria-label={`Name for ${vip.name}`} /><select name="group" defaultValue={vip.group}>{vipGroups.map((name) => <option key={name}>{name}</option>)}</select><input name="durationMinutes" type="number" min="0" max="525600" defaultValue={vip.expiresAt === 0 ? 0 : Math.max(1, Math.floor((vip.expiresAt - Date.now() / 1000) / 60))} aria-label={`Duration in minutes for ${vip.name}`} /><span>{vip.expiresAt === 0 ? "Permanent" : `Ends ${formatDate(vip.expiresAt)}`}</span><button className="staff-unban-button" name="action" value="vip-upsert" type="submit">Save</button><button className="staff-danger-button" name="action" value="vip-remove" type="submit">Remove</button></form> : <div className="staff-admin-read" key={`${vip.steamId}-${vip.group}`}><Link href={`/players/${vip.steamId}`}>{vip.name}<small>{vip.steamId}</small></Link><GroupBadge kind="vip" group={vip.group} /><span>{vip.expiresAt === 0 ? "Permanent" : `Ends ${formatDate(vip.expiresAt)}`}</span></div>)}</div> : <p className="empty-copy">No VIP assignments in this tier.</p>}</article>; })}</section> : null}
+    {tab === "vips" ? <section className="staff-record-section"><div className="staff-section-heading"><div><p className="tapped-kicker">VIPCore</p><h2>VIP assignments</h2></div><span>{vips.length.toLocaleString()} active records</span></div>{access.canManageVips ? <form className="staff-management-form vip" action="/api/admin/staff" method="post"><input type="hidden" name="csrf" value={csrf} /><input type="hidden" name="action" value="vip-upsert" /><PlayerSearchField name="steamId" label="VIP player" mode="target" required includeSelf companionNameField="name" /><label>Player name<input name="name" maxLength={64} placeholder="Filled from the selected profile" /></label><label>VIP tier<select name="group">{vipGroups.map((group) => <option key={group}>{group}</option>)}</select></label><label>Duration (minutes)<input name="durationMinutes" type="number" min="0" max="525600" defaultValue="1440" required /><small>Use 0 for permanent access.</small></label><button className="button button-primary" type="submit">Save VIP</button></form> : <p className="staff-readonly-note">VIP changes require the VIPCore management permission. Your current staff role remains read-only here.</p>}{vipGroups.map((group) => { const entries = vips.filter((vip) => vip.group === group); return <article className="staff-group-card" key={group}><div><h3><ConfiguredExternalGroupBadge badges={externalBadges} sourceType="vipcore" group={group} /></h3><span>{entries.length} member{entries.length === 1 ? "" : "s"}</span></div>{entries.length ? <div className="staff-group-list">{entries.map((vip) => access.canManageVips ? <form className="staff-vip-edit" action="/api/admin/staff" method="post" key={`${vip.steamId}-${vip.group}`}><input type="hidden" name="csrf" value={csrf} /><input type="hidden" name="steamId" value={vip.steamId} /><input type="hidden" name="previousGroup" value={vip.group} /><Link href={`/players/${vip.steamId}`}>{vip.name}<small>{vip.steamId}</small></Link><input name="name" defaultValue={vip.name} maxLength={64} required aria-label={`Name for ${vip.name}`} /><select name="group" defaultValue={vip.group}>{vipGroups.map((name) => <option key={name}>{name}</option>)}</select><input name="durationMinutes" type="number" min="0" max="525600" defaultValue={vip.expiresAt === 0 ? 0 : Math.max(1, Math.floor((vip.expiresAt - Date.now() / 1000) / 60))} aria-label={`Duration in minutes for ${vip.name}`} /><span>{vip.expiresAt === 0 ? "Permanent" : `Ends ${formatDate(vip.expiresAt)}`}</span><button className="staff-unban-button" name="action" value="vip-upsert" type="submit">Save</button><button className="staff-danger-button" name="action" value="vip-remove" type="submit">Remove</button></form> : <div className="staff-admin-read" key={`${vip.steamId}-${vip.group}`}><Link href={`/players/${vip.steamId}`}>{vip.name}<small>{vip.steamId}</small></Link><ConfiguredExternalGroupBadge badges={externalBadges} sourceType="vipcore" group={vip.group} compact /><span>{vip.expiresAt === 0 ? "Permanent" : `Ends ${formatDate(vip.expiresAt)}`}</span></div>)}</div> : <p className="empty-copy">No VIP assignments in this tier.</p>}</article>; })}</section> : null}
 
     {tab === "appeals" ? access.canUnban && appealPage ? <section className="staff-record-section"><div className="staff-section-heading"><div><p className="tapped-kicker"><Ban aria-hidden="true" /> Unban review</p><h2>Appeals</h2></div><span>{appealPage.total.toLocaleString()} cases</span></div>{appealPage.appeals.length ? <div className="staff-case-list">{appealPage.appeals.map((appeal) => { const profile = steamProfiles.get(appeal.steamId); const name = profile?.name || `Steam ${appeal.steamId}`; return <article className="staff-case" key={appeal.id}><div className="staff-case-heading"><Link href={`/players/${appeal.steamId}`}>{name}<small>{appeal.steamId}</small></Link><CaseStatusTag status={appeal.status} /></div><AppealBanSource appeal={appeal} steamProfiles={steamProfiles} /><p>{appeal.body}</p><small>Opened {formatPortalDate(appeal.createdAt)} · Updated {formatPortalDate(appeal.updatedAt)}</small><CaseMessages messages={appeal.messages} steamProfiles={steamProfiles} /><form className="staff-case-form" action="/api/admin/cases" method="post" encType="multipart/form-data"><input type="hidden" name="csrf" value={csrf} /><input type="hidden" name="caseId" value={appeal.id} /><textarea name="body" maxLength={5000} placeholder="Reply to the player (optional when closing)" /><label>Screenshot (optional)<input name="screenshot" type="file" accept="image/png,image/jpeg,image/webp" /></label><div><button className="staff-unban-button" name="action" value="appeal-reply" type="submit">Reply</button><button className="staff-danger-button" name="action" value="appeal-close-banned" type="submit">Close: still banned</button><button className="button button-primary" name="action" value="appeal-close-unbanned" type="submit">Close: unbanned</button></div></form></article>; })}</div> : <p className="empty-copy">No appeals have been submitted.</p>}<nav className="pagination staff-pagination" aria-label="Appeal pages"><Link className={page <= 1 ? "is-disabled" : ""} aria-disabled={page <= 1} href={staffLink("appeals", Math.max(1, page - 1))}>Previous</Link><span>Page {page} of {caseTotalPages}</span><Link className={page >= caseTotalPages ? "is-disabled" : ""} aria-disabled={page >= caseTotalPages} href={staffLink("appeals", Math.min(caseTotalPages, page + 1))}>Next</Link></nav></section> : <section className="staff-denied"><LockKeyhole aria-hidden="true" /><p className="tapped-kicker">Unban restricted</p><h1>Appeal access requires unban permission.</h1><p>Only staff members with <code>admins.commands.unban</code> can read, reply to, or resolve ban appeals.</p></section> : null}
 

@@ -1,21 +1,21 @@
 import { randomUUID } from "node:crypto";
 
 import Link from "next/link";
-import type { CSSProperties } from "react";
 import {
-  BadgeCheck,
-  Crown,
   Database,
   Gift,
   KeyRound,
   LockKeyhole,
   RefreshCw,
   ShieldCheck,
-  Star,
   Tags,
   UsersRound,
 } from "lucide-react";
 
+import {
+  IdentityGroupBadge,
+  identityGroupBadgeIconOptions,
+} from "@/components/identity-group-badge";
 import { PlayerSearchField } from "@/components/player-search-field";
 import { CatalogueSearchField } from "@/components/economy/catalogue-search-field";
 import { SignInRequired } from "@/components/sign-in-required";
@@ -170,13 +170,6 @@ function GroupCard({
   snapshot: IdentityAdminSnapshot;
   csrf: string;
 }) {
-  const BadgeIcon = group.badgeIconKey === "crown"
-    ? Crown
-    : group.badgeIconKey === "star"
-      ? Star
-      : group.badgeIconKey === "badge"
-        ? BadgeCheck
-        : ShieldCheck;
   const availablePermissions = privilegeOptions(snapshot.privileges);
   const externalDefinition = group.externalDefinition;
   const sourceDescription = group.sourceType === "custom"
@@ -187,16 +180,7 @@ function GroupCard({
       <div>
         <div className={styles.cardTitle}>
           <h3>
-            <span
-              className="role-badge role-badge-admin"
-              style={{
-                "--role-color": group.badgeColor,
-                "--role-soft": group.badgeSoftColor,
-              } as CSSProperties}
-            >
-              <BadgeIcon aria-hidden="true" /> {group.badgeLabel}
-            </span>{" "}
-            {group.displayName}
+            <IdentityGroupBadge group={group} />
           </h3>
           <span className={styles.sourceBadge} data-source={group.sourceType}>{sourceLabel(group)}</span>
           <span className={styles.statusBadge} data-enabled={group.enabled ? "true" : "false"}>
@@ -264,10 +248,9 @@ function GroupCard({
         <label>
           Badge icon
           <select name="badgeIconKey" defaultValue={group.badgeIconKey}>
-            <option value="shield">Shield</option>
-            <option value="crown">Crown</option>
-            <option value="star">Star</option>
-            <option value="badge">Badge</option>
+            {identityGroupBadgeIconOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
           </select>
         </label>
         <label>
@@ -509,7 +492,7 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
             <label>Display name<input name="displayName" maxLength={100} required placeholder="Beta Testers" /></label>
             <label>Description<input name="description" maxLength={255} placeholder="What this group represents" /></label>
             <label>Badge label<input name="badgeLabel" maxLength={32} required placeholder="BETA" /></label>
-            <label>Badge icon<select name="badgeIconKey" defaultValue="shield"><option value="shield">Shield</option><option value="crown">Crown</option><option value="star">Star</option><option value="badge">Badge</option></select></label>
+            <label>Badge icon<select name="badgeIconKey" defaultValue="shield">{identityGroupBadgeIconOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
             <label>Accent<input name="badgeColor" type="color" defaultValue="#f0b35a" required /></label>
             <label>Badge background<input name="badgeSoftColor" type="color" defaultValue="#ffe4b8" required /></label>
             <label>Profile priority<input name="profilePriority" type="number" min="-32768" max="32767" defaultValue="0" required /></label>

@@ -82,7 +82,9 @@ export async function getAdminAccess(steamId: string): Promise<AdminAccess> {
 
   const identity = await getEffectiveIdentity({
     steamId,
-    vipGroupNames: profile.vipGroups.map((group) => group.name),
+    vipGroupNames: profile.vipGroups.map(
+      (group) => group.externalKey ?? group.name,
+    ),
     adminGroupNames: admin?.groups ?? [],
   });
   // Founder-managed identity grants are shared with the Swiftly runtime. A
