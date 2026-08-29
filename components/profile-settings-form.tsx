@@ -7,17 +7,20 @@ import {
   Palette,
   Save,
 } from "lucide-react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useMemo, useState, useTransition } from "react";
 
 import { PortalToast } from "@/components/success-toast";
 import { ProfileShowcases } from "@/components/profile-showcases";
 import { AsyncButton } from "@/components/ui/async-button";
+import { getTrustedProfileTheme } from "@/lib/content/profile-themes";
 
 type InventoryVisibility = "private" | "public";
 
 type OwnedTheme = {
   id: number;
+  inventoryItemId: string;
   key: string;
   displayName: string;
   description: string;
@@ -28,6 +31,7 @@ type OwnedTheme = {
 export type ProfileSettingsValue = {
   inventoryVisibility: InventoryVisibility;
   activeThemeId: number | null;
+  activeThemeItemId: string | null;
   ownedThemes: OwnedTheme[];
 };
 
@@ -37,6 +41,7 @@ type SettingsResponse = {
   settings?: {
     inventoryVisibility: InventoryVisibility;
     activeThemeId: number | null;
+    activeThemeItemId: string | null;
   };
 };
 
@@ -53,12 +58,12 @@ export function ProfileSettingsForm({
   const [visibility, setVisibility] = useState(
     initialSettings.inventoryVisibility,
   );
-  const [activeThemeId, setActiveThemeId] = useState<number | null>(
-    initialSettings.activeThemeId,
+  const [activeThemeItemId, setActiveThemeItemId] = useState<string | null>(
+    initialSettings.activeThemeItemId,
   );
   const [saved, setSaved] = useState({
     visibility: initialSettings.inventoryVisibility,
-    activeThemeId: initialSettings.activeThemeId,
+    activeThemeItemId: initialSettings.activeThemeItemId,
   });
   const [notice, setNotice] = useState<{
     variant: "success" | "danger";
@@ -66,9 +71,11 @@ export function ProfileSettingsForm({
   } | null>(null);
   const [pending, startTransition] = useTransition();
   const dirty =
-    visibility !== saved.visibility || activeThemeId !== saved.activeThemeId;
-  const ownedThemeIds = useMemo(
-    () => new Set(initialSettings.ownedThemes.map((theme) => theme.id)),
+    visibility !== saved.visibility ||
+    activeThemeItemId !== saved.activeThemeItemId;
+  const ownedThemeItemIds = useMemo(
+    () =>
+      new Set(initialSettings.ownedThemes.map((theme) => theme.inventoryItemId)),
     [initialSettings.ownedThemes],
   );
 
@@ -88,7 +95,7 @@ export function ProfileSettingsForm({
           body: JSON.stringify({
             csrf,
             inventoryVisibility: visibility,
-            activeThemeId,
+            activeThemeItemId,
           }),
         });
         const result = (await response.json().catch(() => null)) as
@@ -99,16 +106,16 @@ export function ProfileSettingsForm({
             result?.message ?? "Your settings could not be saved.",
           );
         }
-        const selectedThemeId =
-          result.settings.activeThemeId !== null &&
-          ownedThemeIds.has(result.settings.activeThemeId)
-            ? result.settings.activeThemeId
+        const selectedThemeItemId =
+          result.settings.activeThemeItemId !== null &&
+          ownedThemeItemIds.has(result.settings.activeThemeItemId)
+            ? result.settings.activeThemeItemId
             : null;
         setVisibility(result.settings.inventoryVisibility);
-        setActiveThemeId(selectedThemeId);
+        setActiveThemeItemId(selectedThemeItemId);
         setSaved({
           visibility: result.settings.inventoryVisibility,
-          activeThemeId: selectedThemeId,
+          activeThemeItemId: selectedThemeItemId,
         });
         setNotice({
           variant: "success",
@@ -201,19 +208,19 @@ export function ProfileSettingsForm({
           <strong>Select a theme owned by your account.</strong>
         </legend>
         <p className="empty-copy">
-          Themes change profile presentation only. Purchased themes will
-          appear here automatically when profile-theme products launch.
+          Themes change this profile only. Buy a Profile Theme item from the
+          Market, then equip its owned inventory instance here or from Inventory.
         </p>
         <div className="settings-theme-grid">
           <label
-            className={`settings-theme-card${activeThemeId === null ? " is-selected" : ""}`}
+            className={`settings-theme-card${activeThemeItemId === null ? " is-selected" : ""}`}
           >
             <input
               type="radio"
-              name="activeThemeId"
+              name="activeThemeItemId"
               value="default"
-              checked={activeThemeId === null}
-              onChange={() => setActiveThemeId(null)}
+              checked={activeThemeItemId === null}
+              onChange={() => setActiveThemeItemId(null)}
             />
             <span className="settings-theme-preview is-default">
               <Palette aria-hidden="true" />
@@ -225,18 +232,27 @@ export function ProfileSettingsForm({
           </label>
           {initialSettings.ownedThemes.map((theme) => (
             <label
-              className={`settings-theme-card${activeThemeId === theme.id ? " is-selected" : ""}`}
-              key={theme.id}
+              className={`settings-theme-card${activeThemeItemId === theme.inventoryItemId ? " is-selected" : ""}`}
+              key={theme.inventoryItemId}
             >
               <input
                 type="radio"
-                name="activeThemeId"
-                value={theme.id}
-                checked={activeThemeId === theme.id}
-                onChange={() => setActiveThemeId(theme.id)}
+                name="activeThemeItemId"
+                value={theme.inventoryItemId}
+                checked={activeThemeItemId === theme.inventoryItemId}
+                onChange={() => setActiveThemeItemId(theme.inventoryItemId)}
               />
               <span className="settings-theme-preview">
-                <ImageIcon aria-hidden="true" />
+                {getTrustedProfileTheme(theme.key).previewImageUrl ? (
+                  <Image
+                    src={getTrustedProfileTheme(theme.key).previewImageUrl!}
+                    alt=""
+                    width={108}
+                    height={108}
+                  />
+                ) : (
+                  <ImageIcon aria-hidden="true" />
+                )}
               </span>
               <span>
                 <strong>{theme.displayName}</strong>

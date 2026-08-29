@@ -51,6 +51,10 @@ import { TokenBalance } from "@/components/economy/token-balance";
 import { PortalToast } from "@/components/success-toast";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { SearchField } from "@/components/ui/search-field";
+import {
+  ECONOMY_RARITY_RANKS,
+  ECONOMY_SPECIAL_RARITY_RANK,
+} from "@/lib/economy/item-taxonomy";
 
 type CrateOpenerProps = {
   crates: unknown;
@@ -109,7 +113,6 @@ type BulkOpeningRow = {
 const CATALOGUE_PAGE_SIZE = 50;
 const OWNED_CRATE_PAGE_SIZE = 30;
 const DROP_PAGE_SIZE = 50;
-const CRATE_RARITY_RANKS = [0, 1, 2, 3, 4, 5, 6, 7] as const;
 const MAX_CRATE_PURCHASE_QUANTITY = 50;
 const MAX_BULK_OPEN_CRATES = 10;
 const FINAL_REEL_DURATION_MS = 4_800;
@@ -257,6 +260,7 @@ function formatDropRate(drop: CrateDrop, totalWeight: number) {
 }
 
 function dropHeadline(rarityRank: number) {
+  if (rarityRank >= ECONOMY_SPECIAL_RARITY_RANK) return "Special unbox";
   if (rarityRank >= 7) return "Extraordinary unbox";
   if (rarityRank >= 6) return "Covert unbox";
   if (rarityRank >= 5) return "Classified unbox";
@@ -1931,7 +1935,7 @@ export function CrateOpener({
             <div className="crate-filter-grid">
               <SearchField id="crate-search" label="Search crates" rootClassName="crate-search-field" value={catalogueQuery} onValueChange={setCatalogueQuery} placeholder="Kilowatt, capsule, autograph…" autoComplete="off" />
               <label htmlFor="crate-type">Type<select id="crate-type" value={catalogueType} onChange={(event) => setCatalogueType(event.target.value as CatalogueTypeFilter)}><option value="all">All containers</option><option value="crate">Crates / cases</option><option value="capsule">Capsules</option></select></label>
-              <label htmlFor="crate-rarity">Rarity<select id="crate-rarity" value={catalogueRarity} onChange={(event) => setCatalogueRarity(event.target.value)}><option value="">All rarities</option>{CRATE_RARITY_RANKS.map((rank) => <option key={rank} value={rank}>{rarityName(rank)}</option>)}</select></label>
+              <label htmlFor="crate-rarity">Rarity<select id="crate-rarity" value={catalogueRarity} onChange={(event) => setCatalogueRarity(event.target.value)}><option value="">All rarities</option>{ECONOMY_RARITY_RANKS.map((rank) => <option key={rank} value={rank}>{rarityName(rank)}</option>)}</select></label>
               <label htmlFor="crate-price-filter">Price<select id="crate-price-filter" value={cataloguePrice} onChange={(event) => setCataloguePrice(event.target.value as CataloguePriceFilter)}><option value="all">All price states</option><option value="priced">Priced now</option><option value="affordable">Within my balance</option><option value="unpriced">Price pending</option></select></label>
               <label htmlFor="crate-sort">Sort<select id="crate-sort" value={catalogueSort} onChange={(event) => setCatalogueSort(event.target.value as CatalogueSort)}><option value="catalogue">Catalogue order</option><option value="price-asc">Lowest Token price</option><option value="price-desc">Highest Token price</option><option value="rarity">Rarity</option><option value="name">Name</option></select></label>
             </div>

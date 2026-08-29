@@ -1,6 +1,11 @@
 import "server-only";
 
 import { getAdminAuthorization, getPlayerDashboard, portalStorageConfigured } from "@/lib/data/portal-repository";
+import { getEffectiveIdentity } from "@/lib/data/identity-groups";
+import {
+  configuredGameServerGuid,
+  isAssignedToConfiguredGameServer,
+} from "@/lib/admin/server-scope";
 
 type AdminGroupConfig = {
   name?: unknown;
@@ -19,8 +24,6 @@ const currentGroups: AdminGroupConfig[] = [
   { name: "Founder", immunity: 100, permissions: ["*"] }
 ];
 
-const currentServerGuid = "05eda3ad-2921-4083-adfb-2e23596c8caa";
-
 export type AdminAccess = {
   steamId: string;
   displayName: string;
@@ -30,6 +33,8 @@ export type AdminAccess = {
   serverGuids: string[];
   isAdmin: boolean;
   isAssignedToServer: boolean;
+  isFounder: boolean;
+  canManageGroups: boolean;
   canBan: boolean;
   canUnban: boolean;
   canManageAdmins: boolean;
@@ -71,7 +76,25 @@ export async function getAdminAccess(steamId: string): Promise<AdminAccess> {
     if (typeof group.immunity === "number") immunity = Math.max(immunity, group.immunity);
   }
 
-  const isAssignedToServer = admin?.serverGuids.some((serverGuid) => serverGuid.trim().toLowerCase() === currentServerGuid.toLowerCase()) ?? false;
+  const identity = await getEffectiveIdentity({
+    steamId,
+    vipGroupNames: profile.vipGroups.map((group) => group.name),
+    adminGroupNames: admin?.groups ?? [],
+  });
+  // Game-scoped privileges are consumed by the Swiftly runtime. Only explicit
+  // portal-scoped grants may extend website authorization.
+  for (const privilege of identity.privileges) {
+    if (privilege.scope === "portal") permissions.add(privilege.key);
+  }
+
+  const isAssignedToServer = isAssignedToConfiguredGameServer(
+    admin?.serverGuids,
+  );
+  // Founder is an immutable external trust anchor. Never derive it from a
+  // portal-managed group, direct privilege, wildcard, badge, or display name.
+  const isFounder = isAssignedToServer && (admin?.groups.some(
+    (group) => group.trim().toLocaleLowerCase("en-US") === "founder",
+  ) ?? false);
   const isAdmin = isAssignedToServer && (matchedGroups.length > 0 || [...permissions].some(isStaffPermission));
 
   return {
@@ -83,6 +106,8 @@ export async function getAdminAccess(steamId: string): Promise<AdminAccess> {
     serverGuids: admin?.serverGuids ?? [],
     isAdmin,
     isAssignedToServer,
+    isFounder,
+    canManageGroups: isFounder,
     canBan: isAdmin && hasPermission(permissions, "admins.commands.ban"),
     canUnban: isAdmin && hasPermission(permissions, "admins.commands.unban"),
     canManageAdmins: isAdmin && hasPermission(permissions, "admins.commands.admin"),
@@ -112,6 +137,5 @@ export function adminWriteConfigured() {
 }
 
 export async function getServerGuid() {
-  if (process.env.GAME_SERVER_GUID) return process.env.GAME_SERVER_GUID.trim();
-  return currentServerGuid;
+  return configuredGameServerGuid();
 }

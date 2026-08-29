@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-labelledby="title description">
+  <title id="title">BETA TESTER profile theme</title>
+  <description id="description">Angular cyan and yellow circuitry on a dark blue field.</description>
+  <defs>
+    <linearGradient id="field" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#020817"/>
+      <stop offset="0.58" stop-color="#071b35"/>
+      <stop offset="1" stop-color="#0b2a46"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#67e8f9"/>
+    </linearGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#38bdf8" stroke-opacity=".13" stroke-width="2"/>
+    </pattern>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="9" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <path fill="url(#field)" d="M0 0h1200v800H0z"/>
+  <path fill="url(#grid)" d="M0 0h1200v800H0z"/>
+  <path fill="#facc15" d="M0 0h470l-78 72H0zm1200 800H730l78-72h392z"/>
+  <path fill="#38bdf8" fill-opacity=".14" d="m1200 0-352 0-164 164 124 0 92-92h300zM0 800h352l164-164H392l-92 92H0z"/>
+  <g fill="none" stroke="url(#cyan)" stroke-width="8" filter="url(#glow)">
+    <path d="M76 225h250l64-64h173"/>
+    <path d="M1124 575H874l-64 64H637"/>
+  </g>
+  <g fill="#facc15">
+    <path d="M72 213h24v24H72zM551 149h24v24h-24zM1104 563h24v24h-24zM625 627h24v24h-24z"/>
+    <path d="m616 105 42 42-98 98-42-42zm-32 490 42 42-98 98-42-42z" opacity=".55"/>
+  </g>
+  <path d="M290 302h666l-46 196H244z" fill="#020817" stroke="#38bdf8" stroke-width="5"/>
+  <path d="M244 498h666l-18 76H226z" fill="#facc15"/>
+  <text x="600" y="416" fill="#f8fafc" font-family="Arial, Helvetica, sans-serif" font-size="116" font-weight="900" letter-spacing="13" text-anchor="middle">BETA</text>
+  <text x="566" y="548" fill="#020817" font-family="Arial, Helvetica, sans-serif" font-size="55" font-weight="900" letter-spacing="20" text-anchor="middle">TESTER</text>
+  <text x="601" y="675" fill="#67e8f9" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700" letter-spacing="8" text-anchor="middle">ARENA PROFILE SYSTEM // 001</text>
+  <g fill="#38bdf8">
+    <path d="M198 329h20v132h-20zM982 329h20v132h-20z"/>
+    <path d="M180 347h56v9h-56zm784 86h56v9h-56z"/>
+  </g>
+</svg>

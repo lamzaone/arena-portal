@@ -1,3 +1,8 @@
+import {
+  economyRarityName as taxonomyRarityName,
+  economyRarityRankClass,
+} from "@/lib/economy/item-taxonomy";
+
 export type EconomyItemView = {
   id: string;
   catalogueId: number | null;
@@ -6,6 +11,7 @@ export type EconomyItemView = {
   description: string | null;
   rarity: string;
   rarityRank: number;
+  tradable: boolean;
   marketHashName: string | null;
   marketPriceTokens: number | null;
   marketBasePriceTokens: number | null;
@@ -61,12 +67,12 @@ export type EconomyTradeItemView = {
   displayName: string;
   rarity: string;
   rarityRank: number;
+  tradable: boolean;
   imageUrl: string | null;
   floatValue: number | null;
   stattrak: boolean;
   stattrakCount: number;
   nametag: string | null;
-  specialKind: string | null;
 };
 
 export type EconomyTradeView = {
@@ -317,6 +323,7 @@ export function toEconomyItem(value: unknown): EconomyItemView {
   const discountRuleId = integer(appliedDiscount?.ruleId);
   const discountTokens = integer(appliedDiscount?.discountTokens);
   const discountName = text(appliedDiscount?.displayName, "");
+  const tradableValue = firstDefined(record, ["tradable", "isTradable"]);
 
   return {
     id,
@@ -333,6 +340,7 @@ export function toEconomyItem(value: unknown): EconomyItemView {
     // source labels such as "mythical" or "ancient" into the UI.
     rarity: rarityName(rarityRank),
     rarityRank,
+    tradable: tradableValue === undefined ? true : bool(tradableValue),
     marketHashName:
       text(
         firstDefined(record, ["marketHashName", "market_hash_name"]),
@@ -557,18 +565,12 @@ function tradeItems(value: unknown): EconomyTradeItemView[] {
         displayName: item.displayName,
         rarity: item.rarity,
         rarityRank: item.rarityRank,
+        tradable: item.tradable,
         imageUrl: item.imageUrl,
         floatValue: item.floatValue,
         stattrak: item.stattrak,
         stattrakCount: item.stattrakCount,
         nametag: item.nametag,
-        specialKind:
-          text(
-            firstDefined(record, ["specialKind"]),
-            isRecord(record.item)
-              ? text(firstDefined(record.item, ["specialKind"]), "")
-              : "",
-          ) || null,
       };
     },
   );
@@ -631,18 +633,14 @@ export function itemIsTradable(item: EconomyItemView) {
   // The repository clears a matching loadout slot atomically when an offered
   // item enters escrow, so equipped items remain valid trade candidates.
   return (
-    Boolean(item.id) && ["available", "owned", "inventory"].includes(item.state)
+    item.tradable &&
+    Boolean(item.id) &&
+    ["available", "owned", "inventory"].includes(item.state)
   );
 }
 
 export function itemIsVipMembership(item: EconomyItemView) {
-  const catalogue = isRecord(item.raw.catalogue) ? item.raw.catalogue : {};
-  const metadata = isRecord(item.raw.metadata)
-    ? item.raw.metadata
-    : isRecord(catalogue.metadata)
-      ? catalogue.metadata
-      : {};
-  return metadata.specialKind === "vip_membership";
+  return item.itemType === "vip_membership";
 }
 
 export function itemSupportsLoadout(item: EconomyItemView) {
@@ -728,8 +726,7 @@ export function humanize(value: string) {
 }
 
 export function rarityRankClass(rarityRank: number) {
-  const normalized = Math.max(0, Math.min(7, Math.trunc(rarityRank) || 0));
-  return `rarity-rank-${normalized}`;
+  return economyRarityRankClass(rarityRank);
 }
 
 export function rarityClass(rarityRank: number) {
@@ -737,16 +734,5 @@ export function rarityClass(rarityRank: number) {
 }
 
 export function rarityName(rarityRank: number) {
-  const names = [
-    "Standard",
-    "Consumer Grade",
-    "Industrial Grade",
-    "Mil-Spec Grade",
-    "Restricted",
-    "Classified",
-    "Covert",
-    "Extraordinary",
-  ];
-  const normalized = Math.max(0, Math.min(names.length - 1, Math.trunc(rarityRank) || 0));
-  return names[normalized];
+  return taxonomyRarityName(rarityRank);
 }

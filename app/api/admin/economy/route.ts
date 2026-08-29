@@ -37,21 +37,13 @@ import {
   type StaffStickerGrant,
 } from "@/lib/data/portal-repository";
 import { getSkinportHistoricalPrice } from "@/lib/economy/skinport-prices";
+import {
+  ECONOMY_ITEM_TYPES,
+  ECONOMY_MAX_RARITY_RANK,
+  isCustomProductItemType,
+} from "@/lib/economy/item-taxonomy";
 
-const itemTypes: EconomyItemType[] = [
-  "skin",
-  "knife",
-  "glove",
-  "crate",
-  "capsule",
-  "nametag",
-  "sticker",
-  "agent",
-  "music_kit",
-  "keychain",
-  "patch",
-  "graffiti",
-];
+const itemTypes: readonly EconomyItemType[] = ECONOMY_ITEM_TYPES;
 const artworkContentTypes = new Map([
   ["image/jpeg", "jpg"],
   ["image/png", "png"],
@@ -390,7 +382,12 @@ function parseCustomItem(
     65_535,
   );
   const paintkit = optionalInteger(formData, `${prefix}paintkit`, 0, 2_000_000);
-  const rarityRank = optionalInteger(formData, `${prefix}rarityRank`, 0, 255);
+  const rarityRank = optionalInteger(
+    formData,
+    `${prefix}rarityRank`,
+    0,
+    ECONOMY_MAX_RARITY_RANK,
+  );
   const metadataText = optionalText(formData, `${prefix}metadata`, 12_000);
   const metadata =
     metadataText === undefined
@@ -716,7 +713,11 @@ export async function POST(request: Request) {
       if (!actor.canManageEconomy)
         return redirect(request, "error", "manage-permission");
       const displayName = formText(formData, "crateDisplayName", 160);
-      const rarityRank = integer(formText(formData, "crateRarityRank", 8), 0, 7);
+      const rarityRank = integer(
+        formText(formData, "crateRarityRank", 8),
+        0,
+        ECONOMY_MAX_RARITY_RANK,
+      );
       const directPriceTokens = integer(
         formText(formData, "crateDirectPriceTokens", 20),
         0,
@@ -752,7 +753,11 @@ export async function POST(request: Request) {
         return redirect(request, "error", "manage-permission");
       const catalogueId = integer(formText(formData, "crateId", 20), 1);
       const displayName = formText(formData, "crateDisplayName", 160);
-      const rarityRank = integer(formText(formData, "crateRarityRank", 8), 0, 7);
+      const rarityRank = integer(
+        formText(formData, "crateRarityRank", 8),
+        0,
+        ECONOMY_MAX_RARITY_RANK,
+      );
       const directPriceTokens = integer(
         formText(formData, "crateDirectPriceTokens", 20),
         0,
@@ -875,6 +880,9 @@ export async function POST(request: Request) {
       ) {
         return redirect(request, "error", "container-catalogue", targetSteamId);
       }
+      if (parsedCustomItem && isCustomProductItemType(parsedCustomItem.itemType)) {
+        return redirect(request, "error", "custom-product-catalogue", targetSteamId);
+      }
       if (
         catalogueId === null ||
         !customization ||
@@ -890,6 +898,7 @@ export async function POST(request: Request) {
         catalogueId,
         customItem,
         customization,
+        tradable: formData.get("tradable") !== "false",
         stickers: stickers.length ? stickers : undefined,
         reason,
         idempotencyKey,

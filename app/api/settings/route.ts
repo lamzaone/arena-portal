@@ -26,6 +26,7 @@ function publicSettings(settings: PlayerSettings) {
   return {
     inventoryVisibility: settings.inventoryVisibility,
     activeThemeId: settings.activeThemeId,
+    activeThemeItemId: settings.activeThemeItemId,
     activeTheme: settings.activeTheme,
     ownedThemes: settings.ownedThemes,
   };
@@ -64,22 +65,23 @@ export async function POST(request: Request) {
       400,
     );
   }
-  const activeThemeId =
-    body.activeThemeId === null
+  const activeThemeItemId =
+    body.activeThemeItemId === null
       ? null
-      : typeof body.activeThemeId === "number" &&
-          Number.isSafeInteger(body.activeThemeId) &&
-          body.activeThemeId > 0
-        ? body.activeThemeId
+      : typeof body.activeThemeItemId === "string" &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+            body.activeThemeItemId,
+          )
+        ? body.activeThemeItemId.toLowerCase()
         : undefined;
-  if (activeThemeId === undefined)
+  if (activeThemeItemId === undefined)
     return json({ ok: false, message: "Choose a valid profile theme." }, 400);
 
   try {
     const settings = await updatePlayerSettings({
       steamId: session.steamId,
       inventoryVisibility: visibility,
-      activeThemeId,
+      activeThemeItemId,
     });
     return json({
       ok: true,

@@ -77,7 +77,17 @@ CREATE TABLE IF NOT EXISTS portal_economy_catalogue (
   KEY portal_economy_catalogue_browse (enabled, item_type, rarity_rank, id),
   KEY portal_economy_catalogue_market_hash_name (market_hash_name),
   KEY portal_economy_catalogue_definition_paintkit (definition_index, paintkit),
-  CONSTRAINT portal_economy_catalogue_item_type_known CHECK (item_type IN ('skin', 'knife', 'glove', 'crate', 'capsule', 'nametag', 'sticker', 'agent', 'music_kit', 'keychain', 'patch', 'graffiti'))
+  CONSTRAINT portal_economy_catalogue_item_type_known CHECK (item_type IN ('skin', 'knife', 'glove', 'crate', 'capsule', 'nametag', 'sticker', 'agent', 'music_kit', 'keychain', 'patch', 'graffiti', 'vip_membership', 'profile_theme')),
+  CONSTRAINT portal_economy_catalogue_rarity_known CHECK (rarity_rank <= 8),
+  CONSTRAINT portal_economy_catalogue_special_custom CHECK (
+    rarity_rank <> 8 OR LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.customProduct')), 'false')) IN ('true', '1')
+  ),
+  CONSTRAINT portal_economy_catalogue_native_product_shape CHECK (
+    item_type NOT IN ('vip_membership', 'profile_theme') OR (
+      rarity_rank = 8 AND
+      LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.customProduct')), 'false')) IN ('true', '1')
+    )
+  )
 ) ENGINE=InnoDB;
 
 -- Price history is intentionally separate from the catalogue snapshot. Prices
@@ -180,6 +190,7 @@ CREATE TABLE IF NOT EXISTS portal_inventory_items (
   stattrak_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
   nametag VARCHAR(128) NULL,
   rarity_rank TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  tradable BOOLEAN NOT NULL DEFAULT TRUE,
   state ENUM('available', 'escrowed', 'attached', 'consumed', 'revoked') NOT NULL DEFAULT 'available',
   attributes JSON NOT NULL,
   source JSON NOT NULL,
@@ -190,7 +201,18 @@ CREATE TABLE IF NOT EXISTS portal_inventory_items (
   KEY portal_inventory_items_owner_browse (owner_steam_id, state, item_type, rarity_rank, acquired_at, id),
   KEY portal_inventory_items_catalogue_owner (catalogue_id, owner_steam_id),
   KEY portal_inventory_items_state_updated (state, updated_at),
-  CONSTRAINT portal_inventory_items_item_type_known CHECK (item_type IN ('skin', 'knife', 'glove', 'crate', 'capsule', 'nametag', 'sticker', 'agent', 'music_kit', 'keychain', 'patch', 'graffiti')),
+  CONSTRAINT portal_inventory_items_item_type_known CHECK (item_type IN ('skin', 'knife', 'glove', 'crate', 'capsule', 'nametag', 'sticker', 'agent', 'music_kit', 'keychain', 'patch', 'graffiti', 'vip_membership', 'profile_theme')),
+  CONSTRAINT portal_inventory_items_rarity_known CHECK (rarity_rank <= 8),
+  CONSTRAINT portal_inventory_items_special_custom CHECK (
+    rarity_rank <> 8 OR LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(attributes, '$.customProduct')), 'false')) IN ('true', '1')
+  ),
+  CONSTRAINT portal_inventory_items_native_product_shape CHECK (
+    item_type NOT IN ('vip_membership', 'profile_theme') OR (
+      catalogue_id IS NOT NULL AND
+      rarity_rank = 8 AND
+      LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(attributes, '$.customProduct')), 'false')) IN ('true', '1')
+    )
+  ),
   CONSTRAINT portal_inventory_items_float_range CHECK (float_value IS NULL OR (float_value >= 0 AND float_value <= 1)),
   CONSTRAINT portal_inventory_items_stattrak_count_nonnegative CHECK (stattrak_count >= 0),
   CONSTRAINT portal_inventory_items_catalogue_fk FOREIGN KEY (catalogue_id) REFERENCES portal_economy_catalogue (id) ON DELETE RESTRICT

@@ -41,8 +41,11 @@ import {
   marketplaceCategories,
   normalizeMarketplaceCategory,
 } from "@/lib/economy/market-categories";
+import {
+  ECONOMY_RARITY_RANKS,
+  ECONOMY_SPECIAL_RARITY_RANK,
+} from "@/lib/economy/item-taxonomy";
 
-const MARKET_RARITY_RANKS = [0, 1, 2, 3, 4, 5, 6, 7] as const;
 const DEFAULT_MARKET_FLOAT = 0.15;
 const FLOAT_PURCHASE_SLIDER_STEP = 0.000001;
 
@@ -123,7 +126,7 @@ function validRarity(value: string) {
   if (!normalized) return "";
   const parsed = Number(normalized);
   return Number.isSafeInteger(parsed) &&
-    (MARKET_RARITY_RANKS as readonly number[]).includes(parsed)
+    (ECONOMY_RARITY_RANKS as readonly number[]).includes(parsed)
     ? String(parsed)
     : "";
 }
@@ -220,8 +223,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isVipMembershipItem(item: EconomyItemView) {
-  const metadata = item.raw.metadata;
-  return isRecord(metadata) && metadata.specialKind === "vip_membership";
+  return item.itemType === "vip_membership";
+}
+
+function isProfileThemeItem(item: EconomyItemView) {
+  return item.itemType === "profile_theme";
+}
+
+function isSpecialItem(item: EconomyItemView) {
+  return item.rarityRank === ECONOMY_SPECIAL_RARITY_RANK;
 }
 
 function marketplaceQuoteFromResponse(value: unknown): MarketplaceQuote | null {
@@ -343,6 +353,7 @@ function MarketplacePurchaseAction({
   onPurchase: (item: EconomyItemView, options: MarketplacePurchaseOptions) => void;
 }) {
   const vipMembership = isVipMembershipItem(item);
+  const profileTheme = isProfileThemeItem(item);
   const supportsFloat = isFloatSelectable(item);
   const supportsStattrak = isStattrakSelectable(item);
   const selectedFloat = parseFloatInput(floatInput);
@@ -473,6 +484,8 @@ function MarketplacePurchaseAction({
                 ? "Refresh public price & buy"
                 : vipMembership
                   ? `Buy membership for ${formatTokens(knownPrice)} Tokens`
+                  : profileTheme
+                    ? `Buy theme for ${formatTokens(knownPrice)} Tokens`
                   : `Buy for ${formatTokens(knownPrice)} Tokens`}
       </button>
     </div>
@@ -628,7 +641,7 @@ function MarketplaceListing({
   return (
     <EconomyItemCard
       item={pricedItem}
-      className={isVipMembershipItem(item) ? "market-item-special" : ""}
+      className={isSpecialItem(item) ? "market-item-special" : ""}
       enableMarketPreview
       previewFloat={previewFloat}
       previewOverlay={
@@ -848,7 +861,7 @@ export function MarketplaceBrowser({
               onChange={(event) => updateDraft("rarity", event.target.value)}
             >
               <option value="">All rarities</option>
-              {MARKET_RARITY_RANKS.map((value) => (
+              {ECONOMY_RARITY_RANKS.map((value) => (
                 <option key={value} value={value}>
                   {rarityName(value)}
                 </option>

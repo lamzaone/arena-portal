@@ -6,6 +6,7 @@ import { PlayerProfilePage } from "@/components/player-profile-page";
 import { SiteHeader } from "@/components/site-header";
 import { createProfileActionToken, getSession } from "@/lib/auth/session";
 import { getPlayerDashboard, getPlayerProfileInventoryPage, getPlayerProfileThemeKey, getPlayerSettings, getPublicPlayerProfile } from "@/lib/data/portal-repository";
+import { getEffectiveIdentity, reconcileIdentityGroupRewards } from "@/lib/data/identity-groups";
 import { getSteamProfiles } from "@/lib/steam/profiles";
 
 type PlayerProfilePageProps = {
@@ -45,5 +46,22 @@ export default async function PublicPlayerProfilePage({ params, searchParams }: 
     );
   }
 
-  return <PlayerProfilePage profile={profile} steamId={steamId} steamProfile={steamProfiles.get(steamId)} isOwnProfile={Boolean(isOwnProfile)} isAuthenticated={Boolean(session)} profileInventory={profileInventory} profileThemeKey={profileThemeKey} settingsOpen={settingsOpen} profileSettings={settings && session ? { csrf: createProfileActionToken(session), initialSettings: { inventoryVisibility: settings.inventoryVisibility, activeThemeId: settings.activeThemeId, ownedThemes: settings.ownedThemes } } : undefined} />;
+  const identity = await getEffectiveIdentity({
+    steamId,
+    vipGroupNames: profile.vipGroups.map((group) => group.name),
+    adminGroupNames: profile.adminGroups.map((group) => group.name),
+  });
+
+  // External Admins.Core and VIPCore memberships remain authoritative in the
+  // game database. Reconcile their catalogue rewards when that player opens
+  // their own authenticated profile; public visitors never trigger grants.
+  if (isOwnProfile) {
+    await reconcileIdentityGroupRewards({
+      steamId,
+      vipGroupNames: profile.vipGroups.map((group) => group.name),
+      adminGroupNames: profile.adminGroups.map((group) => group.name),
+    }).catch(() => null);
+  }
+
+  return <PlayerProfilePage profile={profile} identity={identity} steamId={steamId} steamProfile={steamProfiles.get(steamId)} isOwnProfile={Boolean(isOwnProfile)} isAuthenticated={Boolean(session)} profileInventory={profileInventory} profileThemeKey={profileThemeKey} settingsOpen={settingsOpen} profileSettings={settings && session ? { csrf: createProfileActionToken(session), initialSettings: { inventoryVisibility: settings.inventoryVisibility, activeThemeId: settings.activeThemeId, activeThemeItemId: settings.activeThemeItemId, ownedThemes: settings.ownedThemes } } : undefined} />;
 }

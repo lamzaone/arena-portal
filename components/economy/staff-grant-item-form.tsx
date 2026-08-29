@@ -5,19 +5,20 @@ import type {
   EconomyCatalogueItem,
   EconomyItemType,
 } from "@/lib/data/portal-repository";
+import {
+  ECONOMY_ITEM_TYPES,
+  ECONOMY_RARITIES,
+  ECONOMY_SPECIAL_RARITY_RANK,
+  economyItemTypeLabel,
+  isCustomProductItemType,
+} from "@/lib/economy/item-taxonomy";
 
-const customItemTypes = [
-  "skin",
-  "knife",
-  "glove",
-  "nametag",
-  "sticker",
-  "agent",
-  "music_kit",
-  "keychain",
-  "patch",
-  "graffiti",
-] as const satisfies readonly EconomyItemType[];
+const customItemTypes: EconomyItemType[] = ECONOMY_ITEM_TYPES.filter(
+  (itemType) =>
+    itemType !== "crate" &&
+    itemType !== "capsule" &&
+    !isCustomProductItemType(itemType),
+);
 
 export type GrantCatalogueItem = Pick<
   EconomyCatalogueItem,
@@ -55,7 +56,7 @@ export function StaffGrantItemForm({
       <datalist id={`economy-catalogue-options-${steamId}`}>
         {catalogue.map((item) => (
           <option key={item.id} value={item.id}>
-            {item.displayName} · {item.itemType}
+            {item.displayName} · {economyItemTypeLabel(item.itemType)}
           </option>
         ))}
       </datalist>
@@ -96,7 +97,7 @@ export function StaffGrantItemForm({
                 <select name="itemType" defaultValue="skin">
                   {customItemTypes.map((type) => (
                     <option key={type} value={type}>
-                      {type}
+                      {economyItemTypeLabel(type)}
                     </option>
                   ))}
                 </select>
@@ -119,12 +120,16 @@ export function StaffGrantItemForm({
               </label>
               <label>
                 Rarity rank
-                <input
-                  name="rarityRank"
-                  inputMode="numeric"
-                  min="0"
-                  max="255"
-                />
+                <select name="rarityRank" defaultValue="0">
+                  {ECONOMY_RARITIES.map((rarity) => (
+                    <option key={rarity.rank} value={rarity.rank}>
+                      {rarity.rank} · {rarity.name}
+                      {rarity.rank === ECONOMY_SPECIAL_RARITY_RANK
+                        ? " (custom only)"
+                        : ""}
+                    </option>
+                  ))}
+                </select>
               </label>
             </div>
             <label>
@@ -137,6 +142,13 @@ export function StaffGrantItemForm({
           </div>
         </details>
         <div className="form-grid">
+          <label>
+            Transferability
+            <select name="tradable" defaultValue="true">
+              <option value="true">Tradable</option>
+              <option value="false">Untradable reward</option>
+            </select>
+          </label>
           <label>
             Float
             <input

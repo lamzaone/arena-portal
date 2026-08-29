@@ -1,6 +1,7 @@
 export type TrustedProfileTheme = {
   key: string;
   className: string;
+  previewImageUrl: string | null;
 };
 
 // Theme presentation stays in source control. A database entitlement only
@@ -10,6 +11,12 @@ const trustedProfileThemes = {
   default: {
     key: "default",
     className: "profile-theme-default",
+    previewImageUrl: null,
+  },
+  beta_tester: {
+    key: "beta_tester",
+    className: "profile-theme-beta-tester",
+    previewImageUrl: "/images/economy/profile-themes/beta-tester.svg",
   },
 } satisfies Record<string, TrustedProfileTheme>;
 

@@ -113,6 +113,7 @@ function feedback(value: string | undefined, kind: "notice" | "error") {
     target: "The selected player is invalid or protected by higher staff immunity.",
     "item-details": "Review the item fields and try again.",
     "container-catalogue": "Crates and capsules must use a catalogue entry with a configured loot table.",
+    "custom-product-catalogue": "VIP memberships and profile themes must use a trusted catalogue product.",
     "loadout-details": "Choose a valid loadout slot and owned item.",
     "transfer-details": "Provide a valid destination SteamID64.",
     "sticker-details": "Provide a valid weapon, sticker, and sticker slot.",

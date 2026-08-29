@@ -2,6 +2,7 @@ import {
   EconomyRepositoryError,
   getEconomyCatalogueItem,
   isEconomyMarketplacePurchasable,
+  isEconomyProfileTheme,
   isEconomyVipMembership,
   purchaseEconomyItem,
   recordEconomyPrice,
@@ -232,6 +233,8 @@ export async function POST(request: Request) {
       message:
         isEconomyVipMembership(catalogue)
           ? "VIP membership added to your inventory. Activate it whenever you are ready."
+          : isEconomyProfileTheme(catalogue)
+            ? "Profile theme added to your inventory. Equip it from the item details."
           : quantity === 1
           ? "Item purchased and added to your inventory."
           : `${quantity} items purchased and added to your inventory.`,

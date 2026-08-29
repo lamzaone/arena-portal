@@ -20,6 +20,11 @@ import {
   SearchField,
   SearchSubmitButton,
 } from "@/components/ui/search-field";
+import {
+  ECONOMY_ITEM_TYPES,
+  economyItemTypeLabel,
+  economyItemTypePluralLabel,
+} from "@/lib/economy/item-taxonomy";
 
 import styles from "./discount-rule-admin.module.css";
 
@@ -45,20 +50,11 @@ type CatalogueSearchResponse = {
   message?: string;
 };
 
-const itemTypes: Array<{ value: EconomyItemType; label: string }> = [
-  { value: "skin", label: "Skins" },
-  { value: "knife", label: "Knives" },
-  { value: "glove", label: "Gloves" },
-  { value: "crate", label: "Crates" },
-  { value: "capsule", label: "Capsules" },
-  { value: "nametag", label: "Name tags" },
-  { value: "sticker", label: "Stickers" },
-  { value: "agent", label: "Agents" },
-  { value: "music_kit", label: "Music kits" },
-  { value: "keychain", label: "Keychains" },
-  { value: "patch", label: "Patches" },
-  { value: "graffiti", label: "Graffiti" },
-];
+const itemTypes: Array<{ value: EconomyItemType; label: string }> =
+  ECONOMY_ITEM_TYPES.map((itemType) => ({
+    value: itemType,
+    label: economyItemTypePluralLabel(itemType),
+  }));
 
 function percentageValue(basisPoints: number) {
   return (basisPoints / 100).toFixed(basisPoints % 100 === 0 ? 0 : 2);
@@ -342,7 +338,7 @@ export function DiscountRuleAdmin({
       <datalist id="discount-catalogue-options">
         {knownCatalogue.map((item) => (
           <option key={item.id} value={item.id}>
-            {item.displayName} · {item.itemType}
+            {item.displayName} · {economyItemTypeLabel(item.itemType)}
           </option>
         ))}
       </datalist>
@@ -408,7 +404,7 @@ export function DiscountRuleAdmin({
               <span key={item.id}>
                 <strong>#{item.id}</strong>
                 <span>{item.displayName}</span>
-                <small>{item.itemType}</small>
+                <small>{economyItemTypeLabel(item.itemType)}</small>
               </span>
             ))}
           </div>

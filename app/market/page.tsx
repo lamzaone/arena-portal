@@ -18,9 +18,9 @@ import {
 } from "@/lib/data/portal-repository";
 import {
   marketplaceCategoryItemTypes,
-  marketplaceCategoryMarketCategory,
   normalizeMarketplaceCategory,
 } from "@/lib/economy/market-categories";
+import { ECONOMY_MAX_RARITY_RANK } from "@/lib/economy/item-taxonomy";
 
 const MARKET_PAGE_SIZE = 50;
 
@@ -34,6 +34,8 @@ const marketDiscountCategoryLabels: Record<string, string> = {
   sticker: "All stickers",
   agent: "All agents",
   keychain: "All keychains",
+  vip_membership: "All VIP memberships",
+  profile_theme: "All profile themes",
 };
 
 type MarketPageProps = {
@@ -65,14 +67,15 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
   const query = (params.q ?? "").trim().slice(0, 120);
   const itemType = normalizeMarketplaceCategory(params.type);
   const itemTypes = marketplaceCategoryItemTypes(itemType);
-  const marketCategory = marketplaceCategoryMarketCategory(itemType);
   // `Number("")` is 0, which made the native "All rarities" form value
   // accidentally turn into the rank-0 filter. Preserve a deliberate `0`, but
   // treat an omitted or empty value as no rarity filter.
   const rarityText = (params.rarity ?? "").trim();
   const rarityValue = rarityText ? Number(rarityText) : Number.NaN;
   const rarity =
-    Number.isSafeInteger(rarityValue) && rarityValue >= 0 && rarityValue <= 7
+    Number.isSafeInteger(rarityValue) &&
+    rarityValue >= 0 &&
+    rarityValue <= ECONOMY_MAX_RARITY_RANK
       ? rarityValue
       : null;
   const [wallet, catalogue, activeDiscountRules] = await Promise.all([
@@ -80,11 +83,6 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
     getMarketplaceCatalogue({
       query: query || undefined,
       itemTypes: itemTypes ? [...itemTypes] : undefined,
-      marketCategory: marketCategory ?? undefined,
-      // VIP memberships use a storage-compatible item type internally. Keep
-      // them in Special rather than leaking them into the Agents category.
-      excludeMarketCategory:
-        itemType === "agent" ? "special" : undefined,
       rarityRanks: rarity === null ? undefined : [rarity],
       page: positivePage(params.page),
       pageSize: MARKET_PAGE_SIZE,

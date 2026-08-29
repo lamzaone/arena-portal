@@ -39,6 +39,7 @@ import { TokenBalance } from "@/components/economy/token-balance";
 import { PortalToast } from "@/components/success-toast";
 import { AsyncButton } from "@/components/ui/async-button";
 import { SearchField } from "@/components/ui/search-field";
+import { economyItemTypeLabel } from "@/lib/economy/item-taxonomy";
 
 type TradeManagerProps = {
   inventory: unknown;
@@ -98,6 +99,7 @@ function parsePartnerItem(value: unknown): EconomyTradeItemView | null {
     displayName,
     rarity: rarityName(rarityRank),
     rarityRank,
+    tradable: value.tradable !== false && value.tradable !== 0,
     imageUrl: text(value.imageUrl) || null,
     floatValue:
       value.floatValue === null || value.floatValue === undefined
@@ -106,7 +108,6 @@ function parsePartnerItem(value: unknown): EconomyTradeItemView | null {
     stattrak: value.stattrak === true,
     stattrakCount: Math.max(0, integer(value.stattrakCount)),
     nametag: text(value.nametag) || null,
-    specialKind: text(value.specialKind) || null,
   };
 }
 
@@ -167,21 +168,13 @@ function TradeItems({
               <MarketplaceItemPreview item={item} enableMarketPreview />
               <div>
                 <span
-                  className={
-                    item.specialKind === "vip_membership"
-                      ? "badge economy-special-badge"
-                      : rarityClass(item.rarityRank)
-                  }
+                  className={rarityClass(item.rarityRank)}
                 >
-                  {item.specialKind === "vip_membership"
-                    ? "Special"
-                    : item.rarity}
+                  {item.rarity}
                 </span>
                 <strong>{item.displayName}</strong>
                 <p>
-                  {item.specialKind === "vip_membership"
-                    ? "VIP membership"
-                    : humanize(item.itemType)}
+                  {economyItemTypeLabel(item.itemType)}
                   {item.floatValue !== null
                     ? ` · Float ${item.floatValue.toFixed(6)}`
                     : ""}
@@ -228,7 +221,7 @@ function TradeItemButton({
         <span className={rarityClass(item.rarityRank)}>{item.rarity}</span>
         <strong>{item.displayName}</strong>
         <small>
-          {humanize(item.itemType)}
+          {economyItemTypeLabel(item.itemType)}
           {item.floatValue !== null
             ? ` · ${item.floatValue.toFixed(6)} float`
             : ""}

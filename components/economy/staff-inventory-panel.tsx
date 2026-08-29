@@ -16,6 +16,7 @@ import {
   type GrantCatalogueItem,
 } from "@/components/economy/staff-grant-item-form";
 import { rarityClass, rarityName } from "@/components/economy/economy-view-model";
+import { economyItemTypeLabel } from "@/lib/economy/item-taxonomy";
 import {
   type EconomyInventoryItem,
   type EconomyLoadoutSlot,
@@ -135,7 +136,7 @@ function ItemEditor({
           </span>
           <h3>{item.displayName}</h3>
           <p>
-            {item.itemType} · {item.id}
+            {economyItemTypeLabel(item.itemType)} · {item.id}
           </p>
         </div>
         <span className="tag">{item.state}</span>
@@ -293,7 +294,7 @@ export function StaffInventoryPanel({
         <section className="panel economy-admin-section">
           <div className="panel-heading"><div><p className="eyebrow"><SlidersHorizontal aria-hidden="true" /> Loadout control</p><h2>Player loadout</h2><p>Server refresh is queued after every change.</p></div></div>
           <div className="economy-loadout-list">{account.loadout.length ? account.loadout.map((slot) => <article key={slot.slotKey}><div><strong>{slot.slotKey}</strong><span>{slot.item?.displayName ?? "Empty"}</span></div><form action={mutationAction} method="post"><ActionFields csrf={csrf} action="clear-slot" steamId={account.steamId} /><input type="hidden" name="slotType" value={slot.slotType} /><input type="hidden" name="slotTeam" value={slot.team ?? ""} /><input type="hidden" name="slotDefinitionIndex" value={slot.definitionIndex ?? ""} /><input type="hidden" name="reason" value="Staff loadout clear" /><button className="staff-unban-button" type="submit">Clear</button></form></article>) : <p className="empty-copy">No loadout slots have been saved yet.</p>}</div>
-          <form className="form-panel economy-admin-form" action={mutationAction} method="post"><ActionFields csrf={csrf} action="equip" steamId={account.steamId} /><label>Owned available item<select name="itemId" required><option value="">Choose item</option>{availableItems.map((item) => <option key={item.id} value={item.id}>{item.displayName} · {item.itemType} · {item.id}</option>)}</select></label><SlotFields /><label>Reason<input name="reason" required maxLength={180} defaultValue="Staff loadout assignment" /></label><button className="button button-primary" type="submit">Set loadout slot</button></form>
+          <form className="form-panel economy-admin-form" action={mutationAction} method="post"><ActionFields csrf={csrf} action="equip" steamId={account.steamId} /><label>Owned available item<select name="itemId" required><option value="">Choose item</option>{availableItems.map((item) => <option key={item.id} value={item.id}>{item.displayName} · {economyItemTypeLabel(item.itemType)} · {item.id}</option>)}</select></label><SlotFields /><label>Reason<input name="reason" required maxLength={180} defaultValue="Staff loadout assignment" /></label><button className="button button-primary" type="submit">Set loadout slot</button></form>
         </section>
       ) : null}
       {canManage ? (

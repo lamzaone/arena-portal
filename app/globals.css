@@ -799,7 +799,7 @@ code { padding: 2px 4px; border-radius: 4px; color: #fecdd3; background: rgba(22
 .redeem-picker-item .economy-item-preview-fallback svg { width: 21px; height: 21px; }
 .redeem-picker-item .economy-item-preview-fallback span { display: none; }
 .redeem-picker-item > div { display: grid; min-width: 0; gap: 3px; }
-.redeem-picker-item > div > span, .redeem-card-rewards .rarity-rank-0, .redeem-card-rewards .rarity-rank-1, .redeem-card-rewards .rarity-rank-2, .redeem-card-rewards .rarity-rank-3, .redeem-card-rewards .rarity-rank-4, .redeem-card-rewards .rarity-rank-5, .redeem-card-rewards .rarity-rank-6, .redeem-card-rewards .rarity-rank-7 { justify-self: start; padding: 2px 5px; border: 1px solid color-mix(in srgb, var(--rarity-accent) 50%, transparent); color: color-mix(in srgb, var(--rarity-accent) 83%, #fff); background: color-mix(in srgb, var(--rarity-accent) 13%, transparent); font-size: 8px; font-weight: 850; letter-spacing: .04em; line-height: 1; text-transform: uppercase; }
+.redeem-picker-item > div > span, .redeem-card-rewards .rarity-rank-0, .redeem-card-rewards .rarity-rank-1, .redeem-card-rewards .rarity-rank-2, .redeem-card-rewards .rarity-rank-3, .redeem-card-rewards .rarity-rank-4, .redeem-card-rewards .rarity-rank-5, .redeem-card-rewards .rarity-rank-6, .redeem-card-rewards .rarity-rank-7, .redeem-card-rewards .rarity-rank-8 { justify-self: start; padding: 2px 5px; border: 1px solid color-mix(in srgb, var(--rarity-accent) 50%, transparent); color: color-mix(in srgb, var(--rarity-accent) 83%, #fff); background: color-mix(in srgb, var(--rarity-accent) 13%, transparent); font-size: 8px; font-weight: 850; letter-spacing: .04em; line-height: 1; text-transform: uppercase; }
 .redeem-picker-item strong { overflow: hidden; color: #f2dfe9; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .redeem-picker-item small { overflow: hidden; color: #9f798d; font-size: 9px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .redeem-picker-item .button { min-height: 29px; padding: 5px 7px; font-size: 9px; }
@@ -839,35 +839,45 @@ code { padding: 2px 4px; border-radius: 4px; color: #fecdd3; background: rgba(22
 @media (max-width: 650px) { .redeem-catalogue-search > .button { width: 100%; margin-top: 0; } }
 
 /* Special market products share the catalogue tooling used by custom crates,
-   with a stronger rose treatment so instant benefits remain easy to distinguish. */
+   with a distinct cyan-and-gold treatment so custom products stay legible. */
+.rarity-rank-8 { --rarity-accent: #49e7ff; }
+.badge.rarity-rank-8,
+.redeem-card-rewards .rarity-rank-8 {
+  border-color: rgba(73, 231, 255, .62);
+  color: #dffbff;
+  background: linear-gradient(125deg, rgba(24, 122, 169, .28), rgba(245, 196, 66, .13));
+}
+.economy-item-preview.rarity-rank-8 {
+  border-color: rgba(73, 231, 255, .56);
+}
 .market-item-special,
 .economy-market-special {
-  border-color: rgba(255, 113, 133, .56) !important;
+  border-color: rgba(73, 231, 255, .5) !important;
   background:
-    radial-gradient(circle at 88% 7%, rgba(225, 29, 72, .22), transparent 36%),
-    linear-gradient(150deg, rgba(74, 8, 21, .9), rgba(10, 3, 6, .97)) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 202, 211, .09), 0 0 24px rgba(225, 29, 72, .1);
+    radial-gradient(circle at 88% 7%, rgba(245, 196, 66, .16), transparent 36%),
+    linear-gradient(150deg, rgba(6, 39, 61, .92), rgba(8, 4, 7, .98)) !important;
+  box-shadow: inset 0 1px 0 rgba(207, 249, 255, .11), 0 0 24px rgba(73, 231, 255, .1);
 }
 .market-item-special .economy-item-preview {
-  --rarity-accent: var(--accent-bright);
-  border-color: rgba(255, 113, 133, .62);
+  --rarity-accent: #49e7ff;
+  border-color: rgba(73, 231, 255, .62);
   background:
-    radial-gradient(circle at 50% 43%, rgba(225, 29, 72, .3), transparent 62%),
-    linear-gradient(145deg, rgba(74, 8, 21, .96), rgba(7, 2, 4, .98));
+    radial-gradient(circle at 50% 43%, rgba(29, 173, 225, .28), transparent 62%),
+    linear-gradient(145deg, rgba(6, 39, 61, .96), rgba(7, 2, 4, .98));
 }
 .economy-special-badge {
-  border-color: rgba(255, 145, 164, .68);
-  color: #ffe7eb;
-  background: rgba(225, 29, 72, .25);
+  border-color: rgba(73, 231, 255, .62);
+  color: #dffbff;
+  background: rgba(24, 122, 169, .25);
 }
 .market-item-special .market-price-hud {
   border-color: rgba(255, 145, 164, .58);
   background: linear-gradient(125deg, rgba(225, 29, 72, .29), rgba(81, 12, 34, .36));
 }
 .economy-market-special .badge {
-  border-color: rgba(255, 145, 164, .62);
-  color: #ffe7eb;
-  background: rgba(225, 29, 72, .2);
+  border-color: rgba(73, 231, 255, .62);
+  color: #dffbff;
+  background: rgba(24, 122, 169, .2);
 }
 .economy-market-disabled-copy {
   max-width: 178px;
@@ -2071,6 +2081,12 @@ fieldset.settings-section { padding-top: 20px; }
   background: linear-gradient(145deg, rgba(96, 12, 30, .88), rgba(17, 3, 7, .94));
 }
 .settings-theme-preview svg { width: 21px; height: 21px; }
+.settings-theme-preview img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
 .settings-theme-card > span:last-child { grid-column: 2; grid-row: 1; }
 .settings-owned-empty {
   margin: 12px 0 0;
@@ -2778,4 +2794,484 @@ fieldset.settings-section { padding-top: 20px; }
 @media (max-width: 680px) {
   .market-filters .market-filter-grid > .market-search-field,
   .market-filters .market-filter-grid > label { grid-column: span 12; }
+}
+
+/* Portal identity badges use founder-controlled, validated presentation
+   tokens. The primary badge sits outside the clipped avatar artwork so banned
+   overlays and group identity remain independently readable. */
+.identity-group-badge {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  min-height: 27px;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, var(--identity-badge-color) 72%, transparent);
+  border-radius: 999px;
+  color: var(--identity-badge-soft);
+  background: color-mix(in srgb, var(--identity-badge-color) 17%, rgba(6, 2, 4, .94));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 0 15px color-mix(in srgb, var(--identity-badge-color) 16%, transparent);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .065em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+.identity-group-badge > svg { width: 12px; height: 12px; flex: 0 0 auto; color: var(--identity-badge-color); filter: drop-shadow(0 0 4px color-mix(in srgb, var(--identity-badge-color) 70%, transparent)); }
+.identity-group-badge > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.identity-group-badge > small { padding-left: 6px; border-left: 1px solid color-mix(in srgb, var(--identity-badge-color) 30%, transparent); color: color-mix(in srgb, var(--identity-badge-soft) 76%, #b69399); font-size: 7px; letter-spacing: .045em; white-space: nowrap; }
+.identity-group-badge.is-compact { min-height: 23px; max-width: 118px; padding: 4px 7px; font-size: 7px; }
+.identity-group-badge.is-compact > svg { width: 10px; height: 10px; }
+.profile-primary-group-badge { position: absolute; z-index: 3; right: 50%; bottom: -13px; display: block; max-width: 124px; transform: translateX(50%); }
+.profile-primary-group-badge .identity-group-badge { box-shadow: 0 5px 16px rgba(0, 0, 0, .46), 0 0 13px color-mix(in srgb, var(--identity-badge-color) 18%, transparent); }
+.identity-group-membership-cards article { min-height: 82px; }
+.identity-group-tag-summary { display: block; overflow: hidden; color: var(--role-soft); font-size: 8px; font-weight: 800; letter-spacing: .045em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.identity-group-tag-summary.is-empty { color: #806269; font-weight: 650; }
+
+@media (max-width: 520px) {
+  .profile-primary-group-badge { bottom: -12px; }
+  .identity-group-badge.is-compact { max-width: 92px; }
+}
+
+@media (forced-colors: active) {
+  .identity-group-badge { border-color: CanvasText; color: CanvasText; background: Canvas; box-shadow: none; }
+}
+
+/* The trusted BETA TESTER profile theme is intentionally source-controlled.
+   Entitlements can select this class, but cannot inject presentation rules. */
+.player-profile-page.profile-theme-beta-tester {
+  --beta-bg: #04111c;
+  --beta-surface: #071827;
+  --beta-surface-strong: #0b2235;
+  --beta-blue: #38bdf8;
+  --beta-yellow: #facc15;
+  --beta-text: #f5fbff;
+  --beta-muted: #b8cfdf;
+  --beta-border: rgba(56, 189, 248, .43);
+  color: var(--beta-text);
+  color-scheme: dark;
+  background-color: var(--beta-bg);
+  background-image:
+    linear-gradient(rgba(56, 189, 248, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, .035) 1px, transparent 1px),
+    radial-gradient(circle at 72% 18%, rgba(56, 189, 248, .13), transparent 30rem),
+    radial-gradient(circle at 12% 62%, rgba(250, 204, 21, .07), transparent 25rem),
+    linear-gradient(145deg, #04111c, #02080f 78%);
+  background-size: 42px 42px, 42px 42px, auto, auto, auto;
+  animation: beta-profile-grid-drift 24s linear infinite;
+}
+
+@keyframes beta-profile-grid-drift {
+  from { background-position: 0 0, 0 0, center, center, center; }
+  to { background-position: 42px 42px, 42px 42px, center, center, center; }
+}
+
+@keyframes beta-profile-signal {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(250, 204, 21, .08), 0 5px 9px rgba(0, 0, 0, .5); }
+  50% { box-shadow: 0 0 0 5px rgba(56, 189, 248, .12), 0 5px 15px rgba(0, 0, 0, .62); }
+}
+
+.player-profile-page.profile-theme-beta-tester .site-header {
+  border-color: var(--beta-border);
+  border-radius: 0;
+  background: rgba(4, 17, 28, .94);
+  box-shadow: inset 3px 0 0 var(--beta-yellow), 0 16px 38px rgba(0, 0, 0, .34);
+}
+
+.player-profile-page.profile-theme-beta-tester .brand-mark {
+  border-radius: 0;
+  color: var(--beta-bg);
+  background: var(--beta-yellow);
+  box-shadow: 4px 4px 0 rgba(56, 189, 248, .34);
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+
+.player-profile-page.profile-theme-beta-tester :where(.main-nav a, .mobile-nav nav a) {
+  color: var(--beta-muted);
+}
+
+.player-profile-page.profile-theme-beta-tester :where(.main-nav a, .mobile-nav nav a):hover,
+.player-profile-page.profile-theme-beta-tester :where(.main-nav a, .mobile-nav nav a):focus-visible {
+  color: var(--beta-yellow);
+  background-color: rgba(56, 189, 248, .1);
+}
+
+.player-profile-page.profile-theme-beta-tester :where(a, button, summary, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--beta-yellow) !important;
+  outline-offset: 3px;
+}
+
+.player-profile-page.profile-theme-beta-tester .public-player-hero {
+  border: 1px solid var(--beta-border);
+  border-left: 3px solid var(--beta-yellow);
+  background:
+    linear-gradient(135deg, rgba(56, 189, 248, .14), transparent 34%),
+    linear-gradient(315deg, rgba(250, 204, 21, .08), transparent 25%),
+    rgba(4, 17, 28, .78);
+  box-shadow: inset 0 1px 0 rgba(245, 251, 255, .06), 0 24px 64px rgba(0, 0, 0, .2);
+}
+
+.player-profile-page.profile-theme-beta-tester .back-link {
+  color: var(--beta-blue);
+}
+
+.player-profile-page.profile-theme-beta-tester .back-link:hover,
+.player-profile-page.profile-theme-beta-tester .back-link:focus-visible {
+  color: var(--beta-yellow);
+}
+
+.player-profile-page.profile-theme-beta-tester .public-player-identity .tapped-kicker,
+.player-profile-page.profile-theme-beta-tester :where(.eyebrow, .panel-heading p) {
+  color: var(--beta-blue);
+}
+
+.player-profile-page.profile-theme-beta-tester .public-player-identity h1 {
+  color: var(--beta-text);
+  letter-spacing: -.045em;
+  text-shadow: 2px 2px 0 rgba(56, 189, 248, .2), -1px -1px 0 rgba(250, 204, 21, .12);
+}
+
+.player-profile-page.profile-theme-beta-tester .public-player-avatar {
+  border: 2px solid var(--beta-blue);
+  border-radius: 0;
+  background: linear-gradient(145deg, #10304a, var(--beta-bg));
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, .1), 6px 6px 0 rgba(250, 204, 21, .16);
+  clip-path: polygon(13px 0, 100% 0, 100% calc(100% - 13px), calc(100% - 13px) 100%, 0 100%, 0 13px);
+}
+
+.player-profile-page.profile-theme-beta-tester .public-player-avatar > img,
+.player-profile-page.profile-theme-beta-tester .public-player-avatar > .public-player-avatar-fallback {
+  background: linear-gradient(145deg, #10304a, var(--beta-bg));
+  color: var(--beta-yellow);
+}
+
+.beta-tester-avatar-mark {
+  position: absolute;
+  z-index: 3;
+  right: -7px;
+  top: -7px;
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  border: 2px solid var(--beta-blue);
+  color: var(--beta-bg);
+  background: var(--beta-yellow);
+  filter: drop-shadow(0 5px 9px rgba(0, 0, 0, .5));
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  animation: beta-profile-signal 2.8s ease-in-out infinite;
+}
+
+.beta-tester-avatar-mark svg { width: 16px; height: 16px; stroke-width: 3; }
+
+.beta-tester-theme-badge {
+  display: flex;
+  width: max-content;
+  max-width: 100%;
+  min-height: 30px;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+  padding: 6px 12px 6px 9px;
+  border: 1px solid var(--beta-blue);
+  color: var(--beta-yellow);
+  background: linear-gradient(110deg, rgba(56, 189, 248, .16), rgba(4, 17, 28, .92));
+  box-shadow: inset 3px 0 0 var(--beta-yellow);
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: .11em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.beta-tester-theme-badge > svg { width: 14px; height: 14px; flex: 0 0 auto; color: var(--beta-yellow); stroke-width: 3; }
+.beta-tester-theme-badge > span { white-space: nowrap; }
+.beta-tester-theme-badge > small {
+  padding-left: 7px;
+  border-left: 1px solid rgba(56, 189, 248, .42);
+  color: var(--beta-muted);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .07em;
+  white-space: nowrap;
+}
+
+.player-profile-page.profile-theme-beta-tester .public-player-steam-identity {
+  border-radius: 0;
+  color: color-mix(in srgb, var(--profile-presence-color) 52%, var(--beta-text));
+  background: rgba(7, 24, 39, .92);
+}
+
+.player-profile-page.profile-theme-beta-tester .public-player-steam-identity:hover,
+.player-profile-page.profile-theme-beta-tester .public-player-steam-identity:focus-visible {
+  color: var(--beta-text);
+  background: rgba(56, 189, 248, .12);
+}
+
+.player-profile-page.profile-theme-beta-tester .public-rank-card {
+  border: 1px solid var(--beta-blue);
+  border-top: 3px solid var(--beta-yellow);
+  border-radius: 0;
+  background: linear-gradient(145deg, rgba(11, 34, 53, .96), rgba(4, 17, 28, .98));
+  box-shadow: inset 0 0 38px rgba(56, 189, 248, .09), 7px 7px 0 rgba(56, 189, 248, .08);
+}
+
+.player-profile-page.profile-theme-beta-tester .public-rank-card::after {
+  right: -54px;
+  bottom: -66px;
+  border-color: rgba(250, 204, 21, .34);
+  border-radius: 0;
+  transform: rotate(45deg);
+}
+
+.player-profile-page.profile-theme-beta-tester .public-rank-card > span {
+  color: var(--beta-yellow);
+}
+
+.player-profile-page.profile-theme-beta-tester .public-rank-card > strong,
+.player-profile-page.profile-theme-beta-tester .public-rank-card > div > small {
+  color: var(--beta-text);
+}
+
+.player-profile-page.profile-theme-beta-tester .public-rank-card > small,
+.player-profile-page.profile-theme-beta-tester .public-rank-card > div > span {
+  color: var(--beta-muted);
+}
+
+.player-profile-page.profile-theme-beta-tester .public-rank-card > div {
+  border-color: var(--beta-border);
+}
+
+.player-profile-page.profile-theme-beta-tester .button-primary {
+  border-color: var(--beta-yellow);
+  color: #111827;
+  background: var(--beta-yellow);
+  box-shadow: 4px 4px 0 rgba(56, 189, 248, .24);
+}
+
+.player-profile-page.profile-theme-beta-tester .button-primary:hover,
+.player-profile-page.profile-theme-beta-tester .button-primary:focus-visible {
+  border-color: var(--beta-blue);
+  color: #07121f;
+  background: #fde047;
+}
+
+.player-profile-page.profile-theme-beta-tester .button-secondary {
+  border-color: var(--beta-blue);
+  border-radius: 0;
+  color: var(--beta-blue);
+  background: rgba(56, 189, 248, .08);
+}
+
+.player-profile-page.profile-theme-beta-tester .button-secondary:hover,
+.player-profile-page.profile-theme-beta-tester .button-secondary:focus-visible {
+  border-color: var(--beta-yellow);
+  color: var(--beta-yellow);
+  background: rgba(250, 204, 21, .08);
+}
+
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs {
+  border-color: var(--beta-border);
+}
+
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs > div {
+  border-color: var(--beta-border);
+  border-radius: 0;
+  background: rgba(4, 17, 28, .9);
+  box-shadow: inset 3px 0 0 var(--beta-yellow);
+}
+
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs button {
+  color: var(--beta-muted);
+}
+
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs button:hover,
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs button:focus-visible {
+  color: var(--beta-yellow);
+  background: rgba(56, 189, 248, .1);
+  box-shadow: inset 0 0 0 1px var(--beta-blue);
+}
+
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs button[aria-selected="true"] {
+  color: var(--beta-text);
+  background: linear-gradient(135deg, rgba(56, 189, 248, .24), rgba(4, 17, 28, .36));
+}
+
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs button[aria-selected="true"]::after {
+  background: var(--beta-yellow);
+  box-shadow: 0 0 12px rgba(250, 204, 21, .42);
+}
+
+.player-profile-page.profile-theme-beta-tester .profile-content-tabs button > span {
+  border-color: var(--beta-border);
+  border-radius: 0;
+  color: var(--beta-yellow);
+  background: rgba(56, 189, 248, .08);
+}
+
+.player-profile-page.profile-theme-beta-tester :where(.public-player-stat-grid article, .panel, .profile-inventory-panel) {
+  border-color: var(--beta-border);
+  border-radius: 0;
+  background: linear-gradient(145deg, rgba(11, 34, 53, .78), rgba(4, 17, 28, .92));
+  box-shadow: inset 3px 0 0 rgba(56, 189, 248, .7), inset 0 1px 0 rgba(245, 251, 255, .035);
+}
+
+.player-profile-page.profile-theme-beta-tester .public-player-stat-grid article:nth-child(even) {
+  box-shadow: inset 3px 0 0 rgba(250, 204, 21, .78), inset 0 1px 0 rgba(245, 251, 255, .035);
+}
+
+.player-profile-page.profile-theme-beta-tester .public-player-stat-grid article > span:first-child,
+.player-profile-page.profile-theme-beta-tester .public-player-stat-grid .stat-foot,
+.player-profile-page.profile-theme-beta-tester :where(.empty-copy, .profile-settings-view-heading > p:last-child, .profile-inventory-heading p:last-child) {
+  color: var(--beta-muted);
+}
+
+.player-profile-page.profile-theme-beta-tester .public-player-stat-grid strong,
+.player-profile-page.profile-theme-beta-tester :where(.panel-heading h2, .panel-heading h3, .profile-settings-view-heading h2, .profile-inventory-heading h2) {
+  color: var(--beta-text);
+}
+
+.player-profile-page.profile-theme-beta-tester .public-player-stat-grid svg,
+.player-profile-page.profile-theme-beta-tester .combat-stat-grid svg {
+  color: rgba(56, 189, 248, .7);
+}
+
+.player-profile-page.profile-theme-beta-tester :where(.group-role-section, .combat-stat-grid, .hit-map-list) {
+  border-color: var(--beta-border);
+  border-radius: 0;
+  background: rgba(56, 189, 248, .13);
+}
+
+.player-profile-page.profile-theme-beta-tester :where(.group-membership-cards article, .combat-stat-grid > div, .hit-map-list > div) {
+  border-radius: 0;
+  background-color: rgba(4, 17, 28, .88);
+  transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease;
+}
+
+.player-profile-page.profile-theme-beta-tester :where(.group-membership-cards article, .combat-stat-grid > div, .hit-map-list > div):hover {
+  border-color: var(--beta-yellow);
+  background-color: rgba(11, 34, 53, .98);
+  box-shadow: inset 3px 0 0 var(--beta-blue), 0 0 18px rgba(56, 189, 248, .1);
+}
+
+.player-profile-page.profile-theme-beta-tester :where(.group-role-section h3, .combat-stat-grid span, .hit-map-list span, .hit-map-figure figcaption, .hit-map-damage) {
+  color: var(--beta-muted);
+}
+
+.player-profile-page.profile-theme-beta-tester .hit-map-panel::before {
+  background: radial-gradient(circle at 60% 45%, rgba(56, 189, 248, .13), transparent 62%);
+}
+
+.player-profile-page.profile-theme-beta-tester .hit-map-figure {
+  border-color: var(--beta-border);
+}
+
+.player-profile-page.profile-theme-beta-tester .hit-map-outline {
+  stroke: rgba(184, 207, 223, .66);
+}
+
+.player-profile-page.profile-theme-beta-tester .rank-progress-track {
+  background: rgba(56, 189, 248, .18);
+}
+
+.player-profile-page.profile-theme-beta-tester .rank-progress > div:first-child {
+  color: var(--beta-text);
+}
+
+.player-profile-page.profile-theme-beta-tester .rank-progress > div:first-child strong {
+  color: var(--beta-muted);
+}
+
+.player-profile-page.profile-theme-beta-tester :where(.record-list li, .hit-map-damage) {
+  border-color: var(--beta-border);
+}
+
+.player-profile-page.profile-theme-beta-tester :where(.settings-choice, .settings-theme-card, .settings-upcoming-grid article, .settings-save-bar) {
+  border-color: var(--beta-border);
+  border-radius: 0;
+  background: rgba(4, 17, 28, .86);
+}
+
+.player-profile-page.profile-theme-beta-tester :where(.settings-choice, .settings-theme-card):hover,
+.player-profile-page.profile-theme-beta-tester :where(.settings-choice, .settings-theme-card):focus-within {
+  border-color: var(--beta-blue);
+  background: rgba(56, 189, 248, .1);
+}
+
+.player-profile-page.profile-theme-beta-tester :where(.settings-choice, .settings-theme-card).is-selected {
+  border-color: var(--beta-yellow);
+  background: linear-gradient(135deg, rgba(250, 204, 21, .1), rgba(56, 189, 248, .08));
+  box-shadow: inset 3px 0 0 var(--beta-yellow);
+}
+
+.player-profile-page.profile-theme-beta-tester :where(.settings-choice-icon, .settings-theme-preview) {
+  border-color: var(--beta-border);
+  border-radius: 0;
+  color: var(--beta-yellow);
+  background: rgba(56, 189, 248, .1);
+}
+
+.player-profile-page.profile-theme-beta-tester :where(.settings-choice input, .settings-theme-card input) {
+  accent-color: var(--beta-yellow);
+}
+
+.player-profile-page.profile-theme-beta-tester .profile-inventory-artwork-placeholder,
+.player-profile-page.profile-theme-beta-tester .profile-inventory-artwork {
+  border-radius: 0;
+  background-color: var(--beta-bg);
+}
+
+.player-profile-page.profile-theme-beta-tester .profile-inventory-artwork:hover,
+.player-profile-page.profile-theme-beta-tester .profile-inventory-artwork:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--rarity-accent) 34%, transparent), 6px 6px 0 rgba(56, 189, 248, .16);
+  transform: none;
+}
+
+.player-profile-page.profile-theme-beta-tester .profile-inventory-tooltip {
+  border-radius: 0;
+  color: var(--beta-text);
+  background: rgba(4, 17, 28, .97);
+}
+
+.player-profile-page.profile-theme-beta-tester .profile-inventory-empty {
+  border-color: var(--beta-border);
+  color: var(--beta-muted);
+  background: rgba(4, 17, 28, .7);
+}
+
+@media (max-width: 520px) {
+  .beta-tester-avatar-mark {
+    right: -5px;
+    top: -5px;
+    width: 25px;
+    height: 25px;
+  }
+
+  .beta-tester-avatar-mark svg { width: 13px; height: 13px; }
+  .beta-tester-theme-badge { gap: 5px; padding-right: 8px; font-size: 8px; letter-spacing: .08em; }
+  .beta-tester-theme-badge > small { padding-left: 5px; font-size: 7px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player-profile-page.profile-theme-beta-tester *,
+  .player-profile-page.profile-theme-beta-tester *::before,
+  .player-profile-page.profile-theme-beta-tester *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .beta-tester-avatar-mark,
+  .beta-tester-theme-badge {
+    border: 2px solid ButtonText;
+    color: ButtonText;
+    background: Canvas;
+    box-shadow: none;
+    filter: none;
+  }
 }

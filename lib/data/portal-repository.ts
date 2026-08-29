@@ -11,6 +11,16 @@ import mysql, {
 
 import { normalizeVipGroup } from "@/lib/content/group-presentation";
 import { isTrustedOwnedProfileThemeKey } from "@/lib/content/profile-themes";
+import { isAssignedToConfiguredGameServer } from "@/lib/admin/server-scope";
+import {
+  ECONOMY_ITEM_TYPES,
+  ECONOMY_MAX_RARITY_RANK,
+  ECONOMY_SPECIAL_RARITY_RANK,
+  economyRarityName,
+  isCustomProductItemType,
+  isEconomyItemType,
+  type EconomyItemType,
+} from "@/lib/economy/item-taxonomy";
 import {
   adjustedMarketplaceEuroCents,
   deriveMarketplacePriceIdentity,
@@ -150,6 +160,7 @@ type PortalSessionRow = RowDataPacket & {
 type PlayerSettingsRow = RowDataPacket & {
   inventory_visibility: string;
   active_theme_id: number | string | null;
+  active_theme_item_id: string | null;
 };
 
 type ProfileThemeRow = RowDataPacket & {
@@ -158,6 +169,7 @@ type ProfileThemeRow = RowDataPacket & {
   display_name: string;
   description: string;
   preview_image_url: string | null;
+  inventory_item_id: string;
   acquired_at: Date | string;
 };
 
@@ -440,6 +452,7 @@ export type InventoryVisibility = "private" | "public";
 
 export type OwnedProfileTheme = {
   id: number;
+  inventoryItemId: string;
   key: string;
   displayName: string;
   description: string;
@@ -451,6 +464,7 @@ export type PlayerSettings = {
   steamId: string;
   inventoryVisibility: InventoryVisibility;
   activeThemeId: number | null;
+  activeThemeItemId: string | null;
   activeTheme: OwnedProfileTheme | null;
   ownedThemes: OwnedProfileTheme[];
 };
@@ -674,6 +688,14 @@ function toGroups(value: unknown) {
 
 function toAdminMemberships(value: unknown): GroupMembership[] {
   return toGroups(value).map((name) => ({ name, expiresAt: null }));
+}
+
+function toScopedAdminMemberships(
+  row: { Groups?: unknown; Servers?: unknown } | null | undefined,
+) {
+  return isAssignedToConfiguredGameServer(toGroups(row?.Servers))
+    ? toAdminMemberships(row?.Groups)
+    : [];
 }
 
 function toVipMemberships(
@@ -1259,8 +1281,8 @@ export async function getPlayerDashboard(
       "SELECT account_id, name, lastvisit, sid, `group`, expires FROM vip_users WHERE account_id = ? AND sid = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) ORDER BY `group`",
       [toAccountId(steamId), getVipServerId()],
     ),
-    safeAdminQuery<RowDataPacket & { Groups: string }>(
-      "SELECT Groups FROM admins WHERE SteamId64 = ? LIMIT 1",
+    safeAdminQuery<RowDataPacket & { Groups: string; Servers: string }>(
+      "SELECT Groups, Servers FROM admins WHERE SteamId64 = ? LIMIT 1",
       [steamId],
     ),
     safeAdminQuery<BanRow>(
@@ -1323,7 +1345,7 @@ export async function getPlayerDashboard(
     gameWins: Number(player?.game_wins ?? 0),
     gameLosses: Number(player?.game_losses ?? 0),
     vipGroups: toVipMemberships(vipRows),
-    adminGroups: toAdminMemberships(adminRows[0]?.Groups),
+    adminGroups: toScopedAdminMemberships(adminRows[0]),
     bans: banRows.map((row) => ({
       id: Number(row.Id),
       reason: row.Reason,
@@ -1376,8 +1398,8 @@ export async function getPublicPlayerProfile(
       "SELECT account_id, name, lastvisit, sid, `group`, expires FROM vip_users WHERE account_id = ? AND sid = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) ORDER BY `group`",
       [toAccountId(steamId), getVipServerId()],
     ),
-    safeAdminQuery<RowDataPacket & { Groups: string }>(
-      "SELECT Groups FROM admins WHERE SteamId64 = ? LIMIT 1",
+    safeAdminQuery<RowDataPacket & { Groups: string; Servers: string }>(
+      "SELECT Groups, Servers FROM admins WHERE SteamId64 = ? LIMIT 1",
       [steamId],
     ),
     safeAdminQuery<RowDataPacket & { ExpiresAt: number }>(
@@ -1414,7 +1436,7 @@ export async function getPublicPlayerProfile(
     noscopes: Number(player.noscopes ?? 0),
     hitStats: toHitboxStats(hitRows[0]),
     vipGroups: toVipMemberships(vipRows),
-    adminGroups: toAdminMemberships(adminRows[0]?.Groups),
+    adminGroups: toScopedAdminMemberships(adminRows[0]),
     isBanned,
   };
 }
@@ -1451,12 +1473,65 @@ async function getGroupMembershipsForPlayers(steamIds: string[]) {
       vipGroups: toVipMemberships(
         vipRows.filter((row) => String(row.account_id) === accountId),
       ),
-      adminGroups: toAdminMemberships(
-        adminRows.find((row) => String(row.SteamId64) === steamId)?.Groups,
+      adminGroups: toScopedAdminMemberships(
+        adminRows.find((row) => String(row.SteamId64) === steamId),
       ),
     });
   }
   return result;
+}
+
+/**
+ * Resolves authoritative external membership for Founder-managed reward
+ * backfills. Admins.Core memberships are limited to this configured server;
+ * VIPCore is already scoped by its server ID.
+ */
+export async function getExternalIdentityGroupMemberSteamIds(input: {
+  sourceType: "admins_core" | "vipcore";
+  externalKey: string;
+}) {
+  const pool = getGamePool();
+  if (!pool) throw new Error("The game database is not configured.");
+  const externalKey = input.externalKey.normalize("NFKC").trim();
+  if (!externalKey || externalKey.length > 100 || /[\r\n\0]/.test(externalKey)) {
+    throw new Error("The external identity group key is invalid.");
+  }
+
+  if (input.sourceType === "vipcore") {
+    const [rows] = await pool.query<
+      Array<RowDataPacket & { account_id: string | number }>
+    >(
+      "SELECT DISTINCT account_id FROM vip_users WHERE sid = ? AND `group` = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) ORDER BY account_id",
+      [getVipServerId(), externalKey],
+    );
+    return [
+      ...new Set(
+        rows
+          .map((row) => vipAccountToSteamId(String(row.account_id)))
+          .filter(isSteamId),
+      ),
+    ];
+  }
+
+  const [rows] = await pool.query<AdminListRow[]>(
+    "SELECT Id, SteamId64, Username, Permissions, Groups, Immunity, Servers FROM admins ORDER BY SteamId64",
+  );
+  const groupKey = externalKey.toLocaleLowerCase("en-US");
+  return [
+    ...new Set(
+      rows
+        .filter((row) =>
+          isAssignedToConfiguredGameServer(toGroups(row.Servers)),
+        )
+        .filter((row) =>
+          toGroups(row.Groups).some(
+            (group) => group.toLocaleLowerCase("en-US") === groupKey,
+          ),
+        )
+        .map((row) => String(row.SteamId64))
+        .filter(isSteamId),
+    ),
+  ];
 }
 
 function leaderboardFilter(query: string) {
@@ -2016,6 +2091,7 @@ function inventoryVisibility(value: unknown): InventoryVisibility {
 function toOwnedProfileTheme(row: ProfileThemeRow): OwnedProfileTheme {
   return {
     id: Number(row.id),
+    inventoryItemId: String(row.inventory_item_id),
     key: String(row.theme_key),
     displayName: String(row.display_name),
     description: String(row.description),
@@ -2074,6 +2150,7 @@ export async function getPlayerSettings(
     steamId,
     inventoryVisibility: "private",
     activeThemeId: null,
+    activeThemeItemId: null,
     activeTheme: null,
     ownedThemes: [],
   };
@@ -2083,34 +2160,50 @@ export async function getPlayerSettings(
   try {
     const [settingsRows, themeRows] = await Promise.all([
       pool.query<PlayerSettingsRow[]>(
-        "SELECT inventory_visibility, active_theme_id FROM portal_player_settings WHERE steam_id = ? LIMIT 1",
+        "SELECT inventory_visibility, active_theme_id, active_theme_item_id FROM portal_player_settings WHERE steam_id = ? LIMIT 1",
         [steamId],
       ),
       pool.query<ProfileThemeRow[]>(
-        "SELECT t.id, t.theme_key, t.display_name, t.description, t.preview_image_url, o.acquired_at " +
-          "FROM portal_player_theme_ownership AS o " +
-          "INNER JOIN portal_profile_themes AS t ON t.id = o.theme_id AND t.enabled = TRUE " +
-          "WHERE o.steam_id = ? ORDER BY t.display_name ASC, t.id ASC",
+        "SELECT t.id, t.theme_key, t.display_name, t.description, t.preview_image_url, i.id AS inventory_item_id, i.acquired_at " +
+          "FROM portal_inventory_items AS i " +
+          "INNER JOIN portal_profile_themes AS t ON t.catalogue_id = i.catalogue_id AND t.enabled = TRUE " +
+          "LEFT JOIN portal_player_settings AS s ON s.steam_id = i.owner_steam_id AND s.active_theme_item_id = i.id " +
+          "WHERE i.owner_steam_id = ? AND i.item_type = 'profile_theme' AND i.state = 'available' " +
+          "ORDER BY (s.active_theme_item_id IS NOT NULL) DESC, i.acquired_at DESC, i.id DESC",
         [steamId],
       ),
     ]);
     const settings = settingsRows[0][0];
-    const ownedThemes = themeRows[0]
+    const ownedThemesByKey = new Map<string, OwnedProfileTheme>();
+    for (const theme of themeRows[0]
       .map(toOwnedProfileTheme)
-      .filter((theme) => isTrustedOwnedProfileThemeKey(theme.key));
+      .filter((candidate) => isTrustedOwnedProfileThemeKey(candidate.key))) {
+      if (!ownedThemesByKey.has(theme.key)) ownedThemesByKey.set(theme.key, theme);
+    }
+    const ownedThemes = [...ownedThemesByKey.values()].sort((left, right) =>
+      left.displayName.localeCompare(right.displayName),
+    );
     const requestedThemeId = settings?.active_theme_id
       ? Number(settings.active_theme_id)
       : null;
+    const requestedThemeItemId = settings?.active_theme_item_id
+      ? String(settings.active_theme_item_id)
+      : null;
     const activeTheme =
-      requestedThemeId === null
+      requestedThemeId === null || requestedThemeItemId === null
         ? null
-        : (ownedThemes.find((theme) => theme.id === requestedThemeId) ?? null);
+        : (ownedThemes.find(
+            (theme) =>
+              theme.id === requestedThemeId &&
+              theme.inventoryItemId === requestedThemeItemId,
+          ) ?? null);
     return {
       steamId,
       inventoryVisibility: inventoryVisibility(
         settings?.inventory_visibility,
       ),
       activeThemeId: activeTheme?.id ?? null,
+      activeThemeItemId: activeTheme?.inventoryItemId ?? null,
       activeTheme,
       ownedThemes,
     };
@@ -2132,8 +2225,8 @@ export async function getPlayerProfileThemeKey(
       Array<RowDataPacket & { theme_key: string }>
     >(
       "SELECT t.theme_key FROM portal_player_settings AS s " +
-        "INNER JOIN portal_player_theme_ownership AS o ON o.steam_id = s.steam_id AND o.theme_id = s.active_theme_id " +
-        "INNER JOIN portal_profile_themes AS t ON t.id = o.theme_id AND t.enabled = TRUE " +
+        "INNER JOIN portal_inventory_items AS i ON i.id = s.active_theme_item_id AND i.owner_steam_id = s.steam_id AND i.item_type = 'profile_theme' AND i.state = 'available' " +
+        "INNER JOIN portal_profile_themes AS t ON t.id = s.active_theme_id AND t.catalogue_id = i.catalogue_id AND t.enabled = TRUE " +
         "WHERE s.steam_id = ? LIMIT 1",
       [steamId],
     );
@@ -2147,38 +2240,35 @@ export async function getPlayerProfileThemeKey(
 export async function updatePlayerSettings(input: {
   steamId: string;
   inventoryVisibility: InventoryVisibility;
-  activeThemeId: number | null;
+  activeThemeItemId: string | null;
 }): Promise<PlayerSettings> {
   const steamId = economySteamId(input.steamId);
+  const activeThemeItemId = input.activeThemeItemId
+    ? economyItemId(input.activeThemeItemId, "Profile Theme item ID")
+    : null;
   if (
     input.inventoryVisibility !== "private" &&
     input.inventoryVisibility !== "public"
   ) {
     economyError("invalid_input", "Choose a valid inventory visibility.");
   }
-  if (
-    input.activeThemeId !== null &&
-    (!Number.isSafeInteger(input.activeThemeId) || input.activeThemeId < 1)
-  ) {
-    economyError("invalid_input", "Choose a valid profile theme.");
-  }
-
   const pool = economyStorageRequired();
   const connection = await pool.getConnection();
+  let activeThemeId: number | null = null;
   try {
     await connection.beginTransaction();
     await connection.execute(
       "INSERT INTO portal_steam_accounts (steam_id) VALUES (?) ON DUPLICATE KEY UPDATE updated_at = CURRENT_TIMESTAMP",
       [steamId],
     );
-    if (input.activeThemeId !== null) {
+    if (activeThemeItemId !== null) {
       const [themeRows] = await connection.query<
-        Array<RowDataPacket & { theme_key: string }>
+        Array<RowDataPacket & { id: number | string; theme_key: string }>
       >(
-        "SELECT t.theme_key FROM portal_player_theme_ownership AS o " +
-          "INNER JOIN portal_profile_themes AS t ON t.id = o.theme_id AND t.enabled = TRUE " +
-          "WHERE o.steam_id = ? AND o.theme_id = ? LIMIT 1 FOR UPDATE",
-        [steamId, input.activeThemeId],
+        "SELECT t.id, t.theme_key FROM portal_inventory_items AS i " +
+          "INNER JOIN portal_profile_themes AS t ON t.catalogue_id = i.catalogue_id AND t.enabled = TRUE " +
+          "WHERE i.id = ? AND i.owner_steam_id = ? AND i.item_type = 'profile_theme' AND i.state = 'available' LIMIT 1 FOR UPDATE",
+        [activeThemeItemId, steamId],
       );
       if (
         !themeRows.length ||
@@ -2189,12 +2279,18 @@ export async function updatePlayerSettings(input: {
           "That profile theme is not available on your account.",
         );
       }
+      activeThemeId = Number(themeRows[0].id);
+      await connection.execute(
+        "INSERT INTO portal_player_theme_ownership (steam_id, theme_id, source_type, source_reference) VALUES (?, ?, 'inventory', ?) " +
+          "ON DUPLICATE KEY UPDATE source_type = VALUES(source_type), source_reference = VALUES(source_reference)",
+        [steamId, activeThemeId, activeThemeItemId],
+      );
     }
 
     await connection.execute(
-      "INSERT INTO portal_player_settings (steam_id, inventory_visibility, active_theme_id) VALUES (?, ?, ?) " +
-        "ON DUPLICATE KEY UPDATE inventory_visibility = VALUES(inventory_visibility), active_theme_id = VALUES(active_theme_id)",
-      [steamId, input.inventoryVisibility, input.activeThemeId],
+      "INSERT INTO portal_player_settings (steam_id, inventory_visibility, active_theme_id, active_theme_item_id) VALUES (?, ?, ?, ?) " +
+        "ON DUPLICATE KEY UPDATE inventory_visibility = VALUES(inventory_visibility), active_theme_id = VALUES(active_theme_id), active_theme_item_id = VALUES(active_theme_item_id)",
+      [steamId, input.inventoryVisibility, activeThemeId, activeThemeItemId],
     );
     await connection.execute(
       "INSERT INTO portal_audit_events (actor_type, actor_id, action, target_type, target_id, metadata) VALUES ('player', ?, 'player.settings.updated', 'player-settings', ?, ?)",
@@ -2203,7 +2299,8 @@ export async function updatePlayerSettings(input: {
         steamId,
         JSON.stringify({
           inventoryVisibility: input.inventoryVisibility,
-          activeThemeId: input.activeThemeId,
+          activeThemeId,
+          activeThemeItemId,
         }),
       ],
     );
@@ -2221,7 +2318,8 @@ export async function updatePlayerSettings(input: {
   return {
     ...settings,
     inventoryVisibility: input.inventoryVisibility,
-    activeThemeId: input.activeThemeId,
+    activeThemeId,
+    activeThemeItemId,
   };
 }
 
@@ -2770,19 +2868,7 @@ export async function removeStaffVip(input: {
 // consumes only the visual/chat queue created below.
 // ---------------------------------------------------------------------------
 
-export type EconomyItemType =
-  | "skin"
-  | "knife"
-  | "glove"
-  | "crate"
-  | "capsule"
-  | "nametag"
-  | "sticker"
-  | "agent"
-  | "music_kit"
-  | "keychain"
-  | "patch"
-  | "graffiti";
+export type { EconomyItemType } from "@/lib/economy/item-taxonomy";
 
 export type EconomyItemState =
   "available" | "escrowed" | "attached" | "consumed" | "revoked";
@@ -2936,8 +3022,6 @@ export type EconomyCatalogueFilter = {
   // retire a product from sale without deleting its existing inventory or
   // staff/redeem visibility.
   marketOnly?: boolean;
-  marketCategory?: "special";
-  excludeMarketCategory?: "special";
   // A requested float range. Catalogue entries without an explicit range are
   // treated as the normal [0, 1] range for skin-like items.
   minFloat?: number;
@@ -3061,6 +3145,8 @@ export type EconomyInventoryCatalogue = {
   id: number;
   catalogueKey: string | null;
   marketHashName: string | null;
+  itemType: EconomyItemType;
+  rarityRank: number;
   displayName: string;
   metadata: Record<string, unknown>;
   enabled: boolean;
@@ -3081,6 +3167,7 @@ export type EconomyInventoryItem = {
   stattrakCount: number;
   nametag: string | null;
   rarityRank: number;
+  tradable: boolean;
   state: EconomyItemState;
   attributes: Record<string, unknown>;
   source: Record<string, unknown>;
@@ -3108,6 +3195,7 @@ export type EconomyInventoryFilter = {
   rarityRanks?: number[];
   states?: EconomyItemState[];
   includeAttached?: boolean;
+  tradableOnly?: boolean;
   page?: number;
   pageSize?: number;
 };
@@ -3196,12 +3284,12 @@ export type EconomyTradeItemPreview = {
   itemType: EconomyItemType;
   displayName: string;
   rarityRank: number;
+  tradable: boolean;
   floatValue: number | null;
   stattrak: boolean;
   stattrakCount: number;
   nametag: string | null;
   imageUrl: string | null;
-  specialKind: string | null;
 };
 
 export type TradePartnerInventoryItem = EconomyTradeItemPreview & {
@@ -3297,6 +3385,20 @@ export type ActivateVipMembershipItemResult = {
   tier: string;
   durationMinutes: number;
   expiresAt: number;
+};
+
+export type EquipProfileThemeItemInput = {
+  steamId: string;
+  itemId: string;
+  idempotencyKey: string;
+};
+
+export type EquipProfileThemeItemResult = {
+  itemId: string;
+  catalogueId: number;
+  themeId: number;
+  themeKey: string;
+  displayName: string;
 };
 
 export type SellEconomyItemInput = {
@@ -3746,6 +3848,7 @@ export type StaffGrantEconomyItemInput = {
   catalogueId?: number;
   customItem?: StaffCustomEconomyItem | null;
   customization?: StaffEconomyItemCustomization;
+  tradable?: boolean;
   stickers?: StaffStickerGrant[];
   reason: string;
   idempotencyKey: string;
@@ -3969,6 +4072,7 @@ type EconomyInventoryRow = RowDataPacket & {
   stattrak_count: number | string;
   nametag: string | null;
   rarity_rank: number | string;
+  tradable: number | boolean;
   state: string;
   attributes: unknown;
   source: unknown;
@@ -4196,26 +4300,12 @@ function economyNullableRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function economyItemType(value: string): EconomyItemType {
-  const known: EconomyItemType[] = [
-    "skin",
-    "knife",
-    "glove",
-    "crate",
-    "capsule",
-    "nametag",
-    "sticker",
-    "agent",
-    "music_kit",
-    "keychain",
-    "patch",
-    "graffiti",
-  ];
-  if (!known.includes(value as EconomyItemType))
+  if (!isEconomyItemType(value))
     economyError(
       "invalid_database_value",
       "The token economy contains an unknown item type.",
     );
-  return value as EconomyItemType;
+  return value;
 }
 
 function economyItemState(value: string): EconomyItemState {
@@ -4864,23 +4954,6 @@ function economyPriceIsLegacySteam(price: EconomyCataloguePrice | null) {
   return Boolean(price?.source.toLocaleLowerCase("en-US").startsWith("steam"));
 }
 
-function economyRarityName(rarityRank: number) {
-  // These are the Valve economy rarity ranks used by the imported catalogue.
-  // Keep rank zero useful for staff-created/general items that do not have an
-  // assigned Counter-Strike rarity yet.
-  const names: Record<number, string> = {
-    0: "Standard",
-    1: "Consumer Grade",
-    2: "Industrial Grade",
-    3: "Mil-Spec Grade",
-    4: "Restricted",
-    5: "Classified",
-    6: "Covert",
-    7: "Extraordinary",
-  };
-  return names[rarityRank] ?? `Rarity ${rarityRank}`;
-}
-
 function economyLootEntryRarityRank(
   _attributes: Record<string, unknown>,
   fallback: number,
@@ -5085,6 +5158,7 @@ function toEconomyInventoryItem(
     ),
     nametag: row.nametag ? String(row.nametag) : null,
     rarityRank,
+    tradable: economyBoolean(row.tradable),
     state: economyItemState(String(row.state)),
     attributes,
     source: economyRecord(row.source),
@@ -5100,6 +5174,8 @@ function toEconomyInventoryItem(
             marketHashName: row.market_hash_name
               ? String(row.market_hash_name)
               : null,
+            itemType,
+            rarityRank: catalogueRarityRank,
             displayName,
             metadata: economyRecord(row.catalogue_metadata),
             enabled: economyBoolean(row.catalogue_enabled),
@@ -5161,8 +5237,16 @@ const disabledMarketplaceItemTypes = new Set<EconomyItemType>([
   "music_kit",
 ]);
 
-export function isEconomyVipMembership(item: Pick<EconomyCatalogueItem, "metadata">) {
-  return economyMetadataString(item.metadata, "specialKind") === "vip_membership";
+export function isEconomyVipMembership(
+  item: Pick<EconomyCatalogueItem, "itemType">,
+) {
+  return item.itemType === "vip_membership";
+}
+
+export function isEconomyProfileTheme(
+  item: Pick<EconomyCatalogueItem, "itemType">,
+) {
+  return item.itemType === "profile_theme";
 }
 
 export function isEconomyMarketplacePurchasable(item: EconomyCatalogueItem) {
@@ -5600,7 +5684,7 @@ const economyCrateSelect =
   "INNER JOIN portal_loot_tables AS l ON l.container_catalogue_id = c.id AND l.table_type = 'container' AND l.enabled = TRUE ";
 
 const economyInventorySelect =
-  "SELECT i.id, i.owner_steam_id, i.catalogue_id, i.item_type, i.definition_index, i.paintkit, i.seed, i.float_value, i.stattrak, i.stattrak_count, i.nametag, i.rarity_rank, i.state, i.attributes, i.source, i.acquired_at, i.consumed_at, i.updated_at, " +
+  "SELECT i.id, i.owner_steam_id, i.catalogue_id, i.item_type, i.definition_index, i.paintkit, i.seed, i.float_value, i.stattrak, i.stattrak_count, i.nametag, i.rarity_rank, i.tradable, i.state, i.attributes, i.source, i.acquired_at, i.consumed_at, i.updated_at, " +
   "c.catalogue_key, c.market_hash_name, c.display_name, c.rarity_rank AS catalogue_rarity_rank, c.metadata AS catalogue_metadata, c.enabled AS catalogue_enabled, " +
   "p.id AS price_id, p.market_price_eur_cents, p.token_price, p.price_source, p.source_reference, p.observed_at " +
   "FROM portal_inventory_items AS i " +
@@ -5612,7 +5696,7 @@ function economyFilterItemTypes(values: EconomyItemType[] | undefined) {
   const unique = [
     ...new Set(values.map((value) => economyItemType(String(value)))),
   ];
-  if (unique.length > 12)
+  if (unique.length > ECONOMY_ITEM_TYPES.length)
     economyError("invalid_input", "Too many item types were requested.");
   return unique;
 }
@@ -5621,9 +5705,12 @@ function economyFilterRarityRanks(values: number[] | undefined) {
   if (!values) return [];
   const unique = [...new Set(values)];
   if (
-    unique.length > 16 ||
+    unique.length > ECONOMY_MAX_RARITY_RANK + 1 ||
     unique.some(
-      (value) => !Number.isSafeInteger(value) || value < 0 || value > 255,
+      (value) =>
+        !Number.isSafeInteger(value) ||
+        value < 0 ||
+        value > ECONOMY_MAX_RARITY_RANK,
     )
   ) {
     economyError("invalid_input", "The rarity filter is invalid.");
@@ -5883,11 +5970,6 @@ export async function getEconomyCatalogue(
   if (filter.marketOnly) {
     where.push("c.item_type NOT IN ('graffiti', 'patch', 'nametag', 'music_kit')");
     where.push("COALESCE(JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.marketEnabled')), 'true') <> 'false'");
-  }
-  if (filter.marketCategory === "special") {
-    where.push("JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.marketCategory')) = 'special'");
-  } else if (filter.excludeMarketCategory === "special") {
-    where.push("COALESCE(JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.marketCategory')), '') <> 'special'");
   }
   if (itemTypes.length) {
     where.push("c.item_type IN (" + itemTypes.map(() => "?").join(", ") + ")");
@@ -7026,6 +7108,7 @@ export async function getPlayerEconomyInventory(
     where.push("i.item_type IN (" + itemTypes.map(() => "?").join(", ") + ")");
     values.push(...itemTypes);
   }
+  if (filter.tradableOnly) where.push("i.tradable = TRUE");
   if (rarityRanks.length) {
     where.push(
       economyInventoryPresentationRaritySql +
@@ -7152,6 +7235,7 @@ export async function getTradePartnerInventory(
   const inventory = await getPlayerEconomyInventory(partnerSteamId, {
     query: filter.query,
     states: ["available"],
+    tradableOnly: true,
     page: paging.page,
     pageSize: paging.pageSize,
   });
@@ -7555,6 +7639,7 @@ type EconomyItemCreation = {
   rarityRank?: number;
   customItem?: StaffCustomEconomyItem;
   customization?: StaffEconomyItemCustomization;
+  tradable?: boolean;
   source: Record<string, unknown>;
   actorSteamId: string | null;
   idempotencyKey: string;
@@ -7574,6 +7659,7 @@ type CreatedEconomyItem = {
   stattrakCount: number;
   nametag: string | null;
   rarityRank: number;
+  tradable: boolean;
   displayName: string;
   attributes: Record<string, unknown>;
 };
@@ -7589,6 +7675,12 @@ function economyCustomItem(input: StaffCustomEconomyItem | undefined) {
     economyError(
       "incompatible_item",
       "Custom containers must be catalogue-backed so they always have an active loot table.",
+    );
+  }
+  if (isCustomProductItemType(itemType)) {
+    economyError(
+      "incompatible_item",
+      "VIP memberships and Profile Themes must use a trusted Special catalogue product.",
     );
   }
   const displayName = economyText(
@@ -7608,6 +7700,12 @@ function economyCustomItem(input: StaffCustomEconomyItem | undefined) {
     input.rarityRank === undefined
       ? 0
       : economyNumber(input.rarityRank, "Custom rarity rank");
+  if (rarityRank > ECONOMY_MAX_RARITY_RANK) {
+    economyError(
+      "invalid_input",
+      `Custom rarity rank must be between 0 and ${ECONOMY_MAX_RARITY_RANK}.`,
+    );
+  }
   return {
     itemType,
     displayName,
@@ -7674,10 +7772,14 @@ async function createEconomyInventoryItem(
   const nametag = economyNullableText(requested.nametag, "Name tag", 128);
   const attributes = { ...baseMetadata, ...(requested.attributes ?? {}) };
   if (!catalogue) attributes.displayName = displayName;
+  if (!catalogue && rarityRank === ECONOMY_SPECIAL_RARITY_RANK) {
+    attributes.customProduct = true;
+  }
+  const tradable = input.tradable ?? true;
   const id = randomUUID().toLowerCase();
 
   await connection.execute(
-    "INSERT INTO portal_inventory_items (id, owner_steam_id, catalogue_id, item_type, definition_index, paintkit, seed, float_value, stattrak, stattrak_count, nametag, rarity_rank, state, attributes, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'available', ?, ?)",
+    "INSERT INTO portal_inventory_items (id, owner_steam_id, catalogue_id, item_type, definition_index, paintkit, seed, float_value, stattrak, stattrak_count, nametag, rarity_rank, tradable, state, attributes, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'available', ?, ?)",
     [
       id,
       ownerSteamId,
@@ -7691,6 +7793,7 @@ async function createEconomyInventoryItem(
       stattrakCount,
       nametag,
       rarityRank,
+      tradable,
       JSON.stringify(attributes),
       JSON.stringify(input.source),
     ],
@@ -7704,6 +7807,7 @@ async function createEconomyInventoryItem(
     lineKey: input.lineKey,
     afterState: {
       ownerSteamId,
+      tradable,
       state: "available",
       nametag,
       stattrak,
@@ -7725,6 +7829,7 @@ async function createEconomyInventoryItem(
     stattrakCount,
     nametag,
     rarityRank,
+    tradable,
     displayName,
     attributes,
   };
@@ -7733,6 +7838,7 @@ async function createEconomyInventoryItem(
 function economyInventorySnapshot(item: EconomyInventoryItem) {
   return {
     ownerSteamId: item.ownerSteamId,
+    tradable: item.tradable,
     state: item.state,
     seed: item.seed,
     floatValue: item.floatValue,
@@ -7771,6 +7877,30 @@ async function moveAttachedStickersWithWeapon(
       ")",
     [newOwnerSteamId, ...weaponItemIds],
   );
+}
+
+async function requireTradableAttachedStickers(
+  connection: PoolConnection,
+  weaponItemIds: string[],
+) {
+  if (!weaponItemIds.length) return;
+  const placeholders = weaponItemIds.map(() => "?").join(", ");
+  const [rows] = await connection.query<
+    Array<RowDataPacket & { id: string }>
+  >(
+    "SELECT sticker.id FROM portal_inventory_items AS sticker " +
+      "INNER JOIN portal_inventory_item_stickers AS attachment ON attachment.sticker_item_id = sticker.id " +
+      "WHERE attachment.weapon_item_id IN (" +
+      placeholders +
+      ") AND sticker.tradable = FALSE ORDER BY sticker.id FOR UPDATE",
+    weaponItemIds,
+  );
+  if (rows.length) {
+    economyError(
+      "item_not_tradable",
+      "Detach account-bound stickers before transferring this weapon.",
+    );
+  }
 }
 
 async function getEconomyPlayerDisplayName(steamId: string) {
@@ -8380,8 +8510,11 @@ export async function createStaffCustomCrate(
 ): Promise<CreateStaffCustomCrateResult> {
   const displayName = economyText(input.displayName, "Custom crate name", 160);
   const rarityRank = economyNumber(input.rarityRank, "Custom crate rarity");
-  if (rarityRank > 7)
-    economyError("invalid_input", "Custom crate rarity must be between 0 and 7.");
+  if (rarityRank > ECONOMY_MAX_RARITY_RANK)
+    economyError(
+      "invalid_input",
+      `Custom crate rarity must be between 0 and ${ECONOMY_MAX_RARITY_RANK}.`,
+    );
   const directPriceTokens = economyAmount(
     input.directPriceTokens,
     "Custom crate Token price",
@@ -8400,6 +8533,7 @@ export async function createStaffCustomCrate(
         source: "staff",
         staffCreated: true,
         customCrate: true,
+        customProduct: true,
         marketEnabled: false,
         containerCode: lootTableCode,
         imageUrl: artworkUrl,
@@ -8449,8 +8583,11 @@ export async function updateStaffCustomCrate(
   const catalogueId = economyNumber(input.catalogueId, "Custom crate catalogue ID", 1);
   const displayName = economyText(input.displayName, "Custom crate name", 160);
   const rarityRank = economyNumber(input.rarityRank, "Custom crate rarity");
-  if (rarityRank > 7)
-    economyError("invalid_input", "Custom crate rarity must be between 0 and 7.");
+  if (rarityRank > ECONOMY_MAX_RARITY_RANK)
+    economyError(
+      "invalid_input",
+      `Custom crate rarity must be between 0 and ${ECONOMY_MAX_RARITY_RANK}.`,
+    );
   const directPriceTokens = economyAmount(
     input.directPriceTokens,
     "Custom crate Token price",
@@ -8468,6 +8605,7 @@ export async function updateStaffCustomCrate(
       );
       const metadata = {
         ...crate.metadata,
+        customProduct: true,
         imageUrl: artworkUrl,
         staffArtworkUrl: artworkUrl,
       };
@@ -9301,10 +9439,17 @@ export async function purchaseEconomyItem(
  * the fallback when the public database has no current quote.
  */
 function economyVipMembershipDetails(
-  product: Pick<EconomyCatalogueItem, "metadata">,
+  product: Pick<EconomyCatalogueItem, "itemType" | "rarityRank" | "metadata">,
 ) {
-  if (!isEconomyVipMembership(product))
-    economyError("incompatible_item", "That Special product is not a VIP membership.");
+  if (
+    !isEconomyVipMembership(product) ||
+    product.rarityRank !== ECONOMY_SPECIAL_RARITY_RANK
+  ) {
+    economyError(
+      "incompatible_item",
+      "That item is not a Special VIP membership.",
+    );
+  }
   const tier = economyMetadataString(product.metadata, "vipTier")?.trim().toUpperCase();
   const durationMinutes = economyMetadataInteger(
     product.metadata,
@@ -9347,7 +9492,11 @@ export async function activateVipMembershipItem(
     connection: PoolConnection | null;
     transactionStarted: boolean;
     committed: boolean;
-    rollback: { tier: string; previousExpiry: number | null } | null;
+    rollback: {
+      tier: string;
+      previousExpiry: number | null;
+      writtenExpiry: number;
+    } | null;
   } = {
     connection: null,
     transactionStarted: false,
@@ -9404,7 +9553,11 @@ export async function activateVipMembershipItem(
         }
         const now = Math.floor(Date.now() / 1_000);
         const expiresAt = Math.max(now, previousExpiry ?? now) + membership.durationMinutes * 60;
-        vipState.rollback = { tier: membership.tier, previousExpiry };
+        vipState.rollback = {
+          tier: membership.tier,
+          previousExpiry,
+          writtenExpiry: expiresAt,
+        };
         await vipState.connection.execute(
           "INSERT INTO vip_users (account_id, name, lastvisit, sid, `group`, expires) VALUES (?, ?, ?, ?, ?, ?) " +
             "ON DUPLICATE KEY UPDATE name = VALUES(name), lastvisit = VALUES(lastvisit), expires = VALUES(expires)",
@@ -9465,13 +9618,24 @@ export async function activateVipMembershipItem(
         try {
           if (vipState.rollback.previousExpiry === null) {
             await compensation.execute(
-              "DELETE FROM vip_users WHERE account_id = ? AND sid = ? AND `group` = ?",
-              [toAccountId(steamId), getVipServerId(), vipState.rollback.tier],
+              "DELETE FROM vip_users WHERE account_id = ? AND sid = ? AND `group` = ? AND expires = ?",
+              [
+                toAccountId(steamId),
+                getVipServerId(),
+                vipState.rollback.tier,
+                vipState.rollback.writtenExpiry,
+              ],
             );
           } else {
             await compensation.execute(
-              "UPDATE vip_users SET expires = ? WHERE account_id = ? AND sid = ? AND `group` = ?",
-              [vipState.rollback.previousExpiry, toAccountId(steamId), getVipServerId(), vipState.rollback.tier],
+              "UPDATE vip_users SET expires = ? WHERE account_id = ? AND sid = ? AND `group` = ? AND expires = ?",
+              [
+                vipState.rollback.previousExpiry,
+                toAccountId(steamId),
+                getVipServerId(),
+                vipState.rollback.tier,
+                vipState.rollback.writtenExpiry,
+              ],
             );
           }
         } finally {
@@ -9487,6 +9651,102 @@ export async function activateVipMembershipItem(
   } finally {
     vipState.connection?.release();
   }
+}
+
+/**
+ * Equips a trusted Profile Theme through the concrete inventory instance that
+ * grants it. The item remains available and can be unequipped later; losing
+ * ownership or availability also makes the theme inactive at read time.
+ */
+export async function equipProfileThemeItem(
+  input: EquipProfileThemeItemInput,
+): Promise<EquipProfileThemeItemResult> {
+  const steamId = economySteamId(input.steamId);
+  const itemId = economyItemId(input.itemId, "Profile Theme item ID");
+
+  return runEconomyMutation({
+    operationName: "inventory.profile_theme.equip",
+    actorSteamId: steamId,
+    idempotencyKey: input.idempotencyKey,
+    request: { itemId },
+    work: async (context) => {
+      const item = await lockEconomyInventoryItem(context.connection, itemId);
+      if (item.ownerSteamId !== steamId) {
+        economyError(
+          "item_not_owned",
+          "You do not own that Profile Theme item.",
+        );
+      }
+      if (item.state !== "available") {
+        economyError(
+          "item_unavailable",
+          "That Profile Theme is consumed, attached, or reserved for a trade.",
+        );
+      }
+      if (item.itemType !== "profile_theme" || item.catalogueId === null) {
+        economyError(
+          "incompatible_item",
+          "That inventory item is not a catalogue-backed Profile Theme.",
+        );
+      }
+
+      const [themeRows] = await context.connection.query<
+        Array<
+          RowDataPacket & {
+            id: number | string;
+            theme_key: string;
+            display_name: string;
+          }
+        >
+      >(
+        "SELECT id, theme_key, display_name FROM portal_profile_themes " +
+          "WHERE catalogue_id = ? AND enabled = TRUE LIMIT 1 FOR UPDATE",
+        [item.catalogueId],
+      );
+      const theme = themeRows[0];
+      if (!theme || !isTrustedOwnedProfileThemeKey(String(theme.theme_key))) {
+        economyError(
+          "catalogue_unavailable",
+          "That Profile Theme is not enabled or trusted by this portal build.",
+        );
+      }
+      const themeId = economyNumber(theme.id, "Profile Theme ID");
+      const themeKey = String(theme.theme_key);
+      const displayName = String(theme.display_name);
+
+      await ensureEconomySteamAccount(context.connection, steamId);
+      await context.connection.execute(
+        "INSERT INTO portal_player_theme_ownership (steam_id, theme_id, source_type, source_reference) VALUES (?, ?, 'inventory', ?) " +
+          "ON DUPLICATE KEY UPDATE source_type = VALUES(source_type), source_reference = VALUES(source_reference)",
+        [steamId, themeId, itemId],
+      );
+      await context.connection.execute(
+        "INSERT INTO portal_player_settings (steam_id, inventory_visibility, active_theme_id, active_theme_item_id) VALUES (?, 'public', ?, ?) " +
+          "ON DUPLICATE KEY UPDATE active_theme_id = VALUES(active_theme_id), active_theme_item_id = VALUES(active_theme_item_id)",
+        [steamId, themeId, itemId],
+      );
+      await context.connection.execute(
+        "INSERT INTO portal_audit_events (actor_type, actor_id, action, target_type, target_id, metadata) VALUES ('player', ?, 'profile-theme.equipped', 'inventory-item', ?, ?)",
+        [
+          steamId,
+          itemId,
+          JSON.stringify({
+            catalogueId: item.catalogueId,
+            themeId,
+            themeKey,
+          }),
+        ],
+      );
+
+      return {
+        itemId,
+        catalogueId: item.catalogueId,
+        themeId,
+        themeKey,
+        displayName,
+      };
+    },
+  });
 }
 
 export async function sellEconomyItem(
@@ -9513,6 +9773,12 @@ export async function sellEconomyItem(
         economyError(
           "ownership_required",
           "That item is not available to sell from your inventory.",
+        );
+      }
+      if (!item.tradable) {
+        economyError(
+          "item_not_tradable",
+          "That reward item cannot be traded or sold.",
         );
       }
       if (!item.catalogue) {
@@ -10473,6 +10739,7 @@ function toEconomyTradeItemPreview(
     itemType: item.itemType,
     displayName: item.displayName,
     rarityRank: item.rarityRank,
+    tradable: item.tradable,
     floatValue: item.floatValue,
     stattrak: item.stattrak,
     stattrakCount: item.stattrakCount,
@@ -10482,10 +10749,6 @@ function toEconomyTradeItemPreview(
     imageUrl:
       economyMetadataImageUrl(item.attributes) ??
       economyMetadataImageUrl(item.catalogue?.metadata ?? {}),
-    specialKind: economyMetadataString(
-      item.catalogue?.metadata ?? {},
-      "specialKind",
-    ),
   };
 }
 
@@ -10860,11 +11123,12 @@ export async function createEconomyTrade(
         if (
           !item ||
           item.ownerSteamId !== steamId ||
-          item.state !== "available"
+          item.state !== "available" ||
+          !item.tradable
         ) {
           economyError(
             "ownership_required",
-            "Every offered item must be available in your inventory.",
+            "Every offered item must be available and tradable in your inventory.",
           );
         }
       }
@@ -10873,7 +11137,8 @@ export async function createEconomyTrade(
         if (
           !item ||
           item.ownerSteamId !== counterpartySteamId ||
-          item.state !== "available"
+          item.state !== "available" ||
+          !item.tradable
         ) {
           economyError(
             "requested_item_unavailable",
@@ -10881,6 +11146,10 @@ export async function createEconomyTrade(
           );
         }
       }
+      await requireTradableAttachedStickers(
+        context.connection,
+        allItemIds,
+      );
       await context.connection.execute(
         "INSERT INTO portal_economy_trades (id, creator_steam_id, counterparty_steam_id, offered_tokens, requested_tokens, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
         [
@@ -11050,7 +11319,8 @@ export async function respondEconomyTrade(
         return (
           !item ||
           item.ownerSteamId !== counterpartySteamId ||
-          item.state !== "available"
+          item.state !== "available" ||
+          !item.tradable
         );
       });
       const offeredInvalid = offered.some((row) => {
@@ -11058,7 +11328,8 @@ export async function respondEconomyTrade(
         return (
           !item ||
           item.ownerSteamId !== creatorSteamId ||
-          item.state !== "escrowed"
+          item.state !== "escrowed" ||
+          !item.tradable
         );
       });
       if (requestedUnavailable || offeredInvalid) {
@@ -11078,6 +11349,10 @@ export async function respondEconomyTrade(
           reason: "requested_item_unavailable" as const,
         };
       }
+      await requireTradableAttachedStickers(
+        context.connection,
+        itemIds,
+      );
 
       const offeredTokens = economyNumber(
         trade.offered_tokens,
@@ -11467,6 +11742,7 @@ export async function staffGrantEconomyItem(
       catalogueId: input.catalogueId ?? null,
       customItem: customItem ?? null,
       customization: input.customization ?? {},
+      tradable: input.tradable ?? true,
       stickers: stickerSlots,
       reason,
     },
@@ -11494,6 +11770,7 @@ export async function staffGrantEconomyItem(
         catalogue,
         customItem,
         customization: input.customization,
+        tradable: input.tradable,
         source: { type: "staff_grant", actorSteamId, reason },
         actorSteamId,
         idempotencyKey: context.idempotencyKey,
@@ -11834,6 +12111,13 @@ export async function staffTransferEconomyItem(
           "Only an available item belonging to the source player can be transferred.",
         );
       }
+      if (!item.tradable) {
+        economyError(
+          "item_not_tradable",
+          "That account-bound item cannot be transferred.",
+        );
+      }
+      await requireTradableAttachedStickers(context.connection, [itemId]);
       await context.connection.execute(
         "UPDATE portal_inventory_items SET owner_steam_id = ? WHERE id = ?",
         [toSteamId, itemId],

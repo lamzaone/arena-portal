@@ -28,6 +28,7 @@ import type {
   EconomyCatalogueItem,
   EconomyRedeemCode,
 } from "@/lib/data/portal-repository";
+import { economyItemTypeLabel } from "@/lib/economy/item-taxonomy";
 
 type SelectedReward = {
   catalogueId: number;
@@ -422,7 +423,7 @@ export function RedeemCodeAdmin({
               const selected = rewards.find((reward) => reward.catalogueId === item.id);
               return <article key={item.id} className="redeem-picker-item">
                 <MarketplaceItemPreview item={{ catalogueId: item.id, displayName: item.displayName, floatValue: null, imageUrl: item.imageUrl, itemType: item.itemType, rarityRank: item.rarityRank }} enableMarketPreview={false} />
-                <div><span className={`rarity-rank-${item.rarityRank}`}>{item.rarityName}</span><strong>{item.displayName}</strong><small>{item.itemType} · ID {item.id}</small></div>
+                <div><span className={`rarity-rank-${item.rarityRank}`}>{item.rarityName}</span><strong>{item.displayName}</strong><small>{economyItemTypeLabel(item.itemType)} · ID {item.id}</small></div>
                 <button className="button button-secondary" type="button" onClick={() => addReward(item.id)} disabled={selected?.quantity === 50}>
                   <Plus aria-hidden="true" /> {selected ? `Add (${selected.quantity})` : "Add"}
                 </button>

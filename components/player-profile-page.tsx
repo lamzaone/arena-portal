@@ -1,24 +1,25 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowLeft, ArrowRight, Ban, Clock3, Crosshair, Settings2, ShieldCheck, Target, UserRound, VolumeX } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Ban, Clock3, Crosshair, Settings2, ShieldCheck, Target, UserRound, VolumeX, Zap } from "lucide-react";
 import type { CSSProperties } from "react";
 
 import { formatDate, formatPlaytime, isActiveSanction } from "@/components/formatters";
-import { GroupBadge } from "@/components/group-badge";
+import { IdentityGroupBadge } from "@/components/identity-group-badge";
 import { ProfileInventoryPreview } from "@/components/profile-inventory-preview";
 import { ProfileSettingsForm, type ProfileSettingsValue } from "@/components/profile-settings-form";
 import { ProfileTabs } from "@/components/profile-tabs";
 import { ResilientRemoteImage } from "@/components/resilient-remote-image";
 import { SiteHeader } from "@/components/site-header";
 import { getLevelRank, getNextLevelRank, getRankProgress } from "@/lib/content/levelranks";
-import { getGroupPresentation, type RoleKind } from "@/lib/content/group-presentation";
 import { getTrustedProfileTheme } from "@/lib/content/profile-themes";
-import type { GroupMembership, HitboxStats, PlayerDashboard, PlayerProfileInventoryPage, PublicPlayerProfile } from "@/lib/data/portal-repository";
+import type { HitboxStats, PlayerDashboard, PlayerProfileInventoryPage, PublicPlayerProfile } from "@/lib/data/portal-repository";
+import type { EffectiveIdentity, EffectiveIdentityGroup } from "@/lib/data/identity-groups";
 import type { SteamProfile } from "@/lib/steam/profiles";
 
 type SharedProfile = PlayerDashboard | PublicPlayerProfile;
 
 type PlayerProfilePageProps = {
   profile: SharedProfile;
+  identity: EffectiveIdentity;
   steamId: string;
   steamProfile?: SteamProfile;
   isOwnProfile: boolean;
@@ -104,19 +105,28 @@ function HitMap({ stats }: { stats: HitboxStats }) {
   );
 }
 
-function GroupMembershipCards({ kind, groups }: { kind: RoleKind; groups: GroupMembership[] }) {
-  const label = kind === "vip" ? "VIP privileges" : "Admin ranks";
-  return <section className={`group-role-section group-role-${kind}`}>
-    <div><h3>{label}</h3><small>{groups.length ? `${groups.length} active` : "None assigned"}</small></div>
-    {groups.length ? <div className="group-membership-cards">{groups.map((group) => {
-      const presentation = getGroupPresentation(kind, group.name);
-      const expiry = kind === "vip" ? group.expiresAt === 0 ? "Permanent access" : group.expiresAt ? `Expires ${formatDate(group.expiresAt)}` : "Expiry unavailable" : "Admin rank";
-      return <article key={`${kind}-${group.name.toLowerCase()}`} style={{ "--role-color": presentation.color, "--role-soft": presentation.softColor } as CSSProperties}><GroupBadge kind={kind} group={group.name} /><small>{expiry}</small></article>;
-    })}</div> : <p className="group-role-empty">No {kind === "vip" ? "VIP groups" : "admin ranks"} assigned.</p>}
-  </section>;
+function identityMembershipLabel(
+  group: EffectiveIdentityGroup,
+  profile: SharedProfile,
+) {
+  if (group.sourceType === "admins_core") return "Synced from Admins.Core";
+  if (group.sourceType === "vipcore") {
+    const membership = profile.vipGroups.find(
+      (candidate) =>
+        candidate.name.toLocaleLowerCase() ===
+        (group.externalKey ?? group.displayName).toLocaleLowerCase(),
+    );
+    if (membership?.expiresAt === 0) return "Permanent VIP access";
+    if (membership?.expiresAt) return `Expires ${formatDate(membership.expiresAt)}`;
+    return "Synced from VIPCore";
+  }
+  if (group.membershipExpiresAt) {
+    return `Expires ${formatDate(Math.floor(new Date(group.membershipExpiresAt).getTime() / 1_000))}`;
+  }
+  return "Custom portal group";
 }
 
-export function PlayerProfilePage({ profile, steamId, steamProfile, isOwnProfile, isAuthenticated, profileInventory, profileThemeKey, settingsOpen = false, profileSettings }: PlayerProfilePageProps) {
+export function PlayerProfilePage({ profile, identity, steamId, steamProfile, isOwnProfile, isAuthenticated, profileInventory, profileThemeKey, settingsOpen = false, profileSettings }: PlayerProfilePageProps) {
   const displayName = steamProfile?.name ?? profile.displayName ?? "ARENA player";
   const dashboard = isDashboard(profile) ? profile : null;
   const activeBan = dashboard?.bans.find((ban) => isActiveSanction(ban.expiresAt));
@@ -135,6 +145,8 @@ export function PlayerProfilePage({ profile, steamId, steamProfile, isOwnProfile
   const presence = steamProfile?.presence ?? "unknown";
   const presenceLabel = presence === "online" ? "Steam online" : presence === "offline" ? "Steam offline" : "Steam status unavailable";
   const profileTheme = getTrustedProfileTheme(profileThemeKey);
+  const betaTesterTheme = profileTheme.key === "beta_tester";
+  const primaryIdentityGroup = identity.groups[0] ?? null;
   const showSettings = Boolean(isOwnProfile && settingsOpen && profileSettings);
 
   return (
@@ -150,11 +162,14 @@ export function PlayerProfilePage({ profile, steamId, steamProfile, isOwnProfile
                   <ResilientRemoteImage src={steamProfile?.avatarFull} alt={`${displayName}'s Steam avatar`} referrerPolicy="no-referrer" fallback={<span className="public-player-avatar-fallback" aria-hidden="true">{avatarInitial(displayName)}</span>} />
                   {isBanned ? <span className="banned-avatar-overlay">BANNED</span> : null}
                 </div>
+                {betaTesterTheme ? <span className="beta-tester-avatar-mark" aria-hidden="true"><Zap /></span> : null}
+                {primaryIdentityGroup ? <span className="profile-primary-group-badge"><IdentityGroupBadge group={primaryIdentityGroup} compact /></span> : null}
               </div>
               <div>
                 <p className="tapped-kicker"><UserRound aria-hidden="true" /> {isOwnProfile ? "Your player profile" : "Player profile"}<span className="profile-presence" title={presenceLabel}><i aria-hidden="true" /> {presenceLabel}</span></p>
                 <h1>{displayName}</h1>
                 <a className="public-player-steam-identity" href={steamProfileUrl} target="_blank" rel="noreferrer" title={`Open ${displayName}'s Steam profile`}>{steamId}</a>
+                {betaTesterTheme ? <span className="beta-tester-theme-badge"><Zap aria-hidden="true" /><span>BETA TESTER</span><small>Profile theme</small></span> : null}
               </div>
             </div>
           </div>
@@ -197,8 +212,13 @@ export function PlayerProfilePage({ profile, steamId, steamProfile, isOwnProfile
 
         {!showSettings ? <section className="content-grid public-player-content-grid shared-profile-content">
           <article className="panel">
-            <div className="panel-heading"><h2>Groups</h2><p>Synced from VIPCore and Admins.</p></div>
-            <div className="group-role-sections"><GroupMembershipCards kind="vip" groups={profile.vipGroups} /><GroupMembershipCards kind="admin" groups={profile.adminGroups} /></div>
+            <div className="panel-heading"><h2>Groups</h2><p>Portal identity, VIPCore, and Admins.Core.</p></div>
+            <div className="group-role-sections">
+              <section className="group-role-section group-role-identity">
+                <div><h3>Profile groups</h3><small>{identity.groups.length ? `${identity.groups.length} active` : "None assigned"}</small></div>
+                {identity.groups.length ? <div className="group-membership-cards identity-group-membership-cards">{identity.groups.map((group) => <article key={group.id} style={{ "--role-color": group.badgeColor, "--role-soft": group.badgeSoftColor } as CSSProperties}><IdentityGroupBadge group={group} /><small>{identityMembershipLabel(group, profile)}</small>{group.tags.length ? <span className="identity-group-tag-summary">{group.tags.map((tag) => tag.text).join(" · ")}</span> : <span className="identity-group-tag-summary is-empty">No chat tag</span>}</article>)}</div> : <p className="group-role-empty">No profile groups assigned.</p>}
+              </section>
+            </div>
           </article>
           <article className="panel combat-panel">
             <div className="panel-heading"><h2>Combat profile</h2><p>From K4 LevelRanks.</p></div>

@@ -34,6 +34,13 @@ import {
   SearchSubmitButton,
 } from "@/components/ui/search-field";
 import { ServerSearchField } from "@/components/ui/server-search-field";
+import {
+  ECONOMY_ITEM_TYPES,
+  ECONOMY_RARITIES,
+  ECONOMY_SPECIAL_RARITY_RANK,
+  economyItemTypeLabel,
+  isCustomProductItemType,
+} from "@/lib/economy/item-taxonomy";
 
 import styles from "./items-admin.module.css";
 
@@ -56,20 +63,7 @@ type AdminItemsPageProps = {
 const itemsTabs = ["marketplace", "crates", "discount"] as const;
 type ItemsTab = (typeof itemsTabs)[number];
 
-const itemTypes = [
-  "skin",
-  "knife",
-  "glove",
-  "crate",
-  "capsule",
-  "nametag",
-  "sticker",
-  "agent",
-  "music_kit",
-  "keychain",
-  "patch",
-  "graffiti",
-] as const satisfies readonly EconomyItemType[];
+const itemTypes = ECONOMY_ITEM_TYPES;
 
 function validCatalogueId(value: string | undefined) {
   if (!value || !/^\d{1,20}$/.test(value)) return null;
@@ -157,8 +151,8 @@ const permanentlyMarketDisabledItemTypes = new Set([
   "music_kit",
 ]);
 
-function isVipMembership(metadata: Record<string, unknown>) {
-  return metadata.specialKind === "vip_membership";
+function isVipMembership(itemType: EconomyItemType) {
+  return itemType === "vip_membership";
 }
 
 function isMarketEnabled(metadata: Record<string, unknown>) {
@@ -219,6 +213,8 @@ function errorText(value: string | undefined) {
     "item-details": "Review the item fields, JSON, and reason before saving.",
     "container-catalogue":
       "Crates and capsules must be granted from a catalogue entry so their loot table is available.",
+    "custom-product-catalogue":
+      "VIP memberships and profile themes must use a trusted catalogue product.",
     "custom-crate-details":
       "Provide a crate name, rarity, direct Token price, and valid artwork URL or image upload.",
     "custom-crate-reward":
@@ -610,14 +606,11 @@ export default async function AdminItemsPage({
                   <label>
                     Crate rarity
                     <select name="crateRarityRank" defaultValue="0">
-                      <option value="0">Standard</option>
-                      <option value="1">Consumer Grade</option>
-                      <option value="2">Industrial Grade</option>
-                      <option value="3">Mil-Spec Grade</option>
-                      <option value="4">Restricted</option>
-                      <option value="5">Classified</option>
-                      <option value="6">Covert</option>
-                      <option value="7">Extraordinary</option>
+                      {ECONOMY_RARITIES.map((rarity) => (
+                        <option key={rarity.rank} value={rarity.rank}>
+                          {rarity.name}
+                        </option>
+                      ))}
                     </select>
                   </label>
                   <label>
@@ -751,14 +744,11 @@ export default async function AdminItemsPage({
                           name="crateRarityRank"
                           defaultValue={String(customCrate.crate.rarityRank)}
                         >
-                          <option value="0">Standard</option>
-                          <option value="1">Consumer Grade</option>
-                          <option value="2">Industrial Grade</option>
-                          <option value="3">Mil-Spec Grade</option>
-                          <option value="4">Restricted</option>
-                          <option value="5">Classified</option>
-                          <option value="6">Covert</option>
-                          <option value="7">Extraordinary</option>
+                          {ECONOMY_RARITIES.map((rarity) => (
+                            <option key={rarity.rank} value={rarity.rank}>
+                              {rarity.name}
+                            </option>
+                          ))}
                         </select>
                       </label>
                       <label>
@@ -864,7 +854,7 @@ export default async function AdminItemsPage({
                       .filter((item) => item.id !== customCrate.crate.id)
                       .map((item) => (
                         <option key={item.id} value={item.id}>
-                          {item.displayName} · {isVipMembership(item.metadata) ? "Special VIP" : item.itemType}
+                          {item.displayName} · {economyItemTypeLabel(item.itemType)}
                         </option>
                       ))}
                   </datalist>
@@ -901,7 +891,7 @@ export default async function AdminItemsPage({
                         <option value="">All item types</option>
                         {itemTypes.map((itemType) => (
                           <option key={itemType} value={itemType}>
-                            {itemType === "keychain" ? "Charm" : itemType}
+                            {economyItemTypeLabel(itemType)}
                           </option>
                         ))}
                       </select>
@@ -970,13 +960,11 @@ export default async function AdminItemsPage({
                               />
                               <div className="economy-crate-candidate-copy">
                                 <span className={`badge rarity-rank-${item.rarityRank}`}>
-                                  {isVipMembership(item.metadata)
-                                    ? "Special · VIP"
-                                    : item.rarityName}
+                                  {item.rarityName}
                                 </span>
                                 <strong>{item.displayName}</strong>
                                 <small>
-                                  {item.itemType === "keychain" ? "charm" : item.itemType} · ID {item.id}
+                                  {economyItemTypeLabel(item.itemType)} · ID {item.id}
                                   {existingEntry && !alreadyActive
                                     ? " · previously removed"
                                     : ""}
@@ -1041,15 +1029,11 @@ export default async function AdminItemsPage({
                             />
                             <div>
                               <span className={`badge rarity-rank-${entry.catalogue.rarityRank}`}>
-                                {isVipMembership(entry.catalogue.metadata)
-                                  ? "Special · VIP"
-                                  : entry.catalogue.rarityName}
+                                {entry.catalogue.rarityName}
                               </span>
                               <strong>{entry.catalogue.displayName}</strong>
                               <small>
-                                {entry.catalogue.itemType === "keychain"
-                                  ? "charm"
-                                  : entry.catalogue.itemType} · weight {formatTokens(entry.weight)}
+                                {economyItemTypeLabel(entry.catalogue.itemType)} · weight {formatTokens(entry.weight)}
                                 {rewardIsActive
                                   ? ` · ${formatDropChance(entry.weight, activeCrateRewardWeight)}`
                                   : entry.catalogue.enabled
@@ -1131,7 +1115,10 @@ export default async function AdminItemsPage({
             {catalogue.items.length ? (
               <div className={styles.marketplaceGrid}>
                 {catalogue.items.map((item) => {
-                  const vipMembership = isVipMembership(item.metadata);
+                  const vipMembership = isVipMembership(item.itemType);
+                  const customProduct = isCustomProductItemType(item.itemType);
+                  const specialRarity =
+                    item.rarityRank === ECONOMY_SPECIAL_RARITY_RANK;
                   const disabledByType = permanentlyMarketDisabledItemTypes.has(
                     item.itemType,
                   );
@@ -1150,7 +1137,7 @@ export default async function AdminItemsPage({
 
                   return (
                     <article
-                      className={`${styles.marketplaceCard} panel ${vipMembership ? styles.specialCard : ""}`}
+                      className={`${styles.marketplaceCard} panel ${specialRarity ? styles.specialCard : ""}`}
                       key={item.id}
                     >
                     <div className={styles.marketplaceArtwork}>
@@ -1167,8 +1154,11 @@ export default async function AdminItemsPage({
                       />
                     </div>
                     <div className={styles.cardCopy}>
+                      <span className={`badge rarity-rank-${item.rarityRank}`}>
+                        {item.rarityName}
+                      </span>
                       <span className="badge">
-                        {vipMembership ? "Special · VIP" : item.itemType}
+                        {economyItemTypeLabel(item.itemType)}
                       </span>
                       <span
                         className={`${styles.statusBadge} ${listed ? styles.listed : styles.unlisted}`}
@@ -1220,7 +1210,7 @@ export default async function AdminItemsPage({
                     </div>
                     {access.canManageEconomy ? (
                     <div className={`${styles.actionGrid} economy-admin-actions`}>
-                      {!vipMembership ? (
+                      {!customProduct ? (
                         <form action="/api/admin/economy" method="post">
                         <ActionFields csrf={csrf} action="market-name-set" />
                         <input
@@ -1279,7 +1269,7 @@ export default async function AdminItemsPage({
                           Save artwork
                         </button>
                       </form>
-                      {!vipMembership ? (
+                      {!customProduct ? (
                         <form action="/api/admin/economy" method="post">
                         <ActionFields csrf={csrf} action="price-refresh" />
                         <input
@@ -1304,7 +1294,7 @@ export default async function AdminItemsPage({
                           value={item.id}
                         />
                         <label>
-                          {vipMembership ? "VIP price (Tokens)" : "Last-known price (Tokens)"}
+                          {customProduct ? "Direct price (Tokens)" : "Last-known price (Tokens)"}
                           <input
                             name="eurCents"
                             required
@@ -1314,7 +1304,7 @@ export default async function AdminItemsPage({
                           />
                         </label>
                         <button className="staff-unban-button" type="submit">
-                          {vipMembership ? "Save VIP price" : "Save Token price"}
+                          {customProduct ? "Save direct price" : "Save Token price"}
                         </button>
                       </form>
                       {disabledByType ? (

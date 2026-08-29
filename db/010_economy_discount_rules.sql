@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS portal_economy_discount_rules (
     (target_type = 'item_type' AND catalogue_id IS NULL AND item_type IS NOT NULL)
   ),
   CONSTRAINT portal_economy_discount_rules_item_type_known CHECK (
-    item_type IS NULL OR item_type IN ('skin', 'knife', 'glove', 'crate', 'capsule', 'nametag', 'sticker', 'agent', 'music_kit', 'keychain', 'patch', 'graffiti')
+    item_type IS NULL OR item_type IN ('skin', 'knife', 'glove', 'crate', 'capsule', 'nametag', 'sticker', 'agent', 'music_kit', 'keychain', 'patch', 'graffiti', 'vip_membership', 'profile_theme')
   ),
   CONSTRAINT portal_economy_discount_rules_percentage_range CHECK (percentage_bps <= 10000),
   CONSTRAINT portal_economy_discount_rules_adjustment_positive CHECK (percentage_bps > 0 OR fixed_tokens > 0),

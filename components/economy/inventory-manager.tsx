@@ -6,6 +6,7 @@ import {
   Crosshair,
   ListChecks,
   LoaderCircle,
+  Palette,
   PencilLine,
   Search,
   Shield,
@@ -121,6 +122,7 @@ function rowEndIndex(itemIndex: number, columns: number, itemCount: number) {
 function canBulkSellItem(item: EconomyItemView) {
   return (
     item.state === "available" &&
+    item.tradable &&
     item.stickers.length === 0 &&
     (item.marketPriceTokens !== null || item.catalogueId !== null)
   );
@@ -275,12 +277,15 @@ export function InventoryManager({
     ? null
     : selected.state !== "available"
       ? "Attached or trade-reserved items cannot be sold."
+      : !selected.tradable
+        ? "This account-bound item cannot be sold or traded."
       : selected.stickers.length
         ? "Remove the attached stickers before selling this item."
       : !salePriceIsKnown && !saleCanResolveFromMarket
         ? "This item needs a current market or last-known price before it can be sold."
         : null;
   const selectedVipMembership = selected ? itemIsVipMembership(selected) : false;
+  const selectedProfileTheme = selected?.itemType === "profile_theme";
   const selectedSlots = selected
     ? (() => {
         const prototype = slotForItem(selected, "T");
@@ -452,6 +457,8 @@ export function InventoryManager({
         text:
           item.state !== "available"
             ? "Attached or trade-reserved items cannot be bulk sold."
+            : !item.tradable
+              ? "Account-bound group rewards cannot be sold or traded."
             : item.stickers.length
               ? "Remove attached stickers before selecting this item for sale."
               : "This item needs a current market or last-known price before it can be sold.",
@@ -851,6 +858,31 @@ export function InventoryManager({
                     </button>
                   </fieldset>
                 ) : null}
+                {selectedProfileTheme ? (
+                  <fieldset className="form-panel inventory-profile-theme-equip">
+                    <legend>Equip profile theme</legend>
+                    <p className="empty-copy">
+                      Apply this owned theme only to your shareable player profile.
+                      The item stays in your inventory and can be changed again from
+                      profile settings.
+                    </p>
+                    <button
+                      type="button"
+                      className="button button-primary"
+                      disabled={pending || !selected.id || selected.state !== "available"}
+                      onClick={() =>
+                        runAction(
+                          "/api/economy/items/profile-theme/equip",
+                          { itemId: selected.id },
+                          `${selected.displayName} is now equipped on your profile.`,
+                        )
+                      }
+                    >
+                      <Palette aria-hidden="true" />{" "}
+                      {pending ? "Equipping…" : "Equip on profile"}
+                    </button>
+                  </fieldset>
+                ) : null}
                 {itemSupportsLoadout(selected) ? (
                   <fieldset className="form-panel inventory-equip-panel">
                     <legend>Equip item</legend>
@@ -930,7 +962,7 @@ export function InventoryManager({
                       </button>
                     </div>
                   </fieldset>
-                ) : !selectedVipMembership ? (
+                ) : !selectedVipMembership && !selectedProfileTheme ? (
                   <p className="empty-copy">
                     This item is kept in your inventory and cannot be equipped
                     in a loadout slot.

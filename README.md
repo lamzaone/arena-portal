@@ -7,9 +7,10 @@ The player portal for the ARENA CS2 server: Steam sign-in, player dashboard, mod
 1. Copy `.env.example` to `.env.local` and set `SITE_URL` to `http://localhost:3000` for local testing.
 2. Set a long random `SESSION_SECRET` for CSRF protection on sensitive staff actions.
 3. Run `npm install`, then `npm run dev`.
-4. For tickets, appeals, login sessions, player settings, and the Token Economy, create a separate database and run the SQL files in `db/` in numerical order through `010_economy_discount_rules.sql`. Do not run these migrations in the game database.
+4. For tickets, appeals, login sessions, player settings, the Token Economy, and portal identity groups, create a separate `utf8mb4` database and run the SQL files in `db/` in numerical order through `013_inventory_profile_theme_equip.sql`. Do not run these migrations in the game database. Migration 012 also pins its identity tables and decorated chat-tag text to `utf8mb4` so symbols remain lossless on servers whose global default differs.
 5. Add a read-only `GAME_DATABASE_URL` to display real data from K4 LevelRanks, VIPCore, and Admins.
 6. Install TAPPED.Inventory with its Swiftly database connection named `portal`, then run `!inventory_sync_catalogue` once after the migration. This imports the retained WeaponSkins catalogue and creates the initial container/drop tables without modifying the legacy cache.
+7. Install GlobalChatTags with its Swiftly database connection named `portal`. Migration 012 supplies the shared Admins.Core, VIPCore, custom-group, tag, badge, privilege, preference, and reward records; deploy `Dapper.dll` beside the plugin DLL.
 
 For local testing with `http://localhost`, the session cookie is deliberately non-secure. Any public deployment must use an `https://` `SITE_URL`; its session cookie is always marked `Secure`.
 
@@ -27,11 +28,11 @@ See [the website plan](docs/website-plan.md) and [the Discord bot plan](docs/dis
 
 ## Token Economy rollout
 
-1. Back up the portal database, run migrations 001 through 010 against the portal database, and keep the game database read-only. Migration 010 preserves historical staff-crate snapshots, closes the old doubled current row, and records a corrected 1:1 base snapshot.
-2. Deploy the TAPPED.Inventory build and config, then restart/reload the server only after step 1 is complete.
+1. Back up the portal database and run migrations 001 through 013 against it in order; keep the game database read-only. Migration 011 introduces Special/custom item taxonomy and transferability, 012 introduces identity groups, and 013 binds equipped profile themes to concrete owned inventory instances.
+2. Deploy the TAPPED.Inventory and GlobalChatTags builds (including `Dapper.dll`) and config, then restart/reload the server only after step 1 is complete.
 3. From the server console or an authorised Director/Founder account, run `!inventory_sync_catalogue`. It imports the old cosmetic catalogue and bootstraps the initial crate/capsule/drop tables.
 4. Confirm a player can run `!tokens`, earn a kill/headshot in a normal 4+ human-player match, and browse Inventory, Crates, Market, and Trades in the portal.
-5. Use Portal > Staff > Item management for grants, customisation, price refresh/overrides, inventory changes, stickers, and player loadouts.
+5. Use Portal > Staff > Item management for grants, customisation, price refresh/overrides, inventory changes, stickers, and player loadouts. Exact externally assigned Founders can use Portal > Staff > Groups for identity groups, tags, badges, privileges, and catalogue rewards.
 
 No production database migration or server restart is performed by the portal application itself.
 

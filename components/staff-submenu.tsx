@@ -14,13 +14,14 @@ export type StaffModerationSection =
   (typeof staffModerationSections)[number]["id"];
 export type StaffSection =
   | StaffModerationSection
+  | "groups"
   | "items"
   | "inventories"
   | "redeem";
 
 type StaffSubmenuAccess = Pick<
   AdminAccess,
-  "canUnban" | "canViewEconomy" | "canManageEconomy"
+  "canUnban" | "canViewEconomy" | "canManageEconomy" | "canManageGroups"
 >;
 
 export function StaffSubmenu({
@@ -47,6 +48,15 @@ export function StaffSubmenu({
             {section.label}
           </Link>
         ))}
+      {access.canManageGroups ? (
+        <Link
+          className={linkClass("groups")}
+          href="/admin/groups"
+          aria-current={active === "groups" ? "page" : undefined}
+        >
+          Groups
+        </Link>
+      ) : null}
       {access.canViewEconomy ? (
         <Link
           className={linkClass("items")}

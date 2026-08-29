@@ -1,6 +1,6 @@
 "use client";
 
-import { Box, Coins, Tag } from "lucide-react";
+import { Box, Coins, LockKeyhole, Tag } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
@@ -10,6 +10,7 @@ import {
   rarityClass,
   type EconomyItemView,
 } from "@/components/economy/economy-view-model";
+import { economyItemTypeLabel } from "@/lib/economy/item-taxonomy";
 
 type EconomyItemCardProps = {
   item: EconomyItemView;
@@ -24,27 +25,6 @@ type EconomyItemCardProps = {
   className?: string;
   disabled?: boolean;
 };
-
-function isVipMembership(item: EconomyItemView) {
-  const catalogue = item.raw.catalogue;
-  const metadata =
-    typeof item.raw.metadata === "object" &&
-    item.raw.metadata !== null &&
-    !Array.isArray(item.raw.metadata)
-      ? item.raw.metadata
-      : typeof catalogue === "object" &&
-          catalogue !== null &&
-          !Array.isArray(catalogue) &&
-          typeof (catalogue as Record<string, unknown>).metadata === "object" &&
-          (catalogue as Record<string, unknown>).metadata !== null &&
-          !Array.isArray((catalogue as Record<string, unknown>).metadata)
-        ? (catalogue as Record<string, unknown>).metadata
-        : null;
-  return (
-    metadata !== null &&
-    (metadata as Record<string, unknown>).specialKind === "vip_membership"
-  );
-}
 
 export function EconomyItemCard({
   item,
@@ -67,8 +47,7 @@ export function EconomyItemCard({
       basePrice !== null &&
       basePrice > price,
   );
-  const vipMembership = isVipMembership(item);
-  const itemKind = vipMembership ? "VIP membership" : humanize(item.itemType);
+  const itemKind = economyItemTypeLabel(item.itemType);
   const content = (
     <>
       <MarketplaceItemPreview
@@ -80,13 +59,9 @@ export function EconomyItemCard({
       <div className="panel-heading">
         <div>
           <span
-            className={
-              vipMembership
-                ? "badge economy-special-badge"
-                : rarityClass(item.rarityRank)
-            }
+            className={rarityClass(item.rarityRank)}
           >
-            {vipMembership ? "Special" : item.rarity}
+            {item.rarity}
           </span>
           <h3>{item.displayName}</h3>
           <p>{itemKind}{item.nametag ? ` · “${item.nametag}”` : ""}</p>
@@ -104,6 +79,11 @@ export function EconomyItemCard({
         ) : null}
         {item.floatValue !== null ? <span className="tag">Float {item.floatValue.toFixed(6)}</span> : null}
         {item.seed !== null ? <span className="tag">Seed {item.seed}</span> : null}
+        {!item.tradable ? (
+          <span className="tag" title="This item cannot be traded or sold.">
+            <LockKeyhole aria-hidden="true" /> Untradable
+          </span>
+        ) : null}
         {item.equippedSlots.map((slot) => <span key={slot} className="tag tag-vip">Equipped: {humanize(slot)}</span>)}
         {price !== null ? (
           <span
