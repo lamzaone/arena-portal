@@ -2,7 +2,8 @@ import { Gift } from "lucide-react";
 
 import { CrateOpener } from "@/components/economy/crate-opener";
 import { SignInRequired } from "@/components/sign-in-required";
-import { SiteHeader } from "@/components/site-header";
+import { PageHeading } from "@/components/ui/page-heading";
+import { PortalShell } from "@/components/ui/portal-shell";
 import { createEconomyActionToken, getSession } from "@/lib/auth/session";
 import { getTokenWallet } from "@/lib/data/portal-repository";
 import { getCompleteEconomyCrates } from "@/lib/economy/catalogue";
@@ -18,8 +19,8 @@ export default async function CratesPage() {
     getCompletePlayerEconomyInventory(session.steamId)
   ]);
 
-  return <main><div className="shell"><SiteHeader authenticated />
-    <section className="page-heading"><div><p className="eyebrow"><Gift aria-hidden="true" /> Player economy</p><h1>Crates</h1><p>Open an owned crate or capsule to receive one random item. Crates never require a key.</p></div></section>
+  return <PortalShell authenticated className="tapped-page">
+    <PageHeading eyebrow={<><Gift aria-hidden="true" /> Player economy</>} title="Crates" description="Open an owned crate or capsule to receive one random item. Crates never require a key." />
     <CrateOpener crates={crates} inventory={inventory} wallet={wallet} csrf={createEconomyActionToken(session)} />
-  </div></main>;
+  </PortalShell>;
 }

@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { PlayerProfilePage } from "@/components/player-profile-page";
 import { SiteHeader } from "@/components/site-header";
 import { getSession } from "@/lib/auth/session";
-import { getPlayerDashboard, getPublicPlayerProfile } from "@/lib/data/portal-repository";
+import { getPlayerDashboard, getPlayerProfileInventoryPage, getPlayerProfileThemeKey, getPublicPlayerProfile } from "@/lib/data/portal-repository";
 import { getSteamProfiles } from "@/lib/steam/profiles";
 
 type PlayerProfilePageProps = {
@@ -18,9 +18,11 @@ export default async function PublicPlayerProfilePage({ params }: PlayerProfileP
 
   const session = await getSession();
   const isOwnProfile = session?.steamId === steamId;
-  const [profile, steamProfiles] = await Promise.all([
+  const [profile, steamProfiles, profileInventory, profileThemeKey] = await Promise.all([
     isOwnProfile ? getPlayerDashboard(steamId) : getPublicPlayerProfile(steamId),
-    getSteamProfiles([steamId])
+    getSteamProfiles([steamId]),
+    getPlayerProfileInventoryPage(session?.steamId ?? null, steamId),
+    getPlayerProfileThemeKey(steamId)
   ]);
 
   if (!profile) {
@@ -40,5 +42,5 @@ export default async function PublicPlayerProfilePage({ params }: PlayerProfileP
     );
   }
 
-  return <PlayerProfilePage profile={profile} steamId={steamId} steamProfile={steamProfiles.get(steamId)} isOwnProfile={Boolean(isOwnProfile)} isAuthenticated={Boolean(session)} />;
+  return <PlayerProfilePage profile={profile} steamId={steamId} steamProfile={steamProfiles.get(steamId)} isOwnProfile={Boolean(isOwnProfile)} isAuthenticated={Boolean(session)} profileInventory={profileInventory} profileThemeKey={profileThemeKey} />;
 }

@@ -8,6 +8,7 @@ import { canActOnTarget, getAdminAccess } from "@/lib/admin/access";
 import { getSession, verifyAdminActionToken } from "@/lib/auth/session";
 import {
   addStaffCustomCrateLootEntry,
+  createEconomyDiscountRule,
   createStaffCustomCrate,
   EconomyRepositoryError,
   getEconomyCatalogueItem,
@@ -23,9 +24,12 @@ import {
   staffTransferEconomyItem,
   staffUpdateEconomyItem,
   setEconomyCatalogueArtwork,
+  setEconomyDiscountRuleEnabled,
   setEconomyCatalogueMarketplaceStatus,
   setEconomyCatalogueMarketHash,
   updateStaffCustomCrate,
+  updateEconomyDiscountRule,
+  type EconomyDiscountTargetType,
   type EconomyItemType,
   type EconomyLoadoutSlotInput,
   type StaffCustomEconomyItem,
@@ -55,6 +59,12 @@ const artworkContentTypes = new Map([
 ]);
 const maxArtworkBytes = 5 * 1024 * 1024;
 
+function returnPage(value: string | null) {
+  if (!value || !/^\d{1,6}$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 1 ? parsed : null;
+}
+
 function redirect(
   request: Request,
   key: "notice" | "error",
@@ -69,6 +79,27 @@ function redirect(
       : "/admin/items",
     request.url,
   );
+  if (requestUrl.searchParams.get("returnTo") === "inventories") {
+    const returnQuery = requestUrl.searchParams.get("returnQ")?.trim().slice(0, 64);
+    const returnPlayerPage = returnPage(requestUrl.searchParams.get("returnPage"));
+    const returnInventoryPage = returnPage(
+      requestUrl.searchParams.get("returnInventoryPage"),
+    );
+    if (returnQuery) url.searchParams.set("q", returnQuery);
+    if (returnPlayerPage)
+      url.searchParams.set("page", String(returnPlayerPage));
+    if (returnInventoryPage)
+      url.searchParams.set("inventoryPage", String(returnInventoryPage));
+  } else {
+    const returnTab = requestUrl.searchParams.get("returnTab");
+    if (
+      returnTab === "marketplace" ||
+      returnTab === "crates" ||
+      returnTab === "discount"
+    ) {
+      url.searchParams.set("tab", returnTab);
+    }
+  }
   url.searchParams.set(key, value);
   if (steamId && /^7656119\d{10}$/.test(steamId))
     url.searchParams.set("steamId", steamId);
@@ -124,6 +155,120 @@ function optionalFloat(formData: FormData, name: string) {
   return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1
     ? Number(parsed.toFixed(6))
     : null;
+}
+
+function discountPercentageBps(formData: FormData) {
+  const value = optionalText(formData, "discountPercentage", 8);
+  if (value === undefined) return 0;
+  if (value === null || !/^\d{1,3}(?:\.\d{1,2})?$/.test(value)) return null;
+  const basisPoints = Math.round(Number(value) * 100);
+  return Number.isSafeInteger(basisPoints) && basisPoints <= 10_000
+    ? basisPoints
+    : null;
+}
+
+function discountUtcDate(formData: FormData, name: string) {
+  const value = optionalText(formData, name, 40);
+  if (value === undefined) return { valid: true as const, value: null };
+  if (value === null) return { valid: false as const, value: null };
+  // datetime-local has no zone. The discount editor labels these controls UTC
+  // and this conversion makes the persisted boundary independent of host TZ.
+  const normalized = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)
+    ? `${value}:00.000Z`
+    : value;
+  const parsed = new Date(normalized);
+  return Number.isFinite(parsed.getTime())
+    ? { valid: true as const, value: parsed.toISOString() }
+    : { valid: false as const, value: null };
+}
+
+function discountExclusions(formData: FormData) {
+  const value = optionalText(formData, "discountExclusions", 5_500);
+  if (value === undefined) return [];
+  if (value === null) return null;
+  const entries = value.split(/[\s,;]+/).filter(Boolean);
+  if (entries.length > 250 || entries.some((entry) => !/^\d+$/.test(entry)))
+    return null;
+  const ids = [...new Set(entries.map(Number))];
+  return ids.every(
+    (catalogueId) => Number.isSafeInteger(catalogueId) && catalogueId > 0,
+  )
+    ? ids
+    : null;
+}
+
+function parseDiscountRule(formData: FormData) {
+  const displayName = formText(formData, "discountName", 120);
+  const targetTypeValue = formText(formData, "discountTargetType", 32);
+  const targetType: EconomyDiscountTargetType | null =
+    targetTypeValue === "catalogue_item" || targetTypeValue === "item_type"
+      ? targetTypeValue
+      : null;
+  const catalogueId = optionalInteger(
+    formData,
+    "discountCatalogueId",
+    1,
+  );
+  const itemTypeValue = optionalText(formData, "discountItemType", 32);
+  const itemType =
+    typeof itemTypeValue === "string" &&
+    itemTypes.includes(itemTypeValue as EconomyItemType)
+      ? (itemTypeValue as EconomyItemType)
+      : itemTypeValue === undefined
+        ? undefined
+        : null;
+  const percentageBps = discountPercentageBps(formData);
+  const fixedTokensValue = optionalText(
+    formData,
+    "discountFixedTokens",
+    20,
+  );
+  const fixedTokens = integer(
+    fixedTokensValue === undefined ? "0" : fixedTokensValue,
+    0,
+    10_000_000_000,
+  );
+  const priorityValue = optionalText(formData, "discountPriority", 8);
+  const priority = integer(
+    priorityValue === undefined ? "0" : priorityValue,
+    -32_768,
+    32_767,
+  );
+  const startsAt = discountUtcDate(formData, "discountStartsAt");
+  const endsAt = discountUtcDate(formData, "discountEndsAt");
+  const excludedCatalogueIds = discountExclusions(formData);
+  if (
+    !displayName ||
+    !targetType ||
+    fixedTokensValue === null ||
+    priorityValue === null ||
+    percentageBps === null ||
+    fixedTokens === null ||
+    priority === null ||
+    !startsAt.valid ||
+    !endsAt.valid ||
+    excludedCatalogueIds === null ||
+    (percentageBps === 0 && fixedTokens === 0) ||
+    (targetType === "catalogue_item" &&
+      (catalogueId === undefined || catalogueId === null)) ||
+    (targetType === "item_type" && !itemType)
+  ) {
+    return null;
+  }
+  return {
+    displayName,
+    targetType,
+    catalogueId: targetType === "catalogue_item" ? catalogueId : null,
+    itemType: targetType === "item_type" ? itemType : null,
+    percentageBps,
+    fixedTokens,
+    priority,
+    enabled: formData.get("discountEnabled") === "true",
+    startsAt: startsAt.value,
+    endsAt: endsAt.value,
+    excludedCatalogueIds:
+      targetType === "item_type" ? excludedCatalogueIds : [],
+  };
 }
 
 function crateActionErrorKey(error: unknown, crateId: number | null) {
@@ -390,6 +535,59 @@ export async function POST(request: Request) {
   const reason = formText(formData, "reason", 180);
 
   try {
+    if (action === "discount-rule-create") {
+      if (!actor.canManageEconomy)
+        return redirect(request, "error", "manage-permission");
+      const rule = parseDiscountRule(formData);
+      if (!rule) return redirect(request, "error", "discount-details");
+      await createEconomyDiscountRule({
+        actorSteamId: actor.steamId,
+        ...rule,
+        idempotencyKey,
+      });
+      return redirect(request, "notice", "discount-created");
+    }
+
+    if (action === "discount-rule-update") {
+      if (!actor.canManageEconomy)
+        return redirect(request, "error", "manage-permission");
+      const ruleId = integer(formText(formData, "discountRuleId", 20), 1);
+      const rule = parseDiscountRule(formData);
+      if (ruleId === null || !rule)
+        return redirect(request, "error", "discount-details");
+      await updateEconomyDiscountRule({
+        actorSteamId: actor.steamId,
+        ruleId,
+        ...rule,
+        idempotencyKey,
+      });
+      return redirect(request, "notice", "discount-saved");
+    }
+
+    if (action === "discount-rule-enabled-set") {
+      if (!actor.canManageEconomy)
+        return redirect(request, "error", "manage-permission");
+      const ruleId = integer(formText(formData, "discountRuleId", 20), 1);
+      const enabledValue = formText(formData, "discountEnabled", 5);
+      if (
+        ruleId === null ||
+        (enabledValue !== "true" && enabledValue !== "false")
+      ) {
+        return redirect(request, "error", "discount-details");
+      }
+      await setEconomyDiscountRuleEnabled({
+        actorSteamId: actor.steamId,
+        ruleId,
+        enabled: enabledValue === "true",
+        idempotencyKey,
+      });
+      return redirect(
+        request,
+        "notice",
+        enabledValue === "true" ? "discount-enabled" : "discount-disabled",
+      );
+    }
+
     if (action === "catalogue-artwork-set") {
       if (!actor.canManageEconomy)
         return redirect(request, "error", "manage-permission");
@@ -846,12 +1044,18 @@ export async function POST(request: Request) {
 
     return redirect(request, "error", "action", targetSteamId);
   } catch (error) {
+    const discountError = action?.startsWith("discount-rule-") &&
+      error instanceof EconomyRepositoryError
+      ? error.code === "discount_not_found"
+        ? "discount-missing"
+        : "discount-details"
+      : null;
     return redirect(
       request,
       "error",
       error instanceof Error && error.message === "artwork"
         ? "artwork"
-        : crateActionErrorKey(error, crateContextId) ?? "database",
+        : discountError ?? crateActionErrorKey(error, crateContextId) ?? "database",
       targetSteamId ?? undefined,
       crateContextId ?? undefined,
     );

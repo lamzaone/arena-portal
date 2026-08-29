@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 
 import { getSession } from "@/lib/auth/session";
-import { getEconomyCatalogueItem } from "@/lib/data/portal-repository";
+import {
+  getEconomyCatalogueItem,
+  getEconomyDiscountedPrice,
+} from "@/lib/data/portal-repository";
 import {
   getMarketplacePriceQuotes,
   isFloatPricedMarketplaceItem,
@@ -146,13 +149,24 @@ export async function GET(request: Request) {
       imageUrl: item.imageUrl,
       quote,
     });
+    const discounted = await getEconomyDiscountedPrice({
+      catalogueId,
+      itemType: item.itemType,
+      basePriceTokens: quote.eurCents,
+    });
 
     return NextResponse.json(
       {
         ok: true,
-        priceTokens: quote.eurCents,
+        // The public/float quote is the promotion base. One active admin rule
+        // may reduce it, so both amounts are returned for honest presentation.
+        priceTokens: discounted.finalPriceTokens,
+        basePriceTokens: discounted.basePriceTokens,
+        // Discounts affect the Token checkout price, not the public EUR quote.
         euroCents: quote.eurCents,
+        originalEuroCents: quote.eurCents,
         baseEuroCents: quote.baseEuroCents,
+        discount: discounted.appliedDiscount,
         source: quote.source,
         floatValue: quote.floatValue,
         wear: quote.wear,
@@ -162,7 +176,7 @@ export async function GET(request: Request) {
         seed: quote.seed,
         seedMatched: quote.seedMatched,
       },
-      { headers: { "Cache-Control": "private, max-age=60" } },
+      { headers: { "Cache-Control": "private, no-store" } },
     );
   } catch {
     return NextResponse.json(

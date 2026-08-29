@@ -48,6 +48,7 @@ import {
 } from "@/components/economy/economy-view-model";
 import { TokenBalance } from "@/components/economy/token-balance";
 import { PortalToast } from "@/components/success-toast";
+import { SearchField } from "@/components/ui/search-field";
 
 type CrateOpenerProps = {
   crates: unknown;
@@ -121,16 +122,6 @@ function normalizedText(value: string) {
     .trim()
     .replace(/\s+/g, " ")
     .toLocaleLowerCase("en-US");
-}
-
-function formatEuroCents(value: number | null) {
-  if (value === null || !Number.isFinite(value)) return null;
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value / 100);
 }
 
 function priceSourceLabel(source: string | null) {
@@ -324,6 +315,7 @@ function CratePurchaseControls({
   onPurchase: () => void;
 }) {
   const priceTokens = cratePriceTokens(crate);
+  const basePriceTokens = crate.marketBasePriceTokens;
   const canRefreshPrice = Boolean(crate.marketHashName);
   const hasCatalogueEntry = crate.catalogueId !== null;
   const totalPriceTokens = priceTokens === null ? null : priceTokens * quantity;
@@ -335,9 +327,10 @@ function CratePurchaseControls({
       ? "The current public price will be checked before purchase."
       : "No public or staff price is available yet."
     : [
-        formatEuroCents(crate.marketPriceEuroCents),
         priceSourceLabel(crate.marketPriceSource),
-        "50% container rate applied",
+        crate.marketDiscount
+          ? `${crate.marketDiscount.displayName}: -${formatTokens(crate.marketDiscount.discountTokens)} Tokens`
+          : null,
       ]
         .filter(Boolean)
         .join(" · ");
@@ -367,6 +360,13 @@ function CratePurchaseControls({
         <strong>
           {priceAvailable ? `${formatTokens(priceTokens)} Tokens each` : "Price unavailable"}
         </strong>
+        {priceTokens !== null &&
+        basePriceTokens !== null &&
+        basePriceTokens > priceTokens ? (
+          <del className="market-base-price">
+            Original {formatTokens(basePriceTokens)} Tokens each
+          </del>
+        ) : null}
         <small>{priceDetail}</small>
       </div>
       <label className="crate-quantity-control">
@@ -500,7 +500,7 @@ function CrateDropOddsReady({
       {rarityGroups.map((group) => <button key={group.rank} type="button" role="tab" aria-selected={rarityFilter === String(group.rank)} className={`${rarityRankClass(group.rank)} ${rarityFilter === String(group.rank) ? "active" : ""}`} onClick={() => setRarityFilter(String(group.rank))} disabled={group.count === 0}><span>{rarityName(group.rank)}</span><small>{((group.weight / totalWeight) * 100).toFixed(2)}%</small></button>)}
     </div>
     <div className="crate-drop-toolbar">
-      <label htmlFor="crate-drop-search">Search this crate<input id="crate-drop-search" type="search" value={query} placeholder="e.g. Butterfly, Fade, AK-47" onChange={(event) => setQuery(event.target.value)} /></label>
+      <SearchField id="crate-drop-search" label="Search this crate" value={query} onValueChange={setQuery} placeholder="Butterfly, Fade, AK-47…" autoComplete="off" />
       <p aria-live="polite">{filteredDrops.length ? `Showing ${pageStart + 1}-${Math.min(pageStart + visibleDrops.length, filteredDrops.length)} of ${filteredDrops.length.toLocaleString()} drops` : "No drops match this filter"}</p>
     </div>
     {visibleDrops.length ? <div className="crate-drop-grid">
@@ -749,7 +749,7 @@ function MarketCrateInlineOpener({
       <div>
         <p className="eyebrow"><ShoppingBag aria-hidden="true" /> Container market</p>
         <h3>{crate.displayName}</h3>
-        <p>Buy this container at its 50% Token rate, then open it from your Owned tab.</p>
+        <p>Buy this container at its listed Token price, then open it from your Owned tab.</p>
       </div>
       <button type="button" className="button button-quiet crate-inline-modal-close" onClick={onClose} disabled={busy} aria-label={`Close ${crate.displayName} market panel`}>
         <X aria-hidden="true" /> Close
@@ -816,7 +816,7 @@ function CrateSelectionStage({
       <p>{crate.description ?? `Ready to ${tab === "owned" ? "open" : "buy"} this ${humanize(crate.itemType)}.`}</p>
       <div className="tag-list">
         {cratePriceTokens !== null ? <span className="tag">{formatTokens(cratePriceTokens)} Token container rate</span> : null}
-        <span className="tag">{tab === "owned" ? "No key required" : "50% container price"}</span>
+        <span className="tag">{tab === "owned" ? "No key required" : "Explicit discounts only"}</span>
       </div>
     </div>
     {tab === "owned" ? <button type="button" className="button button-primary button-large" disabled={busy} onClick={onOpen}>{busy ? "Opening…" : `Open ${crate.displayName}`}</button> : <CratePurchaseControls crate={crate as EconomyCrateView} walletBalance={walletBalance} quantity={quantity} pending={busy} buying={purchasing} onQuantityChange={onQuantityChange} onPurchase={onPurchase} />}
@@ -1402,8 +1402,8 @@ export function CrateOpener({
           <h2>Open crates without a key.</h2>
           <p className="empty-copy">
             Select a crate from your inventory and reveal one random item.
-            Cases and capsules can also be acquired below at their half-price
-            Token rate.
+            Cases and capsules can also be acquired below at their listed
+            Token price.
           </p>
         </div>
         <TokenBalance wallet={walletView} />
@@ -1438,7 +1438,7 @@ export function CrateOpener({
           <form className="panel form-panel crate-catalogue-filters" onSubmit={(event) => event.preventDefault()}>
             <div className="crate-filter-heading"><div><p className="eyebrow"><SlidersHorizontal aria-hidden="true" /> Browse containers</p><p className="empty-copy">Search the crate name, public market name, loot-table code, or rarity. Results update as you filter.</p></div><span className="tag">Up to {CATALOGUE_PAGE_SIZE} per page</span></div>
             <div className="crate-filter-grid">
-              <label className="crate-search-field" htmlFor="crate-search">Search crates<input id="crate-search" type="search" value={catalogueQuery} placeholder="e.g. Kilowatt, capsule, autograph" onChange={(event) => setCatalogueQuery(event.target.value)} /></label>
+              <SearchField id="crate-search" label="Search crates" rootClassName="crate-search-field" value={catalogueQuery} onValueChange={setCatalogueQuery} placeholder="Kilowatt, capsule, autograph…" autoComplete="off" />
               <label htmlFor="crate-type">Type<select id="crate-type" value={catalogueType} onChange={(event) => setCatalogueType(event.target.value as CatalogueTypeFilter)}><option value="all">All containers</option><option value="crate">Crates / cases</option><option value="capsule">Capsules</option></select></label>
               <label htmlFor="crate-rarity">Rarity<select id="crate-rarity" value={catalogueRarity} onChange={(event) => setCatalogueRarity(event.target.value)}><option value="">All rarities</option>{CRATE_RARITY_RANKS.map((rank) => <option key={rank} value={rank}>{rarityName(rank)}</option>)}</select></label>
               <label htmlFor="crate-price-filter">Price<select id="crate-price-filter" value={cataloguePrice} onChange={(event) => setCataloguePrice(event.target.value as CataloguePriceFilter)}><option value="all">All price states</option><option value="priced">Priced now</option><option value="affordable">Within my balance</option><option value="unpriced">Price pending</option></select></label>

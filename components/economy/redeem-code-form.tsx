@@ -1,10 +1,11 @@
 "use client";
 
-import { CheckCircle2, Gift, LoaderCircle, TicketCheck } from "lucide-react";
+import { CheckCircle2, Gift, TicketCheck } from "lucide-react";
 import { FormEvent, useState } from "react";
 
 import { postEconomyAction } from "@/components/economy/economy-request";
 import { PortalToast } from "@/components/success-toast";
+import { AsyncButton } from "@/components/ui/async-button";
 
 type RedeemResult = {
   displayName: string;
@@ -73,10 +74,16 @@ export function RedeemCodeForm({ csrf }: { csrf: string }) {
             placeholder="TAPPD-SUMMER-2026"
             disabled={pending}
           />
-          <button className="button button-primary" type="submit" disabled={pending || !code.trim()}>
-            {pending ? <LoaderCircle className="spin" aria-hidden="true" /> : <Gift aria-hidden="true" />}
-            {pending ? "Redeeming" : "Redeem"}
-          </button>
+          <AsyncButton
+            className="button button-primary"
+            type="submit"
+            disabled={!code.trim()}
+            icon={<Gift />}
+            pending={pending}
+            pendingLabel="Redeeming"
+          >
+            Redeem
+          </AsyncButton>
         </div>
       </form>
       {result ? (

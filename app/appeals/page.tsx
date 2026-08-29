@@ -5,8 +5,9 @@ import { CaseStatusTag } from "@/components/case-status-tag";
 import { CaseConversation } from "@/components/case-conversation";
 import { formatDate, formatPortalDate, isActiveSanction } from "@/components/formatters";
 import { SignInRequired } from "@/components/sign-in-required";
-import { SiteHeader } from "@/components/site-header";
 import { PortalToast } from "@/components/success-toast";
+import { PageHeading } from "@/components/ui/page-heading";
+import { PortalShell } from "@/components/ui/portal-shell";
 import { getSession } from "@/lib/auth/session";
 import { getAppealEligibility, getAppeals, getPlayerDashboard, portalStorageConfigured, type AppealBan, type BanAppeal } from "@/lib/data/portal-repository";
 import { getSteamProfiles, type SteamProfile } from "@/lib/steam/profiles";
@@ -66,8 +67,8 @@ export default async function AppealsPage({ searchParams }: AppealsPageProps) {
   const error = params.error === "screenshot" ? "Screenshots must be PNG, JPEG, or WebP, with no more than five files up to 5 MB each." : params.error === "closed" ? "That appeal has already been closed and cannot receive another reply." : params.error === "cooldown" ? "A previous appeal was closed as still banned. You can submit another appeal seven days after that decision." : "Your appeal could not be submitted. Check the required details and portal database setup.";
 
   return (
-    <main><div className="shell"><SiteHeader authenticated />
-      <section className="page-heading"><div><p className="eyebrow"><Shield aria-hidden="true" /> Moderation review</p><h1>Ban appeals</h1><p>Appeals are unlocked only while a current ban is active.</p></div></section>
+    <PortalShell authenticated className="tapped-page">
+      <PageHeading eyebrow={<><Shield aria-hidden="true" /> Moderation review</>} title="Ban appeals" description="Appeals are unlocked only while a current ban is active." />
       {params.submitted && <PortalToast message="Your appeal was submitted. Staff updates will appear below." />}
       {params.replied && <PortalToast message="Your reply and any screenshots were sent to staff." />}
       {params.error && <PortalToast variant="danger" message={error} />}
@@ -76,6 +77,6 @@ export default async function AppealsPage({ searchParams }: AppealsPageProps) {
         {storageReady && appealEligibility?.eligible ? <form className="panel form-panel" action="/api/appeals" method="post" encType="multipart/form-data"><input type="hidden" name="action" value="create" /><div className="panel-heading"><h2>Submit an appeal</h2><p>Explain what happened, take responsibility where appropriate, and include useful context.</p></div><label htmlFor="appeal-body">Your appeal</label><textarea id="appeal-body" name="body" minLength={20} maxLength={5000} required placeholder="Write your appeal…" /><label htmlFor="appeal-screenshots">Screenshots (optional)<input id="appeal-screenshots" name="screenshots" type="file" accept="image/png,image/jpeg,image/webp" multiple /></label><EvidenceGuidance /><button className="button button-primary" type="submit">Submit appeal</button></form> : !storageReady ? <div className="notice notice-info"><AlertTriangle aria-hidden="true" /> Portal storage needs to be configured before appeals can be submitted.</div> : <div className="notice notice-warning"><AlertTriangle aria-hidden="true" /> Your previous appeal was closed as still banned. You can submit a new appeal after <strong>{appealEligibility?.eligibleAt ? formatPortalDate(appealEligibility.eligibleAt) : "the seven-day review cooldown"}</strong>.</div>}
       </> : <section className="empty-state compact"><h2>No active ban</h2><p>Your account has no active ban, so no appeal is needed. Previous appeals remain visible below if any exist.</p></section>}
       <section className="history-section case-history"><div className="section-heading compact"><p className="eyebrow">Appeal timeline</p><h2>Your submitted appeals</h2></div>{appeals.length ? <div className="case-card-list">{appeals.map((appeal) => <AppealCase key={appeal.id} appeal={appeal} steamProfiles={steamProfiles} viewerSteamId={session.steamId} />)}</div> : <p className="empty-copy">No appeals have been submitted from this Steam account.</p>}</section>
-    </div></main>
+    </PortalShell>
   );
 }

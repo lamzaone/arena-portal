@@ -105,6 +105,27 @@ export function verifyEconomyActionToken(session: PortalSession, token: string) 
   return timingSafeEqual(Buffer.from(token), Buffer.from(expected));
 }
 
+// Account privacy and profile presentation are isolated from economy and
+// staff mutations. A token rendered on Settings cannot be replayed to move an
+// item, spend Tokens, or perform an administrative action.
+export function createProfileActionToken(session: PortalSession) {
+  const secret = getSecret();
+  if (!secret) return "";
+  return sign(
+    `profile-action:${session.steamId}:${session.expiresAt}:${session.tokenHash}`,
+    secret,
+  );
+}
+
+export function verifyProfileActionToken(
+  session: PortalSession,
+  token: string,
+) {
+  const expected = createProfileActionToken(session);
+  if (!token || !expected || token.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+}
+
 export function sessionCookieOptions() {
   return {
     httpOnly: true,

@@ -2,7 +2,8 @@ import { Archive } from "lucide-react";
 
 import { InventoryManager } from "@/components/economy/inventory-manager";
 import { SignInRequired } from "@/components/sign-in-required";
-import { SiteHeader } from "@/components/site-header";
+import { PageHeading } from "@/components/ui/page-heading";
+import { PortalShell } from "@/components/ui/portal-shell";
 import { createEconomyActionToken, getSession } from "@/lib/auth/session";
 import { getPlayerEconomyLoadout, getTokenWallet } from "@/lib/data/portal-repository";
 import { getCompletePlayerEconomyInventory } from "@/lib/economy/player-inventory";
@@ -17,8 +18,8 @@ export default async function InventoryPage() {
     getPlayerEconomyLoadout(session.steamId)
   ]);
 
-  return <main><div className="shell"><SiteHeader authenticated />
-    <section className="page-heading"><div><p className="eyebrow"><Archive aria-hidden="true" /> Player economy</p><h1>Inventory</h1><p>Manage the cosmetic items attached to your Token account, then equip eligible owned instances to your server loadout.</p></div></section>
+  return <PortalShell authenticated className="tapped-page">
+    <PageHeading eyebrow={<><Archive aria-hidden="true" /> Player economy</>} title="Inventory" description="Manage the cosmetic items attached to your Token account, then equip eligible owned instances to your server loadout." />
     <InventoryManager inventory={inventory} loadout={loadout} wallet={wallet} csrf={createEconomyActionToken(session)} />
-  </div></main>;
+  </PortalShell>;
 }

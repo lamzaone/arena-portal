@@ -11,8 +11,13 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body>
+        <a className="skip-link" href="#main-content">
+          Skip to main content
+        </a>
         <CursorGridBackground />
-        <div className="portal-content">{children}</div>
+        <div id="main-content" className="portal-content" tabIndex={-1}>
+          {children}
+        </div>
       </body>
     </html>
   );

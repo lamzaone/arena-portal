@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { LockKeyhole, TicketCheck } from "lucide-react";
+import { LockKeyhole } from "lucide-react";
 
 import { RedeemCodeAdmin } from "@/components/economy/redeem-code-admin";
 import { SignInRequired } from "@/components/sign-in-required";
 import { SiteHeader } from "@/components/site-header";
+import { StaffSubmenu } from "@/components/staff-submenu";
 import { getAdminAccess } from "@/lib/admin/access";
 import { createAdminActionToken, getSession } from "@/lib/auth/session";
 import {
@@ -51,12 +52,7 @@ export default async function RedeemCodeAdminPage({
     <main className="tapped-page">
       <div className="shell">
         <SiteHeader authenticated />
-        <nav className="staff-tabs" aria-label="Economy administration">
-          <Link href="/admin">Staff panel</Link>
-          <Link href="/admin/items">Items</Link>
-          <Link href="/admin/inventories">Inventories</Link>
-          <Link className="active" href="/admin/redeem"><TicketCheck aria-hidden="true" /> Redeem codes</Link>
-        </nav>
+        <StaffSubmenu access={access} active="redeem" />
         <RedeemCodeAdmin
           csrf={createAdminActionToken(session)}
           catalogue={catalogue.items}

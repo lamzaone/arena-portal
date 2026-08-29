@@ -2,7 +2,8 @@ import { ShoppingBag } from "lucide-react";
 
 import { MarketplaceBrowser } from "@/components/economy/marketplace-browser";
 import { SignInRequired } from "@/components/sign-in-required";
-import { SiteHeader } from "@/components/site-header";
+import { PageHeading } from "@/components/ui/page-heading";
+import { PortalShell } from "@/components/ui/portal-shell";
 import { createEconomyActionToken, getSession } from "@/lib/auth/session";
 import {
   getMarketplaceCatalogue,
@@ -95,21 +96,12 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
   ]);
 
   return (
-    <main>
-      <div className="shell">
-        <SiteHeader authenticated />
-        <section className="page-heading">
-          <div>
-            <p className="eyebrow">
-              <ShoppingBag aria-hidden="true" /> Player economy
-            </p>
-            <h1>Marketplace</h1>
-            <p>
-              Buy a specific cosmetic, case, or VIP membership item directly
-              with Tokens.
-            </p>
-          </div>
-        </section>
+    <PortalShell authenticated className="tapped-page">
+        <PageHeading
+          eyebrow={<><ShoppingBag aria-hidden="true" /> Player economy</>}
+          title="Marketplace"
+          description="Buy a specific cosmetic, case, or VIP membership item directly with Tokens."
+        />
         <MarketplaceBrowser
           catalogue={catalogue}
           wallet={wallet}
@@ -127,7 +119,6 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
             total: catalogue.total,
           }}
         />
-      </div>
-    </main>
+    </PortalShell>
   );
 }

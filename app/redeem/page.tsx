@@ -2,7 +2,8 @@ import { TicketCheck } from "lucide-react";
 
 import { RedeemCodeForm } from "@/components/economy/redeem-code-form";
 import { SignInRequired } from "@/components/sign-in-required";
-import { SiteHeader } from "@/components/site-header";
+import { PageHeading } from "@/components/ui/page-heading";
+import { PortalShell } from "@/components/ui/portal-shell";
 import { createEconomyActionToken, getSession } from "@/lib/auth/session";
 
 export default async function RedeemPage() {
@@ -15,20 +16,14 @@ export default async function RedeemPage() {
       />
     );
   return (
-    <main>
-      <div className="shell">
-        <SiteHeader authenticated />
-        <section className="page-heading redeem-page-heading">
-          <div>
-            <p className="eyebrow">
-              <TicketCheck aria-hidden="true" /> Token rewards
-            </p>
-            <h1>Redeem</h1>
-            <p>Claim a server or community reward code once, from anywhere.</p>
-          </div>
-        </section>
-        <RedeemCodeForm csrf={createEconomyActionToken(session)} />
-      </div>
-    </main>
+    <PortalShell authenticated className="tapped-page">
+      <PageHeading
+        className="redeem-page-heading"
+        eyebrow={<><TicketCheck aria-hidden="true" /> Token rewards</>}
+        title="Redeem"
+        description="Claim a server or community reward code once, from anywhere."
+      />
+      <RedeemCodeForm csrf={createEconomyActionToken(session)} />
+    </PortalShell>
   );
 }

@@ -129,6 +129,7 @@ export function MarketplaceItemPreview({
   const [failedPreviewImageUrls, setFailedPreviewImageUrls] = useState<string[]>(
     [],
   );
+  const [loadedImageUrl, setLoadedImageUrl] = useState<string | null>(null);
   const [state, setState] = useState<PreviewState>("idle");
   const directImageUrls = useMemo(() => imageCandidates(item.imageUrl), [item.imageUrl]);
   const directImageKey = directImageUrls.join("|");
@@ -230,8 +231,10 @@ export function MarketplaceItemPreview({
   // available; the startup-cached catalogue image stays on screen while that
   // request resolves and remains the reliable fallback when Steam is down.
   const imageUrl = previewImageUrl ?? directImageUrl;
-  const loading = !imageUrl && state === "loading";
-  const label = loading
+  const imageLoading = Boolean(imageUrl && loadedImageUrl !== imageUrl);
+  const requestLoading = !imageUrl && state === "loading";
+  const loading = imageLoading || requestLoading;
+  const label = requestLoading
     ? "Loading item art"
     : state === "unavailable" && previewRequestUrl
       ? "Item preview unavailable"
@@ -244,32 +247,42 @@ export function MarketplaceItemPreview({
       aria-busy={loading}
     >
       {imageUrl ? (
-        <img
-          src={imageUrl}
-          alt={`${item.displayName} preview`}
-          loading="lazy"
-          decoding="async"
-          referrerPolicy="no-referrer"
-          onError={() => {
-            if (directImageUrls.includes(imageUrl)) {
-              setFailedDirectImageUrls((current) =>
+        <>
+          <img
+            src={imageUrl}
+            alt={`${item.displayName} preview`}
+            className={imageLoading ? "is-loading" : undefined}
+            loading="lazy"
+            decoding="async"
+            referrerPolicy="no-referrer"
+            onLoad={() => setLoadedImageUrl(imageUrl)}
+            onError={() => {
+              setLoadedImageUrl(null);
+              if (directImageUrls.includes(imageUrl)) {
+                setFailedDirectImageUrls((current) =>
+                  current.includes(imageUrl) ? current : [...current, imageUrl],
+                );
+                return;
+              }
+              const hasAnotherCandidate = previewImageUrls.some(
+                (candidate) =>
+                  candidate !== imageUrl &&
+                  !failedPreviewImageUrls.includes(candidate),
+              );
+              setFailedPreviewImageUrls((current) =>
                 current.includes(imageUrl) ? current : [...current, imageUrl],
               );
-              return;
-            }
-            const hasAnotherCandidate = previewImageUrls.some(
-              (candidate) =>
-                candidate !== imageUrl &&
-                !failedPreviewImageUrls.includes(candidate),
-            );
-            setFailedPreviewImageUrls((current) =>
-              current.includes(imageUrl) ? current : [...current, imageUrl],
-            );
-            if (!hasAnotherCandidate) {
-              setState("unavailable");
-            }
-          }}
-        />
+              if (!hasAnotherCandidate) {
+                setState("unavailable");
+              }
+            }}
+          />
+          {imageLoading ? (
+            <span className="economy-item-preview-loading" aria-hidden="true">
+              <LoaderCircle />
+            </span>
+          ) : null}
+        </>
       ) : (
         <div className="economy-item-preview-fallback">
           {loading ? (

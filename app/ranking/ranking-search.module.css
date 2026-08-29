@@ -1,0 +1,28 @@
+.form {
+  display: grid;
+  width: min(430px, 100%);
+  grid-template-columns: minmax(250px, 1fr) 44px;
+  gap: 7px;
+  align-items: start;
+}
+
+.field {
+  min-width: 0;
+}
+
+.submit {
+  width: 44px;
+  min-width: 44px;
+}
+
+.submit svg {
+  width: 15px;
+  height: 15px;
+}
+
+@media (max-width: 520px) {
+  .form {
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+}

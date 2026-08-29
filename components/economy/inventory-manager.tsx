@@ -39,6 +39,7 @@ import {
 } from "@/components/economy/economy-view-model";
 import { TokenBalance } from "@/components/economy/token-balance";
 import { PortalToast } from "@/components/success-toast";
+import { SearchField } from "@/components/ui/search-field";
 
 type InventoryManagerProps = {
   inventory: unknown;
@@ -370,16 +371,14 @@ export function InventoryManager({
         onSubmit={(event) => event.preventDefault()}
       >
         <div className="form-grid">
-          <label htmlFor="inventory-search">
-            Search inventory
-            <input
-              id="inventory-search"
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search name, rarity, tag, or type"
-            />
-          </label>
+          <SearchField
+            id="inventory-search"
+            label="Search inventory"
+            value={query}
+            onValueChange={setQuery}
+            placeholder="Name, rarity, tag, or item type"
+            autoComplete="off"
+          />
           <label htmlFor="inventory-sort">
             Sort by
             <select

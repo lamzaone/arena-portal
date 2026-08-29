@@ -8,8 +8,15 @@ export type EconomyItemView = {
   rarityRank: number;
   marketHashName: string | null;
   marketPriceTokens: number | null;
+  marketBasePriceTokens: number | null;
   marketPriceEuroCents: number | null;
+  marketBasePriceEuroCents: number | null;
   marketPriceSource: string | null;
+  marketDiscount: {
+    ruleId: number;
+    displayName: string;
+    discountTokens: number;
+  } | null;
   marketPriceFloatValue: number | null;
   marketPriceWear: string | null;
   marketPriceFloatDiscountBps: number | null;
@@ -302,6 +309,14 @@ export function toEconomyItem(value: unknown): EconomyItemView {
     : isRecord(catalogue.price)
       ? catalogue.price
       : {};
+  const appliedDiscount = isRecord(record.appliedDiscount)
+    ? record.appliedDiscount
+    : isRecord(catalogue.appliedDiscount)
+      ? catalogue.appliedDiscount
+      : null;
+  const discountRuleId = integer(appliedDiscount?.ruleId);
+  const discountTokens = integer(appliedDiscount?.discountTokens);
+  const discountName = text(appliedDiscount?.displayName, "");
 
   return {
     id,
@@ -336,6 +351,16 @@ export function toEconomyItem(value: unknown): EconomyItemView {
       ]),
       number(firstDefined(nestedPrice, ["tokenPrice", "priceTokens"])),
     ),
+    marketBasePriceTokens: number(
+      firstDefined(record, ["displayBasePriceTokens", "basePriceTokens"]),
+      number(
+        firstDefined(catalogue, [
+          "displayBasePriceTokens",
+          "basePriceTokens",
+        ]),
+        number(firstDefined(nestedPrice, ["tokenPrice", "priceTokens"])),
+      ),
+    ),
     marketPriceEuroCents: number(
       firstDefined(record, [
         "displayPriceEuroCents",
@@ -350,11 +375,31 @@ export function toEconomyItem(value: unknown): EconomyItemView {
         ]),
       ),
     ),
+    marketBasePriceEuroCents: number(
+      firstDefined(record, [
+        "displayBasePriceEuroCents",
+        "basePriceEuroCents",
+      ]),
+      number(
+        firstDefined(catalogue, [
+          "displayBasePriceEuroCents",
+          "basePriceEuroCents",
+        ]),
+        number(firstDefined(nestedPrice, ["euroCents"])),
+      ),
+    ),
     marketPriceSource:
       text(
         firstDefined(record, ["displayPriceSource", "marketPriceSource"]),
         text(firstDefined(nestedPrice, ["source", "priceSource"]), ""),
       ) || null,
+    marketDiscount:
+      discountRuleId !== null &&
+      discountTokens !== null &&
+      discountTokens > 0 &&
+      discountName
+        ? { ruleId: discountRuleId, displayName: discountName, discountTokens }
+        : null,
     marketPriceFloatValue: float(
       firstDefined(record, [
         "displayPriceFloatValue",

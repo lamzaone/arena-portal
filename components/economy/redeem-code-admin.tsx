@@ -5,7 +5,6 @@ import {
   Clipboard,
   Coins,
   Gift,
-  LoaderCircle,
   Minus,
   PackagePlus,
   Pause,
@@ -20,6 +19,11 @@ import { FormEvent, useMemo, useState } from "react";
 
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
 import { PortalToast } from "@/components/success-toast";
+import { AsyncButton } from "@/components/ui/async-button";
+import {
+  SearchField,
+  SearchSubmitButton,
+} from "@/components/ui/search-field";
 import type {
   EconomyCatalogueItem,
   EconomyRedeemCode,
@@ -374,10 +378,15 @@ export function RedeemCodeAdmin({
               </ul>
             ) : <p>Search the catalogue below, then add cases, skins, stickers, agents, or other existing items.</p>}
           </div>
-          <button className="button button-primary redeem-create-button" type="submit" disabled={pending}>
-            {pending ? <LoaderCircle className="spin" aria-hidden="true" /> : <TicketCheck aria-hidden="true" />}
-            {pending ? "Creating campaign" : "Create redeem code"}
-          </button>
+          <AsyncButton
+            className="button button-primary redeem-create-button"
+            type="submit"
+            icon={<TicketCheck />}
+            pending={pending}
+            pendingLabel="Creating campaign"
+          >
+            Create redeem code
+          </AsyncButton>
         </form>
 
         <aside className="panel redeem-picker">
@@ -389,8 +398,24 @@ export function RedeemCodeAdmin({
             </div>
           </div>
           <form className="redeem-catalogue-search" onSubmit={searchCatalogue}>
-            <input value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} placeholder="Search skins, cases, stickers…" maxLength={100} />
-            <button className="button button-secondary" type="submit" disabled={searching}>{searching ? <LoaderCircle className="spin" aria-hidden="true" /> : <Search aria-hidden="true" />} {searching ? "Searching" : "Search"}</button>
+            <SearchField
+              id="redeem-catalogue-search"
+              label="Search catalogue"
+              value={pickerQuery}
+              onValueChange={setPickerQuery}
+              placeholder="Skins, cases, stickers…"
+              maxLength={100}
+              autoComplete="off"
+              pending={searching}
+            />
+            <SearchSubmitButton
+              alignWithLabel
+              variant="secondary"
+              pending={searching}
+              pendingLabel="Searching"
+            >
+              Search
+            </SearchSubmitButton>
           </form>
           <div className="redeem-picker-list">
             {pickerItems.length ? pickerItems.map((item) => {
@@ -426,10 +451,17 @@ export function RedeemCodeAdmin({
             <header><div><span className="redeem-code-hint">{item.codeHint}</span><h3>{item.displayName}</h3></div><span className={`redeem-code-status ${item.enabled ? "" : "is-paused"}`}>{item.enabled ? "Live" : "Paused"}</span></header>
             <div className="redeem-code-meta"><span><Coins aria-hidden="true" /> {item.tokenAmount.toLocaleString()} Tokens</span><span><TicketCheck aria-hidden="true" /> {usesLabel(item)}</span></div>
             {item.rewards.length ? <ul className="redeem-card-rewards">{item.rewards.map((reward) => <li key={reward.catalogueId}><span className={`rarity-rank-${reward.rarityRank}`}>{reward.quantity}×</span>{reward.displayName}</li>)}</ul> : <p className="empty-copy">Token-only reward</p>}
-            <button className="button button-secondary" type="button" disabled={activeCodeId === item.id} onClick={() => toggleCode(item)}>
-              {activeCodeId === item.id ? <LoaderCircle className="spin" aria-hidden="true" /> : item.enabled ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+            <AsyncButton
+              className="button button-secondary"
+              type="button"
+              disabled={activeCodeId !== null && activeCodeId !== item.id}
+              icon={item.enabled ? <Pause /> : <Play />}
+              pending={activeCodeId === item.id}
+              pendingLabel="Updating code"
+              onClick={() => toggleCode(item)}
+            >
               {item.enabled ? "Pause code" : "Make live"}
-            </button>
+            </AsyncButton>
           </article>
         ))}</div> : <p className="empty-copy">No redeem campaigns have been created yet.</p>}
       </section>

@@ -6,19 +6,25 @@ import {
   ChevronLeft,
   ChevronRight,
   LockKeyhole,
-  Search,
   ShieldCheck,
   UserRoundSearch,
 } from "lucide-react";
 
 import { StaffInventoryPanel } from "@/components/economy/staff-inventory-panel";
+import { PlayerSearchField } from "@/components/player-search-field";
 import { SignInRequired } from "@/components/sign-in-required";
 import { SiteHeader } from "@/components/site-header";
+import { StaffSubmenu } from "@/components/staff-submenu";
 import { PortalToast } from "@/components/success-toast";
+import {
+  SearchNavigationForm,
+  SearchSubmitButton,
+} from "@/components/ui/search-field";
 import { getAdminAccess } from "@/lib/admin/access";
 import { createAdminActionToken, getSession } from "@/lib/auth/session";
 import {
   findStaffEconomyAccounts,
+  getEconomyCatalogue,
   getStaffEconomyAccount,
 } from "@/lib/data/portal-repository";
 
@@ -67,10 +73,28 @@ function inventoriesHref({
   return search ? `/admin/inventories?${search}` : "/admin/inventories";
 }
 
+function inventoryMutationAction({
+  query,
+  page,
+  inventoryPage,
+}: {
+  query: string;
+  page: number;
+  inventoryPage: number;
+}) {
+  const params = new URLSearchParams({ returnTo: "inventories" });
+  if (query) params.set("returnQ", query);
+  if (page > 1) params.set("returnPage", String(page));
+  if (inventoryPage > 1)
+    params.set("returnInventoryPage", String(inventoryPage));
+  return `/api/admin/economy?${params.toString()}`;
+}
+
 function feedback(value: string | undefined, kind: "notice" | "error") {
   if (!value) return undefined;
   const notices: Record<string, string> = {
     "tokens-updated": "Token balance updated.",
+    "item-granted": "Item granted to the selected player's inventory.",
     "item-updated": "Item customization saved and queued for server refresh.",
     "item-state-updated": "Item state updated.",
     "item-transferred": "Item transferred and both loadouts refreshed.",
@@ -83,15 +107,22 @@ function feedback(value: string | undefined, kind: "notice" | "error") {
     verification: "Session verification failed. Reload and try again.",
     permission: "Your staff group does not have Token economy access.",
     "token-permission": "Your staff group cannot adjust Token balances.",
+    "grant-permission": "Your staff group cannot grant inventory items.",
     "manage-permission": "This action requires full inventory administration access.",
     "loadout-permission": "Your staff group cannot manage loadouts.",
     target: "The selected player is invalid or protected by higher staff immunity.",
     "item-details": "Review the item fields and try again.",
+    "container-catalogue": "Crates and capsules must use a catalogue entry with a configured loot table.",
     "loadout-details": "Choose a valid loadout slot and owned item.",
     "transfer-details": "Provide a valid destination SteamID64.",
     "sticker-details": "Provide a valid weapon, sticker, and sticker slot.",
+    catalogue: "Choose a valid catalogue item.",
+    database: "The inventory action could not be saved. Check database configuration and try again.",
+    action: "The requested inventory action is not supported.",
   };
-  return kind === "notice" ? notices[value] : errors[value];
+  return kind === "notice"
+    ? notices[value] ?? "The inventory action was completed."
+    : errors[value] ?? "The requested inventory action could not be completed.";
 }
 
 export default async function AdminInventoriesPage({ searchParams }: AdminInventoriesPageProps) {
@@ -107,10 +138,13 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
   const playerPage = positivePage(params.page);
   const steamId = validSteamId(params.steamId);
   const inventoryPage = positivePage(params.inventoryPage);
-  const [players, account] = await Promise.all([
+  const [players, account, grantCatalogue] = await Promise.all([
     findStaffEconomyAccounts({ query: query || undefined, page: playerPage, pageSize: 24 }),
     steamId
       ? getStaffEconomyAccount(steamId, { inventoryPage, inventoryPageSize: 48 })
+      : Promise.resolve(null),
+    steamId && access.canGrantEconomyItems
+      ? getEconomyCatalogue({ includeDisabled: true, pageSize: 100 })
       : Promise.resolve(null),
   ]);
   const notice = feedback(params.notice, "notice");
@@ -121,6 +155,11 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
   const previousInventoryHref = account && account.inventory.page > 1 ? inventoriesHref({ query, page: players.page, steamId, inventoryPage: account.inventory.page - 1 }) : null;
   const inventoryPageCount = account ? Math.max(1, Math.ceil(account.inventory.total / account.inventory.pageSize)) : 1;
   const nextInventoryHref = account && account.inventory.page < inventoryPageCount ? inventoriesHref({ query, page: players.page, steamId, inventoryPage: account.inventory.page + 1 }) : null;
+  const mutationAction = inventoryMutationAction({
+    query,
+    page: players.page,
+    inventoryPage: account?.inventory.page ?? inventoryPage,
+  });
 
   return (
     <main className="tapped-page staff-page economy-admin-page">
@@ -134,11 +173,7 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
           </div>
           <Link className="button button-secondary" href="/admin">Back to staff panel</Link>
         </section>
-        <nav className="staff-tabs economy-staff-tabs" aria-label="Economy administration">
-          <Link href="/admin/items">Items &amp; crates</Link>
-          <Link className="active" href="/admin/inventories">Inventories</Link>
-          {access.canManageEconomy ? <Link href="/admin/redeem">Redeem codes</Link> : null}
-        </nav>
+        <StaffSubmenu access={access} active="inventories" />
         {notice ? <PortalToast message={notice} /> : null}
         {error ? <PortalToast variant="danger" message={error} /> : null}
         <section className="staff-inventories-layout">
@@ -147,10 +182,18 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
               <div><p className="eyebrow"><UserRoundSearch aria-hidden="true" /> Player directory</p><h2>Inventories</h2></div>
               <span>{players.total} known</span>
             </div>
-            <form className="staff-player-search" action="/admin/inventories" method="get">
-              <label>Search player<input name="q" defaultValue={query} placeholder="Player name or SteamID64" autoComplete="off" /></label>
-              <button className="button button-primary" type="submit"><Search aria-hidden="true" /> Search</button>
-            </form>
+            <SearchNavigationForm className="staff-player-search" action="/admin/inventories">
+              <PlayerSearchField
+                name="q"
+                selectionName="steamId"
+                label="Search player"
+                mode="query"
+                defaultQuery={query}
+                includeSelf
+                autoSubmitOnSelect
+              />
+              <SearchSubmitButton alignWithLabel>Search</SearchSubmitButton>
+            </SearchNavigationForm>
             <div className="staff-player-results">
               {players.accounts.length ? players.accounts.map((player) => {
                 const selected = player.steamId === steamId;
@@ -164,7 +207,7 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
             {playerPageCount > 1 ? <nav className="pagination staff-player-pagination" aria-label="Player results pages"><Link className={previousPlayerHref ? "" : "is-disabled"} href={previousPlayerHref ?? "#"} scroll={false}><ChevronLeft aria-hidden="true" /> Previous</Link><span>{players.page} / {playerPageCount}</span><Link className={nextPlayerHref ? "" : "is-disabled"} href={nextPlayerHref ?? "#"} scroll={false}>Next <ChevronRight aria-hidden="true" /></Link></nav> : null}
           </aside>
           <div className="staff-inventory-workspace">
-            {account ? <StaffInventoryPanel account={account} csrf={createAdminActionToken(session)} canAdjustTokens={access.canAdjustEconomyTokens} canManage={access.canManageEconomy} canManageLoadouts={access.canManageEconomyLoadouts} pagination={{ previousHref: previousInventoryHref, nextHref: nextInventoryHref }} /> : <section className="panel staff-inventory-empty"><div className="staff-inventory-empty-icon"><Archive aria-hidden="true" /></div><p className="eyebrow">Select a player</p><h2>Choose an inventory to inspect.</h2><p>Search the directory by player name or SteamID64. Selecting a player opens their wallet, loadout controls, and preview-rich inventory right here.</p></section>}
+            {account ? <StaffInventoryPanel account={account} csrf={createAdminActionToken(session)} canAdjustTokens={access.canAdjustEconomyTokens} canGrant={access.canGrantEconomyItems} canManage={access.canManageEconomy} canManageLoadouts={access.canManageEconomyLoadouts} grantCatalogue={grantCatalogue?.items ?? []} mutationAction={mutationAction} pagination={{ previousHref: previousInventoryHref, nextHref: nextInventoryHref }} /> : <section className="panel staff-inventory-empty"><div className="staff-inventory-empty-icon"><Archive aria-hidden="true" /></div><p className="eyebrow">Select a player</p><h2>Choose an inventory to inspect.</h2><p>Search the directory by player name or SteamID64. Selecting a player opens their wallet, loadout controls, and preview-rich inventory right here.</p></section>}
           </div>
         </section>
       </div>

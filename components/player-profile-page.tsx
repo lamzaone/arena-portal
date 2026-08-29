@@ -1,14 +1,19 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowLeft, ArrowRight, Ban, Clock3, Crosshair, ShieldCheck, Target, UserRound, VolumeX } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Ban, Clock3, Crosshair, Settings2, ShieldCheck, Target, UserRound, VolumeX } from "lucide-react";
 import type { CSSProperties } from "react";
 
 import { formatDate, formatPlaytime, isActiveSanction } from "@/components/formatters";
 import { GroupBadge } from "@/components/group-badge";
+import { ProfileInventoryPreview } from "@/components/profile-inventory-preview";
+import { ProfileSettingsForm, type ProfileSettingsValue } from "@/components/profile-settings-form";
+import { ProfileSettingsToggle } from "@/components/profile-settings-toggle";
+import { ProfileTabs } from "@/components/profile-tabs";
 import { ResilientRemoteImage } from "@/components/resilient-remote-image";
 import { SiteHeader } from "@/components/site-header";
 import { getLevelRank, getNextLevelRank, getRankProgress } from "@/lib/content/levelranks";
 import { getGroupPresentation, type RoleKind } from "@/lib/content/group-presentation";
-import type { GroupMembership, HitboxStats, PlayerDashboard, PublicPlayerProfile } from "@/lib/data/portal-repository";
+import { getTrustedProfileTheme } from "@/lib/content/profile-themes";
+import type { GroupMembership, HitboxStats, PlayerDashboard, PlayerProfileInventoryPage, PublicPlayerProfile } from "@/lib/data/portal-repository";
 import type { SteamProfile } from "@/lib/steam/profiles";
 
 type SharedProfile = PlayerDashboard | PublicPlayerProfile;
@@ -19,6 +24,13 @@ type PlayerProfilePageProps = {
   steamProfile?: SteamProfile;
   isOwnProfile: boolean;
   isAuthenticated: boolean;
+  profileInventory: PlayerProfileInventoryPage;
+  profileThemeKey?: string | null;
+  settingsOpen?: boolean;
+  profileSettings?: {
+    csrf: string;
+    initialSettings: ProfileSettingsValue;
+  };
 };
 
 type Hitbox = {
@@ -105,7 +117,7 @@ function GroupMembershipCards({ kind, groups }: { kind: RoleKind; groups: GroupM
   </section>;
 }
 
-export function PlayerProfilePage({ profile, steamId, steamProfile, isOwnProfile, isAuthenticated }: PlayerProfilePageProps) {
+export function PlayerProfilePage({ profile, steamId, steamProfile, isOwnProfile, isAuthenticated, profileInventory, profileThemeKey, settingsOpen = false, profileSettings }: PlayerProfilePageProps) {
   const displayName = steamProfile?.name ?? profile.displayName ?? "ARENA player";
   const dashboard = isDashboard(profile) ? profile : null;
   const activeBan = dashboard?.bans.find((ban) => isActiveSanction(ban.expiresAt));
@@ -123,18 +135,23 @@ export function PlayerProfilePage({ profile, steamId, steamProfile, isOwnProfile
   const steamProfileUrl = `https://steamcommunity.com/profiles/${steamId}`;
   const presence = steamProfile?.presence ?? "unknown";
   const presenceLabel = presence === "online" ? "Steam online" : presence === "offline" ? "Steam offline" : "Steam status unavailable";
+  const profileTheme = getTrustedProfileTheme(profileThemeKey);
+  const showSettings = Boolean(isOwnProfile && settingsOpen && profileSettings);
 
   return (
-    <main className="tapped-page player-profile-page">
+    <main className={`tapped-page player-profile-page ${profileTheme.className}`} data-profile-theme={profileTheme.key}>
       <div className="shell">
         <SiteHeader authenticated={isAuthenticated} />
         <section className="public-player-hero shared-profile-hero">
           <div className="public-player-copy">
             {!isOwnProfile ? <Link className="back-link" href="/ranking"><ArrowLeft aria-hidden="true" /> Server ranking</Link> : null}
             <div className="public-player-identity" data-presence={presence}>
-              <div className={`public-player-avatar${isBanned ? " is-banned" : ""}`}>
-                <ResilientRemoteImage src={steamProfile?.avatarFull} alt={`${displayName}'s Steam avatar`} referrerPolicy="no-referrer" fallback={<span className="public-player-avatar-fallback" aria-hidden="true">{avatarInitial(displayName)}</span>} />
-                {isBanned ? <span className="banned-avatar-overlay">BANNED</span> : null}
+              <div className="public-player-avatar-shell">
+                <div className={`public-player-avatar${isBanned ? " is-banned" : ""}`}>
+                  <ResilientRemoteImage src={steamProfile?.avatarFull} alt={`${displayName}'s Steam avatar`} referrerPolicy="no-referrer" fallback={<span className="public-player-avatar-fallback" aria-hidden="true">{avatarInitial(displayName)}</span>} />
+                  {isBanned ? <span className="banned-avatar-overlay">BANNED</span> : null}
+                </div>
+                {isOwnProfile ? <ProfileSettingsToggle open={showSettings} /> : null}
               </div>
               <div>
                 <p className="tapped-kicker"><UserRound aria-hidden="true" /> {isOwnProfile ? "Your player profile" : "Player profile"}<span className="profile-presence" title={presenceLabel}><i aria-hidden="true" /> {presenceLabel}</span></p>
@@ -152,18 +169,30 @@ export function PlayerProfilePage({ profile, steamId, steamProfile, isOwnProfile
           </aside>
         </section>
 
-        {isOwnProfile && dashboard && (!dashboard.sourceConnected ? <div className="notice notice-info"><AlertTriangle aria-hidden="true" /><span>Game-data access is not configured yet. Add <code>GAME_DATABASE_URL</code> to populate this profile.</span></div> : !dashboard.hasGameRecord ? <div className="notice notice-info"><AlertTriangle aria-hidden="true" /><span>No K4 LevelRanks record exists for this Steam account yet. Join the server once and refresh this page.</span></div> : null)}
-        {isOwnProfile && activeBan ? <div className="notice notice-danger"><Ban aria-hidden="true" /><span><strong>You have an active ban.</strong> Appeal it here with your explanation and keep track of staff responses.</span><Link href="/appeals">Open appeal</Link></div> : null}
-        {isOwnProfile && activeComms.length > 0 ? <div className="notice notice-warning"><VolumeX aria-hidden="true" /><span>You currently have {activeComms.length} active communication restriction{activeComms.length === 1 ? "" : "s"}.</span></div> : null}
+        {isOwnProfile ? <section className="profile-settings-view" id="profile-settings-view" aria-labelledby={showSettings ? "profile-settings-title" : undefined} hidden={!showSettings}>
+          {showSettings && profileSettings ? <>
+            <header className="profile-settings-view-heading">
+              <p className="eyebrow"><Settings2 aria-hidden="true" /> Account preferences</p>
+              <h2 id="profile-settings-title">Settings &amp; customisation</h2>
+              <p>Control who can browse your inventory and choose the profile presentation saved to this ARENA account.</p>
+            </header>
+            <ProfileSettingsForm csrf={profileSettings.csrf} initialSettings={profileSettings.initialSettings} />
+          </> : null}
+        </section> : null}
 
-        <section className="stat-grid public-player-stat-grid" aria-label={`${displayName}'s statistics`}>
+        {!showSettings ? <ProfileTabs inventory={<ProfileInventoryPreview preview={profileInventory} steamId={steamId} isOwnProfile={isOwnProfile} />} inventoryCount={profileInventory.canView ? profileInventory.total : 0}>
+        {isOwnProfile && dashboard && (!dashboard.sourceConnected ? <div className="notice notice-info"><AlertTriangle aria-hidden="true" /><span>Game-data access is not configured yet. Add <code>GAME_DATABASE_URL</code> to populate this profile.</span></div> : !dashboard.hasGameRecord ? <div className="notice notice-info"><AlertTriangle aria-hidden="true" /><span>No K4 LevelRanks record exists for this Steam account yet. Join the server once and refresh this page.</span></div> : null)}
+        {!showSettings && isOwnProfile && activeBan ? <div className="notice notice-danger"><Ban aria-hidden="true" /><span><strong>You have an active ban.</strong> Appeal it here with your explanation and keep track of staff responses.</span><Link href="/appeals">Open appeal</Link></div> : null}
+        {!showSettings && isOwnProfile && activeComms.length > 0 ? <div className="notice notice-warning"><VolumeX aria-hidden="true" /><span>You currently have {activeComms.length} active communication restriction{activeComms.length === 1 ? "" : "s"}.</span></div> : null}
+
+        {!showSettings ? <section className="stat-grid public-player-stat-grid" aria-label={`${displayName}'s statistics`}>
           <article><span>Playtime</span><strong>{formatPlaytime(profile.playtimeSeconds)}</strong><Clock3 aria-hidden="true" /></article>
           <article className="profile-points-stat" style={{ "--level-rank-color": levelRank.hex } as CSSProperties}><span>Points</span><strong>{levelRank.name}</strong><span className="stat-foot">{formatCount(profile.points)} total points</span><ShieldCheck aria-hidden="true" /></article>
           <article className="level-rank-stat"><span>K4 rank</span><strong>RANKED #{placement}</strong><span className="stat-foot">out of {formattedPlacementTotal}</span></article>
           <article><span>K / D</span><strong>{kdRatio}</strong><span className="stat-foot">{profile.kills} kills / {profile.deaths} deaths</span></article>
-        </section>
+        </section> : null}
 
-        <section className="content-grid public-player-content-grid shared-profile-content">
+        {!showSettings ? <section className="content-grid public-player-content-grid shared-profile-content">
           <article className="panel">
             <div className="panel-heading"><h2>Groups</h2><p>Synced from VIPCore and Admins.</p></div>
             <div className="group-role-sections"><GroupMembershipCards kind="vip" groups={profile.vipGroups} /><GroupMembershipCards kind="admin" groups={profile.adminGroups} /></div>
@@ -179,7 +208,7 @@ export function PlayerProfilePage({ profile, steamId, steamProfile, isOwnProfile
             <div className="rank-progress" aria-label={`K4 rank progression: ${levelRank.name}`}><div><span>{levelRank.name}</span><strong>{nextLevelRank ? `${formatCount(Math.max(0, nextLevelRank.points - profile.points))} points to ${nextLevelRank.tag}` : "Highest K4 rank"}</strong></div><div className="rank-progress-track"><i style={{ width: `${rankProgress}%`, backgroundColor: levelRank.hex }} /></div></div>
           </article>
           <HitMap stats={profile.hitStats} />
-        </section>
+        </section> : null}
 
         {isOwnProfile && dashboard ? <section className="history-section" aria-labelledby="moderation-title">
           <div className="section-heading compact"><p className="eyebrow"><ShieldCheck aria-hidden="true" /> Private record</p><h2 id="moderation-title">Moderation history</h2></div>
@@ -189,6 +218,7 @@ export function PlayerProfilePage({ profile, steamId, steamProfile, isOwnProfile
             <article className="panel history-panel"><div className="panel-heading"><h3>Kick history</h3><span>Audit bridge</span></div><p className="empty-copy">The current game stack does not persist kicks. The Swiftly audit bridge can add kick reasons here without changing existing moderation tables.</p></article>
           </div>
         </section> : null}
+        </ProfileTabs> : null}
       </div>
     </main>
   );

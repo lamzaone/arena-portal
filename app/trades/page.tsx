@@ -2,7 +2,8 @@ import { ArrowLeftRight } from "lucide-react";
 
 import { TradeManager } from "@/components/economy/trade-manager";
 import { SignInRequired } from "@/components/sign-in-required";
-import { SiteHeader } from "@/components/site-header";
+import { PageHeading } from "@/components/ui/page-heading";
+import { PortalShell } from "@/components/ui/portal-shell";
 import { createEconomyActionToken, getSession } from "@/lib/auth/session";
 import { getTokenWallet } from "@/lib/data/portal-repository";
 import { getCompletePlayerEconomyInventory } from "@/lib/economy/player-inventory";
@@ -18,8 +19,8 @@ export default async function TradesPage() {
     getCompletePlayerEconomyTrades(session.steamId)
   ]);
 
-  return <main><div className="shell"><SiteHeader authenticated />
-    <section className="page-heading"><div><p className="eyebrow"><ArrowLeftRight aria-hidden="true" /> Player economy</p><h1>Trades</h1><p>Send, accept, decline, or cancel secure trade offers for owned items and Tokens.</p></div></section>
+  return <PortalShell authenticated className="tapped-page">
+    <PageHeading eyebrow={<><ArrowLeftRight aria-hidden="true" /> Player economy</>} title="Trades" description="Find another player, compare both inventories, and build a secure item or Token offer." />
     <TradeManager inventory={inventory} wallet={wallet} trades={trades} csrf={createEconomyActionToken(session)} />
-  </div></main>;
+  </PortalShell>;
 }

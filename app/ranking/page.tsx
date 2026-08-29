@@ -1,13 +1,17 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Crown, Crosshair, Medal, Search, Trophy, UsersRound } from "lucide-react";
+import { ChevronLeft, ChevronRight, Crown, Crosshair, Medal, Trophy, UsersRound } from "lucide-react";
 
 import { SiteHeader } from "@/components/site-header";
 import { GroupBadge } from "@/components/group-badge";
+import { PlayerSearchField } from "@/components/player-search-field";
 import { ResilientRemoteImage } from "@/components/resilient-remote-image";
+import { SearchNavigationForm, SearchSubmitButton } from "@/components/ui/search-field";
 import { getSession } from "@/lib/auth/session";
 import { getLevelRank } from "@/lib/content/levelranks";
 import { getLeaderboard } from "@/lib/data/portal-repository";
 import { getSteamProfiles } from "@/lib/steam/profiles";
+
+import styles from "./ranking-search.module.css";
 
 type RankingPageProps = { searchParams: Promise<{ page?: string; q?: string }> };
 
@@ -45,7 +49,31 @@ export default async function RankingPage({ searchParams }: RankingPageProps) {
         </section>
 
         <section className="leaderboard-section" aria-labelledby="leaderboard-title">
-          <div className="leaderboard-heading"><div><p className="tapped-kicker"><Crosshair aria-hidden="true" /> Monthly race</p><h2 id="leaderboard-title">{query ? "Search results" : "Top players"}</h2></div><div className="leaderboard-controls"><form className="leaderboard-search" action="/ranking" method="get"><label htmlFor="leaderboard-search">Find a player</label><div><input id="leaderboard-search" name="q" defaultValue={query} maxLength={64} placeholder="Name or SteamID64" /><button type="submit" aria-label="Search leaderboard"><Search aria-hidden="true" /></button></div></form><span>Page {page} / {totalPages}</span></div></div>
+          <div className="leaderboard-heading">
+            <div>
+              <p className="tapped-kicker"><Crosshair aria-hidden="true" /> Monthly race</p>
+              <h2 id="leaderboard-title">{query ? "Search results" : "Top players"}</h2>
+            </div>
+            <div className="leaderboard-controls">
+              <SearchNavigationForm className={styles.form} action="/ranking">
+                <PlayerSearchField
+                  className={styles.field}
+                  id="leaderboard-search"
+                  name="q"
+                  label="Find a player"
+                  mode="query"
+                  defaultQuery={query}
+                  placeholder="Name or SteamID64"
+                  includeSelf
+                  autoSubmitOnSelect
+                />
+                <SearchSubmitButton className={styles.submit} alignWithLabel iconOnly aria-label="Search leaderboard">
+                  Search leaderboard
+                </SearchSubmitButton>
+              </SearchNavigationForm>
+              <span>Page {page} / {totalPages}</span>
+            </div>
+          </div>
           {leaderboard.players.length ? <div className="leaderboard-scroll"><table className="leaderboard-table"><thead><tr><th scope="col">Position</th><th scope="col">K4 rank</th><th scope="col">Player</th><th scope="col">Points</th><th scope="col">K</th><th scope="col">D</th><th scope="col">MVPs</th></tr></thead><tbody>{leaderboard.players.map((player, index) => {
             const profile = profiles.get(player.steamId);
             const displayName = profile?.name || player.name;

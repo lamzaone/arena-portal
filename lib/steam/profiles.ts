@@ -33,7 +33,12 @@ export async function getSteamProfiles(steamIds: string[]) {
   try {
     const response = await fetch(
       `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=${encodeURIComponent(apiKey)}&steamids=${uniqueIds.join(",")}`,
-      { next: { revalidate: 60 } }
+      {
+        next: { revalidate: 60 },
+        // Steam identity is decorative enrichment. Never let it hold a portal
+        // page or player search open until the hosting platform times out.
+        signal: AbortSignal.timeout(2_500),
+      }
     );
     if (!response.ok) return new Map<string, SteamProfile>();
 

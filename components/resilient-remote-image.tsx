@@ -47,25 +47,33 @@ export function ResilientRemoteImage({
   }, [src]);
   const imageKey = imageUrls.join("|");
   const [failedImageUrls, setFailedImageUrls] = useState<string[]>([]);
+  const [loadedImageUrl, setLoadedImageUrl] = useState<string | null>(null);
   const imageUrl = imageUrls.find(
     (candidate) => !failedImageUrls.includes(candidate),
   );
+  const loaded = Boolean(imageUrl && loadedImageUrl === imageUrl);
 
-  useEffect(() => setFailedImageUrls([]), [imageKey]);
+  useEffect(() => {
+    setFailedImageUrls([]);
+    setLoadedImageUrl(null);
+  }, [imageKey]);
 
   if (!imageUrl) return <>{fallback}</>;
   return (
     <img
       src={imageUrl}
       alt={alt}
-      className={className}
+      className={`${className ?? ""} ui-remote-image${loaded ? "" : " is-loading"}`.trim()}
       loading={loading}
       referrerPolicy={referrerPolicy}
-      onError={() =>
+      aria-busy={!loaded}
+      onLoad={() => setLoadedImageUrl(imageUrl)}
+      onError={() => {
+        setLoadedImageUrl(null);
         setFailedImageUrls((current) =>
           current.includes(imageUrl) ? current : [...current, imageUrl],
         )
-      }
+      }}
     />
   );
 }

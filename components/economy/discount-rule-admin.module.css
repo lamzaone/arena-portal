@@ -1,0 +1,537 @@
+.panel {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  padding: clamp(1rem, 2.5vw, 1.5rem);
+  border: 1px solid rgba(184, 125, 255, 0.27);
+  border-radius: 7px;
+  background:
+    linear-gradient(135deg, rgba(135, 61, 181, 0.12), transparent 42%),
+    rgba(13, 3, 15, 0.9);
+}
+
+.header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.9rem;
+  align-items: start;
+}
+
+.headingIcon {
+  display: grid;
+  width: 2.65rem;
+  height: 2.65rem;
+  place-items: center;
+  border: 1px solid rgba(203, 143, 255, 0.3);
+  border-radius: 6px;
+  color: #d7a2ff;
+  background: rgba(135, 61, 181, 0.14);
+}
+
+.headingIcon svg,
+.securityMark svg,
+.target svg,
+.ruleNumbers svg,
+.empty > svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: 0 0 auto;
+}
+
+.header h2,
+.ruleCard h3,
+.empty h3 {
+  margin: 0;
+}
+
+.header p,
+.empty p {
+  margin: 0.35rem 0 0;
+  color: rgba(241, 244, 248, 0.67);
+  line-height: 1.55;
+}
+
+.eyebrow {
+  margin: 0 0 0.25rem !important;
+  color: #d7a2ff !important;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.securityMark {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid rgba(76, 206, 132, 0.2);
+  border-radius: 999px;
+  color: #82e2ac;
+  background: rgba(31, 125, 75, 0.09);
+  font-size: 0.73rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.lookup {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(184, 125, 255, 0.18);
+  background: rgba(8, 2, 9, 0.48);
+}
+
+.lookupHeading {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.lookupHeading > svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  color: #d7a2ff;
+}
+
+.lookupHeading h3,
+.lookupHeading p {
+  margin: 0;
+}
+
+.lookupHeading h3 {
+  color: #f6e7ff;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 400;
+  letter-spacing: -0.025em;
+}
+
+.lookupForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: end;
+}
+
+.lookupStatus,
+.lookupEmpty {
+  margin: 0;
+  color: #9f82ae;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.lookupError {
+  color: #ff9cab;
+}
+
+.lookupMatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 7px;
+}
+
+.lookupMatches > span {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 7px;
+  align-items: center;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(184, 125, 255, 0.16);
+  color: #c8a9d7;
+  background: rgba(4, 1, 5, 0.46);
+  font-size: 10px;
+}
+
+.lookupMatches > span > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lookupMatches strong {
+  color: #e4bbff;
+  font-variant-numeric: tabular-nums;
+}
+
+.lookupMatches small {
+  color: #9474a4;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.createRule,
+.editRule {
+  overflow: clip;
+  border: 1px solid rgba(184, 125, 255, 0.16);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.createRule > summary,
+.editRule > summary {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 3.15rem;
+  padding: 0.7rem 0.9rem;
+  cursor: pointer;
+  font-weight: 750;
+  list-style: none;
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+.createRule > summary::-webkit-details-marker,
+.editRule > summary::-webkit-details-marker {
+  display: none;
+}
+
+.createRule > summary:hover,
+.editRule > summary:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.createRule > summary:focus-visible,
+.editRule > summary:focus-visible {
+  outline: 2px solid #ca91ff;
+  outline-offset: -3px;
+}
+
+.createRule > summary span {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.createRule > summary svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  color: #d7a2ff;
+}
+
+.createRule > summary small {
+  color: rgba(241, 244, 248, 0.48);
+  font-weight: 600;
+}
+
+.form {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.075);
+}
+
+.primaryFields,
+.adjustmentFields,
+.scheduleFields {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.primaryFields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.adjustmentFields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.scheduleFields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form label {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+  color: rgba(241, 244, 248, 0.72);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.form label > span:not(.inputSuffix) {
+  color: rgba(241, 244, 248, 0.43);
+  font-size: 0.68rem;
+}
+
+.form input,
+.form select,
+.form textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 5px;
+  color: #f7f8fa;
+  background: #0c0f14;
+  font: inherit;
+}
+
+.form textarea {
+  min-height: 4.25rem;
+  resize: vertical;
+}
+
+.form input:focus-visible,
+.form select:focus-visible,
+.form textarea:focus-visible {
+  border-color: rgba(202, 145, 255, 0.78);
+  outline: 2px solid rgba(173, 88, 238, 0.2);
+  outline-offset: 1px;
+}
+
+.form small {
+  color: rgba(241, 244, 248, 0.48);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.inputSuffix {
+  position: relative;
+  display: block;
+}
+
+.inputSuffix > span {
+  position: absolute;
+  top: 50%;
+  right: 0.8rem;
+  color: rgba(241, 244, 248, 0.45);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.inputSuffix input {
+  padding-right: 2rem;
+}
+
+.exclusions {
+  grid-column: 1 / -1;
+}
+
+.enabledControl {
+  grid-template-columns: auto minmax(0, 1fr) !important;
+  align-items: center;
+  width: fit-content;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.025);
+  cursor: pointer;
+}
+
+.enabledControl input {
+  width: 1.05rem;
+  min-height: 1.05rem;
+  accent-color: #df2835;
+}
+
+.enabledControl span {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.enabledControl small {
+  display: block;
+}
+
+.formFooter {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.formFooter p {
+  max-width: 42rem;
+  margin: 0;
+  color: rgba(241, 244, 248, 0.53);
+  font-size: 0.77rem;
+  line-height: 1.5;
+}
+
+.formFooter button {
+  flex: 0 0 auto;
+}
+
+.readOnlyNotice {
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid rgba(184, 125, 255, 0.16);
+  color: #a98bb8;
+  background: rgba(8, 2, 9, 0.48);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.ruleList {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.ruleCard {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.022);
+}
+
+.ruleSummary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.9rem;
+}
+
+.ruleTitleLine {
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ruleTitleLine h3 {
+  font-size: 1rem;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.45rem;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.active { color: #75dda3; background: rgba(48, 174, 105, 0.08); }
+.scheduled { color: #e9c66b; background: rgba(178, 134, 30, 0.09); }
+.ended { color: #b0b5bf; background: rgba(176, 181, 191, 0.06); }
+.disabled { color: #ff7c85; background: rgba(222, 37, 49, 0.08); }
+
+.target {
+  display: flex;
+  gap: 0.38rem;
+  align-items: center;
+  margin: 0.35rem 0 0;
+  color: rgba(241, 244, 248, 0.58);
+  font-size: 0.76rem;
+}
+
+.ruleNumbers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(5.2rem, auto));
+  gap: 0.5rem;
+}
+
+.ruleNumbers span {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.1rem 0.35rem;
+  align-items: center;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.065);
+  border-radius: 5px;
+  color: rgba(241, 244, 248, 0.45);
+  background: rgba(0, 0, 0, 0.16);
+  font-size: 0.62rem;
+}
+
+.ruleNumbers svg {
+  grid-row: 1 / span 2;
+  color: #d7a2ff;
+}
+
+.ruleNumbers strong {
+  color: #f7f8fa;
+  font-size: 0.8rem;
+}
+
+.ruleMeta {
+  display: flex;
+  gap: 0.45rem;
+  padding: 0 0.9rem 0.75rem;
+  flex-wrap: wrap;
+}
+
+.ruleMeta span {
+  padding: 0.28rem 0.45rem;
+  border-radius: 0.45rem;
+  color: rgba(241, 244, 248, 0.5);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 0.68rem;
+}
+
+.ruleActions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: start;
+  padding: 0.75rem 0.9rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.065);
+}
+
+.editRule {
+  flex: 1 1 auto;
+}
+
+.editRule > summary {
+  min-height: 2.35rem;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.76rem;
+}
+
+.empty {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  min-height: 7rem;
+  padding: 1rem;
+  border: 1px dashed rgba(255, 255, 255, 0.11);
+  border-radius: 6px;
+}
+
+.empty > svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  color: rgba(215, 162, 255, 0.8);
+}
+
+@media (max-width: 880px) {
+  .header { grid-template-columns: auto minmax(0, 1fr); }
+  .securityMark { grid-column: 2; justify-self: start; }
+  .ruleSummary { grid-template-columns: 1fr; }
+  .ruleNumbers { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .panel { padding: 0.85rem; }
+  .primaryFields,
+  .adjustmentFields,
+  .scheduleFields,
+  .ruleNumbers { grid-template-columns: 1fr; }
+  .formFooter,
+  .ruleActions { align-items: stretch; flex-direction: column; }
+  .formFooter button,
+  .ruleActions form,
+  .ruleActions button { width: 100%; }
+  .securityMark { grid-column: 1 / -1; }
+  .lookupForm { grid-template-columns: 1fr; }
+  .lookupForm :global(.button) { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .createRule > summary,
+  .editRule > summary { transition: none; }
+}

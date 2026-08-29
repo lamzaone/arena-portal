@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
   ChevronRight,
-  Search,
   ShoppingBag,
   SlidersHorizontal,
   X,
@@ -32,6 +31,10 @@ import {
 } from "@/components/economy/economy-view-model";
 import { TokenBalance } from "@/components/economy/token-balance";
 import { PortalToast } from "@/components/success-toast";
+import {
+  SearchField,
+  SearchSubmitButton,
+} from "@/components/ui/search-field";
 import {
   marketplaceCategories,
   normalizeMarketplaceCategory,
@@ -72,12 +75,13 @@ type ParsedFloat = {
 
 type MarketplaceQuote = {
   priceTokens: number;
-  euroCents: number | null;
+  basePriceTokens: number;
   source: string | null;
   floatValue: number;
   wear: string | null;
   stattrak: boolean;
   floatDiscountBps: number | null;
+  discount: EconomyItemView["marketDiscount"];
 };
 
 type MarketplaceQuoteStatus = "idle" | "loading" | "ready" | "error";
@@ -240,14 +244,24 @@ function marketplaceQuoteFromResponse(value: unknown): MarketplaceQuote | null {
   if (!isRecord(value)) return null;
   const record = isRecord(value.quote) ? value.quote : value;
   const priceTokens = numberFromUnknown(record.priceTokens);
+  const basePriceTokens = numberFromUnknown(record.basePriceTokens);
   const floatValue = numberFromUnknown(record.floatValue);
-  const euroCents = numberFromUnknown(record.euroCents);
   const floatDiscountBps = numberFromUnknown(record.floatDiscountBps);
   const stattrak = record.stattrak;
+  const discountRecord = isRecord(record.discount) ? record.discount : null;
+  const discountRuleId = numberFromUnknown(discountRecord?.ruleId);
+  const discountTokens = numberFromUnknown(discountRecord?.discountTokens);
+  const discountName =
+    typeof discountRecord?.displayName === "string"
+      ? discountRecord.displayName.trim()
+      : "";
   if (
     priceTokens === null ||
     !Number.isSafeInteger(priceTokens) ||
-    priceTokens < 1 ||
+    priceTokens < 0 ||
+    basePriceTokens === null ||
+    !Number.isSafeInteger(basePriceTokens) ||
+    basePriceTokens < priceTokens ||
     floatValue === null ||
     floatValue < 0 ||
     floatValue > 1 ||
@@ -257,12 +271,7 @@ function marketplaceQuoteFromResponse(value: unknown): MarketplaceQuote | null {
   }
   return {
     priceTokens,
-    euroCents:
-      euroCents !== null &&
-      Number.isSafeInteger(euroCents) &&
-      euroCents >= 0
-        ? euroCents
-        : null,
+    basePriceTokens,
     source: typeof record.source === "string" && record.source.trim()
       ? record.source.trim()
       : null,
@@ -277,22 +286,26 @@ function marketplaceQuoteFromResponse(value: unknown): MarketplaceQuote | null {
       floatDiscountBps >= 0
         ? floatDiscountBps
         : null,
+    discount:
+      discountRuleId !== null &&
+      Number.isSafeInteger(discountRuleId) &&
+      discountRuleId > 0 &&
+      discountTokens !== null &&
+      Number.isSafeInteger(discountTokens) &&
+      discountTokens > 0 &&
+      discountName
+        ? {
+            ruleId: discountRuleId,
+            displayName: discountName,
+            discountTokens,
+          }
+        : null,
   };
 }
 
 function marketplaceQuoteError(value: unknown) {
   if (!isRecord(value) || typeof value.message !== "string") return null;
   return value.message.trim() || null;
-}
-
-function formatEurosFromCents(value: number | null) {
-  if (value === null || !Number.isFinite(value)) return null;
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value / 100);
 }
 
 function marketPriceSourceLabel(source: string | null) {
@@ -381,6 +394,8 @@ function MarketplacePurchaseAction({
   // The standard catalogue price must never be shown or charged while the
   // separately quoted StatTrak™ variant is still being resolved.
   const knownPrice = stattrak && !quote ? null : item.marketPriceTokens;
+  const basePrice = stattrak && !quote ? null : item.marketBasePriceTokens;
+  const activeDiscount = stattrak && !quote ? null : item.marketDiscount;
   const needsMarketPrice = knownPrice === null;
   const canFetchMarketPrice = supportsFloat
     ? Boolean(item.catalogueId)
@@ -398,7 +413,6 @@ function MarketplacePurchaseAction({
   const stattrakControlId = `market-purchase-stattrak-${item.catalogueId ?? item.id}`;
   const containerRate = item.itemType === "crate" || item.itemType === "capsule";
   const priceSource = marketPriceSourceLabel(item.marketPriceSource);
-  const euroPrice = formatEurosFromCents(item.marketPriceEuroCents);
   const missingFloat = supportsFloat && selectedFloat.number === null;
   const floatIsSupported =
     !supportsFloat ||
@@ -433,10 +447,11 @@ function MarketplacePurchaseAction({
       ? "No public price match yet. Try again later or ask staff to set a last-known price."
       : "This item needs an exact public market name or a staff last-known price."
     : [
-        euroPrice,
         priceSource,
         stattrak ? "StatTrak™ variant" : "Standard variant",
-        containerRate ? "50% container rate applied" : null,
+        activeDiscount
+          ? `${activeDiscount.displayName}: -${formatTokens(activeDiscount.discountTokens)} Tokens`
+          : null,
         floatPriceDetail,
       ]
         .filter(Boolean)
@@ -477,6 +492,11 @@ function MarketplacePurchaseAction({
             ? "Price unavailable"
             : `${formatTokens(knownPrice)} Tokens`}
         </strong>
+        {knownPrice !== null && basePrice !== null && basePrice > knownPrice ? (
+          <del className="market-base-price">
+            Original {formatTokens(basePrice)} Tokens
+          </del>
+        ) : null}
         <small>{priceDetail}</small>
       </div>
       {supportsStattrak ? (
@@ -690,11 +710,12 @@ function MarketplaceListing({
     ...(activeQuote
       ? {
         marketPriceTokens: activeQuote.priceTokens,
-        marketPriceEuroCents: activeQuote.euroCents,
+        marketBasePriceTokens: activeQuote.basePriceTokens,
         marketPriceSource: activeQuote.source,
         marketPriceFloatValue: activeQuote.floatValue,
         marketPriceWear: activeQuote.wear,
         marketPriceFloatDiscountBps: activeQuote.floatDiscountBps,
+        marketDiscount: activeQuote.discount,
         }
       : {}),
   };
@@ -836,9 +857,9 @@ export function MarketplaceBrowser({
           </p>
           <h2>Buy the exact item you want.</h2>
           <p className="empty-copy">
-            Prices use public historical sale medians at 100 Tokens per EUR.
-            Crates and capsules use their 50% container rate; no key is needed
-            to open them.
+            Token prices use current public market data. Crates and capsules
+            use their listed base price unless an explicit admin discount is
+            active; no key is needed to open them.
           </p>
         </div>
         <TokenBalance wallet={walletView} />
@@ -871,18 +892,17 @@ export function MarketplaceBrowser({
           <span className="tag">Up to 50 items per page</span>
         </div>
         <div className="market-filter-grid">
-          <label className="market-search-field" htmlFor="market-search">
-            Search items
-            <input
-              id="market-search"
-              name="q"
-              type="search"
-              maxLength={120}
-              value={draft.query}
-              placeholder="e.g. AK-47, weapons, Redline"
-              onChange={(event) => updateDraft("query", event.target.value)}
-            />
-          </label>
+          <SearchField
+            id="market-search"
+            name="q"
+            label="Search items"
+            rootClassName="market-search-field"
+            maxLength={120}
+            value={draft.query}
+            placeholder="AK-47, weapons, Redline…"
+            autoComplete="off"
+            onValueChange={(value) => updateDraft("query", value)}
+          />
           <label htmlFor="market-type">
             Category
             <select
@@ -971,9 +991,9 @@ export function MarketplaceBrowser({
             </div>
           </fieldset>
           <div className="market-filter-actions">
-            <button className="button button-secondary" type="submit">
-              <Search aria-hidden="true" /> Search catalogue
-            </button>
+            <SearchSubmitButton variant="secondary">
+              Search catalogue
+            </SearchSubmitButton>
             <Link className="button button-quiet" href="/market" scroll={false}>
               <X aria-hidden="true" /> Clear filters
             </Link>

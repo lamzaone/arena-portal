@@ -10,6 +10,7 @@ import mysql, {
 } from "mysql2/promise";
 
 import { normalizeVipGroup } from "@/lib/content/group-presentation";
+import { isTrustedOwnedProfileThemeKey } from "@/lib/content/profile-themes";
 import {
   adjustedMarketplaceEuroCents,
   deriveMarketplacePriceIdentity,
@@ -144,6 +145,20 @@ type AppealEligibilityRow = RowDataPacket & {
 type PortalSessionRow = RowDataPacket & {
   steam_id: string;
   expires_at: number;
+};
+
+type PlayerSettingsRow = RowDataPacket & {
+  inventory_visibility: string;
+  active_theme_id: number | string | null;
+};
+
+type ProfileThemeRow = RowDataPacket & {
+  id: number | string;
+  theme_key: string;
+  display_name: string;
+  description: string;
+  preview_image_url: string | null;
+  acquired_at: Date | string;
 };
 
 type AdminListRow = RowDataPacket & {
@@ -419,6 +434,31 @@ export type PublicPlayerProfile = {
   vipGroups: GroupMembership[];
   adminGroups: GroupMembership[];
   isBanned: boolean;
+};
+
+export type InventoryVisibility = "private" | "public";
+
+export type OwnedProfileTheme = {
+  id: number;
+  key: string;
+  displayName: string;
+  description: string;
+  previewImageUrl: string | null;
+  acquiredAt: string;
+};
+
+export type PlayerSettings = {
+  steamId: string;
+  inventoryVisibility: InventoryVisibility;
+  activeThemeId: number | null;
+  activeTheme: OwnedProfileTheme | null;
+  ownedThemes: OwnedProfileTheme[];
+};
+
+export type TradePlayerSearchResult = {
+  steamId: string;
+  displayName: string;
+  inventoryVisibility: InventoryVisibility;
 };
 
 export type PortalTicket = {
@@ -1429,6 +1469,88 @@ function leaderboardFilter(query: string) {
   };
 }
 
+function escapeLikeSearch(value: string) {
+  return value.replaceAll("!", "!!").replaceAll("%", "!%").replaceAll("_", "!_");
+}
+
+export async function searchTradePlayers(input: {
+  query: string;
+  excludeSteamId?: string;
+  limit?: number;
+}): Promise<TradePlayerSearchResult[]> {
+  const query = input.query.normalize("NFKC").trim();
+  if (input.excludeSteamId !== undefined && !isSteamId(input.excludeSteamId))
+    economyError("invalid_input", "The current player is invalid.");
+  if (!query) return [];
+  if (query.length > 64 || (query.length < 2 && !isSteamId(query))) {
+    economyError(
+      "invalid_input",
+      "Search with at least two characters or a complete SteamID64.",
+    );
+  }
+  const limit =
+    typeof input.limit === "number" && Number.isSafeInteger(input.limit)
+      ? Math.max(1, Math.min(input.limit, 10))
+      : 8;
+  const escaped = escapeLikeSearch(query);
+  const containsPattern = `%${escaped}%`;
+  const prefixPattern = `${escaped}%`;
+  const rows = await safeGameQuery<
+    RowDataPacket & { steam_id: string | number; name: string | null }
+  >(
+    "SELECT CAST(steam AS CHAR) AS steam_id, name FROM lvl_base " +
+      "WHERE name LIKE ? ESCAPE '!' OR CAST(steam AS CHAR) LIKE ? ESCAPE '!' " +
+      "ORDER BY CASE " +
+      "WHEN CAST(steam AS CHAR) = ? THEN 0 " +
+      "WHEN LOWER(name) = LOWER(?) THEN 1 " +
+      "WHEN name LIKE ? ESCAPE '!' THEN 2 ELSE 3 END, value DESC, steam ASC LIMIT ?",
+    [containsPattern, containsPattern, query, query, prefixPattern, limit],
+  );
+
+  const matches = new Map<string, string>();
+  for (const row of rows) {
+    const steamId = String(row.steam_id);
+    if (!isSteamId(steamId) || steamId === input.excludeSteamId) continue;
+    if (!matches.has(steamId))
+      matches.set(steamId, row.name?.trim() || steamId);
+    if (matches.size >= limit) break;
+  }
+
+  // Name search comes from the read-only game database. An exact SteamID64
+  // can additionally identify someone who has used the portal but has no K4
+  // LevelRanks record yet.
+  if (
+    isSteamId(query) &&
+    query !== input.excludeSteamId &&
+    !matches.has(query) &&
+    matches.size < limit
+  ) {
+    const pool = getPortalPool();
+    if (pool) {
+      try {
+        const [accountRows] = await pool.query<
+          Array<RowDataPacket & { steam_id: string }>
+        >(
+          "SELECT steam_id FROM portal_steam_accounts WHERE steam_id = ? LIMIT 1",
+          [query],
+        );
+        if (accountRows.length) matches.set(query, query);
+      } catch {
+        // Player search still works from game data if portal storage is down.
+      }
+    }
+  }
+
+  const visibilities = await getPlayerInventoryVisibilities([
+    ...matches.keys(),
+  ]);
+  return [...matches.entries()].map(([steamId, displayName]) => ({
+    steamId,
+    displayName,
+    inventoryVisibility: visibilities.get(steamId) ?? "private",
+  }));
+}
+
 export async function getLeaderboard(
   pageInput: number,
   pageSize = 25,
@@ -1840,6 +1962,10 @@ export async function createPortalSession(input: {
     "INSERT INTO portal_steam_accounts (steam_id) VALUES (?) ON DUPLICATE KEY UPDATE updated_at = CURRENT_TIMESTAMP",
     [input.steamId],
   );
+  await pool.execute(
+    "INSERT INTO portal_player_settings (steam_id, inventory_visibility) VALUES (?, 'public') ON DUPLICATE KEY UPDATE steam_id = VALUES(steam_id)",
+    [input.steamId],
+  );
   await pool.execute("DELETE FROM portal_sessions WHERE expires_at <= ?", [
     Date.now(),
   ]);
@@ -1881,6 +2007,222 @@ export async function revokePortalSession(tokenHash: string) {
   } catch {
     // Clearing the browser cookie still ends the session locally if storage is unavailable.
   }
+}
+
+function inventoryVisibility(value: unknown): InventoryVisibility {
+  return value === "private" ? "private" : "public";
+}
+
+function toOwnedProfileTheme(row: ProfileThemeRow): OwnedProfileTheme {
+  return {
+    id: Number(row.id),
+    key: String(row.theme_key),
+    displayName: String(row.display_name),
+    description: String(row.description),
+    previewImageUrl: row.preview_image_url
+      ? String(row.preview_image_url)
+      : null,
+    acquiredAt: dateToIso(new Date(row.acquired_at)),
+  };
+}
+
+async function getPlayerInventoryVisibilities(steamIds: string[]) {
+  const uniqueSteamIds = [...new Set(steamIds.filter(isSteamId))];
+  const result = new Map<string, InventoryVisibility>();
+  for (const steamId of uniqueSteamIds) result.set(steamId, "public");
+  const pool = getPortalPool();
+  if (!uniqueSteamIds.length) return result;
+  if (!pool) {
+    for (const steamId of uniqueSteamIds) result.set(steamId, "private");
+    return result;
+  }
+
+  try {
+    const [rows] = await pool.query<
+      Array<RowDataPacket & { steam_id: string; inventory_visibility: string }>
+    >(
+      "SELECT steam_id, inventory_visibility FROM portal_player_settings WHERE steam_id IN (" +
+        uniqueSteamIds.map(() => "?").join(", ") +
+        ")",
+      uniqueSteamIds,
+    );
+    for (const row of rows) {
+      const steamId = String(row.steam_id);
+      if (result.has(steamId))
+        result.set(steamId, inventoryVisibility(row.inventory_visibility));
+    }
+  } catch {
+    // A missing migration or unavailable settings table must fail closed.
+    for (const steamId of uniqueSteamIds) result.set(steamId, "private");
+  }
+  return result;
+}
+
+export async function getPlayerInventoryVisibility(
+  steamId: string,
+): Promise<InventoryVisibility> {
+  if (!isSteamId(steamId)) return "private";
+  const visibilities = await getPlayerInventoryVisibilities([steamId]);
+  return visibilities.get(steamId) ?? "private";
+}
+
+export async function getPlayerSettings(
+  steamId: string,
+): Promise<PlayerSettings> {
+  if (!isSteamId(steamId)) throw new Error("Invalid SteamID64.");
+  const fallback: PlayerSettings = {
+    steamId,
+    inventoryVisibility: "private",
+    activeThemeId: null,
+    activeTheme: null,
+    ownedThemes: [],
+  };
+  const pool = getPortalPool();
+  if (!pool) return fallback;
+
+  try {
+    const [settingsRows, themeRows] = await Promise.all([
+      pool.query<PlayerSettingsRow[]>(
+        "SELECT inventory_visibility, active_theme_id FROM portal_player_settings WHERE steam_id = ? LIMIT 1",
+        [steamId],
+      ),
+      pool.query<ProfileThemeRow[]>(
+        "SELECT t.id, t.theme_key, t.display_name, t.description, t.preview_image_url, o.acquired_at " +
+          "FROM portal_player_theme_ownership AS o " +
+          "INNER JOIN portal_profile_themes AS t ON t.id = o.theme_id AND t.enabled = TRUE " +
+          "WHERE o.steam_id = ? ORDER BY t.display_name ASC, t.id ASC",
+        [steamId],
+      ),
+    ]);
+    const settings = settingsRows[0][0];
+    const ownedThemes = themeRows[0]
+      .map(toOwnedProfileTheme)
+      .filter((theme) => isTrustedOwnedProfileThemeKey(theme.key));
+    const requestedThemeId = settings?.active_theme_id
+      ? Number(settings.active_theme_id)
+      : null;
+    const activeTheme =
+      requestedThemeId === null
+        ? null
+        : (ownedThemes.find((theme) => theme.id === requestedThemeId) ?? null);
+    return {
+      steamId,
+      inventoryVisibility: inventoryVisibility(
+        settings?.inventory_visibility,
+      ),
+      activeThemeId: activeTheme?.id ?? null,
+      activeTheme,
+      ownedThemes,
+    };
+  } catch {
+    // Settings are privacy-sensitive. Missing or unavailable storage is
+    // represented as the secure default and never as a public inventory.
+    return fallback;
+  }
+}
+
+export async function getPlayerProfileThemeKey(
+  steamId: string,
+): Promise<string | null> {
+  if (!isSteamId(steamId)) return null;
+  const pool = getPortalPool();
+  if (!pool) return null;
+  try {
+    const [rows] = await pool.query<
+      Array<RowDataPacket & { theme_key: string }>
+    >(
+      "SELECT t.theme_key FROM portal_player_settings AS s " +
+        "INNER JOIN portal_player_theme_ownership AS o ON o.steam_id = s.steam_id AND o.theme_id = s.active_theme_id " +
+        "INNER JOIN portal_profile_themes AS t ON t.id = o.theme_id AND t.enabled = TRUE " +
+        "WHERE s.steam_id = ? LIMIT 1",
+      [steamId],
+    );
+    const key = rows[0]?.theme_key ? String(rows[0].theme_key) : null;
+    return isTrustedOwnedProfileThemeKey(key) ? key : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function updatePlayerSettings(input: {
+  steamId: string;
+  inventoryVisibility: InventoryVisibility;
+  activeThemeId: number | null;
+}): Promise<PlayerSettings> {
+  const steamId = economySteamId(input.steamId);
+  if (
+    input.inventoryVisibility !== "private" &&
+    input.inventoryVisibility !== "public"
+  ) {
+    economyError("invalid_input", "Choose a valid inventory visibility.");
+  }
+  if (
+    input.activeThemeId !== null &&
+    (!Number.isSafeInteger(input.activeThemeId) || input.activeThemeId < 1)
+  ) {
+    economyError("invalid_input", "Choose a valid profile theme.");
+  }
+
+  const pool = economyStorageRequired();
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.execute(
+      "INSERT INTO portal_steam_accounts (steam_id) VALUES (?) ON DUPLICATE KEY UPDATE updated_at = CURRENT_TIMESTAMP",
+      [steamId],
+    );
+    if (input.activeThemeId !== null) {
+      const [themeRows] = await connection.query<
+        Array<RowDataPacket & { theme_key: string }>
+      >(
+        "SELECT t.theme_key FROM portal_player_theme_ownership AS o " +
+          "INNER JOIN portal_profile_themes AS t ON t.id = o.theme_id AND t.enabled = TRUE " +
+          "WHERE o.steam_id = ? AND o.theme_id = ? LIMIT 1 FOR UPDATE",
+        [steamId, input.activeThemeId],
+      );
+      if (
+        !themeRows.length ||
+        !isTrustedOwnedProfileThemeKey(String(themeRows[0].theme_key))
+      ) {
+        economyError(
+          "theme_not_owned",
+          "That profile theme is not available on your account.",
+        );
+      }
+    }
+
+    await connection.execute(
+      "INSERT INTO portal_player_settings (steam_id, inventory_visibility, active_theme_id) VALUES (?, ?, ?) " +
+        "ON DUPLICATE KEY UPDATE inventory_visibility = VALUES(inventory_visibility), active_theme_id = VALUES(active_theme_id)",
+      [steamId, input.inventoryVisibility, input.activeThemeId],
+    );
+    await connection.execute(
+      "INSERT INTO portal_audit_events (actor_type, actor_id, action, target_type, target_id, metadata) VALUES ('player', ?, 'player.settings.updated', 'player-settings', ?, ?)",
+      [
+        steamId,
+        steamId,
+        JSON.stringify({
+          inventoryVisibility: input.inventoryVisibility,
+          activeThemeId: input.activeThemeId,
+        }),
+      ],
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  const settings = await getPlayerSettings(steamId);
+  // The write above is committed. Keep the returned privacy value tied to
+  // that commit even if the tolerant settings readback encounters a transient
+  // storage error and falls back to the secure default.
+  return {
+    ...settings,
+    inventoryVisibility: input.inventoryVisibility,
+    activeThemeId: input.activeThemeId,
+  };
 }
 
 export async function getTickets(steamId: string): Promise<PortalTicket[]> {
@@ -2512,6 +2854,37 @@ export type EconomyCataloguePrice = {
   observedAt: string;
 };
 
+export type EconomyDiscountTargetType = "catalogue_item" | "item_type";
+
+export type EconomyDiscountRule = {
+  id: number;
+  displayName: string;
+  targetType: EconomyDiscountTargetType;
+  catalogueId: number | null;
+  itemType: EconomyItemType | null;
+  percentageBps: number;
+  fixedTokens: number;
+  priority: number;
+  enabled: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+  createdBySteamId: string;
+  excludedCatalogueIds: number[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type EconomyAppliedDiscount = {
+  ruleId: number;
+  displayName: string;
+  targetType: EconomyDiscountTargetType;
+  percentageBps: number;
+  fixedTokens: number;
+  basePriceTokens: number;
+  discountTokens: number;
+  finalPriceTokens: number;
+};
+
 export type EconomyCatalogueItem = {
   id: number;
   catalogueKey: string | null;
@@ -2531,11 +2904,18 @@ export type EconomyCatalogueItem = {
   metadata: Record<string, unknown>;
   enabled: boolean;
   price: EconomyCataloguePrice | null;
+  // The immutable catalogue/public quote before a separately-audited rule.
+  // One EUR cent maps to one Token; crate types no longer receive a hidden
+  // 50% adjustment.
+  basePriceTokens: number | null;
+  appliedDiscount: EconomyAppliedDiscount | null;
   // The marketplace may overlay a fresh public price quote over the
   // immutable stored snapshot. Purchase mutations still re-resolve and record
   // that quote server-side, so these display fields are never browser input.
   displayPriceTokens: number | null;
+  displayBasePriceTokens: number | null;
   displayPriceEuroCents: number | null;
+  displayBasePriceEuroCents: number | null;
   displayPriceSource: string | null;
   // A public price for a skin-like item is quoted for a concrete float. These
   // are presentation fields only; a purchase re-resolves the quote server-side
@@ -2739,6 +3119,15 @@ export type EconomyInventoryPage = {
   pageSize: number;
 };
 
+export type PlayerProfileInventoryPage = {
+  visibility: InventoryVisibility;
+  canView: boolean;
+  items: EconomyInventoryItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
 export type EconomyLoadoutSlotInput =
   | { slotType: "weapon"; team: LoadoutTeam; definitionIndex: number }
   | { slotType: "knife"; team: LoadoutTeam }
@@ -2813,6 +3202,18 @@ export type EconomyTradeItemPreview = {
   nametag: string | null;
   imageUrl: string | null;
   specialKind: string | null;
+};
+
+export type TradePartnerInventoryItem = EconomyTradeItemPreview & {
+  id: string;
+};
+
+export type TradePartnerInventoryPage = {
+  visibility: InventoryVisibility;
+  items: TradePartnerInventoryItem[];
+  total?: number;
+  page: number;
+  pageSize: number;
 };
 
 export type EconomyTrade = {
@@ -3192,6 +3593,37 @@ export type SetEconomyCatalogueMarketplaceStatusResult = {
   marketEnabled: boolean;
 };
 
+export type CreateEconomyDiscountRuleInput = {
+  actorSteamId: string;
+  displayName: string;
+  targetType: EconomyDiscountTargetType;
+  catalogueId?: number | null;
+  itemType?: EconomyItemType | null;
+  percentageBps: number;
+  fixedTokens: number;
+  priority: number;
+  enabled: boolean;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  excludedCatalogueIds?: number[];
+  idempotencyKey: string;
+};
+
+export type UpdateEconomyDiscountRuleInput =
+  CreateEconomyDiscountRuleInput & { ruleId: number };
+
+export type SetEconomyDiscountRuleEnabledInput = {
+  actorSteamId: string;
+  ruleId: number;
+  enabled: boolean;
+  idempotencyKey: string;
+};
+
+export type EconomyDiscountRuleMutationResult = {
+  ruleId: number;
+  enabled: boolean;
+};
+
 export type StaffCustomCrate = EconomyCatalogueItem & {
   lootTableId: number;
   lootTableCode: string;
@@ -3490,6 +3922,24 @@ type EconomyCatalogueRow = RowDataPacket & {
   observed_at?: Date | string | null;
   loot_table_id?: number | string | null;
   loot_table_code?: string | null;
+};
+
+type EconomyDiscountRuleRow = RowDataPacket & {
+  id: number | string;
+  display_name: string;
+  target_type: string;
+  catalogue_id: number | string | null;
+  item_type: string | null;
+  percentage_bps: number | string;
+  fixed_tokens: number | string;
+  priority: number | string;
+  enabled: number | boolean;
+  starts_at: Date | string | null;
+  ends_at: Date | string | null;
+  created_by_steam_id: string;
+  created_at: Date | string;
+  updated_at: Date | string;
+  exclusion_catalogue_id?: number | string | null;
 };
 
 type EconomyMarketVariantPriceRow = RowDataPacket & {
@@ -4107,26 +4557,307 @@ function toEconomyCataloguePrice(
 }
 
 function economyDirectPurchasePrice(
-  itemType: EconomyItemType,
+  _itemType: EconomyItemType,
   price: EconomyCataloguePrice | null,
 ) {
   if (!price) return null;
-  // A persisted EUR-cent snapshot is the source of truth: one cent equals one
-  // Token. Containers are sold at the required half-price direct purchase rate.
-  return itemType === "crate" || itemType === "capsule"
-    ? Math.ceil(price.tokenPrice / 2)
-    : price.tokenPrice;
+  // A persisted EUR-cent snapshot is the immutable base price: one cent is
+  // one Token for every item type. Any promotion is an explicit discount rule.
+  return price.tokenPrice;
 }
 
 function economyDirectPurchasePriceFromEuroCents(
-  itemType: EconomyItemType,
+  _itemType: EconomyItemType,
   euroCents: number,
 ) {
-  // Keep the display and purchase calculation tied to the same exchange rule:
-  // one EUR cent equals one Token, with containers at half price.
-  return itemType === "crate" || itemType === "capsule"
-    ? Math.ceil(euroCents / 2)
-    : euroCents;
+  // Public quotes use the same base conversion as stored snapshots. There is
+  // deliberately no type-specific or otherwise implicit markdown here.
+  return euroCents;
+}
+
+function economyDiscountTargetType(value: unknown): EconomyDiscountTargetType {
+  if (value !== "catalogue_item" && value !== "item_type")
+    economyError(
+      "invalid_database_value",
+      "The economy contains an unknown discount target.",
+    );
+  return value;
+}
+
+function economyDiscountTableMissing(error: unknown) {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: unknown }).code === "ER_NO_SUCH_TABLE",
+  );
+}
+
+function toEconomyDiscountRule(
+  row: EconomyDiscountRuleRow,
+  excludedCatalogueIds: number[] = [],
+): EconomyDiscountRule {
+  const targetType = economyDiscountTargetType(row.target_type);
+  const catalogueId = economyOptionalInteger(
+    row.catalogue_id,
+    "discount catalogue ID",
+  );
+  const itemType = row.item_type
+    ? economyItemType(String(row.item_type))
+    : null;
+  if (
+    (targetType === "catalogue_item" && (catalogueId === null || itemType)) ||
+    (targetType === "item_type" && (!itemType || catalogueId !== null))
+  ) {
+    economyError(
+      "invalid_database_value",
+      "The economy contains a malformed discount target.",
+    );
+  }
+  const percentageBps = economyNumber(
+    row.percentage_bps,
+    "discount percentage",
+  );
+  const fixedTokens = economyNumber(row.fixed_tokens, "fixed discount");
+  if (
+    percentageBps > 10_000 ||
+    (percentageBps === 0 && fixedTokens === 0)
+  ) {
+    economyError(
+      "invalid_database_value",
+      "The economy contains a malformed discount adjustment.",
+    );
+  }
+  return {
+    id: economyNumber(row.id, "discount rule ID", 1),
+    displayName: economyText(row.display_name, "Discount name", 120),
+    targetType,
+    catalogueId,
+    itemType,
+    percentageBps,
+    fixedTokens,
+    priority: economyNumber(
+      row.priority,
+      "discount priority",
+      -32_768,
+    ),
+    enabled: economyBoolean(row.enabled),
+    startsAt: economyDateToIso(row.starts_at),
+    endsAt: economyDateToIso(row.ends_at),
+    createdBySteamId: economySteamId(
+      String(row.created_by_steam_id),
+      "Discount creator Steam ID",
+    ),
+    excludedCatalogueIds: [...new Set(excludedCatalogueIds)].sort(
+      (left, right) => left - right,
+    ),
+    createdAt: economyDateToIso(row.created_at) ?? new Date(0).toISOString(),
+    updatedAt: economyDateToIso(row.updated_at) ?? new Date(0).toISOString(),
+  };
+}
+
+async function loadEconomyDiscountRules(
+  executor: Pool | PoolConnection,
+  input: {
+    activeOnly?: boolean;
+    catalogueId?: number;
+    itemType?: EconomyItemType;
+    lock?: boolean;
+  } = {},
+) {
+  const where: string[] = [];
+  const values: unknown[] = [];
+  if (input.activeOnly) {
+    where.push("r.enabled = TRUE");
+    where.push("(r.starts_at IS NULL OR r.starts_at <= CURRENT_TIMESTAMP)");
+    where.push("(r.ends_at IS NULL OR r.ends_at > CURRENT_TIMESTAMP)");
+  }
+  if (input.catalogueId !== undefined && input.itemType !== undefined) {
+    where.push(
+      "((r.target_type = 'catalogue_item' AND r.catalogue_id = ?) OR " +
+        "(r.target_type = 'item_type' AND r.item_type = ?))",
+    );
+    values.push(input.catalogueId, input.itemType);
+  }
+  const clause = where.length ? " WHERE " + where.join(" AND ") : "";
+  try {
+    const [rows] = await executor.query<EconomyDiscountRuleRow[]>(
+      "SELECT r.id, r.display_name, r.target_type, r.catalogue_id, r.item_type, r.percentage_bps, r.fixed_tokens, r.priority, r.enabled, r.starts_at, r.ends_at, r.created_by_steam_id, r.created_at, r.updated_at, e.catalogue_id AS exclusion_catalogue_id " +
+        "FROM portal_economy_discount_rules AS r " +
+        "LEFT JOIN portal_economy_discount_exclusions AS e ON e.rule_id = r.id" +
+        clause +
+        " ORDER BY r.id, e.catalogue_id" +
+        (input.lock ? " FOR UPDATE" : ""),
+      values,
+    );
+    const grouped = new Map<
+      number,
+      { row: EconomyDiscountRuleRow; exclusions: number[] }
+    >();
+    for (const row of rows) {
+      const ruleId = economyNumber(row.id, "discount rule ID", 1);
+      const current = grouped.get(ruleId) ?? { row, exclusions: [] };
+      if (row.exclusion_catalogue_id !== null && row.exclusion_catalogue_id !== undefined) {
+        current.exclusions.push(
+          economyNumber(
+            row.exclusion_catalogue_id,
+            "discount exclusion catalogue ID",
+            1,
+          ),
+        );
+      }
+      grouped.set(ruleId, current);
+    }
+    return [...grouped.values()].map(({ row, exclusions }) =>
+      toEconomyDiscountRule(row, exclusions),
+    );
+  } catch (error) {
+    // The economy stays usable during the deployment window before migration
+    // 010 is applied. With no table there cannot be a persisted discount.
+    if (economyDiscountTableMissing(error)) return [];
+    throw error;
+  }
+}
+
+function economyDiscountSaving(basePriceTokens: number, rule: EconomyDiscountRule) {
+  const percentageTokens = Number(
+    (BigInt(basePriceTokens) * BigInt(rule.percentageBps)) / 10_000n,
+  );
+  const combined = Math.min(
+    basePriceTokens,
+    percentageTokens + rule.fixedTokens,
+  );
+  if (!Number.isSafeInteger(combined))
+    economyError("invalid_database_value", "The discount amount is too large.");
+  return combined;
+}
+
+function resolveEconomyDiscount(input: {
+  catalogueId: number;
+  itemType: EconomyItemType;
+  basePriceTokens: number;
+  rules: EconomyDiscountRule[];
+}): EconomyAppliedDiscount | null {
+  const eligible = input.rules.flatMap((rule) => {
+    const targetRank =
+      rule.targetType === "catalogue_item" &&
+      rule.catalogueId === input.catalogueId
+        ? 2
+        : rule.targetType === "item_type" &&
+            rule.itemType === input.itemType &&
+            !rule.excludedCatalogueIds.includes(input.catalogueId)
+          ? 1
+          : 0;
+    if (!targetRank) return [];
+    return [
+      {
+        rule,
+        targetRank,
+        saving: economyDiscountSaving(input.basePriceTokens, rule),
+      },
+    ];
+  });
+  eligible.sort(
+    (left, right) =>
+      right.targetRank - left.targetRank ||
+      right.rule.priority - left.rule.priority ||
+      right.saving - left.saving ||
+      right.rule.id - left.rule.id,
+  );
+  const selected = eligible[0];
+  if (!selected || selected.saving <= 0) return null;
+  return {
+    ruleId: selected.rule.id,
+    displayName: selected.rule.displayName,
+    targetType: selected.rule.targetType,
+    percentageBps: selected.rule.percentageBps,
+    fixedTokens: selected.rule.fixedTokens,
+    basePriceTokens: input.basePriceTokens,
+    discountTokens: selected.saving,
+    finalPriceTokens: input.basePriceTokens - selected.saving,
+  };
+}
+
+function withEconomyDiscount(
+  item: EconomyCatalogueItem,
+  basePriceTokens: number | null,
+  rules: EconomyDiscountRule[],
+): EconomyCatalogueItem {
+  if (basePriceTokens === null) {
+    return {
+      ...item,
+      basePriceTokens: null,
+      appliedDiscount: null,
+      displayBasePriceTokens: null,
+      displayPriceTokens: null,
+      displayBasePriceEuroCents: null,
+      displayPriceEuroCents: null,
+      directPurchasePriceTokens: null,
+    };
+  }
+  const appliedDiscount = resolveEconomyDiscount({
+    catalogueId: item.id,
+    itemType: item.itemType,
+    basePriceTokens,
+    rules,
+  });
+  const finalPriceTokens = appliedDiscount?.finalPriceTokens ?? basePriceTokens;
+  return {
+    ...item,
+    basePriceTokens,
+    appliedDiscount,
+    displayBasePriceTokens: basePriceTokens,
+    displayPriceTokens: finalPriceTokens,
+    // A Token promotion does not rewrite the public EUR quote. Keep the
+    // market value stable and expose base/effective Token values separately.
+    displayBasePriceEuroCents:
+      item.displayBasePriceEuroCents ?? item.displayPriceEuroCents,
+    displayPriceEuroCents: item.displayPriceEuroCents,
+    directPurchasePriceTokens: finalPriceTokens,
+  };
+}
+
+async function applyEconomyCatalogueDiscounts(
+  executor: Pool | PoolConnection,
+  items: EconomyCatalogueItem[],
+) {
+  if (!items.length) return items;
+  const rules = await loadEconomyDiscountRules(executor, { activeOnly: true });
+  return items.map((item) =>
+    withEconomyDiscount(item, item.basePriceTokens, rules),
+  );
+}
+
+export async function getEconomyDiscountedPrice(input: {
+  catalogueId: number;
+  itemType: EconomyItemType;
+  basePriceTokens: number;
+}) {
+  const catalogueId = economyNumber(input.catalogueId, "Catalogue item ID", 1);
+  const itemType = economyItemType(input.itemType);
+  const basePriceTokens = economyAmount(
+    input.basePriceTokens,
+    "Base Token price",
+  );
+  const pool = getPortalPool();
+  const rules = pool
+    ? await loadEconomyDiscountRules(pool, {
+        activeOnly: true,
+        catalogueId,
+        itemType,
+      })
+    : [];
+  const appliedDiscount = resolveEconomyDiscount({
+    catalogueId,
+    itemType,
+    basePriceTokens,
+    rules,
+  });
+  return {
+    basePriceTokens,
+    finalPriceTokens: appliedDiscount?.finalPriceTokens ?? basePriceTokens,
+    appliedDiscount,
+  };
 }
 
 function economyPriceIsLegacySteam(price: EconomyCataloguePrice | null) {
@@ -4275,8 +5006,12 @@ function toEconomyCatalogueItem(
     metadata,
     enabled: economyBoolean(row.enabled),
     price,
+    basePriceTokens: directPurchasePriceTokens,
+    appliedDiscount: null,
     displayPriceTokens: directPurchasePriceTokens,
+    displayBasePriceTokens: directPurchasePriceTokens,
     displayPriceEuroCents: price?.euroCents ?? null,
+    displayBasePriceEuroCents: price?.euroCents ?? null,
     displayPriceSource: price?.source ?? null,
     displayPriceFloatValue: null,
     displayPriceWear: null,
@@ -5201,7 +5936,10 @@ export async function getEconomyCatalogue(
     [...values, paging.pageSize, paging.offset],
   );
   return {
-    items: rows.map(toEconomyCatalogueItem),
+    items: await applyEconomyCatalogueDiscounts(
+      pool,
+      rows.map(toEconomyCatalogueItem),
+    ),
     total: economyCount(countRows),
     page: paging.page,
     pageSize: paging.pageSize,
@@ -5224,6 +5962,8 @@ export async function getMarketplaceCatalogue(
         ? 50
         : Math.min(Math.max(1, filter.pageSize), 50),
   });
+  const pool = getPortalPool();
+  if (!pool || !catalogue.items.length) return catalogue;
   // One cached public price snapshot prices every matching card on this
   // marketplace page. Legacy weapon finishes intentionally do not have a
   // fixed hash: their public identity includes the selected exterior, which
@@ -5284,18 +6024,21 @@ export async function getMarketplaceCatalogue(
           : null,
     })),
   );
-  return {
-    ...catalogue,
-    items: catalogue.items.map((item, index) => {
+  const quotedItems = catalogue.items.map((item, index) => {
       const price = publicPrices[index];
       if (price) {
+        const basePriceTokens = economyDirectPurchasePriceFromEuroCents(
+          item.itemType,
+          price.eurCents,
+        );
         return {
           ...item,
-          displayPriceTokens: economyDirectPurchasePriceFromEuroCents(
-            item.itemType,
-            price.eurCents,
-          ),
+          basePriceTokens,
+          appliedDiscount: null,
+          displayPriceTokens: basePriceTokens,
+          displayBasePriceTokens: basePriceTokens,
           displayPriceEuroCents: price.eurCents,
+          displayBasePriceEuroCents: price.eurCents,
           displayPriceSource: price.source,
           displayPriceFloatValue: price.floatValue,
           displayPriceWear: price.wear,
@@ -5307,8 +6050,12 @@ export async function getMarketplaceCatalogue(
       if (economyPriceIsLegacySteam(item.price)) {
         return {
           ...item,
+          basePriceTokens: null,
+          appliedDiscount: null,
           displayPriceTokens: null,
+          displayBasePriceTokens: null,
           displayPriceEuroCents: null,
+          displayBasePriceEuroCents: null,
           displayPriceSource: null,
           displayPriceFloatValue: null,
           displayPriceWear: null,
@@ -5316,7 +6063,10 @@ export async function getMarketplaceCatalogue(
         };
       }
       return item;
-    }),
+    });
+  return {
+    ...catalogue,
+    items: await applyEconomyCatalogueDiscounts(pool, quotedItems),
   };
 }
 
@@ -5335,7 +6085,11 @@ export async function getEconomyCatalogueItem(
       "LIMIT 1",
     [catalogueId],
   );
-  return rows[0] ? toEconomyCatalogueItem(rows[0]) : null;
+  if (!rows[0]) return null;
+  const [item] = await applyEconomyCatalogueDiscounts(pool, [
+    toEconomyCatalogueItem(rows[0]),
+  ]);
+  return item;
 }
 
 function toEconomyRedeemCodeReward(
@@ -6131,8 +6885,12 @@ export async function getEconomyCrates(
       " ORDER BY c.rarity_rank DESC, c.display_name ASC, c.id ASC LIMIT ? OFFSET ?",
     [...values, paging.pageSize, paging.offset],
   );
-  const crates = rows.map((row) => {
-    const item = toEconomyCatalogueItem(row);
+  const catalogueItems = await applyEconomyCatalogueDiscounts(
+    pool,
+    rows.map(toEconomyCatalogueItem),
+  );
+  const crates = rows.map((row, index) => {
+    const item = catalogueItems[index];
     return {
       ...item,
       cratePriceTokens: item.directPurchasePriceTokens,
@@ -6299,6 +7057,119 @@ export async function getPlayerEconomyInventory(
     total: economyCount(countRows),
     page: paging.page,
     pageSize: paging.pageSize,
+  };
+}
+
+/**
+ * Returns the same newest-first inventory instances used by the Inventory
+ * page in fixed 30-item profile pages. Private inventories remain visible to
+ * their owner and fail closed for every other viewer.
+ */
+export async function getPlayerProfileInventoryPage(
+  viewerSteamIdInput: string | null,
+  playerSteamIdInput: string,
+  pageInput = 1,
+): Promise<PlayerProfileInventoryPage> {
+  const playerSteamId = economySteamId(playerSteamIdInput, "Player Steam ID");
+  const viewerSteamId = viewerSteamIdInput
+    ? economySteamId(viewerSteamIdInput, "Viewer Steam ID")
+    : null;
+  const paging = economyPage(pageInput, 30, 30);
+  const visibility = await getPlayerInventoryVisibility(playerSteamId);
+  const canView = viewerSteamId === playerSteamId || visibility === "public";
+  if (!canView) {
+    return {
+      visibility,
+      canView: false,
+      items: [],
+      total: 0,
+      page: paging.page,
+      pageSize: paging.pageSize,
+    };
+  }
+
+  const inventory = await getPlayerEconomyInventory(playerSteamId, {
+    states: ["available"],
+    page: paging.page,
+    pageSize: paging.pageSize,
+  });
+
+  if (
+    viewerSteamId !== playerSteamId &&
+    (await getPlayerInventoryVisibility(playerSteamId)) !== "public"
+  ) {
+    return {
+      visibility: "private",
+      canView: false,
+      items: [],
+      total: 0,
+      page: paging.page,
+      pageSize: paging.pageSize,
+    };
+  }
+
+  return {
+    visibility,
+    canView: true,
+    items: inventory.items,
+    total: inventory.total,
+    page: inventory.page,
+    pageSize: inventory.pageSize,
+  };
+}
+
+export async function getTradePartnerInventory(
+  viewerSteamIdInput: string,
+  partnerSteamIdInput: string,
+  filter: { query?: string; page?: number; pageSize?: number } = {},
+): Promise<TradePartnerInventoryPage> {
+  const viewerSteamId = economySteamId(
+    viewerSteamIdInput,
+    "Current player Steam ID",
+  );
+  const partnerSteamId = economySteamId(
+    partnerSteamIdInput,
+    "Trade partner Steam ID",
+  );
+  if (viewerSteamId === partnerSteamId)
+    economyError("invalid_input", "Choose another player to trade with.");
+  const paging = economyPage(filter.page, filter.pageSize ?? 48, 60);
+  const visibility = await getPlayerInventoryVisibility(partnerSteamId);
+  if (visibility !== "public") {
+    return {
+      visibility: "private",
+      items: [],
+      page: paging.page,
+      pageSize: paging.pageSize,
+    };
+  }
+
+  const inventory = await getPlayerEconomyInventory(partnerSteamId, {
+    query: filter.query,
+    states: ["available"],
+    page: paging.page,
+    pageSize: paging.pageSize,
+  });
+  // A player may change this setting while another browser is viewing their
+  // collection. Re-check before returning any item-shaped data so a completed
+  // privacy change fails closed even across that small race window.
+  if ((await getPlayerInventoryVisibility(partnerSteamId)) !== "public") {
+    return {
+      visibility: "private",
+      items: [],
+      page: paging.page,
+      pageSize: paging.pageSize,
+    };
+  }
+  return {
+    visibility: "public",
+    items: inventory.items.flatMap((item) => {
+      const preview = toEconomyTradeItemPreview(item);
+      return preview ? [{ id: item.id, ...preview }] : [];
+    }),
+    total: inventory.total,
+    page: inventory.page,
+    pageSize: inventory.pageSize,
   };
 }
 
@@ -7006,6 +7877,288 @@ export async function setEconomyCatalogueMarketplaceStatus(
   });
 }
 
+export async function getEconomyDiscountRules(): Promise<EconomyDiscountRule[]> {
+  const pool = getPortalPool();
+  if (!pool) return [];
+  const rules = await loadEconomyDiscountRules(pool);
+  return rules.sort(
+    (left, right) =>
+      Number(right.enabled) - Number(left.enabled) ||
+      right.priority - left.priority ||
+      right.id - left.id,
+  );
+}
+
+function economyDiscountDate(value: string | null | undefined, field: string) {
+  if (value === null || value === undefined || !value.trim()) return null;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime()))
+    economyError("invalid_input", `${field} must be a valid date and time.`);
+  return date.toISOString();
+}
+
+function normalizeEconomyDiscountRuleInput(
+  input: CreateEconomyDiscountRuleInput | UpdateEconomyDiscountRuleInput,
+) {
+  const displayName = economyText(input.displayName, "Discount name", 120);
+  const targetType = economyDiscountTargetType(input.targetType);
+  const percentageBps = economyNumber(
+    input.percentageBps,
+    "discount percentage",
+  );
+  const fixedTokens = economyAmount(input.fixedTokens, "Fixed discount");
+  if (percentageBps > 10_000)
+    economyError("invalid_input", "Discount percentage cannot exceed 100%.");
+  if (percentageBps === 0 && fixedTokens === 0)
+    economyError(
+      "invalid_input",
+      "Enter a percentage or fixed-token discount.",
+    );
+  if (
+    !Number.isSafeInteger(input.priority) ||
+    input.priority < -32_768 ||
+    input.priority > 32_767
+  ) {
+    economyError(
+      "invalid_input",
+      "Discount priority must be between -32768 and 32767.",
+    );
+  }
+  if (typeof input.enabled !== "boolean")
+    economyError("invalid_input", "Discount status is invalid.");
+  const catalogueId =
+    targetType === "catalogue_item"
+      ? economyNumber(input.catalogueId, "discount catalogue ID", 1)
+      : null;
+  const itemType =
+    targetType === "item_type"
+      ? economyItemType(String(input.itemType ?? ""))
+      : null;
+  const excludedCatalogueIds = [
+    ...new Set(
+      (input.excludedCatalogueIds ?? []).map((catalogueIdInput) =>
+        economyNumber(catalogueIdInput, "excluded catalogue ID", 1),
+      ),
+    ),
+  ].sort((left, right) => left - right);
+  if (excludedCatalogueIds.length > 250)
+    economyError("invalid_input", "A discount can exclude at most 250 items.");
+  if (targetType === "catalogue_item" && excludedCatalogueIds.length)
+    economyError(
+      "invalid_input",
+      "Only category discounts can exclude individual items.",
+    );
+  const startsAt = economyDiscountDate(input.startsAt, "Discount start");
+  const endsAt = economyDiscountDate(input.endsAt, "Discount end");
+  if (
+    startsAt &&
+    endsAt &&
+    new Date(endsAt).getTime() <= new Date(startsAt).getTime()
+  ) {
+    economyError("invalid_input", "Discount end must be after its start.");
+  }
+  return {
+    displayName,
+    targetType,
+    catalogueId,
+    itemType,
+    percentageBps,
+    fixedTokens,
+    priority: input.priority,
+    enabled: input.enabled,
+    startsAt,
+    endsAt,
+    excludedCatalogueIds,
+  };
+}
+
+async function lockEconomyDiscountTargets(
+  connection: PoolConnection,
+  input: ReturnType<typeof normalizeEconomyDiscountRuleInput>,
+) {
+  if (input.catalogueId !== null) {
+    await lockEconomyCatalogue(connection, input.catalogueId, true);
+  }
+  if (!input.excludedCatalogueIds.length) return;
+  const placeholders = input.excludedCatalogueIds.map(() => "?").join(", ");
+  const [rows] = await connection.query<
+    Array<RowDataPacket & { id: number | string; item_type: string }>
+  >(
+    "SELECT id, item_type FROM portal_economy_catalogue WHERE id IN (" +
+      placeholders +
+      ") ORDER BY id FOR UPDATE",
+    input.excludedCatalogueIds,
+  );
+  if (rows.length !== input.excludedCatalogueIds.length)
+    economyError("catalogue_not_found", "An excluded item no longer exists.");
+  if (
+    input.itemType &&
+    rows.some((row) => economyItemType(row.item_type) !== input.itemType)
+  ) {
+    economyError(
+      "invalid_input",
+      "Every excluded item must belong to the selected category.",
+    );
+  }
+}
+
+async function replaceEconomyDiscountExclusions(input: {
+  connection: PoolConnection;
+  ruleId: number;
+  excludedCatalogueIds: number[];
+}) {
+  await input.connection.execute(
+    "DELETE FROM portal_economy_discount_exclusions WHERE rule_id = ?",
+    [input.ruleId],
+  );
+  if (!input.excludedCatalogueIds.length) return;
+  await input.connection.execute(
+    "INSERT INTO portal_economy_discount_exclusions (rule_id, catalogue_id) VALUES " +
+      input.excludedCatalogueIds.map(() => "(?, ?)").join(", "),
+    input.excludedCatalogueIds.flatMap((catalogueId) => [
+      input.ruleId,
+      catalogueId,
+    ]),
+  );
+}
+
+export async function createEconomyDiscountRule(
+  input: CreateEconomyDiscountRuleInput,
+): Promise<EconomyDiscountRuleMutationResult> {
+  const rule = normalizeEconomyDiscountRuleInput(input);
+  return runEconomyMutation({
+    operationName: "discount_rule.create",
+    actorSteamId: input.actorSteamId,
+    idempotencyKey: input.idempotencyKey,
+    request: rule,
+    work: async (context) => {
+      await lockEconomyDiscountTargets(context.connection, rule);
+      const [result] = await context.connection.execute<ResultSetHeader>(
+        "INSERT INTO portal_economy_discount_rules (display_name, target_type, catalogue_id, item_type, percentage_bps, fixed_tokens, priority, enabled, starts_at, ends_at, created_by_steam_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+          rule.displayName,
+          rule.targetType,
+          rule.catalogueId,
+          rule.itemType,
+          rule.percentageBps,
+          rule.fixedTokens,
+          rule.priority,
+          rule.enabled,
+          rule.startsAt ? new Date(rule.startsAt) : null,
+          rule.endsAt ? new Date(rule.endsAt) : null,
+          context.actorSteamId,
+        ],
+      );
+      const ruleId = economyNumber(result.insertId, "discount rule ID", 1);
+      await replaceEconomyDiscountExclusions({
+        connection: context.connection,
+        ruleId,
+        excludedCatalogueIds: rule.excludedCatalogueIds,
+      });
+      await writeEconomyAdminAudit({
+        connection: context.connection,
+        actorSteamId: context.actorSteamId,
+        action: "discount_rule.created",
+        targetType: "discount-rule",
+        targetId: String(ruleId),
+        idempotencyKey: context.idempotencyKey,
+        metadata: rule,
+      });
+      return { ruleId, enabled: rule.enabled };
+    },
+  });
+}
+
+export async function updateEconomyDiscountRule(
+  input: UpdateEconomyDiscountRuleInput,
+): Promise<EconomyDiscountRuleMutationResult> {
+  const ruleId = economyNumber(input.ruleId, "Discount rule ID", 1);
+  const rule = normalizeEconomyDiscountRuleInput(input);
+  return runEconomyMutation({
+    operationName: "discount_rule.update",
+    actorSteamId: input.actorSteamId,
+    idempotencyKey: input.idempotencyKey,
+    request: { ruleId, ...rule },
+    work: async (context) => {
+      await lockEconomyDiscountTargets(context.connection, rule);
+      const existing = await loadEconomyDiscountRules(context.connection, {
+        lock: true,
+      });
+      const previous = existing.find((candidate) => candidate.id === ruleId);
+      if (!previous)
+        economyError("discount_not_found", "That discount rule does not exist.");
+      await context.connection.execute(
+        "UPDATE portal_economy_discount_rules SET display_name = ?, target_type = ?, catalogue_id = ?, item_type = ?, percentage_bps = ?, fixed_tokens = ?, priority = ?, enabled = ?, starts_at = ?, ends_at = ? WHERE id = ?",
+        [
+          rule.displayName,
+          rule.targetType,
+          rule.catalogueId,
+          rule.itemType,
+          rule.percentageBps,
+          rule.fixedTokens,
+          rule.priority,
+          rule.enabled,
+          rule.startsAt ? new Date(rule.startsAt) : null,
+          rule.endsAt ? new Date(rule.endsAt) : null,
+          ruleId,
+        ],
+      );
+      await replaceEconomyDiscountExclusions({
+        connection: context.connection,
+        ruleId,
+        excludedCatalogueIds: rule.excludedCatalogueIds,
+      });
+      await writeEconomyAdminAudit({
+        connection: context.connection,
+        actorSteamId: context.actorSteamId,
+        action: "discount_rule.updated",
+        targetType: "discount-rule",
+        targetId: String(ruleId),
+        idempotencyKey: context.idempotencyKey,
+        metadata: { previous, next: rule },
+      });
+      return { ruleId, enabled: rule.enabled };
+    },
+  });
+}
+
+export async function setEconomyDiscountRuleEnabled(
+  input: SetEconomyDiscountRuleEnabledInput,
+): Promise<EconomyDiscountRuleMutationResult> {
+  const ruleId = economyNumber(input.ruleId, "Discount rule ID", 1);
+  if (typeof input.enabled !== "boolean")
+    economyError("invalid_input", "Discount status is invalid.");
+  return runEconomyMutation({
+    operationName: "discount_rule.enabled.set",
+    actorSteamId: input.actorSteamId,
+    idempotencyKey: input.idempotencyKey,
+    request: { ruleId, enabled: input.enabled },
+    work: async (context) => {
+      const [rows] = await context.connection.query<EconomyDiscountRuleRow[]>(
+        "SELECT id, display_name, target_type, catalogue_id, item_type, percentage_bps, fixed_tokens, priority, enabled, starts_at, ends_at, created_by_steam_id, created_at, updated_at FROM portal_economy_discount_rules WHERE id = ? FOR UPDATE",
+        [ruleId],
+      );
+      if (!rows[0])
+        economyError("discount_not_found", "That discount rule does not exist.");
+      const previousEnabled = economyBoolean(rows[0].enabled);
+      await context.connection.execute(
+        "UPDATE portal_economy_discount_rules SET enabled = ? WHERE id = ?",
+        [input.enabled, ruleId],
+      );
+      await writeEconomyAdminAudit({
+        connection: context.connection,
+        actorSteamId: context.actorSteamId,
+        action: "discount_rule.enabled.set",
+        targetType: "discount-rule",
+        targetId: String(ruleId),
+        idempotencyKey: context.idempotencyKey,
+        metadata: { previousEnabled, enabled: input.enabled },
+      });
+      return { ruleId, enabled: input.enabled };
+    },
+  });
+}
+
 type StaffCustomCrateRow = EconomyCatalogueRow & {
   loot_table_id: number | string;
   loot_table_code: string;
@@ -7031,16 +8184,10 @@ function isStaffManagedCustomCrate(crate: EconomyCatalogueItem) {
 }
 
 function staffCustomCrateBasePrice(directPriceTokens: number) {
-  const directPrice = economyAmount(
+  return economyAmount(
     directPriceTokens,
     "Custom crate Token price",
   );
-  if (directPrice > Math.floor(Number.MAX_SAFE_INTEGER / 2))
-    economyError("invalid_input", "The custom crate price is too large.");
-  // The public catalogue price is the comparable market price. Containers are
-  // deliberately sold for half of it everywhere else, so save double the
-  // staff-entered direct Token price here.
-  return directPrice * 2;
 }
 
 function staffCustomCrateSlug(displayName: string) {
@@ -7093,7 +8240,7 @@ async function replaceStaffCustomCratePrice(input: {
     [input.catalogueId],
   );
   await input.connection.execute(
-    "INSERT INTO portal_economy_catalogue_prices (catalogue_id, market_price_eur_cents, price_source, source_reference, is_current) VALUES (?, ?, 'staff-custom-crate', 'Staff custom crate direct Token price', TRUE)",
+    "INSERT INTO portal_economy_catalogue_prices (catalogue_id, market_price_eur_cents, price_source, source_reference, is_current) VALUES (?, ?, 'staff-custom-crate-direct-v2', 'Staff custom crate base Token price; no implicit markdown', TRUE)",
     [input.catalogueId, marketPriceEurCents],
   );
 }
@@ -7114,8 +8261,12 @@ export async function getStaffCustomCrates(): Promise<StaffCustomCrate[]> {
       "ORDER BY c.catalogue_key = ? DESC, c.display_name ASC, c.id ASC",
     [tappdWeaponCaseCatalogueKey, tappdWeaponCaseCatalogueKey],
   );
-  return rows.map((row) => {
-    const crate = toEconomyCatalogueItem(row);
+  const catalogueItems = await applyEconomyCatalogueDiscounts(
+    pool,
+    rows.map(toEconomyCatalogueItem),
+  );
+  return rows.map((row, index) => {
+    const crate = catalogueItems[index];
     return {
       ...crate,
       lootTableId: economyNumber(row.loot_table_id, "loot table ID", 1),
@@ -7927,17 +9078,34 @@ export async function purchaseEconomyItem(
           quote: resolvedMarketQuote,
         });
       }
-      const priceTokens = resolvedMarketQuote
+      const basePriceTokens = resolvedMarketQuote
         ? economyDirectPurchasePriceFromEuroCents(
             catalogue.itemType,
             resolvedMarketQuote.euroCents,
           )
         : economyDirectPurchasePrice(catalogue.itemType, catalogue.price);
-      if (priceTokens === null)
+      if (basePriceTokens === null)
         economyError(
           "price_unavailable",
           "That item has no current market or last-known price.",
         );
+      // Catalogue and matching rule rows are locked in a consistent order.
+      // This is the financial source of truth even if a browser viewed an
+      // earlier quote while staff enabled, edited, or ended a promotion.
+      const discountRules = await loadEconomyDiscountRules(context.connection, {
+        activeOnly: true,
+        catalogueId: catalogue.id,
+        itemType: catalogue.itemType,
+        lock: true,
+      });
+      const appliedDiscount = resolveEconomyDiscount({
+        catalogueId: catalogue.id,
+        itemType: catalogue.itemType,
+        basePriceTokens,
+        rules: discountRules,
+      });
+      const priceTokens =
+        appliedDiscount?.finalPriceTokens ?? basePriceTokens;
       const totalPriceTokens = priceTokens * quantity;
       if (!Number.isSafeInteger(totalPriceTokens))
         economyError("invalid_input", "The total purchase price is too large.");
@@ -7963,6 +9131,7 @@ export async function purchaseEconomyItem(
           metadata: {
             priceEurCents:
               resolvedMarketQuote?.euroCents ?? catalogue.price?.euroCents ?? null,
+            finalPriceEurCents: priceTokens,
             basePriceEurCents: resolvedMarketQuote?.baseEuroCents ?? null,
             priceSource:
               resolvedMarketQuote?.source ?? catalogue.price?.source ?? null,
@@ -7978,8 +9147,14 @@ export async function purchaseEconomyItem(
             stattrak: requestedStattrak,
             itemType: catalogue.itemType,
             quantity,
+            baseUnitPriceTokens: basePriceTokens,
             unitPriceTokens: priceTokens,
             totalPriceTokens,
+            discountRuleId: appliedDiscount?.ruleId ?? null,
+            discountName: appliedDiscount?.displayName ?? null,
+            discountTokensPerItem: appliedDiscount?.discountTokens ?? 0,
+            discountPercentageBps: appliedDiscount?.percentageBps ?? 0,
+            discountFixedTokens: appliedDiscount?.fixedTokens ?? 0,
           },
         });
       }
@@ -7999,12 +9174,19 @@ export async function purchaseEconomyItem(
           source: {
             type: "marketplace_purchase",
             catalogueId: catalogue.id,
+            basePriceTokens,
             priceTokens,
             totalPriceTokens,
             quantity,
+            discountRuleId: appliedDiscount?.ruleId ?? null,
+            discountName: appliedDiscount?.displayName ?? null,
+            discountTokens: appliedDiscount?.discountTokens ?? 0,
+            discountPercentageBps: appliedDiscount?.percentageBps ?? 0,
+            discountFixedTokens: appliedDiscount?.fixedTokens ?? 0,
             itemPosition: index + 1,
             priceEurCents:
               resolvedMarketQuote?.euroCents ?? catalogue.price?.euroCents ?? null,
+            finalPriceEurCents: priceTokens,
             basePriceEurCents: resolvedMarketQuote?.baseEuroCents ?? null,
             priceSource:
               resolvedMarketQuote?.source ?? catalogue.price?.source ?? null,
@@ -9514,6 +10696,24 @@ async function returnEconomyTradeEscrow(input: {
   );
 }
 
+async function requirePublicRequestedInventory(
+  connection: PoolConnection,
+  steamId: string,
+) {
+  const [rows] = await connection.query<
+    Array<RowDataPacket & { inventory_visibility: string }>
+  >(
+    "SELECT inventory_visibility FROM portal_player_settings WHERE steam_id = ? LIMIT 1 FOR UPDATE",
+    [steamId],
+  );
+  if (inventoryVisibility(rows[0]?.inventory_visibility) !== "public") {
+    economyError(
+      "inventory_private",
+      "That player no longer shares their inventory for item requests.",
+    );
+  }
+}
+
 export async function createEconomyTrade(
   input: CreateEconomyTradeInput,
 ): Promise<CreateEconomyTradeResult> {
@@ -9565,6 +10765,12 @@ export async function createEconomyTrade(
       const expiresAt =
         suppliedExpiry ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1_000);
       const tradeId = randomUUID().toLowerCase();
+      if (requestedItemIds.length) {
+        await requirePublicRequestedInventory(
+          context.connection,
+          counterpartySteamId,
+        );
+      }
       const wallets = await lockTokenAccounts(context.connection, [steamId]);
       const allItemIds = [
         ...new Set([...offeredItemIds, ...requestedItemIds]),

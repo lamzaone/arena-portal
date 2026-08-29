@@ -9,7 +9,7 @@ export function TokenBalance({ wallet, compact = false }: { wallet: EconomyWalle
 
   return (
     <section className="panel" aria-label="Token wallet">
-      <div className="panel-heading"><div><p className="eyebrow"><Coins aria-hidden="true" /> Token wallet</p><h2>{formatTokens(wallet.balance)} tokens</h2></div><span className="badge tag-vip">1 EUR = 100 tokens</span></div>
+      <div className="panel-heading"><div><p className="eyebrow"><Coins aria-hidden="true" /> Token wallet</p><h2>{formatTokens(wallet.balance)} tokens</h2></div></div>
       {wallet.earned !== null || wallet.spent !== null ? <div className="tag-list">
         {wallet.earned !== null ? <span className="tag"><TrendingUp aria-hidden="true" /> {formatTokens(wallet.earned)} earned</span> : null}
         {wallet.spent !== null ? <span className="tag"><TrendingDown aria-hidden="true" /> {formatTokens(wallet.spent)} spent</span> : null}
