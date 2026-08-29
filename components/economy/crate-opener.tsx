@@ -32,7 +32,10 @@ import {
   EconomyEmptyState,
   EconomyItemCard,
 } from "@/components/economy/economy-item-card";
-import { postEconomyAction } from "@/components/economy/economy-request";
+import {
+  createEconomyIdempotencyKey,
+  postEconomyAction,
+} from "@/components/economy/economy-request";
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
 import {
   economyCrates,
@@ -223,29 +226,6 @@ function crateDropStateFromResponse(value: unknown): CrateDropState {
   if (!totalWeight || !drops.length)
     return { status: "unavailable", message: "This crate has no enabled drops." };
   return { status: "ready", totalWeight, drops };
-}
-
-async function fetchCrateDropPool(catalogueId: number) {
-  const response = await fetch(`/api/economy/crates/${catalogueId}/drops`, {
-    credentials: "same-origin",
-    cache: "no-store",
-  });
-  const body: unknown = await response.json();
-  if (!response.ok) {
-    const message =
-      isRecord(body) && typeof body.message === "string"
-        ? body.message
-        : "Crate odds are unavailable.";
-    throw new Error(message);
-  }
-  const state = crateDropStateFromResponse(body);
-  if (state.status !== "ready")
-    throw new Error(
-      state.status === "unavailable"
-        ? state.message
-        : "The verified drop pool is not ready.",
-    );
-  return state.drops;
 }
 
 function crateDropRate(drop: CrateDrop, totalWeight: number) {
@@ -1018,11 +998,14 @@ export function CrateOpener({
   const [pending, startTransition] = useTransition();
   const revealTimer = useRef<number | null>(null);
   const bulkRevealTimers = useRef<Map<string, number>>(new Map());
+  const bulkOpenRequestRef = useRef<{
+    signature: string;
+    idempotencyKey: string;
+  } | null>(null);
   const revealComplete = useRef<(() => void) | null>(null);
   const reelAudio = useRef<AudioContext | null>(null);
   const reelTickCount = useRef(0);
   const refreshAfterUnbox = useRef(false);
-  const refreshAfterBulkOpen = useRef(false);
   const ownedGridRef = useRef<HTMLDivElement | null>(null);
   const [ownedGridColumns, setOwnedGridColumns] = useState(1);
   const marketGridRef = useRef<HTMLDivElement | null>(null);
@@ -1223,18 +1206,6 @@ export function CrateOpener({
       setSelectedCrateId("");
     }
   }, [retainedOpenedCrate?.id, selectedCrateId, visibleOwnedCrates]);
-
-  useEffect(() => {
-    if (
-      refreshAfterBulkOpen.current &&
-      bulkOpeningRows.length &&
-      !bulkAnimating &&
-      activeAction === null
-    ) {
-      refreshAfterBulkOpen.current = false;
-      router.refresh();
-    }
-  }, [activeAction, bulkAnimating, bulkOpeningRows.length, router]);
 
   useEffect(() => {
     setConsumedCrateIds((current) => {
@@ -1575,6 +1546,15 @@ export function CrateOpener({
       0,
       MAX_BULK_OPEN_CRATES,
     );
+    const crateItemIds = selectedForOpening.map((crate) => crate.id);
+    const signature = JSON.stringify([...crateItemIds].sort());
+    if (bulkOpenRequestRef.current?.signature !== signature) {
+      bulkOpenRequestRef.current = {
+        signature,
+        idempotencyKey: createEconomyIdempotencyKey(),
+      };
+    }
+    const requestId = bulkOpenRequestRef.current.idempotencyKey;
     const initialRows: BulkOpeningRow[] = selectedForOpening.map((crate) => ({
       crate,
       preparing: true,
@@ -1589,134 +1569,124 @@ export function CrateOpener({
     setBulkSelectedCrateIds(new Set());
     setSelectionMode(false);
     setActiveAction("bulk-open");
-    let openedCount = 0;
-    const dropPoolRequests = new Map<number, Promise<CrateDrop[]>>();
-
-    await Promise.all(
-      selectedForOpening.map(async (crate, index) => {
-        try {
-          if (crate.catalogueId === null)
-            throw new Error("This crate is missing its catalogue drop pool.");
-          const existingDropPool = dropPoolRequests.get(crate.catalogueId);
-          const dropPoolRequest =
-            existingDropPool ?? fetchCrateDropPool(crate.catalogueId);
-          if (!existingDropPool)
-            dropPoolRequests.set(crate.catalogueId, dropPoolRequest);
-          const drops = await dropPoolRequest;
-          const verifyRun = Date.now() + index;
-          setBulkOpeningRows((current) =>
-            current.map((row) =>
-              row.crate.id === crate.id
-                ? {
-                    ...row,
-                    preparing: false,
-                    opening: {
-                      phase: "verifying",
-                      crate,
-                      drops,
-                      run: verifyRun,
-                    },
-                  }
-                : row,
-            ),
+    try {
+      const result = await postEconomyAction(
+        "/api/economy/crates/open",
+        csrf,
+        { crateItemIds },
+        requestId,
+      );
+      const dropsByCatalogueId = new Map<number, CrateDrop[]>();
+      for (const rawPool of result.dropPools ?? []) {
+        if (!isRecord(rawPool)) continue;
+        const catalogueId = finiteNumber(rawPool.containerCatalogueId);
+        if (catalogueId === null || !Number.isSafeInteger(catalogueId)) continue;
+        const state = crateDropStateFromResponse(rawPool);
+        if (state.status === "ready")
+          dropsByCatalogueId.set(catalogueId, state.drops);
+      }
+      const openingsByCrateId = new Map<string, Record<string, unknown>>();
+      for (const rawOpening of result.openings ?? []) {
+        if (!isRecord(rawOpening) || typeof rawOpening.crateItemId !== "string")
+          continue;
+        openingsByCrateId.set(rawOpening.crateItemId, rawOpening);
+      }
+      const resolvedRows = selectedForOpening.map((crate, index) => {
+        if (crate.catalogueId === null)
+          throw new Error("This crate is missing its catalogue drop pool.");
+        const drops = dropsByCatalogueId.get(crate.catalogueId);
+        const rawOpening = openingsByCrateId.get(crate.id);
+        if (!drops?.length || !rawOpening)
+          throw new Error(
+            "The crates opened, but their reveal summary was incomplete. Reload Inventory to verify the rewards.",
           );
-
-          const result = await postEconomyAction(
-            "/api/economy/crates/open",
-            csrf,
-            { crateItemId: crate.id },
-          );
-          const resultItem = result.item ? toEconomyItem(result.item) : null;
-          if (
-            !resultItem ||
-            (!resultItem.id && resultItem.displayName === "Unnamed item")
-          ) {
-            throw new Error(
-              "The crate opened, but its reward could not be displayed. Reload Inventory to view it.",
-            );
-          }
-          const rewardLootEntryId = finiteNumber(result.rewardLootEntryId);
-          const safeLootEntryId =
-            rewardLootEntryId !== null &&
-            Number.isSafeInteger(rewardLootEntryId)
-              ? rewardLootEntryId
-              : null;
-          const reward = rewardWithDropArtwork(
-            resultItem,
-            drops,
-            safeLootEntryId,
-          );
-          const message = result.globalAnnouncementQueued
-            ? `${reward.displayName} was unboxed and announced in global chat.`
-            : result.message ||
-              "Crate opened. The item is now in your inventory.";
-          openedCount += 1;
-          setConsumedCrateIds((current) =>
-            new Set([...current, crate.id]),
-          );
-          setBulkOpeningRows((current) =>
-            current.map((row) =>
-              row.crate.id === crate.id
-                ? {
-                    ...row,
-                    preparing: false,
-                    opening: {
-                      phase: "revealing",
-                      crate,
-                      reward,
-                      rewardLootEntryId: safeLootEntryId,
-                      drops,
-                      run: Date.now() + index,
-                    },
-                    reward,
-                    message,
-                  }
-                : row,
-            ),
-          );
-          const duration = window.matchMedia(
-            "(prefers-reduced-motion: reduce)",
-          ).matches
-            ? REDUCED_MOTION_FINAL_REEL_DURATION_MS
-            : FINAL_REEL_DURATION_MS;
-          const existingTimer = bulkRevealTimers.current.get(crate.id);
-          if (existingTimer !== undefined) window.clearTimeout(existingTimer);
-          bulkRevealTimers.current.set(
-            crate.id,
-            window.setTimeout(
-              () => completeBulkReveal(crate.id),
-              duration + 400,
-            ),
-          );
-        } catch (error) {
-          setBulkOpeningRows((current) =>
-            current.map((row) =>
-              row.crate.id === crate.id
-                ? {
-                    ...row,
-                    preparing: false,
-                    opening: null,
-                    error:
-                      error instanceof Error
-                        ? error.message
-                        : "This crate could not be opened.",
-                  }
-                : row,
-            ),
+        const resultItem = rawOpening.item
+          ? toEconomyItem(rawOpening.item)
+          : null;
+        if (
+          !resultItem ||
+          (!resultItem.id && resultItem.displayName === "Unnamed item")
+        ) {
+          throw new Error(
+            "The crates opened, but one reward could not be displayed. Reload Inventory to view it.",
           );
         }
-      }),
-    );
-
-    setActiveAction(null);
-    if (openedCount) refreshAfterBulkOpen.current = true;
-    const failedCount = selectedForOpening.length - openedCount;
-    setNotice({
-      type: failedCount ? "error" : "success",
-      text: failedCount
-        ? `${openedCount} of ${selectedForOpening.length} crates opened. ${failedCount} failed; see the opening rows for details.`
-        : `${openedCount} ${openedCount === 1 ? "crate" : "crates"} opened. Every reward has been added to Inventory.`,
-    });
+        const rewardLootEntryId = finiteNumber(rawOpening.rewardLootEntryId);
+        const safeLootEntryId =
+          rewardLootEntryId !== null && Number.isSafeInteger(rewardLootEntryId)
+            ? rewardLootEntryId
+            : null;
+        const reward = rewardWithDropArtwork(
+          resultItem,
+          drops,
+          safeLootEntryId,
+        );
+        return {
+          crate,
+          preparing: false,
+          opening: {
+            phase: "revealing" as const,
+            crate,
+            reward,
+            rewardLootEntryId: safeLootEntryId,
+            drops,
+            run: Date.now() + index,
+          },
+          reward,
+          message:
+            rawOpening.globalAnnouncementQueued === true
+              ? `${reward.displayName} was unboxed and announced in global chat.`
+              : typeof rawOpening.message === "string"
+                ? rawOpening.message
+                : "Crate opened. The item is now in your inventory.",
+          error: null,
+        } satisfies BulkOpeningRow;
+      });
+      setConsumedCrateIds(
+        (current) =>
+          new Set([...current, ...selectedForOpening.map((crate) => crate.id)]),
+      );
+      setBulkOpeningRows(resolvedRows);
+      bulkOpenRequestRef.current = null;
+      const duration = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches
+        ? REDUCED_MOTION_FINAL_REEL_DURATION_MS
+        : FINAL_REEL_DURATION_MS;
+      for (const crate of selectedForOpening) {
+        const existingTimer = bulkRevealTimers.current.get(crate.id);
+        if (existingTimer !== undefined) window.clearTimeout(existingTimer);
+        bulkRevealTimers.current.set(
+          crate.id,
+          window.setTimeout(
+            () => completeBulkReveal(crate.id),
+            duration + 400,
+          ),
+        );
+      }
+      setNotice({
+        type: "success",
+        text:
+          result.message ||
+          `${resolvedRows.length} ${resolvedRows.length === 1 ? "crate" : "crates"} opened. Every reward has been added to Inventory.`,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "The selected crates could not be opened.";
+      setBulkOpeningRows((current) =>
+        current.map((row) => ({
+          ...row,
+          preparing: false,
+          opening: null,
+          error: message,
+        })),
+      );
+      setNotice({ type: "error", text: message });
+    } finally {
+      setActiveAction(null);
+    }
   }
 
   function clearUnboxResult() {

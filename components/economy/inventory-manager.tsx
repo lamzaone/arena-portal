@@ -23,7 +23,10 @@ import {
   EconomyEmptyState,
   EconomyItemCard,
 } from "@/components/economy/economy-item-card";
-import { postEconomyAction } from "@/components/economy/economy-request";
+import {
+  createEconomyIdempotencyKey,
+  postEconomyAction,
+} from "@/components/economy/economy-request";
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
 import {
   economyItems,
@@ -55,6 +58,7 @@ type InventoryManagerProps = {
 type SortMode = "newest" | "name" | "rarity" | "float";
 
 const INVENTORY_PAGE_SIZE = 30;
+const MAX_BULK_SELL_ITEMS = 50;
 
 type LoadoutSlotInput =
   | { slotType: "weapon"; team: "T" | "CT"; definitionIndex: number }
@@ -128,34 +132,6 @@ function canBulkSellItem(item: EconomyItemView) {
   );
 }
 
-async function settleWithConcurrency<T, R>(
-  values: T[],
-  worker: (value: T) => Promise<R>,
-  concurrency = 4,
-) {
-  const results: Array<PromiseSettledResult<R>> = new Array(values.length);
-  let cursor = 0;
-  await Promise.all(
-    Array.from(
-      { length: Math.min(concurrency, values.length) },
-      async () => {
-        while (cursor < values.length) {
-          const index = cursor++;
-          try {
-            results[index] = {
-              status: "fulfilled",
-              value: await worker(values[index]),
-            };
-          } catch (reason) {
-            results[index] = { status: "rejected", reason };
-          }
-        }
-      },
-    ),
-  );
-  return results;
-}
-
 export function InventoryManager({
   inventory,
   loadout,
@@ -171,6 +147,7 @@ export function InventoryManager({
   );
   const loadoutView = useMemo(() => economyLoadout(loadout), [loadout]);
   const walletView = useMemo(() => economyWallet(wallet), [wallet]);
+  const [displayWallet, setDisplayWallet] = useState(walletView);
   const [query, setQuery] = useState("");
   const [type, setType] = useState("all");
   const [rarity, setRarity] = useState("all");
@@ -196,6 +173,10 @@ export function InventoryManager({
   } | null>(null);
   const [pending, startTransition] = useTransition();
   const inventoryGridRef = useRef<HTMLDivElement | null>(null);
+  const bulkSaleRequestRef = useRef<{
+    signature: string;
+    idempotencyKey: string;
+  } | null>(null);
   const [inventoryGridColumns, setInventoryGridColumns] = useState(1);
   const [inventoryInlineModalIndex, setInventoryInlineModalIndex] = useState(-1);
   const [inventoryModalHost, setInventoryModalHost] = useState<HTMLDivElement | null>(null);
@@ -338,6 +319,10 @@ export function InventoryManager({
       itemSupportsStickers(selected));
 
   useEffect(() => {
+    setDisplayWallet(walletView);
+  }, [walletView]);
+
+  useEffect(() => {
     if (!selected) return;
     setNametag(selected.nametag ?? "");
     setNametagItemId("");
@@ -465,6 +450,16 @@ export function InventoryManager({
       });
       return;
     }
+    if (
+      !bulkSelectedIds.has(item.id) &&
+      bulkSelectedIds.size >= MAX_BULK_SELL_ITEMS
+    ) {
+      setNotice({
+        type: "error",
+        text: `You can sell up to ${MAX_BULK_SELL_ITEMS} items at once.`,
+      });
+      return;
+    }
     setNotice(null);
     setBulkSaleConfirming(false);
     setBulkSelectedIds((current) => {
@@ -480,6 +475,7 @@ export function InventoryManager({
     setBulkSelectedIds((current) => {
       const next = new Set(current);
       for (const item of visibleItems) {
+        if (next.size >= MAX_BULK_SELL_ITEMS) break;
         if (canBulkSellItem(item)) next.add(item.id);
       }
       return next;
@@ -501,54 +497,60 @@ export function InventoryManager({
     }
 
     const saleItems = [...bulkSelectedItems];
+    const itemIds = saleItems.map((item) => item.id);
+    const signature = JSON.stringify([...itemIds].sort());
+    if (bulkSaleRequestRef.current?.signature !== signature) {
+      bulkSaleRequestRef.current = {
+        signature,
+        idempotencyKey: createEconomyIdempotencyKey(),
+      };
+    }
+    const requestId = bulkSaleRequestRef.current.idempotencyKey;
     setBulkSelling(true);
     setNotice(null);
     try {
-      const results = await settleWithConcurrency(
-        saleItems,
-        (item) =>
-          postEconomyAction("/api/economy/items/sell", csrf, {
-            itemId: item.id,
-          }),
+      const result = await postEconomyAction(
+        "/api/economy/items/sell",
+        csrf,
+        { itemIds },
+        requestId,
       );
-      const soldIds: string[] = [];
-      let payoutTokens = 0;
-      let firstError = "";
-      results.forEach((result, index) => {
-        if (result.status === "fulfilled") {
-          soldIds.push(saleItems[index].id);
-          if (typeof result.value.payoutTokens === "number")
-            payoutTokens += result.value.payoutTokens;
-        } else if (!firstError) {
-          firstError =
-            result.reason instanceof Error
-              ? result.reason.message
-              : "One of the selected items could not be sold.";
-        }
+      const soldIds = Array.isArray(result.itemIds)
+        ? result.itemIds.filter(
+            (itemId): itemId is string => typeof itemId === "string",
+          )
+        : [];
+      if (soldIds.length !== saleItems.length)
+        throw new Error(
+          "The sale completed, but its item summary was incomplete. Reload Inventory to verify it.",
+        );
+      const payoutTokens =
+        typeof result.payoutTokens === "number" ? result.payoutTokens : 0;
+      setSoldItemIds((current) => new Set([...current, ...soldIds]));
+      setBulkSelectedIds(new Set());
+      setDisplayWallet((current) => ({
+        ...current,
+        balance:
+          typeof result.balance === "number"
+            ? result.balance
+            : current.balance + payoutTokens,
+        earned:
+          current.earned === null ? null : current.earned + payoutTokens,
+      }));
+      bulkSaleRequestRef.current = null;
+      setNotice({
+        type: "success",
+        text: `${soldIds.length} ${soldIds.length === 1 ? "item" : "items"} sold for ${formatTokens(payoutTokens)} Tokens.`,
       });
-
-      if (soldIds.length) {
-        setSoldItemIds((current) => new Set([...current, ...soldIds]));
-        setBulkSelectedIds((current) => {
-          const next = new Set(current);
-          soldIds.forEach((itemId) => next.delete(itemId));
-          return next;
-        });
-        router.refresh();
-      }
-      const failedCount = saleItems.length - soldIds.length;
-      if (failedCount) {
-        setNotice({
-          type: "error",
-          text: `${soldIds.length} of ${saleItems.length} items sold${payoutTokens ? ` for ${formatTokens(payoutTokens)} Tokens` : ""}. ${failedCount} failed: ${firstError}`,
-        });
-      } else {
-        setNotice({
-          type: "success",
-          text: `${soldIds.length} ${soldIds.length === 1 ? "item" : "items"} sold for ${formatTokens(payoutTokens)} Tokens.`,
-        });
-        setSelectionMode(false);
-      }
+      setSelectionMode(false);
+    } catch (error) {
+      setNotice({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "The selected items could not be sold.",
+      });
     } finally {
       setBulkSaleConfirming(false);
       setBulkSelling(false);
@@ -593,7 +595,7 @@ export function InventoryManager({
             loadout is updated.
           </p>
         </div>
-        <TokenBalance wallet={walletView} />
+        <TokenBalance wallet={displayWallet} />
       </div>
 
       {notice ? (
@@ -696,8 +698,8 @@ export function InventoryManager({
               <strong>{selectionMode ? "Selection mode" : "Bulk actions"}</strong>
               <span>
                 {selectionMode
-                  ? `${bulkSelectedItems.length.toLocaleString()} sellable ${bulkSelectedItems.length === 1 ? "item" : "items"} selected`
-                  : "Select several items and sell them in one confirmed action."}
+                  ? `${bulkSelectedItems.length.toLocaleString()} of ${MAX_BULK_SELL_ITEMS} sellable items selected`
+                  : `Select and sell up to ${MAX_BULK_SELL_ITEMS} items in one request.`}
               </span>
             </div>
           </div>
@@ -707,7 +709,7 @@ export function InventoryManager({
                 <button
                   type="button"
                   className="button button-quiet"
-                  disabled={bulkSelling || !visibleItems.some(canBulkSellItem)}
+                  disabled={bulkSelling || bulkSelectedItems.length >= MAX_BULK_SELL_ITEMS || !visibleItems.some(canBulkSellItem)}
                   onClick={selectSellablePage}
                 >
                   Select page

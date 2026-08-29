@@ -29,9 +29,11 @@ import {
   adjustedMarketplaceEuroCents,
   deriveMarketplacePriceIdentity,
   getMarketplacePriceQuotes,
+  MAXIMUM_MARKETPLACE_FALLBACK_AGE_MS,
   marketplaceFloatDiscountBps,
   marketplaceWearLabel,
   normalizeMarketplaceFloatValue,
+  selectMarketplacePriceFallback,
 } from "@/lib/economy/market-pricing";
 
 type StatRow = RowDataPacket & {
@@ -3492,6 +3494,9 @@ export type ResolvedMarketplacePurchaseQuote = {
   stattrak: boolean;
   floatDiscountBps: number;
   pricingRule: "float-linear-v1" | "external-exact-v2";
+  fromFallback: boolean;
+  fallbackStale: boolean;
+  fallbackObservedAt: string | null;
 };
 
 export type PurchaseEconomyItemResult = {
@@ -3550,11 +3555,36 @@ export type ResolvedEconomyMarketSalePrice = {
   sourceReference: string | null;
   floatValue: number | null;
   floatDiscountBps: number | null;
+  fromFallback: boolean;
+  fallbackStale: boolean;
+  fallbackObservedAt: string | null;
 };
 
 export type SellEconomyItemResult = {
   itemId: string;
   marketPriceTokens: number;
+  payoutTokens: number;
+  wallet: TokenWallet;
+};
+
+export type SellEconomyItemsInput = {
+  steamId: string;
+  items: Array<{
+    itemId: string;
+    // Quotes are resolved by the authenticated route in one provider batch;
+    // the browser still never supplies a sale price.
+    marketQuote?: ResolvedEconomyMarketSalePrice;
+  }>;
+  idempotencyKey: string;
+};
+
+export type SellEconomyItemsResult = {
+  items: Array<{
+    itemId: string;
+    marketPriceTokens: number;
+    payoutTokens: number;
+  }>;
+  itemIds: string[];
   payoutTokens: number;
   wallet: TokenWallet;
 };
@@ -3591,6 +3621,18 @@ export type OpenEconomyCrateResult = {
     attributes: Record<string, unknown>;
   };
   globalAnnouncementQueued: boolean;
+};
+
+export type OpenEconomyCratesInput = {
+  steamId: string;
+  crateItemIds: string[];
+  idempotencyKey: string;
+};
+
+export type OpenEconomyCratesResult = {
+  openings: OpenEconomyCrateResult[];
+  crateItemIds: string[];
+  dropPools: EconomyCrateDropPreviewResult[];
 };
 
 export type EquipEconomyItemInput = {
@@ -4720,6 +4762,18 @@ function economyJobKey(idempotencyKey: string, purpose: string) {
   );
 }
 
+function economyChildIdempotencyKey(
+  idempotencyKey: string,
+  purpose: string,
+) {
+  return (
+    "child:" +
+    createHash("sha256")
+      .update(idempotencyKey + "|" + purpose)
+      .digest("hex")
+  );
+}
+
 function toTokenWallet(row: EconomyAccountRow): TokenWallet {
   return {
     steamId: String(row.steam_id),
@@ -5744,6 +5798,38 @@ async function writeInventoryEvent(input: {
   );
 }
 
+async function writeInventoryEvents(
+  connection: PoolConnection,
+  events: Array<{
+    itemId: string;
+    actorSteamId: string | null;
+    eventType: string;
+    idempotencyKey: string;
+    lineKey: string;
+    beforeState?: Record<string, unknown> | null;
+    afterState?: Record<string, unknown> | null;
+    metadata?: Record<string, unknown> | null;
+  }>,
+) {
+  if (!events.length) return;
+  const placeholders = events.map(() => "(?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+  const values = events.flatMap((event) => [
+    event.itemId,
+    event.actorSteamId,
+    economyText(event.eventType, "Item event type", 64),
+    event.idempotencyKey,
+    economyText(event.lineKey, "Item event line key", 64),
+    event.beforeState ? JSON.stringify(event.beforeState) : null,
+    event.afterState ? JSON.stringify(event.afterState) : null,
+    event.metadata ? JSON.stringify(event.metadata) : null,
+  ]);
+  await connection.execute(
+    "INSERT INTO portal_inventory_item_events (item_id, actor_steam_id, event_type, idempotency_key, line_key, before_state, after_state, metadata) VALUES " +
+      placeholders,
+    values,
+  );
+}
+
 async function writeEconomyAdminAudit(input: {
   connection: PoolConnection;
   actorSteamId: string;
@@ -6021,6 +6107,42 @@ export async function getPlayerEconomyInventoryItem(
   return item?.ownerSteamId === ownerSteamId ? item : null;
 }
 
+/**
+ * Resolves an authenticated player's selected inventory rows with one item
+ * query plus the two batched hydration queries. Bulk sale pricing uses this
+ * instead of repeating the single-item lookup for every selected card.
+ */
+export async function getPlayerEconomyInventoryItems(
+  steamId: string,
+  itemIds: string[],
+) {
+  const ownerSteamId = economySteamId(steamId);
+  if (!Array.isArray(itemIds) || itemIds.length > 50)
+    economyError("invalid_input", "Choose up to 50 inventory items.");
+  const ids = [...new Set(itemIds.map((itemId) => economyItemId(itemId)))];
+  if (!ids.length) return [];
+  const pool = getPortalPool();
+  if (!pool) return [];
+  const placeholders = ids.map(() => "?").join(", ");
+  const [rows] = await pool.query<EconomyInventoryRow[]>(
+    economyInventorySelect +
+      "WHERE i.id IN (" +
+      placeholders +
+      ") ORDER BY i.id",
+    ids,
+  );
+  const items = await hydrateEconomyInventory(pool, rows);
+  const ownedItems = new Map(
+    items
+      .filter((item) => item.ownerSteamId === ownerSteamId)
+      .map((item) => [item.id, item] as const),
+  );
+  return ids.flatMap((itemId) => {
+    const item = ownedItems.get(itemId);
+    return item ? [item] : [];
+  });
+}
+
 export function economyStorageConfigured() {
   return Boolean(getPortalPool());
 }
@@ -6222,21 +6344,24 @@ export async function getMarketplaceCatalogue(
       metadata: item.metadata,
       minFloat: item.minFloat,
       maxFloat: item.maxFloat,
-      fallbackPrice: cachedVariants[index]
-        ? {
-            eurCents: cachedVariants[index].euroCents,
-            source: cachedVariants[index].stale
-              ? `${cachedVariants[index].source}-last-known`
-              : cachedVariants[index].source,
-            sourceReference: cachedVariants[index].sourceReference,
-          }
-        : item.price && !economyPriceIsLegacySteam(item.price)
+      fallbackPrice: selectMarketplacePriceFallback(
+        cachedVariants[index]
+          ? {
+              eurCents: cachedVariants[index].euroCents,
+              source: cachedVariants[index].source,
+              sourceReference: cachedVariants[index].sourceReference,
+              observedAt: cachedVariants[index].observedAt,
+              stale: cachedVariants[index].stale,
+            }
+          : null,
+        item.price && !economyPriceIsLegacySteam(item.price)
           ? {
               eurCents: item.price.euroCents,
               source: item.price.source,
               sourceReference: item.price.sourceReference,
             }
           : null,
+      ),
     })),
   );
   const quotedItems = catalogue.items.map((item, index) => {
@@ -6802,6 +6927,31 @@ export async function getEconomyPublicPriceRefreshCandidates(): Promise<
   });
 }
 
+// v2 stores the unadjusted provider base. Versioning the existing wear key
+// makes pre-deployment rows (which stored a selected float's adjusted value)
+// invisible without requiring a destructive data migration.
+const economyMarketVariantWearStorageSuffix = "|base-v2";
+
+function economyMarketVariantStorageWear(wear: string) {
+  return (
+    economyText(
+      wear,
+      "market variant wear",
+      32 - economyMarketVariantWearStorageSuffix.length,
+    ) + economyMarketVariantWearStorageSuffix
+  );
+}
+
+function economyMarketVariantPublicWear(storedWear: string) {
+  const wear = economyText(storedWear, "stored market variant wear", 32);
+  if (!wear.endsWith(economyMarketVariantWearStorageSuffix))
+    economyError(
+      "invalid_database_value",
+      "A cached market variant uses an unsupported price format.",
+    );
+  return wear.slice(0, -economyMarketVariantWearStorageSuffix.length);
+}
+
 function toEconomyMarketVariantPrice(
   row: EconomyMarketVariantPriceRow,
 ): EconomyMarketVariantPrice {
@@ -6814,7 +6964,7 @@ function toEconomyMarketVariantPrice(
   return {
     catalogueId: economyNumber(row.catalogue_id, "variant catalogue ID", 1),
     stattrak: economyBoolean(row.stattrak),
-    wear: economyText(row.wear, "market variant wear", 32),
+    wear: economyMarketVariantPublicWear(row.wear),
     marketHashName: economyText(
       row.market_hash_name,
       "market variant name",
@@ -6850,7 +7000,7 @@ export async function getEconomyMarketVariantPrice(input: {
   const [rows] = await pool.query<EconomyMarketVariantPriceRow[]>(
     "SELECT catalogue_id, stattrak, wear, market_hash_name, market_version, market_price_eur_cents, price_source, source_reference, image_url, observed_at, expires_at " +
       "FROM portal_economy_market_variant_prices WHERE catalogue_id = ? AND stattrak = ? AND wear = ? LIMIT 1",
-    [catalogueId, input.stattrak, wear],
+    [catalogueId, input.stattrak, economyMarketVariantStorageWear(wear)],
   );
   return rows[0] ? toEconomyMarketVariantPrice(rows[0]) : null;
 }
@@ -6883,7 +7033,11 @@ export async function getEconomyMarketVariantPrices(
     "SELECT catalogue_id, stattrak, wear, market_hash_name, market_version, market_price_eur_cents, price_source, source_reference, image_url, observed_at, expires_at " +
       "FROM portal_economy_market_variant_prices WHERE " +
       unique.map(() => "(catalogue_id = ? AND stattrak = ? AND wear = ?)").join(" OR "),
-    unique.flatMap((value) => [value.catalogueId, value.stattrak, value.wear]),
+    unique.flatMap((value) => [
+      value.catalogueId,
+      value.stattrak,
+      economyMarketVariantStorageWear(value.wear),
+    ]),
   );
   const byKey = new Map(
     rows.map((row) => {
@@ -6904,7 +7058,7 @@ export async function recordEconomyMarketVariantPrices(
   const values = input.map((value) => ({
     catalogueId: economyNumber(value.catalogueId, "catalogue ID", 1),
     stattrak: value.stattrak === true,
-    wear: economyText(value.wear, "market variant wear", 32),
+    wear: economyMarketVariantStorageWear(value.wear),
     marketHashName: economyText(value.marketHashName, "market variant name", 255),
     marketVersion: value.marketVersion
       ? economyText(value.marketVersion, "market version", 120)
@@ -7565,6 +7719,41 @@ async function lockEconomyCatalogue(
   return item;
 }
 
+async function lockEconomyCatalogues(
+  connection: PoolConnection,
+  catalogueIds: number[],
+  allowDisabled = false,
+) {
+  const ids = [
+    ...new Set(
+      catalogueIds.map((catalogueId) =>
+        economyNumber(catalogueId, "catalogue item ID", 1),
+      ),
+    ),
+  ].sort((left, right) => left - right);
+  if (!ids.length) return new Map<number, EconomyCatalogueItem>();
+  const placeholders = ids.map(() => "?").join(", ");
+  const [rows] = await connection.query<EconomyCatalogueRow[]>(
+    economyCatalogueSelect +
+      "WHERE c.id IN (" +
+      placeholders +
+      ") ORDER BY c.id FOR UPDATE",
+    ids,
+  );
+  if (rows.length !== ids.length)
+    economyError(
+      "catalogue_not_found",
+      "One or more catalogue items no longer exist.",
+    );
+  const items = rows.map(toEconomyCatalogueItem);
+  if (!allowDisabled && items.some((item) => !item.enabled))
+    economyError(
+      "catalogue_unavailable",
+      "One or more catalogue items are not currently available.",
+    );
+  return new Map(items.map((item) => [item.id, item] as const));
+}
+
 async function lockEconomyInventoryItems(
   connection: PoolConnection,
   itemIds: string[],
@@ -7651,6 +7840,57 @@ async function lockEconomyLootTable(
   };
 }
 
+async function lockEconomyContainerLootTables(
+  connection: PoolConnection,
+  containerCatalogueIds: number[],
+) {
+  const ids = [
+    ...new Set(
+      containerCatalogueIds.map((catalogueId) =>
+        economyNumber(catalogueId, "container catalogue ID", 1),
+      ),
+    ),
+  ].sort((left, right) => left - right);
+  if (!ids.length)
+    return new Map<
+      number,
+      Awaited<ReturnType<typeof lockEconomyLootTable>>
+    >();
+  const placeholders = ids.map(() => "?").join(", ");
+  const [rows] = await connection.query<EconomyLootTableRow[]>(
+    "SELECT id, code, table_type, container_catalogue_id, display_name, enabled, metadata FROM portal_loot_tables " +
+      "WHERE enabled = TRUE AND table_type = 'container' AND container_catalogue_id IN (" +
+      placeholders +
+      ") ORDER BY container_catalogue_id FOR UPDATE",
+    ids,
+  );
+  if (rows.length !== ids.length)
+    economyError(
+      "loot_table_unavailable",
+      "One or more crate loot tables are unavailable.",
+    );
+  return new Map(
+    rows.map((table) => {
+      const containerCatalogueId = economyNumber(
+        table.container_catalogue_id,
+        "container catalogue ID",
+        1,
+      );
+      return [
+        containerCatalogueId,
+        {
+          id: economyNumber(table.id, "loot table ID"),
+          code: String(table.code),
+          tableType: table.table_type,
+          containerCatalogueId,
+          displayName: String(table.display_name),
+          metadata: economyRecord(table.metadata),
+        },
+      ] as const;
+    }),
+  );
+}
+
 async function lockEconomyLootEntries(
   connection: PoolConnection,
   lootTableId: number,
@@ -7676,6 +7916,60 @@ async function lockEconomyLootEntries(
     ),
     attributes: economyRecord(row.attributes),
   }));
+}
+
+async function lockEconomyLootEntriesByTable(
+  connection: PoolConnection,
+  lootTableIds: number[],
+) {
+  const ids = [
+    ...new Set(
+      lootTableIds.map((lootTableId) =>
+        economyNumber(lootTableId, "loot table ID", 1),
+      ),
+    ),
+  ].sort((left, right) => left - right);
+  if (!ids.length)
+    return new Map<
+      number,
+      Awaited<ReturnType<typeof lockEconomyLootEntries>>
+    >();
+  const placeholders = ids.map(() => "?").join(", ");
+  const [rows] = await connection.query<EconomyLootEntryRow[]>(
+    "SELECT e.id, e.loot_table_id, e.catalogue_id, e.weight, e.min_float, e.max_float, e.seed_min, e.seed_max, e.stattrak_chance_bps, e.attributes, e.enabled " +
+      "FROM portal_loot_entries AS e INNER JOIN portal_economy_catalogue AS c ON c.id = e.catalogue_id AND c.enabled = TRUE " +
+      "WHERE e.loot_table_id IN (" +
+      placeholders +
+      ") AND e.enabled = TRUE ORDER BY e.loot_table_id, e.id FOR UPDATE",
+    ids,
+  );
+  const entries = rows.map((row) => ({
+    id: economyNumber(row.id, "loot entry ID"),
+    lootTableId: economyNumber(row.loot_table_id, "loot table ID"),
+    catalogueId: economyNumber(row.catalogue_id, "loot catalogue ID"),
+    weight: economyNumber(row.weight, "loot weight", 1),
+    minFloat: economyDecimal(row.min_float, "minimum float"),
+    maxFloat: economyDecimal(row.max_float, "maximum float"),
+    seedMin: economyOptionalInteger(row.seed_min, "minimum seed"),
+    seedMax: economyOptionalInteger(row.seed_max, "maximum seed"),
+    stattrakChanceBps: economyNumber(
+      row.stattrak_chance_bps,
+      "StatTrak chance",
+    ),
+    attributes: economyRecord(row.attributes),
+  }));
+  const byTable = new Map<number, typeof entries>();
+  for (const entry of entries) {
+    const group = byTable.get(entry.lootTableId) ?? [];
+    group.push(entry);
+    byTable.set(entry.lootTableId, group);
+  }
+  if (ids.some((lootTableId) => !byTable.get(lootTableId)?.length))
+    economyError(
+      "loot_table_empty",
+      "One or more crate loot tables have no enabled rewards.",
+    );
+  return byTable;
 }
 
 function rollEconomyLoot<T extends { weight: number }>(entries: T[]) {
@@ -9100,6 +9394,48 @@ function economyMarketplaceQuoteKey(value: string | null) {
     .toLocaleLowerCase("en-US");
 }
 
+function economyMarketplaceFallbackMetadata(input: {
+  fromFallback: boolean;
+  fallbackStale: boolean;
+  fallbackObservedAt: string | null;
+}) {
+  if (
+    typeof input.fromFallback !== "boolean" ||
+    typeof input.fallbackStale !== "boolean"
+  ) {
+    economyError("invalid_input", "The public price fallback state is invalid.");
+  }
+  const fallbackObservedAt = economyMarketplaceQuoteText(
+    input.fallbackObservedAt,
+    "Public price fallback observation",
+    40,
+  );
+  if (!input.fromFallback && (input.fallbackStale || fallbackObservedAt)) {
+    economyError("invalid_input", "The public price fallback state is invalid.");
+  }
+  if (input.fallbackStale && !fallbackObservedAt) {
+    economyError("invalid_input", "The stale public price has no observation time.");
+  }
+  let normalizedObservedAt: string | null = null;
+  if (fallbackObservedAt) {
+    const observedAtMilliseconds = Date.parse(fallbackObservedAt);
+    const age = Date.now() - observedAtMilliseconds;
+    if (
+      !Number.isFinite(observedAtMilliseconds) ||
+      age < -5 * 60 * 1_000 ||
+      age > MAXIMUM_MARKETPLACE_FALLBACK_AGE_MS
+    ) {
+      economyError("price_unavailable", "The last-known public price is too old.");
+    }
+    normalizedObservedAt = new Date(observedAtMilliseconds).toISOString();
+  }
+  return {
+    fromFallback: input.fromFallback,
+    fallbackStale: input.fallbackStale,
+    fallbackObservedAt: normalizedObservedAt,
+  };
+}
+
 function economyResolvedMarketplacePurchaseQuote(
   quote: ResolvedMarketplacePurchaseQuote,
 ): ResolvedMarketplacePurchaseQuote {
@@ -9181,6 +9517,7 @@ function economyResolvedMarketplacePurchaseQuote(
   ) {
     economyError("invalid_input", "The float price rule is invalid.");
   }
+  const fallbackMetadata = economyMarketplaceFallbackMetadata(quote);
   return {
     baseEuroCents,
     euroCents,
@@ -9193,6 +9530,7 @@ function economyResolvedMarketplacePurchaseQuote(
     stattrak: quote.stattrak,
     floatDiscountBps: quote.floatDiscountBps,
     pricingRule: quote.pricingRule,
+    ...fallbackMetadata,
   };
 }
 
@@ -9231,6 +9569,7 @@ function economyResolvedMarketSalePrice(
   ) {
     economyError("invalid_input", "The float price adjustment is invalid.");
   }
+  const fallbackMetadata = economyMarketplaceFallbackMetadata(quote);
   return {
     tokenPrice,
     euroCents,
@@ -9238,6 +9577,7 @@ function economyResolvedMarketSalePrice(
     sourceReference,
     floatValue,
     floatDiscountBps: quote.floatDiscountBps,
+    ...fallbackMetadata,
   };
 }
 
@@ -9481,6 +9821,11 @@ export async function purchaseEconomyItem(
             quoteWear: resolvedMarketQuote?.wear ?? null,
             floatDiscountBps: resolvedMarketQuote?.floatDiscountBps ?? null,
             floatPricingRule: resolvedMarketQuote?.pricingRule ?? null,
+            priceFromFallback: resolvedMarketQuote?.fromFallback ?? false,
+            priceFallbackStale:
+              resolvedMarketQuote?.fallbackStale ?? false,
+            priceFallbackObservedAt:
+              resolvedMarketQuote?.fallbackObservedAt ?? null,
             stattrak: requestedStattrak,
             itemType: catalogue.itemType,
             quantity,
@@ -9536,6 +9881,11 @@ export async function purchaseEconomyItem(
             quoteWear: resolvedMarketQuote?.wear ?? null,
             floatDiscountBps: resolvedMarketQuote?.floatDiscountBps ?? null,
             floatPricingRule: resolvedMarketQuote?.pricingRule ?? null,
+            priceFromFallback: resolvedMarketQuote?.fromFallback ?? false,
+            priceFallbackStale:
+              resolvedMarketQuote?.fallbackStale ?? false,
+            priceFallbackObservedAt:
+              resolvedMarketQuote?.fallbackObservedAt ?? null,
             requestedFloat: requestedFloat ?? null,
             stattrak: requestedStattrak,
           },
@@ -9979,6 +10329,9 @@ export async function sellEconomyItem(
             marketQuote?.sourceReference ?? fallbackPrice?.sourceReference,
           floatValue: marketQuote?.floatValue ?? item.floatValue,
           floatDiscountBps: marketQuote?.floatDiscountBps ?? null,
+          priceFromFallback: marketQuote?.fromFallback ?? false,
+          priceFallbackStale: marketQuote?.fallbackStale ?? false,
+          priceFallbackObservedAt: marketQuote?.fallbackObservedAt ?? null,
         },
       });
       await context.connection.execute(
@@ -10004,6 +10357,9 @@ export async function sellEconomyItem(
             marketQuote?.sourceReference ?? fallbackPrice?.sourceReference,
           floatValue: marketQuote?.floatValue ?? item.floatValue,
           floatDiscountBps: marketQuote?.floatDiscountBps ?? null,
+          priceFromFallback: marketQuote?.fromFallback ?? false,
+          priceFallbackStale: marketQuote?.fallbackStale ?? false,
+          priceFallbackObservedAt: marketQuote?.fallbackObservedAt ?? null,
         },
       });
       await enqueueEconomyLoadoutRefresh(
@@ -10020,6 +10376,204 @@ export async function sellEconomyItem(
           "The sale wallet was not locked.",
         );
       return { itemId, marketPriceTokens, payoutTokens, wallet };
+    },
+  });
+}
+
+/**
+ * Atomically sells a selected inventory batch. Pricing is still resolved by
+ * the authenticated route, while ownership, tradability, stickers, balances,
+ * item consumption, audit events, and the refresh job commit together here.
+ */
+export async function sellEconomyItems(
+  input: SellEconomyItemsInput,
+): Promise<SellEconomyItemsResult> {
+  const steamId = economySteamId(input.steamId);
+  if (!Array.isArray(input.items) || input.items.length < 1 || input.items.length > 50)
+    economyError("invalid_input", "Choose between 1 and 50 items to sell.");
+  const sales = input.items.map((sale) => ({
+    itemId: economyItemId(sale.itemId),
+    marketQuote:
+      sale.marketQuote === undefined
+        ? undefined
+        : economyResolvedMarketSalePrice(sale.marketQuote),
+  }));
+  if (new Set(sales.map((sale) => sale.itemId)).size !== sales.length)
+    economyError("invalid_input", "Each inventory item can only be sold once.");
+  const orderedSales = [...sales].sort((left, right) =>
+    left.itemId.localeCompare(right.itemId),
+  );
+
+  return runEconomyMutation({
+    operationName: "marketplace.sale.bulk",
+    actorSteamId: steamId,
+    idempotencyKey: input.idempotencyKey,
+    // Provider quotes are resolved server-side and may change between a
+    // committed request and a browser retry. Hash only the logical command so
+    // the same idempotency key can replay the original committed result.
+    request: { itemIds: orderedSales.map((sale) => sale.itemId) },
+    work: async (context) => {
+      const itemIds = orderedSales.map((sale) => sale.itemId);
+      const wallets = await lockTokenAccounts(context.connection, [steamId]);
+      const lockedItems = await lockEconomyInventoryItems(
+        context.connection,
+        itemIds,
+      );
+      const placeholders = itemIds.map(() => "?").join(", ");
+      const [attachedStickerRows] = await context.connection.query<
+        Array<RowDataPacket & { weapon_item_id: string }>
+      >(
+        "SELECT weapon_item_id FROM portal_inventory_item_stickers WHERE weapon_item_id IN (" +
+          placeholders +
+          ") ORDER BY weapon_item_id FOR UPDATE",
+        itemIds,
+      );
+      const customizedItemIds = new Set(
+        attachedStickerRows.map((row) => String(row.weapon_item_id)),
+      );
+
+      const prepared = orderedSales.map((sale) => {
+        const item = lockedItems.get(sale.itemId);
+        if (!item)
+          economyError("item_not_found", "That inventory item does not exist.");
+        if (item.ownerSteamId !== steamId || item.state !== "available") {
+          economyError(
+            "ownership_required",
+            "One or more items are no longer available in your inventory.",
+          );
+        }
+        if (!item.tradable)
+          economyError(
+            "item_not_tradable",
+            "Account-bound rewards cannot be traded or sold.",
+          );
+        if (!item.catalogue)
+          economyError(
+            "price_unavailable",
+            "One or more selected items have no current market or last-known price.",
+          );
+        if (customizedItemIds.has(item.id))
+          economyError(
+            "item_customized",
+            "Remove attached stickers before selling the selected items.",
+          );
+
+        const fallbackPrice = item.stattrak ? null : item.catalogue.price;
+        if (
+          !sale.marketQuote &&
+          (!fallbackPrice || economyPriceIsLegacySteam(fallbackPrice))
+        ) {
+          economyError(
+            "price_unavailable",
+            "One or more selected items have no current market or last-known price.",
+          );
+        }
+        const marketPriceTokens =
+          sale.marketQuote?.tokenPrice ?? fallbackPrice?.tokenPrice;
+        if (!marketPriceTokens)
+          economyError(
+            "price_unavailable",
+            "One or more selected items have no current market or last-known price.",
+          );
+        const payoutTokens = Math.max(5, Math.floor(marketPriceTokens / 10));
+        return { sale, item, marketPriceTokens, payoutTokens, fallbackPrice };
+      });
+      const payoutTokens = prepared.reduce((total, sale) => {
+        const next = total + sale.payoutTokens;
+        if (!Number.isSafeInteger(next))
+          economyError("token_limit", "The token balance limit was reached.");
+        return next;
+      }, 0);
+      const wallet = await applyTokenDelta({
+        connection: context.connection,
+        wallets,
+        steamId,
+        delta: payoutTokens,
+        reason: "marketplace.sale",
+        referenceType: "inventory-batch",
+        referenceId: economyChildIdempotencyKey(
+          context.idempotencyKey,
+          "bulk-sale",
+        ),
+        idempotencyKey: context.idempotencyKey,
+        lineKey: "sale:credit",
+        actorSteamId: steamId,
+        metadata: {
+          itemCount: prepared.length,
+          payoutTokens,
+          sellRateBps: 1_000,
+          items: prepared.map(({ sale, item, marketPriceTokens, payoutTokens: itemPayout, fallbackPrice }) => ({
+            itemId: item.id,
+            marketPriceTokens,
+            payoutTokens: itemPayout,
+            priceSource: sale.marketQuote?.source ?? fallbackPrice?.source,
+            priceSourceReference:
+              sale.marketQuote?.sourceReference ?? fallbackPrice?.sourceReference,
+            floatValue: sale.marketQuote?.floatValue ?? item.floatValue,
+            floatDiscountBps: sale.marketQuote?.floatDiscountBps ?? null,
+            priceFromFallback: sale.marketQuote?.fromFallback ?? false,
+            priceFallbackStale: sale.marketQuote?.fallbackStale ?? false,
+            priceFallbackObservedAt:
+              sale.marketQuote?.fallbackObservedAt ?? null,
+          })),
+        },
+      });
+      const [consumed] = await context.connection.execute<ResultSetHeader>(
+        "UPDATE portal_inventory_items SET state = 'consumed', consumed_at = CURRENT_TIMESTAMP WHERE owner_steam_id = ? AND state = 'available' AND id IN (" +
+          placeholders +
+          ")",
+        [steamId, ...itemIds],
+      );
+      if (consumed.affectedRows !== itemIds.length)
+        economyError(
+          "ownership_required",
+          "One or more items are no longer available in your inventory.",
+        );
+      await clearEconomyLoadoutSlots(context.connection, steamId, itemIds);
+      await writeInventoryEvents(
+        context.connection,
+        prepared.map(({ sale, item, marketPriceTokens, payoutTokens: itemPayout, fallbackPrice }, index) => ({
+          itemId: item.id,
+          actorSteamId: steamId,
+          eventType: "marketplace.sold",
+          idempotencyKey: context.idempotencyKey,
+          lineKey: `sale:item:${index}`,
+          beforeState: economyInventorySnapshot(item),
+          afterState: { ...economyInventorySnapshot(item), state: "consumed" },
+          metadata: {
+            marketPriceTokens,
+            payoutTokens: itemPayout,
+            sellRateBps: 1_000,
+            priceSource: sale.marketQuote?.source ?? fallbackPrice?.source,
+            priceSourceReference:
+              sale.marketQuote?.sourceReference ?? fallbackPrice?.sourceReference,
+            floatValue: sale.marketQuote?.floatValue ?? item.floatValue,
+            floatDiscountBps: sale.marketQuote?.floatDiscountBps ?? null,
+            priceFromFallback: sale.marketQuote?.fromFallback ?? false,
+            priceFallbackStale: sale.marketQuote?.fallbackStale ?? false,
+            priceFallbackObservedAt:
+              sale.marketQuote?.fallbackObservedAt ?? null,
+          },
+        })),
+      );
+      await enqueueEconomyLoadoutRefresh(
+        context.connection,
+        steamId,
+        context.idempotencyKey,
+        "sold",
+        itemIds,
+      );
+      const results = prepared.map(({ item, marketPriceTokens, payoutTokens }) => ({
+        itemId: item.id,
+        marketPriceTokens,
+        payoutTokens,
+      }));
+      return {
+        items: results,
+        itemIds: results.map((result) => result.itemId),
+        payoutTokens,
+        wallet,
+      };
     },
   });
 }
@@ -10197,6 +10751,357 @@ export async function openEconomyCrate(
         },
         globalAnnouncementQueued,
       };
+    },
+  });
+}
+
+/**
+ * Opens up to ten selected containers in one idempotent transaction and
+ * returns the exact locked drop pools used for their reveal reels. The batch
+ * is intentionally all-or-nothing: a stale or invalid selected crate cannot
+ * leave the browser guessing which subset committed.
+ */
+export async function openEconomyCrates(
+  input: OpenEconomyCratesInput,
+): Promise<OpenEconomyCratesResult> {
+  const steamId = economySteamId(input.steamId);
+  if (
+    !Array.isArray(input.crateItemIds) ||
+    input.crateItemIds.length < 1 ||
+    input.crateItemIds.length > 10
+  ) {
+    economyError("invalid_input", "Choose between 1 and 10 crates to open.");
+  }
+  const crateItemIds = input.crateItemIds.map((crateItemId) =>
+    economyItemId(crateItemId, "Crate item ID"),
+  );
+  if (new Set(crateItemIds).size !== crateItemIds.length)
+    economyError("invalid_input", "Each crate can only be opened once.");
+  const requestCrateItemIds = [...crateItemIds].sort();
+  const playerName = await getEconomyPlayerDisplayName(steamId);
+
+  return runEconomyMutation({
+    operationName: "crate.open.bulk",
+    actorSteamId: steamId,
+    idempotencyKey: input.idempotencyKey,
+    request: { crateItemIds: requestCrateItemIds },
+    work: async (context) => {
+      const lockedItems = await lockEconomyInventoryItems(
+        context.connection,
+        requestCrateItemIds,
+      );
+      const crates = crateItemIds.map((crateItemId) => {
+        const crate = lockedItems.get(crateItemId);
+        if (!crate)
+          economyError("item_not_found", "That crate no longer exists.");
+        if (crate.ownerSteamId !== steamId || crate.state !== "available")
+          economyError(
+            "ownership_required",
+            "One or more crates are no longer available in your inventory.",
+          );
+        if (
+          (crate.itemType !== "crate" && crate.itemType !== "capsule") ||
+          crate.catalogueId === null
+        ) {
+          economyError(
+            "not_a_crate",
+            "One or more selected items cannot be opened as crates.",
+          );
+        }
+        return crate;
+      });
+      const containerCatalogueIds = [
+        ...new Set(crates.map((crate) => crate.catalogueId as number)),
+      ].sort((left, right) => left - right);
+      const lootTables = await lockEconomyContainerLootTables(
+        context.connection,
+        containerCatalogueIds,
+      );
+      const lootEntriesByTable = await lockEconomyLootEntriesByTable(
+        context.connection,
+        [...lootTables.values()].map((table) => table.id),
+      );
+      const rewardCatalogueIds = [
+        ...new Set(
+          [...lootEntriesByTable.values()]
+            .flat()
+            .map((entry) => entry.catalogueId),
+        ),
+      ];
+      const rewardCatalogues = await lockEconomyCatalogues(
+        context.connection,
+        rewardCatalogueIds,
+        true,
+      );
+
+      const dropPools = containerCatalogueIds.map((containerCatalogueId) => {
+        const lootTable = lootTables.get(containerCatalogueId);
+        if (!lootTable)
+          economyError(
+            "loot_table_unavailable",
+            "That crate loot table is unavailable.",
+          );
+        const entries = lootEntriesByTable.get(lootTable.id);
+        if (!entries?.length)
+          economyError(
+            "loot_table_empty",
+            "That crate loot table has no enabled rewards.",
+          );
+        const totalWeight = entries.reduce((total, entry) => {
+          const next = total + entry.weight;
+          if (!Number.isSafeInteger(next))
+            economyError(
+              "loot_table_invalid",
+              "The loot table weight is too large.",
+            );
+          return next;
+        }, 0);
+        return {
+          containerCatalogueId,
+          totalWeight,
+          drops: entries.map((entry) => {
+            const catalogue = rewardCatalogues.get(entry.catalogueId);
+            if (!catalogue)
+              economyError(
+                "catalogue_not_found",
+                "That reward catalogue item no longer exists.",
+              );
+            const effectiveFloatRange = economyEffectiveLootFloatRange(
+              catalogue,
+              entry.minFloat,
+              entry.maxFloat,
+            );
+            const rarityRank = economyPresentationRarity(
+              catalogue.itemType,
+              catalogue.displayName,
+              economyLootEntryRarityRank(
+                entry.attributes,
+                catalogue.rarityRank,
+              ),
+            );
+            return {
+              lootEntryId: entry.id,
+              catalogue: {
+                ...catalogue,
+                rarityRank,
+                rarityName: economyRarityName(rarityRank),
+                imageUrl:
+                  economyMetadataImageUrl(entry.attributes) ??
+                  catalogue.imageUrl,
+                minFloat: effectiveFloatRange.minimum,
+                maxFloat: effectiveFloatRange.maximum,
+                metadata: { ...catalogue.metadata, ...entry.attributes },
+              },
+              weight: entry.weight,
+              minFloat: effectiveFloatRange.minimum,
+              maxFloat: effectiveFloatRange.maximum,
+              stattrakChanceBps: entry.stattrakChanceBps,
+            };
+          }),
+        } satisfies EconomyCrateDropPreviewResult;
+      });
+
+      const openingDrafts: Array<{
+        crate: EconomyInventoryItem;
+        lootTable: Awaited<ReturnType<typeof lockEconomyLootTable>>;
+        roll: ReturnType<typeof rollEconomyLoot<
+          Awaited<ReturnType<typeof lockEconomyLootEntries>>[number]
+        >>;
+        rewardCatalogue: EconomyCatalogueItem;
+        reward: CreatedEconomyItem;
+        childIdempotencyKey: string;
+      }> = [];
+      for (let index = 0; index < crates.length; index += 1) {
+        const crate = crates[index];
+        const lootTable = lootTables.get(crate.catalogueId as number);
+        if (!lootTable)
+          economyError(
+            "loot_table_unavailable",
+            "That crate loot table is unavailable.",
+          );
+        const lootEntries = lootEntriesByTable.get(lootTable.id);
+        if (!lootEntries?.length)
+          economyError(
+            "loot_table_empty",
+            "That crate loot table has no enabled rewards.",
+          );
+        const roll = rollEconomyLoot(lootEntries);
+        const rewardCatalogue = rewardCatalogues.get(roll.entry.catalogueId);
+        if (!rewardCatalogue)
+          economyError(
+            "catalogue_not_found",
+            "That reward catalogue item no longer exists.",
+          );
+        const rewardFloatRange = economyEffectiveLootFloatRange(
+          rewardCatalogue,
+          roll.entry.minFloat,
+          roll.entry.maxFloat,
+        );
+        const stattrak =
+          economyIsSkinLike(rewardCatalogue.itemType) &&
+          randomInt(10_000) < roll.entry.stattrakChanceBps;
+        const childIdempotencyKey = economyChildIdempotencyKey(
+          context.idempotencyKey,
+          `crate:${index}`,
+        );
+        const reward = await createEconomyInventoryItem(context.connection, {
+          ownerSteamId: steamId,
+          catalogue: rewardCatalogue,
+          rarityRank: economyLootEntryRarityRank(
+            roll.entry.attributes,
+            rewardCatalogue.rarityRank,
+          ),
+          customization: {
+            seed: rollEconomyInteger(
+              roll.entry.seedMin,
+              roll.entry.seedMax,
+            ),
+            floatValue: rollEconomyFloat(
+              rewardFloatRange.minimum,
+              rewardFloatRange.maximum,
+            ),
+            stattrak,
+            attributes: roll.entry.attributes,
+          },
+          source: {
+            type: "crate_opening",
+            crateItemId: crate.id,
+            lootTableId: lootTable.id,
+            lootEntryId: roll.entry.id,
+            rollValue: roll.rollValue,
+            totalWeight: roll.totalWeight,
+          },
+          actorSteamId: steamId,
+          idempotencyKey: context.idempotencyKey,
+          lineKey: `crate:reward:${index}`,
+          eventType: "crate.rewarded",
+        });
+        openingDrafts.push({
+          crate,
+          lootTable,
+          roll,
+          rewardCatalogue,
+          reward,
+          childIdempotencyKey,
+        });
+      }
+
+      const placeholders = requestCrateItemIds.map(() => "?").join(", ");
+      const [consumed] = await context.connection.execute<ResultSetHeader>(
+        "UPDATE portal_inventory_items SET state = 'consumed', consumed_at = CURRENT_TIMESTAMP WHERE owner_steam_id = ? AND state = 'available' AND id IN (" +
+          placeholders +
+          ")",
+        [steamId, ...requestCrateItemIds],
+      );
+      if (consumed.affectedRows !== requestCrateItemIds.length)
+        economyError(
+          "ownership_required",
+          "One or more crates are no longer available in your inventory.",
+        );
+      await writeInventoryEvents(
+        context.connection,
+        openingDrafts.map((draft, index) => ({
+          itemId: draft.crate.id,
+          actorSteamId: steamId,
+          eventType: "crate.opened",
+          idempotencyKey: context.idempotencyKey,
+          lineKey: `crate:consumed:${index}`,
+          beforeState: economyInventorySnapshot(draft.crate),
+          afterState: {
+            ...economyInventorySnapshot(draft.crate),
+            state: "consumed",
+          },
+          metadata: {
+            lootTableId: draft.lootTable.id,
+            lootEntryId: draft.roll.entry.id,
+            rewardItemId: draft.reward.id,
+          },
+        })),
+      );
+
+      const openings: OpenEconomyCrateResult[] = [];
+      for (const draft of openingDrafts) {
+        const [openingResult] =
+          await context.connection.execute<ResultSetHeader>(
+            "INSERT INTO portal_crate_openings (steam_id, crate_item_id, loot_table_id, loot_entry_id, reward_item_id, roll_value, total_weight, idempotency_key, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+              steamId,
+              draft.crate.id,
+              draft.lootTable.id,
+              draft.roll.entry.id,
+              draft.reward.id,
+              draft.roll.rollValue,
+              draft.roll.totalWeight,
+              draft.childIdempotencyKey,
+              JSON.stringify({
+                containerCode: draft.lootTable.code,
+                playerName,
+              }),
+            ],
+          );
+        const openingId = Number(openingResult.insertId);
+        const globalAnnouncementQueued =
+          draft.reward.rarityRank >= ECONOMY_PINK_RARITY_RANK;
+        await createEconomyNotification({
+          connection: context.connection,
+          steamId,
+          notificationType: "crate.opened",
+          payload: {
+            openingId,
+            crateItemId: draft.crate.id,
+            rewardItemId: draft.reward.id,
+            displayName: draft.reward.displayName,
+            rarityRank: draft.reward.rarityRank,
+          },
+        });
+        if (globalAnnouncementQueued) {
+          await enqueueEconomyJob({
+            connection: context.connection,
+            jobType: "economy.unbox.announce",
+            targetSteamId: steamId,
+            idempotencyKey: economyJobKey(
+              draft.childIdempotencyKey,
+              "unbox-announce",
+            ),
+            payload: {
+              steamId,
+              playerName,
+              containerName: draft.crate.displayName,
+              containerItemType: draft.crate.itemType,
+              itemId: draft.reward.id,
+              itemName: draft.reward.displayName,
+              itemType: draft.reward.itemType,
+              rarityRank: draft.reward.rarityRank,
+              openingId,
+            },
+          });
+        }
+        openings.push({
+          openingId,
+          crateItemId: draft.crate.id,
+          rewardItemId: draft.reward.id,
+          rewardCatalogueId: draft.rewardCatalogue.id,
+          rewardLootEntryId: draft.roll.entry.id,
+          rewardRarityRank: draft.reward.rarityRank,
+          reward: {
+            id: draft.reward.id,
+            catalogueId: draft.reward.catalogueId,
+            itemType: draft.reward.itemType,
+            displayName: draft.reward.displayName,
+            definitionIndex: draft.reward.definitionIndex,
+            paintkit: draft.reward.paintkit,
+            seed: draft.reward.seed,
+            floatValue: draft.reward.floatValue,
+            stattrak: draft.reward.stattrak,
+            stattrakCount: draft.reward.stattrakCount,
+            nametag: draft.reward.nametag,
+            rarityRank: draft.reward.rarityRank,
+            attributes: draft.reward.attributes,
+          },
+          globalAnnouncementQueued,
+        });
+      }
+      return { openings, crateItemIds, dropPools };
     },
   });
 }

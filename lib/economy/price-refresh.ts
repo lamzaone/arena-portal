@@ -96,7 +96,9 @@ export async function refreshAllEconomyPublicPrices(): Promise<EconomyPublicPric
           wear: quote.wear ?? "Standard",
           marketHashName: quote.marketHashName ?? candidate.displayName,
           marketVersion: quote.marketVersion,
-          euroCents: quote.eurCents,
+          // The variant cache is a reusable base-price snapshot. The selected
+          // float adjustment is applied later when resolving an item quote.
+          euroCents: quote.baseEuroCents,
           source: quote.source,
           sourceReference: quote.sourceReference,
           imageUrl: candidate.imageUrl,

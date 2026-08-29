@@ -167,6 +167,9 @@ export async function POST(request: Request) {
         stattrak: quote.stattrak,
         floatDiscountBps: quote.floatDiscountBps,
         pricingRule: quote.pricingRule,
+        fromFallback: quote.fromFallback,
+        fallbackStale: quote.fallbackStale,
+        fallbackObservedAt: quote.fallbackObservedAt,
       };
     } else if (catalogue.marketHashName) {
       const [quote] = await getMarketplacePriceQuotes([

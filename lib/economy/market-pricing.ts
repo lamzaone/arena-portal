@@ -54,7 +54,13 @@ export type MarketplacePriceFallback = {
   eurCents: number;
   source: string;
   sourceReference?: string | null | undefined;
+  // Persisted provider snapshots carry their age into the final quote so
+  // mutations can record when a last-known value was used.
+  observedAt?: string | null | undefined;
+  stale?: boolean | undefined;
 };
+
+export const MAXIMUM_MARKETPLACE_FALLBACK_AGE_MS = 24 * 60 * 60 * 1_000;
 
 export type MarketplacePriceInput = MarketplacePriceIdentityInput & {
   // A non-Steam, staff-maintained last-known quote may be supplied by the
@@ -82,6 +88,8 @@ export type MarketplacePriceQuote = {
   seed: number | null;
   seedMatched: boolean;
   fromFallback: boolean;
+  fallbackStale: boolean;
+  fallbackObservedAt: string | null;
 };
 
 function normalizedText(value: unknown) {
@@ -339,20 +347,51 @@ function validFallback(value: MarketplacePriceFallback | null | undefined) {
   const source = normalizedText(value.source);
   if (eurCents === null || !source || source.length > 96) return null;
   const sourceReference = normalizedText(value.sourceReference);
+  const observedAtInput = normalizedText(value.observedAt);
+  const observedAtMilliseconds = observedAtInput
+    ? Date.parse(observedAtInput)
+    : Number.NaN;
+  const observedAt = Number.isFinite(observedAtMilliseconds)
+    ? new Date(observedAtMilliseconds).toISOString()
+    : null;
+  const stale = value.stale === true;
+  if (observedAtInput && !observedAt) return null;
+  if (observedAt) {
+    const age = Date.now() - observedAtMilliseconds;
+    if (age < -5 * 60 * 1_000 || age > MAXIMUM_MARKETPLACE_FALLBACK_AGE_MS)
+      return null;
+  }
+  if (stale && !observedAt) return null;
   return {
     eurCents,
     source,
     sourceReference: sourceReference && sourceReference.length <= 255
       ? sourceReference
       : null,
+    observedAt,
+    stale,
   };
+}
+
+/** Chooses the first valid fallback without letting an expired cache shadow a later source. */
+export function selectMarketplacePriceFallback(
+  ...values: Array<MarketplacePriceFallback | null | undefined>
+) {
+  for (const value of values) {
+    const fallback = validFallback(value);
+    if (fallback) return fallback;
+  }
+  return null;
 }
 
 function quoteFromPrice(
   price: Pick<
     MarketplacePriceQuote,
     "baseEuroCents" | "source" | "sourceReference" | "marketHashName" | "marketVersion" | "fromFallback"
-  >,
+  > & {
+    fallbackStale?: boolean;
+    fallbackObservedAt?: string | null;
+  },
   identity: MarketplacePriceIdentity,
   options: { exact?: ExternalMarketPrice | null | undefined } = {},
 ): MarketplacePriceQuote {
@@ -377,6 +416,10 @@ function quoteFromPrice(
     seed: identity.seed,
     seedMatched: exact?.exactSeed ?? false,
     fromFallback: price.fromFallback,
+    fallbackStale: price.fromFallback && price.fallbackStale === true,
+    fallbackObservedAt: price.fromFallback
+      ? price.fallbackObservedAt ?? null
+      : null,
   };
 }
 
@@ -521,7 +564,7 @@ export async function getMarketplacePriceQuotes(
     // identity. This now includes the server-warmed variant cache, so a
     // temporary provider outage does not make a valid StatTrak™ item
     // impossible to price or sell.
-    const fallback = validFallback(input.fallbackPrice);
+    const fallback = selectMarketplacePriceFallback(input.fallbackPrice);
     if (!fallback) return null;
     return quoteFromPrice(
       {
@@ -531,6 +574,8 @@ export async function getMarketplacePriceQuotes(
         marketHashName: identity.candidates[0]?.marketHashName ?? null,
         marketVersion: identity.marketVersion,
         fromFallback: true,
+        fallbackStale: fallback.stale,
+        fallbackObservedAt: fallback.observedAt,
       },
       identity,
     );

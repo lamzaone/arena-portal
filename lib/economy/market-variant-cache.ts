@@ -7,6 +7,7 @@ import {
 } from "@/lib/data/portal-repository";
 import {
   marketplaceWearLabel,
+  selectMarketplacePriceFallback,
   type MarketplacePriceFallback,
   type MarketplacePriceQuote,
 } from "@/lib/economy/market-pricing";
@@ -22,18 +23,33 @@ type CachedFallbackInput = {
 
 function fallbackFromCached(
   input: CachedFallbackInput,
-  cached: { euroCents: number; source: string; sourceReference: string | null; stale: boolean } | null,
+  cached: {
+    euroCents: number;
+    source: string;
+    sourceReference: string | null;
+    observedAt: string;
+    stale: boolean;
+  } | null,
 ): MarketplacePriceFallback | null {
-  if (cached) {
-    return {
-      eurCents: cached.euroCents,
-      source: cached.stale
-        ? `${cached.source}-last-known`
-        : cached.source,
-      sourceReference: cached.sourceReference,
-    };
-  }
-  return input.stattrak ? null : input.standardFallback ?? null;
+  // Older deployments may already have written an exact listing into this
+  // coarse key. Never reuse that row for a different seed or float.
+  const cachedFallback =
+    cached && cached.source !== "csfloat-exact-listing"
+      ? {
+          eurCents: cached.euroCents,
+          // Staleness describes when the snapshot was recorded, not which
+          // trusted provider produced it. Keep the canonical source so the
+          // economy source allowlist can validate a last-known quote.
+          source: cached.source,
+          sourceReference: cached.sourceReference,
+          observedAt: cached.observedAt,
+          stale: cached.stale,
+        }
+      : null;
+  return selectMarketplacePriceFallback(
+    cachedFallback,
+    input.stattrak ? null : input.standardFallback,
+  );
 }
 
 /**
@@ -81,32 +97,62 @@ export async function getCachedMarketplaceVariantFallbacks(
   }
 }
 
-/** Saves a fresh provider result so the matching variant remains usable offline. */
-export async function cacheMarketplaceVariantQuote(input: {
+type CacheMarketplaceVariantQuoteInput = {
   catalogueId: number;
   stattrak: boolean;
   imageUrl: string | null | undefined;
   quote: MarketplacePriceQuote | null | undefined;
-}) {
-  const quote = input.quote;
-  if (!quote || quote.fromFallback) return;
+};
+
+/** Saves fresh provider results with one database write for a whole batch. */
+export async function cacheMarketplaceVariantQuotes(
+  inputs: readonly CacheMarketplaceVariantQuoteInput[],
+) {
+  const candidates = inputs.flatMap((input) => {
+    const quote = input.quote;
+    // Exact seed/float listings cannot be reused for another item that merely
+    // shares its wear bucket. Generic quotes store their unadjusted base so a
+    // later fallback applies the selected item's float adjustment exactly once.
+    if (
+      !quote ||
+      quote.fromFallback ||
+      quote.pricingRule === "external-exact-v2" ||
+      quote.seedMatched
+    )
+      return [];
+    return [{
+      catalogueId: input.catalogueId,
+      stattrak: input.stattrak,
+      wear: quote.wear ?? "Standard",
+      marketHashName: quote.marketHashName ?? "CS2 item",
+      marketVersion: quote.marketVersion,
+      euroCents: quote.baseEuroCents,
+      source: quote.source,
+      sourceReference: quote.sourceReference,
+      imageUrl: input.imageUrl ?? null,
+      expiresAt: new Date(Date.now() + cacheTtlMs),
+    }];
+  });
+  const updates = [
+    ...new Map(
+      candidates.map((candidate) => [
+        `${candidate.catalogueId}\u0000${candidate.stattrak ? "1" : "0"}\u0000${candidate.wear}`,
+        candidate,
+      ]),
+    ).values(),
+  ];
+  if (!updates.length) return;
   try {
-    await recordEconomyMarketVariantPrices([
-      {
-        catalogueId: input.catalogueId,
-        stattrak: input.stattrak,
-        wear: quote.wear ?? "Standard",
-        marketHashName: quote.marketHashName ?? "CS2 item",
-        marketVersion: quote.marketVersion,
-        euroCents: quote.eurCents,
-        source: quote.source,
-        sourceReference: quote.sourceReference,
-        imageUrl: input.imageUrl ?? null,
-        expiresAt: new Date(Date.now() + cacheTtlMs),
-      },
-    ]);
+    await recordEconomyMarketVariantPrices(updates);
   } catch {
     // Caching is an availability enhancement, never a reason to reject a
     // verified live quote or a completed market transaction.
   }
+}
+
+/** Saves a fresh provider result so the matching variant remains usable offline. */
+export async function cacheMarketplaceVariantQuote(
+  input: CacheMarketplaceVariantQuoteInput,
+) {
+  await cacheMarketplaceVariantQuotes([input]);
 }
