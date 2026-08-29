@@ -9,6 +9,7 @@ export default async function HomePage() {
   const [session, status] = await Promise.all([getSession(), getServerStatus()]);
   const serverName = process.env.NEXT_PUBLIC_SERVER_NAME ?? "ARENA.TAPPED.RO";
   const connectUrl = process.env.NEXT_PUBLIC_SERVER_CONNECT_URL ?? "steam://connect/arena.tapped.ro";
+  const profileHref = session ? `/players/${session.steamId}` : "/api/auth/steam";
   const statusLabel = status.state === "online" ? "Online" : status.state === "offline" ? "Offline" : "Status unavailable";
   const playerLabel = status.players !== null && status.maxPlayers !== null ? `${status.players} / ${status.maxPlayers}` : "—";
 
@@ -24,7 +25,7 @@ export default async function HomePage() {
             <p className="tapped-lede">ARENA.TAPPED.RO is built for players who want every round to matter: instant arena fights, custom duels, rewarding ranks, and a loadout that is yours.</p>
             <div className="hero-actions">
               <a className="button button-primary button-large" href={connectUrl}><Gamepad2 aria-hidden="true" /> Connect to ARENA <ArrowRight aria-hidden="true" /></a>
-              <Link className="button button-secondary button-large" href={session ? "/dashboard" : "/api/auth/steam"}>{session ? "Open profile" : "Steam login"}</Link>
+              <Link className="button button-secondary button-large" href={profileHref}>{session ? "Open profile" : "Steam login"}</Link>
             </div>
             <div className="hero-meta" aria-label="Server details">
               <span><i /> {serverName}</span>
@@ -55,7 +56,7 @@ export default async function HomePage() {
 
         <section className="tapped-account-callout hero-reveal" aria-label="Player portal">
           <div><p className="tapped-kicker"><ShieldCheck aria-hidden="true" /> TAPPED.RO player hub</p><h2>One identity.<br /><span>Every advantage.</span></h2></div>
-          <div className="account-copy"><p>Use Steam to track your rank, VIP and admin groups, loadout, support tickets, and moderation history—all in one private player profile.</p><Link className="button button-primary" href={session ? "/dashboard" : "/api/auth/steam"}>{session ? "Open dashboard" : "Create your profile"} <ArrowRight aria-hidden="true" /></Link></div>
+          <div className="account-copy"><p>Use Steam to track your rank, VIP and admin groups, loadout, support tickets, and moderation history—all in one player profile.</p><Link className="button button-primary" href={profileHref}>{session ? "Open profile" : "Create your profile"} <ArrowRight aria-hidden="true" /></Link></div>
         </section>
 
         <footer className="tapped-footer"><span>TAPPED.RO <i /> ARENA.TAPPED.RO</span><a href={connectUrl}>Connect now <ArrowRight aria-hidden="true" /></a></footer>

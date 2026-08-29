@@ -4,6 +4,8 @@ import {
   Check,
   Coins,
   Crosshair,
+  ListChecks,
+  LoaderCircle,
   PencilLine,
   Search,
   Shield,
@@ -39,6 +41,7 @@ import {
 } from "@/components/economy/economy-view-model";
 import { TokenBalance } from "@/components/economy/token-balance";
 import { PortalToast } from "@/components/success-toast";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { SearchField } from "@/components/ui/search-field";
 
 type InventoryManagerProps = {
@@ -49,6 +52,8 @@ type InventoryManagerProps = {
 };
 
 type SortMode = "newest" | "name" | "rarity" | "float";
+
+const INVENTORY_PAGE_SIZE = 30;
 
 type LoadoutSlotInput =
   | { slotType: "weapon"; team: "T" | "CT"; definitionIndex: number }
@@ -113,6 +118,42 @@ function rowEndIndex(itemIndex: number, columns: number, itemCount: number) {
   );
 }
 
+function canBulkSellItem(item: EconomyItemView) {
+  return (
+    item.state === "available" &&
+    item.stickers.length === 0 &&
+    (item.marketPriceTokens !== null || item.catalogueId !== null)
+  );
+}
+
+async function settleWithConcurrency<T, R>(
+  values: T[],
+  worker: (value: T) => Promise<R>,
+  concurrency = 4,
+) {
+  const results: Array<PromiseSettledResult<R>> = new Array(values.length);
+  let cursor = 0;
+  await Promise.all(
+    Array.from(
+      { length: Math.min(concurrency, values.length) },
+      async () => {
+        while (cursor < values.length) {
+          const index = cursor++;
+          try {
+            results[index] = {
+              status: "fulfilled",
+              value: await worker(values[index]),
+            };
+          } catch (reason) {
+            results[index] = { status: "rejected", reason };
+          }
+        }
+      },
+    ),
+  );
+  return results;
+}
+
 export function InventoryManager({
   inventory,
   loadout,
@@ -120,14 +161,26 @@ export function InventoryManager({
   csrf,
 }: InventoryManagerProps) {
   const router = useRouter();
-  const items = useMemo(() => economyItems(inventory), [inventory]);
+  const inventoryItems = useMemo(() => economyItems(inventory), [inventory]);
+  const [soldItemIds, setSoldItemIds] = useState<Set<string>>(() => new Set());
+  const items = useMemo(
+    () => inventoryItems.filter((item) => !soldItemIds.has(item.id)),
+    [inventoryItems, soldItemIds],
+  );
   const loadoutView = useMemo(() => economyLoadout(loadout), [loadout]);
   const walletView = useMemo(() => economyWallet(wallet), [wallet]);
   const [query, setQuery] = useState("");
   const [type, setType] = useState("all");
   const [rarity, setRarity] = useState("all");
   const [sort, setSort] = useState<SortMode>("newest");
+  const [inventoryPage, setInventoryPage] = useState(1);
   const [selectedId, setSelectedId] = useState("");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [bulkSaleConfirming, setBulkSaleConfirming] = useState(false);
+  const [bulkSelling, setBulkSelling] = useState(false);
   const [selectedTeams, setSelectedTeams] = useState<Array<"T" | "CT">>([]);
   const [nametag, setNametag] = useState("");
   const [nametagItemId, setNametagItemId] = useState("");
@@ -175,8 +228,38 @@ export function InventoryManager({
       .sort((left, right) => compareItems(left, right, sort));
   }, [items, query, rarity, sort, type]);
 
-  const selected = filtered.find((item) => item.id === selectedId) ?? null;
-  const selectedIndex = filtered.findIndex((item) => item.id === selectedId);
+  const inventoryPageCount = Math.max(
+    1,
+    Math.ceil(filtered.length / INVENTORY_PAGE_SIZE),
+  );
+  const visibleInventoryPage = Math.min(inventoryPage, inventoryPageCount);
+  const inventoryPageStart =
+    (visibleInventoryPage - 1) * INVENTORY_PAGE_SIZE;
+  const visibleItems = filtered.slice(
+    inventoryPageStart,
+    inventoryPageStart + INVENTORY_PAGE_SIZE,
+  );
+  const inventoryPageEnd = Math.min(
+    filtered.length,
+    inventoryPageStart + visibleItems.length,
+  );
+  const bulkSelectedItems = items.filter(
+    (item) => bulkSelectedIds.has(item.id) && canBulkSellItem(item),
+  );
+  const bulkKnownPayout = bulkSelectedItems.reduce(
+    (total, item) =>
+      total +
+      (item.marketPriceTokens === null
+        ? 0
+        : Math.max(5, Math.floor(item.marketPriceTokens / 10))),
+    0,
+  );
+  const bulkUnknownPriceCount = bulkSelectedItems.filter(
+    (item) => item.marketPriceTokens === null,
+  ).length;
+
+  const selected = visibleItems.find((item) => item.id === selectedId) ?? null;
+  const selectedIndex = visibleItems.findIndex((item) => item.id === selectedId);
   const selectedSalePayout =
     selected?.marketPriceTokens !== null && selected?.marketPriceTokens !== undefined
       ? Math.max(5, Math.floor(selected.marketPriceTokens / 10))
@@ -261,12 +344,41 @@ export function InventoryManager({
   }, [loadoutView, selected?.id]);
 
   useEffect(() => {
-    if (selectedId && !filtered.some((item) => item.id === selectedId)) {
+    if (selectedId && !visibleItems.some((item) => item.id === selectedId)) {
       setSelectedId("");
       setInventoryInlineModalIndex(-1);
       setSaleConfirmationItemId("");
     }
-  }, [filtered, selectedId]);
+  }, [selectedId, visibleItems]);
+
+  useEffect(() => {
+    setInventoryPage(1);
+  }, [query, rarity, sort, type]);
+
+  useEffect(() => {
+    setInventoryPage((current) => Math.min(current, inventoryPageCount));
+  }, [inventoryPageCount]);
+
+  useEffect(() => {
+    setSoldItemIds((current) => {
+      const next = new Set(
+        [...current].filter((itemId) =>
+          inventoryItems.some((item) => item.id === itemId),
+        ),
+      );
+      return next.size === current.size ? current : next;
+    });
+    setBulkSelectedIds((current) => {
+      const next = new Set(
+        [...current].filter((itemId) =>
+          inventoryItems.some(
+            (item) => item.id === itemId && canBulkSellItem(item),
+          ),
+        ),
+      );
+      return next.size === current.size ? current : next;
+    });
+  }, [inventoryItems]);
 
   useEffect(() => {
     const grid = inventoryGridRef.current;
@@ -280,7 +392,7 @@ export function InventoryManager({
       });
       if (selectedIndex >= 0) {
         setInventoryInlineModalIndex(
-          rowEndIndex(selectedIndex, columns, filtered.length),
+          rowEndIndex(selectedIndex, columns, visibleItems.length),
         );
       }
     };
@@ -289,7 +401,7 @@ export function InventoryManager({
     const observer = new ResizeObserver(syncColumnCount);
     observer.observe(grid);
     return () => observer.disconnect();
-  }, [filtered.length, selectedIndex]);
+  }, [selectedIndex, visibleItems.length]);
 
   function selectInventoryItem(itemId: string) {
     const grid = inventoryGridRef.current;
@@ -304,8 +416,10 @@ export function InventoryManager({
       return;
     }
 
-    const itemIndex = filtered.findIndex((item) => item.id === itemId);
-    setInventoryInlineModalIndex(rowEndIndex(itemIndex, columns, filtered.length));
+    const itemIndex = visibleItems.findIndex((item) => item.id === itemId);
+    setInventoryInlineModalIndex(
+      rowEndIndex(itemIndex, columns, visibleItems.length),
+    );
     setSelectedTeams([]);
     setSelectedId(nextSelectedId);
   }
@@ -315,6 +429,123 @@ export function InventoryManager({
       if (current.includes(team)) return current.filter((entry) => entry !== team);
       return [...current, team].sort();
     });
+  }
+
+  function toggleSelectionMode() {
+    if (pending || bulkSelling) return;
+    setSelectionMode((current) => {
+      const next = !current;
+      if (!next) setBulkSelectedIds(new Set());
+      return next;
+    });
+    setBulkSaleConfirming(false);
+    setSelectedId("");
+    setInventoryInlineModalIndex(-1);
+    setSaleConfirmationItemId("");
+  }
+
+  function toggleBulkItem(item: EconomyItemView) {
+    if (bulkSelling) return;
+    if (!canBulkSellItem(item)) {
+      setNotice({
+        type: "error",
+        text:
+          item.state !== "available"
+            ? "Attached or trade-reserved items cannot be bulk sold."
+            : item.stickers.length
+              ? "Remove attached stickers before selecting this item for sale."
+              : "This item needs a current market or last-known price before it can be sold.",
+      });
+      return;
+    }
+    setNotice(null);
+    setBulkSaleConfirming(false);
+    setBulkSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(item.id)) next.delete(item.id);
+      else next.add(item.id);
+      return next;
+    });
+  }
+
+  function selectSellablePage() {
+    setBulkSaleConfirming(false);
+    setBulkSelectedIds((current) => {
+      const next = new Set(current);
+      for (const item of visibleItems) {
+        if (canBulkSellItem(item)) next.add(item.id);
+      }
+      return next;
+    });
+  }
+
+  function changeInventoryPage(page: number) {
+    setInventoryPage(page);
+    setSelectedId("");
+    setInventoryInlineModalIndex(-1);
+    setSaleConfirmationItemId("");
+  }
+
+  async function bulkSellItems() {
+    if (!bulkSelectedItems.length || bulkSelling) return;
+    if (!bulkSaleConfirming) {
+      setBulkSaleConfirming(true);
+      return;
+    }
+
+    const saleItems = [...bulkSelectedItems];
+    setBulkSelling(true);
+    setNotice(null);
+    try {
+      const results = await settleWithConcurrency(
+        saleItems,
+        (item) =>
+          postEconomyAction("/api/economy/items/sell", csrf, {
+            itemId: item.id,
+          }),
+      );
+      const soldIds: string[] = [];
+      let payoutTokens = 0;
+      let firstError = "";
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          soldIds.push(saleItems[index].id);
+          if (typeof result.value.payoutTokens === "number")
+            payoutTokens += result.value.payoutTokens;
+        } else if (!firstError) {
+          firstError =
+            result.reason instanceof Error
+              ? result.reason.message
+              : "One of the selected items could not be sold.";
+        }
+      });
+
+      if (soldIds.length) {
+        setSoldItemIds((current) => new Set([...current, ...soldIds]));
+        setBulkSelectedIds((current) => {
+          const next = new Set(current);
+          soldIds.forEach((itemId) => next.delete(itemId));
+          return next;
+        });
+        router.refresh();
+      }
+      const failedCount = saleItems.length - soldIds.length;
+      if (failedCount) {
+        setNotice({
+          type: "error",
+          text: `${soldIds.length} of ${saleItems.length} items sold${payoutTokens ? ` for ${formatTokens(payoutTokens)} Tokens` : ""}. ${failedCount} failed: ${firstError}`,
+        });
+      } else {
+        setNotice({
+          type: "success",
+          text: `${soldIds.length} ${soldIds.length === 1 ? "item" : "items"} sold for ${formatTokens(payoutTokens)} Tokens.`,
+        });
+        setSelectionMode(false);
+      }
+    } finally {
+      setBulkSaleConfirming(false);
+      setBulkSelling(false);
+    }
   }
 
   function runAction(
@@ -425,8 +656,10 @@ export function InventoryManager({
         </div>
         <div className="inventory-filter-summary">
           <p className="empty-copy">
-            <Search aria-hidden="true" /> {filtered.length} of {items.length}{" "}
-            items shown
+            <Search aria-hidden="true" /> {filtered.length
+              ? `${inventoryPageStart + 1}-${inventoryPageEnd} of ${filtered.length}`
+              : "0"}{" "}
+            matching items ({items.length} total)
           </p>
           {query || type !== "all" || rarity !== "all" || sort !== "newest" ? (
             <button
@@ -446,19 +679,99 @@ export function InventoryManager({
       </form>
 
       {items.length ? (
+        <section
+          className={`panel economy-bulk-toolbar${selectionMode ? " is-active" : ""}`}
+          aria-label="Inventory selection actions"
+        >
+          <div className="economy-bulk-toolbar-copy">
+            <ListChecks aria-hidden="true" />
+            <div>
+              <strong>{selectionMode ? "Selection mode" : "Bulk actions"}</strong>
+              <span>
+                {selectionMode
+                  ? `${bulkSelectedItems.length.toLocaleString()} sellable ${bulkSelectedItems.length === 1 ? "item" : "items"} selected`
+                  : "Select several items and sell them in one confirmed action."}
+              </span>
+            </div>
+          </div>
+          <div className="economy-bulk-toolbar-actions">
+            {selectionMode ? (
+              <>
+                <button
+                  type="button"
+                  className="button button-quiet"
+                  disabled={bulkSelling || !visibleItems.some(canBulkSellItem)}
+                  onClick={selectSellablePage}
+                >
+                  Select page
+                </button>
+                <button
+                  type="button"
+                  className="button button-quiet"
+                  disabled={bulkSelling || !bulkSelectedItems.length}
+                  onClick={() => {
+                    setBulkSelectedIds(new Set());
+                    setBulkSaleConfirming(false);
+                  }}
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  className="button inventory-sell-confirm"
+                  disabled={bulkSelling || !bulkSelectedItems.length}
+                  onClick={() => void bulkSellItems()}
+                >
+                  {bulkSelling ? (
+                    <><LoaderCircle aria-hidden="true" className="economy-bulk-spinner" /> Selling…</>
+                  ) : bulkSaleConfirming ? (
+                    <><Coins aria-hidden="true" /> Confirm sell {bulkSelectedItems.length}</>
+                  ) : (
+                    <><Coins aria-hidden="true" /> Sell selected</>
+                  )}
+                </button>
+              </>
+            ) : null}
+            <button
+              type="button"
+              className={`button ${selectionMode ? "button-secondary" : "button-primary"}`}
+              aria-pressed={selectionMode}
+              disabled={pending || bulkSelling}
+              onClick={toggleSelectionMode}
+            >
+              <ListChecks aria-hidden="true" />
+              {selectionMode ? "Exit selection" : "Selection mode"}
+            </button>
+          </div>
+          {selectionMode && bulkSaleConfirming ? (
+            <p className="economy-bulk-confirmation" role="alert">
+              Selling is permanent. The current estimate is {formatTokens(bulkKnownPayout)} Tokens
+              {bulkUnknownPriceCount
+                ? ` plus ${bulkUnknownPriceCount} server-priced ${bulkUnknownPriceCount === 1 ? "item" : "items"}`
+                : ""}. Select Confirm sell to continue.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {items.length ? (
         <div className="inventory-layout">
           <div ref={inventoryGridRef} className="feature-grid inventory-item-grid">
-            {filtered.map((item, index) => (
+            {visibleItems.map((item, index) => (
               <Fragment key={item.id || `${item.catalogueId}-${item.displayName}`}>
                 <EconomyItemCard
                   item={item}
-                  selected={selected?.id === item.id}
-                  onSelect={() => selectInventoryItem(item.id)}
-                  selectionLabel={`Manage ${item.displayName}`}
-                  selectionControls={selected?.id === item.id ? `inventory-item-modal-${item.id}` : undefined}
+                  selected={selectionMode ? bulkSelectedIds.has(item.id) : selected?.id === item.id}
+                  onSelect={() => selectionMode ? toggleBulkItem(item) : selectInventoryItem(item.id)}
+                  selectionLabel={selectionMode
+                    ? `${bulkSelectedIds.has(item.id) ? "Remove" : "Add"} ${item.displayName} ${bulkSelectedIds.has(item.id) ? "from" : "to"} sale selection`
+                    : `Manage ${item.displayName}`}
+                  selectionControls={!selectionMode && selected?.id === item.id ? `inventory-item-modal-${item.id}` : undefined}
                   enableMarketPreview
+                  disabled={bulkSelling}
+                  className={selectionMode && !canBulkSellItem(item) ? "is-selection-unavailable" : ""}
                 />
-                {index === inventoryInlineModalIndex ? <div ref={setInventoryModalHost} className="inventory-inline-modal-host" aria-live="polite" /> : null}
+                {!selectionMode && index === inventoryInlineModalIndex ? <div ref={setInventoryModalHost} className="inventory-inline-modal-host" aria-live="polite" /> : null}
               </Fragment>
             ))}
           </div>
@@ -468,7 +781,15 @@ export function InventoryManager({
               description="Clear a filter or search for another item."
             />
           ) : null}
-          {inventoryModalHost && selected ? createPortal(
+          <PaginationControls
+            page={visibleInventoryPage}
+            pageSize={INVENTORY_PAGE_SIZE}
+            totalItems={filtered.length}
+            disabled={pending || bulkSelling}
+            label="Inventory pages"
+            onPageChange={changeInventoryPage}
+          />
+          {!selectionMode && inventoryModalHost && selected ? createPortal(
           <section
             id={`inventory-item-modal-${selected.id}`}
             className="panel crate-inline-modal inventory-inline-modal"

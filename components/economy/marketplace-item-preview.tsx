@@ -11,7 +11,13 @@ import {
   Tag,
   UserRound,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import {
   rarityRankClass,
@@ -31,6 +37,7 @@ type MarketplaceItemPreviewProps = {
   >;
   enableMarketPreview?: boolean;
   floatValue?: number | null;
+  overlay?: ReactNode;
 };
 
 type PreviewState = "idle" | "loading" | "ready" | "unavailable";
@@ -119,6 +126,7 @@ export function MarketplaceItemPreview({
   item,
   enableMarketPreview = true,
   floatValue = null,
+  overlay,
 }: MarketplaceItemPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -298,6 +306,9 @@ export function MarketplaceItemPreview({
           <span>{label}</span>
         </div>
       )}
+      {overlay ? (
+        <div className="economy-item-preview-overlay">{overlay}</div>
+      ) : null}
     </div>
   );
 }

@@ -742,10 +742,10 @@ export function rarityName(rarityRank: number) {
     "Consumer Grade",
     "Industrial Grade",
     "Mil-Spec Grade",
-    "Restricted (Purple)",
-    "Classified (Pink)",
-    "Covert (Red)",
-    "Extraordinary (Gold)",
+    "Restricted",
+    "Classified",
+    "Covert",
+    "Extraordinary",
   ];
   const normalized = Math.max(0, Math.min(names.length - 1, Math.trunc(rarityRank) || 0));
   return names[normalized];

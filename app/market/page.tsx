@@ -1,13 +1,20 @@
 import { ShoppingBag } from "lucide-react";
 
+import {
+  MarketDiscountAnnouncement,
+  type MarketDiscountAnnouncementItem,
+} from "@/components/economy/market-discount-announcement";
 import { MarketplaceBrowser } from "@/components/economy/marketplace-browser";
 import { SignInRequired } from "@/components/sign-in-required";
 import { PageHeading } from "@/components/ui/page-heading";
 import { PortalShell } from "@/components/ui/portal-shell";
 import { createEconomyActionToken, getSession } from "@/lib/auth/session";
 import {
+  getActiveEconomyDiscountRules,
+  getEconomyCatalogueItem,
   getMarketplaceCatalogue,
   getTokenWallet,
+  isEconomyMarketplacePurchasable,
 } from "@/lib/data/portal-repository";
 import {
   marketplaceCategoryItemTypes,
@@ -17,13 +24,23 @@ import {
 
 const MARKET_PAGE_SIZE = 50;
 
+const marketDiscountCategoryLabels: Record<string, string> = {
+  skin: "All weapon skins",
+  weapon: "All weapons",
+  knife: "All knives",
+  glove: "All gloves",
+  crate: "All crates and cases",
+  capsule: "All capsules",
+  sticker: "All stickers",
+  agent: "All agents",
+  keychain: "All keychains",
+};
+
 type MarketPageProps = {
   searchParams: Promise<{
     q?: string;
     type?: string;
     rarity?: string;
-    minFloat?: string;
-    maxFloat?: string;
     page?: string;
   }>;
 };
@@ -33,17 +50,6 @@ function positivePage(value: string | undefined) {
   return Number.isSafeInteger(parsed) && parsed > 0
     ? Math.min(parsed, 10_000)
     : 1;
-}
-
-function marketFloat(value: string | undefined) {
-  if (!value?.trim()) return null;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) return null;
-  return Number((Math.round(parsed * 1_000_000) / 1_000_000).toFixed(6));
-}
-
-function marketFloatText(value: number | null) {
-  return value === null ? "" : value.toFixed(6).replace(/\.?0+$/, "");
 }
 
 export default async function MarketPage({ searchParams }: MarketPageProps) {
@@ -69,15 +75,7 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
     Number.isSafeInteger(rarityValue) && rarityValue >= 0 && rarityValue <= 7
       ? rarityValue
       : null;
-  const requestedMinFloat = marketFloat(params.minFloat);
-  const requestedMaxFloat = marketFloat(params.maxFloat);
-  const floatRangeIsValid =
-    requestedMinFloat === null ||
-    requestedMaxFloat === null ||
-    requestedMinFloat <= requestedMaxFloat;
-  const minFloat = floatRangeIsValid ? requestedMinFloat : null;
-  const maxFloat = floatRangeIsValid ? requestedMaxFloat : null;
-  const [wallet, catalogue] = await Promise.all([
+  const [wallet, catalogue, activeDiscountRules] = await Promise.all([
     getTokenWallet(session.steamId),
     getMarketplaceCatalogue({
       query: query || undefined,
@@ -88,12 +86,55 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
       excludeMarketCategory:
         itemType === "agent" ? "special" : undefined,
       rarityRanks: rarity === null ? undefined : [rarity],
-      minFloat: minFloat ?? undefined,
-      maxFloat: maxFloat ?? undefined,
       page: positivePage(params.page),
       pageSize: MARKET_PAGE_SIZE,
     }),
+    getActiveEconomyDiscountRules(),
   ]);
+  const catalogueDiscountIds = [
+    ...new Set(
+      activeDiscountRules.flatMap((rule) =>
+        rule.targetType === "catalogue_item" && rule.catalogueId !== null
+          ? [rule.catalogueId]
+          : [],
+      ),
+    ),
+  ];
+  const discountCatalogueItems = await Promise.all(
+    catalogueDiscountIds.map((catalogueId) =>
+      getEconomyCatalogueItem(catalogueId),
+    ),
+  );
+  const discountCatalogueById = new Map(
+    discountCatalogueItems.flatMap((item) =>
+      item ? [[item.id, item] as const] : [],
+    ),
+  );
+  const discountAnnouncements = activeDiscountRules.flatMap((rule) => {
+    let targetLabel: string;
+    if (rule.targetType === "catalogue_item") {
+      const item = rule.catalogueId
+        ? discountCatalogueById.get(rule.catalogueId)
+        : null;
+      if (!item || !isEconomyMarketplacePurchasable(item)) return [];
+      targetLabel = item.displayName;
+    } else {
+      if (!rule.itemType || !marketDiscountCategoryLabels[rule.itemType])
+        return [];
+      targetLabel = marketDiscountCategoryLabels[rule.itemType];
+    }
+    return [
+      {
+        id: rule.id,
+        displayName: rule.displayName,
+        targetLabel,
+        percentageBps: rule.percentageBps,
+        fixedTokens: rule.fixedTokens,
+        endsAt: rule.endsAt,
+        exclusionCount: rule.excludedCatalogueIds.length,
+      } satisfies MarketDiscountAnnouncementItem,
+    ];
+  });
 
   return (
     <PortalShell authenticated className="tapped-page">
@@ -102,6 +143,7 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
           title="Marketplace"
           description="Buy a specific cosmetic, case, or VIP membership item directly with Tokens."
         />
+        <MarketDiscountAnnouncement discounts={discountAnnouncements} />
         <MarketplaceBrowser
           catalogue={catalogue}
           wallet={wallet}
@@ -110,8 +152,6 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
             query,
             itemType,
             rarity: rarity === null ? "" : String(rarity),
-            minFloat: marketFloatText(minFloat),
-            maxFloat: marketFloatText(maxFloat),
           }}
           pagination={{
             page: catalogue.page,

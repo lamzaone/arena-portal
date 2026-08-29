@@ -4,8 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Archive, Coins, Gift, MessageSquare, Shield, ShoppingBag, Ticket, TicketCheck, UserRound } from "lucide-react";
 
-const links = [
-  { href: "/dashboard", label: "Profile", icon: UserRound },
+const accountLinks = [
   { href: "/inventory", label: "Inventory", icon: Archive },
   { href: "/crates", label: "Crates", icon: Gift },
   { href: "/market", label: "Market", icon: ShoppingBag },
@@ -15,8 +14,12 @@ const links = [
   { href: "/tickets", label: "Tickets", icon: Ticket }
 ];
 
-export function AccountNav() {
+export function AccountNav({ profileHref }: { profileHref: string }) {
   const pathname = usePathname();
+  const links = [
+    { href: profileHref, label: "Profile", icon: UserRound },
+    ...accountLinks,
+  ];
 
   return (
     <nav className="account-nav" aria-label="Account navigation">

@@ -1,48 +1,83 @@
 "use client";
 
-import { Package, UserRound } from "lucide-react";
+import { Package, Settings2, UserRound } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { type KeyboardEvent, type ReactNode, useId, useState } from "react";
 
-type ProfileTab = "overview" | "inventory";
+type ProfileTab = "overview" | "inventory" | "settings";
 
 type ProfileTabsProps = {
   children: ReactNode;
   inventory: ReactNode;
   inventoryCount: number;
+  profileHref?: string;
+  settings?: ReactNode;
+  settingsAvailable?: boolean;
+  settingsOpen?: boolean;
 };
 
 export function ProfileTabs({
   children,
   inventory,
   inventoryCount,
+  profileHref,
+  settings,
+  settingsAvailable = false,
+  settingsOpen = false,
 }: ProfileTabsProps) {
-  const [activeTab, setActiveTab] = useState<ProfileTab>("overview");
+  const [activeTab, setActiveTab] = useState<Exclude<ProfileTab, "settings">>("overview");
+  const router = useRouter();
   const id = useId();
   const overviewTabId = `${id}-overview-tab`;
   const inventoryTabId = `${id}-inventory-tab`;
+  const settingsTabId = `${id}-settings-tab`;
   const overviewPanelId = `${id}-overview-panel`;
   const inventoryPanelId = `${id}-inventory-panel`;
+  const settingsPanelId = "profile-settings-view";
+  const selectedTab: ProfileTab = settingsOpen ? "settings" : activeTab;
+
+  function tabId(tab: ProfileTab) {
+    if (tab === "settings") return settingsTabId;
+    return tab === "overview" ? overviewTabId : inventoryTabId;
+  }
+
+  function activateTab(next: ProfileTab) {
+    if (next === "settings") {
+      if (!profileHref) return;
+      if (settingsOpen) {
+        setActiveTab("overview");
+        router.push(profileHref, { scroll: false });
+      } else {
+        router.push(`${profileHref}?settings=1`, { scroll: false });
+      }
+      return;
+    }
+
+    setActiveTab(next);
+    if (settingsOpen && profileHref) router.push(profileHref, { scroll: false });
+  }
 
   function selectWithKeyboard(
     event: KeyboardEvent<HTMLButtonElement>,
     current: ProfileTab,
   ) {
-    const next =
-      event.key === "Home"
-        ? "overview"
-        : event.key === "End"
-          ? "inventory"
-          : event.key === "ArrowLeft" || event.key === "ArrowRight"
-            ? current === "overview"
-              ? "inventory"
-              : "overview"
+    const tabs: ProfileTab[] = settingsAvailable
+      ? ["overview", "inventory", "settings"]
+      : ["overview", "inventory"];
+    const currentIndex = tabs.indexOf(current);
+    const next = event.key === "Home"
+      ? tabs[0]
+      : event.key === "End"
+        ? tabs.at(-1)
+        : event.key === "ArrowLeft"
+          ? tabs[(currentIndex - 1 + tabs.length) % tabs.length]
+          : event.key === "ArrowRight"
+            ? tabs[(currentIndex + 1) % tabs.length]
             : null;
     if (!next) return;
     event.preventDefault();
-    setActiveTab(next);
-    document
-      .getElementById(next === "overview" ? overviewTabId : inventoryTabId)
-      ?.focus();
+    activateTab(next);
+    document.getElementById(tabId(next))?.focus();
   }
 
   return (
@@ -53,10 +88,10 @@ export function ProfileTabs({
             type="button"
             id={overviewTabId}
             role="tab"
-            aria-selected={activeTab === "overview"}
+            aria-selected={selectedTab === "overview"}
             aria-controls={overviewPanelId}
-            tabIndex={activeTab === "overview" ? 0 : -1}
-            onClick={() => setActiveTab("overview")}
+            tabIndex={selectedTab === "overview" ? 0 : -1}
+            onClick={() => activateTab("overview")}
             onKeyDown={(event) => selectWithKeyboard(event, "overview")}
           >
             <UserRound aria-hidden="true" />
@@ -66,23 +101,40 @@ export function ProfileTabs({
             type="button"
             id={inventoryTabId}
             role="tab"
-            aria-selected={activeTab === "inventory"}
+            aria-selected={selectedTab === "inventory"}
             aria-controls={inventoryPanelId}
-            tabIndex={activeTab === "inventory" ? 0 : -1}
-            onClick={() => setActiveTab("inventory")}
+            tabIndex={selectedTab === "inventory" ? 0 : -1}
+            onClick={() => activateTab("inventory")}
             onKeyDown={(event) => selectWithKeyboard(event, "inventory")}
           >
             <Package aria-hidden="true" />
             Inventory
             <span>{inventoryCount.toLocaleString("en-US")}</span>
           </button>
+          {settingsAvailable ? (
+            <button
+              className="profile-content-settings-toggle"
+              type="button"
+              id={settingsTabId}
+              role="tab"
+              aria-label={settingsOpen ? "Close profile settings" : "Open profile settings"}
+              aria-selected={selectedTab === "settings"}
+              aria-controls={settingsPanelId}
+              tabIndex={selectedTab === "settings" ? 0 : -1}
+              title={settingsOpen ? "Close profile settings" : "Open profile settings"}
+              onClick={() => activateTab("settings")}
+              onKeyDown={(event) => selectWithKeyboard(event, "settings")}
+            >
+              <Settings2 aria-hidden="true" />
+            </button>
+          ) : null}
         </div>
       </nav>
       <div
         id={overviewPanelId}
         role="tabpanel"
         aria-labelledby={overviewTabId}
-        hidden={activeTab !== "overview"}
+        hidden={selectedTab !== "overview"}
       >
         {children}
       </div>
@@ -90,10 +142,20 @@ export function ProfileTabs({
         id={inventoryPanelId}
         role="tabpanel"
         aria-labelledby={inventoryTabId}
-        hidden={activeTab !== "inventory"}
+        hidden={selectedTab !== "inventory"}
       >
         {inventory}
       </div>
+      {settingsAvailable ? (
+        <div
+          id={settingsPanelId}
+          role="tabpanel"
+          aria-labelledby={settingsTabId}
+          hidden={selectedTab !== "settings"}
+        >
+          {settings}
+        </div>
+      ) : null}
     </>
   );
 }

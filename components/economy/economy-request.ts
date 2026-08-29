@@ -18,6 +18,8 @@ export type EconomyActionResult = {
   itemNames?: string[];
   item?: unknown;
   trade?: unknown;
+  payoutTokens?: number;
+  marketPriceTokens?: number;
 };
 
 function idempotencyKey() {

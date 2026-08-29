@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Gift,
+  ListChecks,
   LoaderCircle,
   Minus,
   Plus,
@@ -48,6 +49,7 @@ import {
 } from "@/components/economy/economy-view-model";
 import { TokenBalance } from "@/components/economy/token-balance";
 import { PortalToast } from "@/components/success-toast";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { SearchField } from "@/components/ui/search-field";
 
 type CrateOpenerProps = {
@@ -95,10 +97,21 @@ type OpeningState =
       run: number;
     };
 
+type BulkOpeningRow = {
+  crate: EconomyItemView;
+  preparing: boolean;
+  opening: OpeningState | null;
+  reward: EconomyItemView | null;
+  message: string | null;
+  error: string | null;
+};
+
 const CATALOGUE_PAGE_SIZE = 50;
+const OWNED_CRATE_PAGE_SIZE = 30;
 const DROP_PAGE_SIZE = 50;
 const CRATE_RARITY_RANKS = [0, 1, 2, 3, 4, 5, 6, 7] as const;
 const MAX_CRATE_PURCHASE_QUANTITY = 50;
+const MAX_BULK_OPEN_CRATES = 10;
 const FINAL_REEL_DURATION_MS = 4_800;
 const REDUCED_MOTION_FINAL_REEL_DURATION_MS = 1_500;
 const REEL_ITEM_WIDTH_PX = 132;
@@ -207,6 +220,29 @@ function crateDropStateFromResponse(value: unknown): CrateDropState {
   if (!totalWeight || !drops.length)
     return { status: "unavailable", message: "This crate has no enabled drops." };
   return { status: "ready", totalWeight, drops };
+}
+
+async function fetchCrateDropPool(catalogueId: number) {
+  const response = await fetch(`/api/economy/crates/${catalogueId}/drops`, {
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+  const body: unknown = await response.json();
+  if (!response.ok) {
+    const message =
+      isRecord(body) && typeof body.message === "string"
+        ? body.message
+        : "Crate odds are unavailable.";
+    throw new Error(message);
+  }
+  const state = crateDropStateFromResponse(body);
+  if (state.status !== "ready")
+    throw new Error(
+      state.status === "unavailable"
+        ? state.message
+        : "The verified drop pool is not ready.",
+    );
+  return state.drops;
 }
 
 function crateDropRate(drop: CrateDrop, totalWeight: number) {
@@ -558,6 +594,7 @@ function CrateOpeningAnimation({
   } as CSSProperties;
 
   useEffect(() => {
+    if (!onTick) return;
     let animationFrame = 0;
     let previousIndex = 0;
 
@@ -719,6 +756,99 @@ function OwnedCrateInlineOpener({
   );
 }
 
+function BulkCrateOpeningRows({
+  rows,
+  onRevealComplete,
+  onDismiss,
+}: {
+  rows: BulkOpeningRow[];
+  onRevealComplete: (crateId: string) => void;
+  onDismiss: () => void;
+}) {
+  if (!rows.length) return null;
+  const finished = rows.every((row) => !row.preparing && !row.opening);
+
+  return (
+    <section className="crate-bulk-openings" aria-labelledby="crate-bulk-openings-heading">
+      <header className="crate-bulk-openings-heading">
+        <div>
+          <p className="eyebrow"><Gift aria-hidden="true" /> Multi-open station</p>
+          <h3 id="crate-bulk-openings-heading">
+            {finished ? "Opening results" : `Opening ${rows.length} crates`}
+          </h3>
+          <p>Each container keeps its own server-verified reel and result row.</p>
+        </div>
+        {finished ? (
+          <button type="button" className="button button-quiet" onClick={onDismiss}>
+            <X aria-hidden="true" /> Dismiss results
+          </button>
+        ) : null}
+      </header>
+      <div className="crate-bulk-opening-list">
+        {rows.map((row, index) => {
+          const rarity = row.reward?.rarityRank ?? null;
+          return (
+            <article
+              key={row.crate.id}
+              className={`panel crate-inline-modal crate-bulk-opening-row ${row.opening ? "is-opening" : ""} ${rarity === null ? "" : `is-reward ${rarityRankClass(rarity)}`}`}
+              aria-label={`${row.crate.displayName}, opening ${index + 1} of ${rows.length}`}
+            >
+              <header className="crate-inline-modal-header">
+                <div>
+                  <p className="eyebrow">Opening {index + 1} of {rows.length}</p>
+                  <h3>{row.crate.displayName}</h3>
+                  <p>Server-verified container opening.</p>
+                </div>
+                <span className="tag">
+                  {row.preparing
+                    ? "Loading drops"
+                    : row.opening?.phase === "verifying"
+                      ? "Verifying roll"
+                      : row.opening?.phase === "revealing"
+                        ? "Revealing"
+                        : row.error
+                          ? "Failed"
+                          : "Complete"}
+                </span>
+              </header>
+              {row.preparing ? (
+                <div className="crate-bulk-preparing" role="status">
+                  <LoaderCircle aria-hidden="true" className="crate-opening-spinner" />
+                  <div>
+                    <strong>Loading the active drop pool</strong>
+                    <span>The opening starts as soon as its possible rewards are verified.</span>
+                  </div>
+                </div>
+              ) : row.opening ? (
+                <CrateOpeningAnimation
+                  opening={row.opening}
+                  onRevealComplete={() => onRevealComplete(row.crate.id)}
+                />
+              ) : row.reward ? (
+                <section className={`crate-inline-reward crate-drop-reveal ${rarityRankClass(row.reward.rarityRank)}`} aria-live="polite">
+                  <div className="crate-inline-reward-copy">
+                    <p className="eyebrow"><Trophy aria-hidden="true" /> {dropHeadline(row.reward.rarityRank)}</p>
+                    <h2>{row.reward.displayName}</h2>
+                    <p className="empty-copy">Added to your inventory. You can inspect, equip, trade, or customize it from Inventory.</p>
+                    <span className={rarityClass(row.reward.rarityRank)}>{row.reward.rarity}</span>
+                    {row.reward.rarityRank >= 4 ? <p className="crate-global-drop-note"><Sparkles aria-hidden="true" /> Pink-and-above unboxes are announced in global chat while you are online.</p> : null}
+                    {row.message ? <p className="crate-inline-reward-notice" role="status"><Sparkles aria-hidden="true" /> {row.message}</p> : null}
+                  </div>
+                  <EconomyItemCard item={row.reward} enableMarketPreview />
+                </section>
+              ) : (
+                <p className="crate-bulk-error" role="alert">
+                  {row.error ?? "This crate could not be opened."}
+                </p>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function MarketCrateInlineOpener({
   crate,
   dropState,
@@ -849,7 +979,14 @@ export function CrateOpener({
   );
   const walletView = useMemo(() => economyWallet(wallet), [wallet]);
   const [activeTab, setActiveTab] = useState<CrateTab>("owned");
+  const [ownedPage, setOwnedPage] = useState(1);
   const [selectedCrateId, setSelectedCrateId] = useState("");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [bulkSelectedCrateIds, setBulkSelectedCrateIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [bulkOpenConfirming, setBulkOpenConfirming] = useState(false);
+  const [bulkOpeningRows, setBulkOpeningRows] = useState<BulkOpeningRow[]>([]);
   const [selectedMarketCatalogueId, setSelectedMarketCatalogueId] = useState<
     number | null
   >(null);
@@ -871,20 +1008,39 @@ export function CrateOpener({
     status: "idle",
   });
   const [opening, setOpening] = useState<OpeningState | null>(null);
-  const [activeAction, setActiveAction] = useState<"open" | "purchase" | null>(
-    null,
-  );
+  const [activeAction, setActiveAction] = useState<
+    "open" | "bulk-open" | "purchase" | null
+  >(null);
   const [pending, startTransition] = useTransition();
   const revealTimer = useRef<number | null>(null);
+  const bulkRevealTimers = useRef<Map<string, number>>(new Map());
   const revealComplete = useRef<(() => void) | null>(null);
   const reelAudio = useRef<AudioContext | null>(null);
   const reelTickCount = useRef(0);
   const refreshAfterUnbox = useRef(false);
+  const refreshAfterBulkOpen = useRef(false);
   const ownedGridRef = useRef<HTMLDivElement | null>(null);
   const [ownedGridColumns, setOwnedGridColumns] = useState(1);
   const marketGridRef = useRef<HTMLDivElement | null>(null);
   const [marketGridColumns, setMarketGridColumns] = useState(1);
 
+  const ownedPageCount = Math.max(
+    1,
+    Math.ceil(ownedCrates.length / OWNED_CRATE_PAGE_SIZE),
+  );
+  const visibleOwnedPage = Math.min(ownedPage, ownedPageCount);
+  const ownedPageStart = (visibleOwnedPage - 1) * OWNED_CRATE_PAGE_SIZE;
+  const visibleOwnedCrates = ownedCrates.slice(
+    ownedPageStart,
+    ownedPageStart + OWNED_CRATE_PAGE_SIZE,
+  );
+  const ownedPageEnd = Math.min(
+    ownedCrates.length,
+    ownedPageStart + visibleOwnedCrates.length,
+  );
+  const bulkSelectedCrates = ownedCrates.filter((crate) =>
+    bulkSelectedCrateIds.has(crate.id),
+  );
   const selectedOwnedCrate =
     ownedCrates.find((item) => item.id === selectedCrateId) ??
     (retainedOpenedCrate?.id === selectedCrateId
@@ -896,12 +1052,15 @@ export function CrateOpener({
     ) ?? null;
   const selectedCrate =
     activeTab === "owned" ? selectedOwnedCrate : selectedMarketCrate;
-  const busy = pending || activeAction !== null;
+  const bulkAnimating = bulkOpeningRows.some(
+    (row) => row.preparing || row.opening !== null,
+  );
+  const busy = pending || activeAction !== null || bulkAnimating;
   const openingCrateId = opening?.crate.id ?? null;
   const selectedInventoryCrateIndex = inventoryCrates.findIndex(
     (item) => item.id === selectedCrateId,
   );
-  const selectedVisibleCrateIndex = ownedCrates.findIndex(
+  const selectedVisibleCrateIndex = visibleOwnedCrates.findIndex(
     (item) => item.id === selectedCrateId,
   );
   const hasRetainedOwnedOpener =
@@ -915,10 +1074,10 @@ export function CrateOpener({
   const selectedCrateRowIndex = selectedVisibleCrateIndex >= 0
     ? selectedVisibleCrateIndex
     : selectedInventoryCrateIndex;
-  const ownedInlineOpenerIndex = selectedCrateRowIndex < 0 || !ownedCrates.length
+  const ownedInlineOpenerIndex = selectedVisibleCrateIndex < 0 || !visibleOwnedCrates.length
     ? -1
     : Math.min(
-        ownedCrates.length - 1,
+        visibleOwnedCrates.length - 1,
         Math.ceil((selectedCrateRowIndex + 1) / ownedGridColumns) *
           ownedGridColumns -
           1,
@@ -1037,6 +1196,43 @@ export function CrateOpener({
   }, [activeTab, selectedMarketCatalogueId]);
 
   useEffect(() => {
+    setOwnedPage((current) => Math.min(current, ownedPageCount));
+  }, [ownedPageCount]);
+
+  useEffect(() => {
+    setBulkSelectedCrateIds((current) => {
+      const next = new Set(
+        [...current].filter((crateId) =>
+          ownedCrates.some((crate) => crate.id === crateId),
+        ),
+      );
+      return next.size === current.size ? current : next;
+    });
+  }, [ownedCrates]);
+
+  useEffect(() => {
+    if (
+      selectedCrateId &&
+      !visibleOwnedCrates.some((crate) => crate.id === selectedCrateId) &&
+      selectedCrateId !== retainedOpenedCrate?.id
+    ) {
+      setSelectedCrateId("");
+    }
+  }, [retainedOpenedCrate?.id, selectedCrateId, visibleOwnedCrates]);
+
+  useEffect(() => {
+    if (
+      refreshAfterBulkOpen.current &&
+      bulkOpeningRows.length &&
+      !bulkAnimating &&
+      activeAction === null
+    ) {
+      refreshAfterBulkOpen.current = false;
+      router.refresh();
+    }
+  }, [activeAction, bulkAnimating, bulkOpeningRows.length, router]);
+
+  useEffect(() => {
     setConsumedCrateIds((current) => {
       let changed = false;
       const next = new Set<string>();
@@ -1077,7 +1273,7 @@ export function CrateOpener({
     const observer = new ResizeObserver(syncColumnCount);
     observer.observe(grid);
     return () => observer.disconnect();
-  }, [activeTab, inventoryCrates.length]);
+  }, [activeTab, visibleOwnedCrates.length]);
 
   useEffect(() => {
     const grid = marketGridRef.current;
@@ -1139,6 +1335,9 @@ export function CrateOpener({
   useEffect(
     () => () => {
       if (revealTimer.current !== null) window.clearTimeout(revealTimer.current);
+      for (const timer of bulkRevealTimers.current.values())
+        window.clearTimeout(timer);
+      bulkRevealTimers.current.clear();
       revealComplete.current = null;
       if (reelAudio.current && reelAudio.current.state !== "closed") {
         void reelAudio.current.close();
@@ -1292,6 +1491,230 @@ export function CrateOpener({
     })();
   }
 
+  function completeBulkReveal(crateId: string) {
+    const timer = bulkRevealTimers.current.get(crateId);
+    if (timer !== undefined) {
+      window.clearTimeout(timer);
+      bulkRevealTimers.current.delete(crateId);
+    }
+    setBulkOpeningRows((current) =>
+      current.map((row) =>
+        row.crate.id === crateId ? { ...row, opening: null } : row,
+      ),
+    );
+  }
+
+  function toggleCrateSelection(crate: EconomyItemView) {
+    if (busy) return;
+    setBulkOpenConfirming(false);
+    if (
+      !bulkSelectedCrateIds.has(crate.id) &&
+      bulkSelectedCrateIds.size >= MAX_BULK_OPEN_CRATES
+    ) {
+      setNotice({
+        type: "error",
+        text: `You can open up to ${MAX_BULK_OPEN_CRATES} crates at once.`,
+      });
+      return;
+    }
+    setNotice(null);
+    setBulkSelectedCrateIds((current) => {
+      const next = new Set(current);
+      if (next.has(crate.id)) {
+        next.delete(crate.id);
+        return next;
+      }
+      next.add(crate.id);
+      return next;
+    });
+  }
+
+  function selectOwnedPage() {
+    if (busy) return;
+    setBulkOpenConfirming(false);
+    setBulkSelectedCrateIds((current) => {
+      const next = new Set(current);
+      for (const crate of visibleOwnedCrates) {
+        if (next.size >= MAX_BULK_OPEN_CRATES) break;
+        next.add(crate.id);
+      }
+      return next;
+    });
+  }
+
+  function toggleCrateSelectionMode() {
+    if (busy) return;
+    setSelectionMode((current) => {
+      const next = !current;
+      if (!next) setBulkSelectedCrateIds(new Set());
+      return next;
+    });
+    setBulkOpenConfirming(false);
+    setSelectedCrateId("");
+    clearUnboxResult();
+  }
+
+  function changeOwnedPage(page: number) {
+    setOwnedPage(page);
+    setSelectedCrateId("");
+    clearUnboxResult();
+  }
+
+  async function openSelectedCrates() {
+    if (!bulkSelectedCrates.length || busy) return;
+    if (!bulkOpenConfirming) {
+      setBulkOpenConfirming(true);
+      return;
+    }
+
+    const selectedForOpening = bulkSelectedCrates.slice(
+      0,
+      MAX_BULK_OPEN_CRATES,
+    );
+    const initialRows: BulkOpeningRow[] = selectedForOpening.map((crate) => ({
+      crate,
+      preparing: true,
+      opening: null,
+      reward: null,
+      message: null,
+      error: null,
+    }));
+    setNotice(null);
+    setBulkOpeningRows(initialRows);
+    setBulkOpenConfirming(false);
+    setBulkSelectedCrateIds(new Set());
+    setSelectionMode(false);
+    setActiveAction("bulk-open");
+    let openedCount = 0;
+    const dropPoolRequests = new Map<number, Promise<CrateDrop[]>>();
+
+    await Promise.all(
+      selectedForOpening.map(async (crate, index) => {
+        try {
+          if (crate.catalogueId === null)
+            throw new Error("This crate is missing its catalogue drop pool.");
+          const existingDropPool = dropPoolRequests.get(crate.catalogueId);
+          const dropPoolRequest =
+            existingDropPool ?? fetchCrateDropPool(crate.catalogueId);
+          if (!existingDropPool)
+            dropPoolRequests.set(crate.catalogueId, dropPoolRequest);
+          const drops = await dropPoolRequest;
+          const verifyRun = Date.now() + index;
+          setBulkOpeningRows((current) =>
+            current.map((row) =>
+              row.crate.id === crate.id
+                ? {
+                    ...row,
+                    preparing: false,
+                    opening: {
+                      phase: "verifying",
+                      crate,
+                      drops,
+                      run: verifyRun,
+                    },
+                  }
+                : row,
+            ),
+          );
+
+          const result = await postEconomyAction(
+            "/api/economy/crates/open",
+            csrf,
+            { crateItemId: crate.id },
+          );
+          const resultItem = result.item ? toEconomyItem(result.item) : null;
+          if (
+            !resultItem ||
+            (!resultItem.id && resultItem.displayName === "Unnamed item")
+          ) {
+            throw new Error(
+              "The crate opened, but its reward could not be displayed. Reload Inventory to view it.",
+            );
+          }
+          const rewardLootEntryId = finiteNumber(result.rewardLootEntryId);
+          const safeLootEntryId =
+            rewardLootEntryId !== null &&
+            Number.isSafeInteger(rewardLootEntryId)
+              ? rewardLootEntryId
+              : null;
+          const reward = rewardWithDropArtwork(
+            resultItem,
+            drops,
+            safeLootEntryId,
+          );
+          const message = result.globalAnnouncementQueued
+            ? `${reward.displayName} was unboxed and announced in global chat.`
+            : result.message ||
+              "Crate opened. The item is now in your inventory.";
+          openedCount += 1;
+          setConsumedCrateIds((current) =>
+            new Set([...current, crate.id]),
+          );
+          setBulkOpeningRows((current) =>
+            current.map((row) =>
+              row.crate.id === crate.id
+                ? {
+                    ...row,
+                    preparing: false,
+                    opening: {
+                      phase: "revealing",
+                      crate,
+                      reward,
+                      rewardLootEntryId: safeLootEntryId,
+                      drops,
+                      run: Date.now() + index,
+                    },
+                    reward,
+                    message,
+                  }
+                : row,
+            ),
+          );
+          const duration = window.matchMedia(
+            "(prefers-reduced-motion: reduce)",
+          ).matches
+            ? REDUCED_MOTION_FINAL_REEL_DURATION_MS
+            : FINAL_REEL_DURATION_MS;
+          const existingTimer = bulkRevealTimers.current.get(crate.id);
+          if (existingTimer !== undefined) window.clearTimeout(existingTimer);
+          bulkRevealTimers.current.set(
+            crate.id,
+            window.setTimeout(
+              () => completeBulkReveal(crate.id),
+              duration + 400,
+            ),
+          );
+        } catch (error) {
+          setBulkOpeningRows((current) =>
+            current.map((row) =>
+              row.crate.id === crate.id
+                ? {
+                    ...row,
+                    preparing: false,
+                    opening: null,
+                    error:
+                      error instanceof Error
+                        ? error.message
+                        : "This crate could not be opened.",
+                  }
+                : row,
+            ),
+          );
+        }
+      }),
+    );
+
+    setActiveAction(null);
+    if (openedCount) refreshAfterBulkOpen.current = true;
+    const failedCount = selectedForOpening.length - openedCount;
+    setNotice({
+      type: failedCount ? "error" : "success",
+      text: failedCount
+        ? `${openedCount} of ${selectedForOpening.length} crates opened. ${failedCount} failed; see the opening rows for details.`
+        : `${openedCount} ${openedCount === 1 ? "crate" : "crates"} opened. Every reward has been added to Inventory.`,
+    });
+  }
+
   function clearUnboxResult() {
     setUnboxed(null);
     setUnboxedCrateId(null);
@@ -1343,6 +1766,9 @@ export function CrateOpener({
   function changeCrateTab(tab: CrateTab) {
     if (busy || tab === activeTab) return;
     if (tab !== "owned") {
+      setSelectionMode(false);
+      setBulkSelectedCrateIds(new Set());
+      setBulkOpenConfirming(false);
       setSelectedCrateId("");
       clearUnboxResult();
     }
@@ -1427,13 +1853,78 @@ export function CrateOpener({
         </div>
 
         {activeTab === "owned" ? <>
-          {ownedCrates.length || hasRetainedOwnedOpener ? <div ref={ownedGridRef} id="crate-owned-panel" className="feature-grid crate-item-grid crate-owned-grid" role="tabpanel" aria-labelledby="crate-owned-tab">
-            {ownedCrates.map((crate, index) => <Fragment key={crate.id}>
-              <EconomyItemCard item={crate} selected={selectedCrateId === crate.id} onSelect={() => toggleOwnedCrate(crate.id)} selectionLabel={`Open ${crate.displayName} options`} selectionControls={selectedCrateId === crate.id ? `crate-opening-${crate.id}` : undefined} enableMarketPreview disabled={openingCrateId === crate.id} className={openingCrateId === crate.id ? "is-opening" : ""} />
-              {index === ownedInlineOpenerIndex && selectedOwnedCrate ? <OwnedCrateInlineOpener crate={selectedOwnedCrate} dropState={dropState} opening={opening} reward={unboxedCrateId === selectedOwnedCrate.id ? unboxed : null} rewardMessage={unboxedCrateId === selectedOwnedCrate.id ? unboxMessage : null} busy={busy} onOpen={openCrate} onClose={() => closeOwnedCrate(selectedOwnedCrate.id)} onRevealComplete={() => revealComplete.current?.()} onTick={playReelTick} /> : null}
+          <section
+            className={`panel economy-bulk-toolbar crate-bulk-toolbar${selectionMode ? " is-active" : ""}`}
+            aria-label="Crate selection actions"
+          >
+            <div className="economy-bulk-toolbar-copy">
+              <ListChecks aria-hidden="true" />
+              <div>
+                <strong>{selectionMode ? "Selection mode" : "Multi-open"}</strong>
+                <span>
+                  {selectionMode
+                    ? `${bulkSelectedCrates.length} of ${MAX_BULK_OPEN_CRATES} crates selected`
+                    : `Select and open up to ${MAX_BULK_OPEN_CRATES} owned crates together.`}
+                </span>
+              </div>
+            </div>
+            <div className="economy-bulk-toolbar-actions">
+              {selectionMode ? <>
+                <button type="button" className="button button-quiet" disabled={busy || !visibleOwnedCrates.length || bulkSelectedCrates.length >= MAX_BULK_OPEN_CRATES} onClick={selectOwnedPage}>Select page</button>
+                <button type="button" className="button button-quiet" disabled={busy || !bulkSelectedCrates.length} onClick={() => { setBulkSelectedCrateIds(new Set()); setBulkOpenConfirming(false); }}>Clear</button>
+              </> : null}
+              {selectionMode && bulkSelectedCrates.length ? (
+                <button
+                  type="button"
+                  className="button button-primary crate-open-all-button"
+                  disabled={busy}
+                  onClick={() => void openSelectedCrates()}
+                >
+                  {activeAction === "bulk-open" ? <LoaderCircle aria-hidden="true" className="economy-bulk-spinner" /> : <Gift aria-hidden="true" />}
+                  {bulkOpenConfirming ? `CONFIRM OPEN ${bulkSelectedCrates.length}` : "OPEN ALL"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className={`button ${selectionMode ? "button-secondary" : "button-primary"}`}
+                aria-pressed={selectionMode}
+                disabled={busy || !ownedCrates.length}
+                onClick={toggleCrateSelectionMode}
+              >
+                <ListChecks aria-hidden="true" /> {selectionMode ? "Exit selection" : "Selection mode"}
+              </button>
+            </div>
+            {selectionMode && bulkOpenConfirming ? <p className="economy-bulk-confirmation" role="alert">Opening consumes all {bulkSelectedCrates.length} selected crates. Select CONFIRM OPEN {bulkSelectedCrates.length} to start every opening row.</p> : null}
+          </section>
+
+          <BulkCrateOpeningRows
+            rows={bulkOpeningRows}
+            onRevealComplete={completeBulkReveal}
+            onDismiss={() => setBulkOpeningRows([])}
+          />
+
+          {ownedCrates.length || hasRetainedOwnedOpener ? <>
+            <p className="crate-owned-page-summary" aria-live="polite">
+              {ownedCrates.length ? `Showing ${ownedPageStart + 1}-${ownedPageEnd} of ${ownedCrates.length} owned crates` : "No unopened crates remain"}
+            </p>
+            <div ref={ownedGridRef} id="crate-owned-panel" className="feature-grid crate-item-grid crate-owned-grid" role="tabpanel" aria-labelledby="crate-owned-tab">
+            {visibleOwnedCrates.map((crate, index) => <Fragment key={crate.id}>
+              <EconomyItemCard
+                item={crate}
+                selected={selectionMode ? bulkSelectedCrateIds.has(crate.id) : selectedCrateId === crate.id}
+                onSelect={() => selectionMode ? toggleCrateSelection(crate) : toggleOwnedCrate(crate.id)}
+                selectionLabel={selectionMode ? `${bulkSelectedCrateIds.has(crate.id) ? "Remove" : "Add"} ${crate.displayName} ${bulkSelectedCrateIds.has(crate.id) ? "from" : "to"} opening selection` : `Open ${crate.displayName} options`}
+                selectionControls={!selectionMode && selectedCrateId === crate.id ? `crate-opening-${crate.id}` : undefined}
+                enableMarketPreview
+                disabled={busy}
+                className={openingCrateId === crate.id ? "is-opening" : ""}
+              />
+              {!selectionMode && index === ownedInlineOpenerIndex && selectedOwnedCrate ? <OwnedCrateInlineOpener crate={selectedOwnedCrate} dropState={dropState} opening={opening} reward={unboxedCrateId === selectedOwnedCrate.id ? unboxed : null} rewardMessage={unboxedCrateId === selectedOwnedCrate.id ? unboxMessage : null} busy={busy} onOpen={openCrate} onClose={() => closeOwnedCrate(selectedOwnedCrate.id)} onRevealComplete={() => revealComplete.current?.()} onTick={playReelTick} /> : null}
             </Fragment>)}
-            {ownedInlineOpenerIndex < 0 && hasRetainedOwnedOpener && selectedOwnedCrate ? <OwnedCrateInlineOpener crate={selectedOwnedCrate} dropState={dropState} opening={opening} reward={unboxed} rewardMessage={unboxMessage} busy={busy} onOpen={openCrate} onClose={() => closeOwnedCrate(selectedOwnedCrate.id)} onRevealComplete={() => revealComplete.current?.()} onTick={playReelTick} /> : null}
-          </div> : <div id="crate-owned-panel" role="tabpanel" aria-labelledby="crate-owned-tab"><EconomyEmptyState title="You do not have a crate yet" description="Crates can arrive as match drops, hourly drops, map-end drops, or direct marketplace purchases in the Market tab." icon={<Gift aria-hidden="true" />} /></div>}
+            {!selectionMode && ownedInlineOpenerIndex < 0 && hasRetainedOwnedOpener && selectedOwnedCrate ? <OwnedCrateInlineOpener crate={selectedOwnedCrate} dropState={dropState} opening={opening} reward={unboxed} rewardMessage={unboxMessage} busy={busy} onOpen={openCrate} onClose={() => closeOwnedCrate(selectedOwnedCrate.id)} onRevealComplete={() => revealComplete.current?.()} onTick={playReelTick} /> : null}
+            </div>
+            <PaginationControls page={visibleOwnedPage} pageSize={OWNED_CRATE_PAGE_SIZE} totalItems={ownedCrates.length} disabled={busy} label="Owned crate pages" onPageChange={changeOwnedPage} />
+          </> : <div id="crate-owned-panel" role="tabpanel" aria-labelledby="crate-owned-tab"><EconomyEmptyState title="You do not have a crate yet" description="Crates can arrive as match drops, hourly drops, map-end drops, or direct marketplace purchases in the Market tab." icon={<Gift aria-hidden="true" />} /></div>}
         </> : <>
           <form className="panel form-panel crate-catalogue-filters" onSubmit={(event) => event.preventDefault()}>
             <div className="crate-filter-heading"><div><p className="eyebrow"><SlidersHorizontal aria-hidden="true" /> Browse containers</p><p className="empty-copy">Search the crate name, public market name, loot-table code, or rarity. Results update as you filter.</p></div><span className="tag">Up to {CATALOGUE_PAGE_SIZE} per page</span></div>
@@ -1452,7 +1943,7 @@ export function CrateOpener({
               {index === marketInlineOpenerIndex && selectedMarketCrate ? <MarketCrateInlineOpener crate={selectedMarketCrate} dropState={dropState} busy={busy} purchasing={activeAction === "purchase"} quantity={purchaseQuantity} walletBalance={walletView.balance} onQuantityChange={(quantity) => setPurchaseQuantity(clampPurchaseQuantity(quantity))} onPurchase={() => buyCrate(selectedMarketCrate, purchaseQuantity)} onClose={() => setSelectedMarketCatalogueId(null)} /> : null}
             </Fragment>)}
           </div> : <div id="crate-market-panel" role="tabpanel" aria-labelledby="crate-market-tab"><EconomyEmptyState title="No crates match these filters" description="Try a shorter search, another price state, or clear the current filters." icon={<Search aria-hidden="true" />} /></div>}
-          {filteredCatalogue.length > CATALOGUE_PAGE_SIZE ? <nav className="crate-pagination" aria-label="Crate catalogue pages"><button type="button" className="button button-secondary" disabled={visibleCataloguePage <= 1} onClick={() => setCataloguePage(visibleCataloguePage - 1)}><ChevronLeft aria-hidden="true" /> Previous</button><span>Page {visibleCataloguePage} of {cataloguePageCount}</span><button type="button" className="button button-secondary" disabled={visibleCataloguePage >= cataloguePageCount} onClick={() => setCataloguePage(visibleCataloguePage + 1)}>Next <ChevronRight aria-hidden="true" /></button></nav> : null}
+          <PaginationControls page={visibleCataloguePage} pageSize={CATALOGUE_PAGE_SIZE} totalItems={filteredCatalogue.length} disabled={busy} label="Crate marketplace pages" onPageChange={setCataloguePage} />
         </>}
 
       </section>

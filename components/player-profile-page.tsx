@@ -6,7 +6,6 @@ import { formatDate, formatPlaytime, isActiveSanction } from "@/components/forma
 import { GroupBadge } from "@/components/group-badge";
 import { ProfileInventoryPreview } from "@/components/profile-inventory-preview";
 import { ProfileSettingsForm, type ProfileSettingsValue } from "@/components/profile-settings-form";
-import { ProfileSettingsToggle } from "@/components/profile-settings-toggle";
 import { ProfileTabs } from "@/components/profile-tabs";
 import { ResilientRemoteImage } from "@/components/resilient-remote-image";
 import { SiteHeader } from "@/components/site-header";
@@ -151,7 +150,6 @@ export function PlayerProfilePage({ profile, steamId, steamProfile, isOwnProfile
                   <ResilientRemoteImage src={steamProfile?.avatarFull} alt={`${displayName}'s Steam avatar`} referrerPolicy="no-referrer" fallback={<span className="public-player-avatar-fallback" aria-hidden="true">{avatarInitial(displayName)}</span>} />
                   {isBanned ? <span className="banned-avatar-overlay">BANNED</span> : null}
                 </div>
-                {isOwnProfile ? <ProfileSettingsToggle open={showSettings} /> : null}
               </div>
               <div>
                 <p className="tapped-kicker"><UserRound aria-hidden="true" /> {isOwnProfile ? "Your player profile" : "Player profile"}<span className="profile-presence" title={presenceLabel}><i aria-hidden="true" /> {presenceLabel}</span></p>
@@ -169,18 +167,23 @@ export function PlayerProfilePage({ profile, steamId, steamProfile, isOwnProfile
           </aside>
         </section>
 
-        {isOwnProfile ? <section className="profile-settings-view" id="profile-settings-view" aria-labelledby={showSettings ? "profile-settings-title" : undefined} hidden={!showSettings}>
-          {showSettings && profileSettings ? <>
-            <header className="profile-settings-view-heading">
-              <p className="eyebrow"><Settings2 aria-hidden="true" /> Account preferences</p>
-              <h2 id="profile-settings-title">Settings &amp; customisation</h2>
-              <p>Control who can browse your inventory and choose the profile presentation saved to this ARENA account.</p>
-            </header>
-            <ProfileSettingsForm csrf={profileSettings.csrf} initialSettings={profileSettings.initialSettings} />
-          </> : null}
-        </section> : null}
-
-        {!showSettings ? <ProfileTabs inventory={<ProfileInventoryPreview preview={profileInventory} steamId={steamId} isOwnProfile={isOwnProfile} />} inventoryCount={profileInventory.canView ? profileInventory.total : 0}>
+        <ProfileTabs
+          inventory={<ProfileInventoryPreview preview={profileInventory} steamId={steamId} isOwnProfile={isOwnProfile} />}
+          inventoryCount={profileInventory.canView ? profileInventory.total : 0}
+          profileHref={`/players/${steamId}`}
+          settingsAvailable={isOwnProfile}
+          settingsOpen={showSettings}
+          settings={isOwnProfile ? <section className="profile-settings-view" aria-labelledby={showSettings ? "profile-settings-title" : undefined}>
+            {showSettings && profileSettings ? <>
+              <header className="profile-settings-view-heading">
+                <p className="eyebrow"><Settings2 aria-hidden="true" /> Account preferences</p>
+                <h2 id="profile-settings-title">Settings &amp; customisation</h2>
+                <p>Control who can browse your inventory and choose the profile presentation saved to this ARENA account.</p>
+              </header>
+              <ProfileSettingsForm csrf={profileSettings.csrf} initialSettings={profileSettings.initialSettings} />
+            </> : null}
+          </section> : undefined}
+        >
         {isOwnProfile && dashboard && (!dashboard.sourceConnected ? <div className="notice notice-info"><AlertTriangle aria-hidden="true" /><span>Game-data access is not configured yet. Add <code>GAME_DATABASE_URL</code> to populate this profile.</span></div> : !dashboard.hasGameRecord ? <div className="notice notice-info"><AlertTriangle aria-hidden="true" /><span>No K4 LevelRanks record exists for this Steam account yet. Join the server once and refresh this page.</span></div> : null)}
         {!showSettings && isOwnProfile && activeBan ? <div className="notice notice-danger"><Ban aria-hidden="true" /><span><strong>You have an active ban.</strong> Appeal it here with your explanation and keep track of staff responses.</span><Link href="/appeals">Open appeal</Link></div> : null}
         {!showSettings && isOwnProfile && activeComms.length > 0 ? <div className="notice notice-warning"><VolumeX aria-hidden="true" /><span>You currently have {activeComms.length} active communication restriction{activeComms.length === 1 ? "" : "s"}.</span></div> : null}
@@ -218,7 +221,7 @@ export function PlayerProfilePage({ profile, steamId, steamProfile, isOwnProfile
             <article className="panel history-panel"><div className="panel-heading"><h3>Kick history</h3><span>Audit bridge</span></div><p className="empty-copy">The current game stack does not persist kicks. The Swiftly audit bridge can add kick reasons here without changing existing moderation tables.</p></article>
           </div>
         </section> : null}
-        </ProfileTabs> : null}
+        </ProfileTabs>
       </div>
     </main>
   );

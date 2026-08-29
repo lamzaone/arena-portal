@@ -20,6 +20,7 @@ type EconomyItemCardProps = {
   selectionControls?: string;
   enableMarketPreview?: boolean;
   previewFloat?: number | null;
+  previewOverlay?: ReactNode;
   className?: string;
   disabled?: boolean;
 };
@@ -54,10 +55,18 @@ export function EconomyItemCard({
   selectionControls,
   enableMarketPreview = true,
   previewFloat = null,
+  previewOverlay,
   className = "",
   disabled = false,
 }: EconomyItemCardProps) {
   const price = item.marketPriceTokens;
+  const basePrice = item.marketBasePriceTokens;
+  const hasDiscount = Boolean(
+    item.marketDiscount &&
+      price !== null &&
+      basePrice !== null &&
+      basePrice > price,
+  );
   const vipMembership = isVipMembership(item);
   const itemKind = vipMembership ? "VIP membership" : humanize(item.itemType);
   const content = (
@@ -66,6 +75,7 @@ export function EconomyItemCard({
         item={item}
         enableMarketPreview={enableMarketPreview}
         floatValue={previewFloat}
+        overlay={previewOverlay}
       />
       <div className="panel-heading">
         <div>
@@ -95,7 +105,22 @@ export function EconomyItemCard({
         {item.floatValue !== null ? <span className="tag">Float {item.floatValue.toFixed(6)}</span> : null}
         {item.seed !== null ? <span className="tag">Seed {item.seed}</span> : null}
         {item.equippedSlots.map((slot) => <span key={slot} className="tag tag-vip">Equipped: {humanize(slot)}</span>)}
-        {price !== null ? <span className="tag"><Coins aria-hidden="true" /> {formatTokens(price)} tokens</span> : null}
+        {price !== null ? (
+          <span
+            className={`tag economy-item-price-tag ${hasDiscount ? "is-discounted" : ""}`.trim()}
+            aria-label={
+              hasDiscount && basePrice !== null
+                ? `Discounted price ${formatTokens(price)} Tokens, originally ${formatTokens(basePrice)} Tokens`
+                : `${formatTokens(price)} Tokens`
+            }
+          >
+            <Coins aria-hidden="true" />
+            {hasDiscount && basePrice !== null ? (
+              <del aria-hidden="true">{formatTokens(basePrice)} Tokens</del>
+            ) : null}
+            <strong>{formatTokens(price)} Tokens</strong>
+          </span>
+        ) : null}
       </div>
       {actions ? <div className="hero-actions">{actions}</div> : null}
     </>

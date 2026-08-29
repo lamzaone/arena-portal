@@ -17,6 +17,7 @@ export async function SiteHeader({ authenticated = false }: SiteHeaderProps) {
   const steamProfile = session ? (await getSteamProfiles([session.steamId])).get(session.steamId) : null;
   const staffAccess = session ? await getAdminAccess(session.steamId) : null;
   const displayName = steamProfile?.name ?? "Steam account";
+  const profileHref = session ? `/players/${session.steamId}` : "/api/auth/steam";
 
   return (
     <>
@@ -28,7 +29,7 @@ export async function SiteHeader({ authenticated = false }: SiteHeaderProps) {
         <PrimaryNavigation />
         {session ? (
           <>
-            <Link className="header-account" href="/dashboard" aria-label={`Open ${displayName}'s profile`}>
+            <Link className="header-account" href={profileHref} aria-label={`Open ${displayName}'s profile`}>
               <ResilientRemoteImage src={steamProfile?.avatarFull} alt="" referrerPolicy="no-referrer" fallback={<span className="header-account-avatar-fallback" aria-hidden="true"><UserRound /></span>} />
               <span className="header-account-copy"><strong>{displayName}</strong><small>{session.steamId}</small></span>
             </Link>
@@ -41,7 +42,7 @@ export async function SiteHeader({ authenticated = false }: SiteHeaderProps) {
           <Link className="button button-primary" href="/api/auth/steam"><LogIn aria-hidden="true" /> Steam login</Link>
         )}
       </header>
-      {session ? <AccountNav /> : null}
+      {session ? <AccountNav profileHref={profileHref} /> : null}
     </>
   );
 }

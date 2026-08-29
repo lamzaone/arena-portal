@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  BadgePercent,
   ChevronLeft,
   ChevronRight,
+  LoaderCircle,
   ShoppingBag,
   SlidersHorizontal,
   X,
@@ -12,8 +14,8 @@ import {
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
-  useTransition,
   type FormEvent,
 } from "react";
 
@@ -42,15 +44,12 @@ import {
 
 const MARKET_RARITY_RANKS = [0, 1, 2, 3, 4, 5, 6, 7] as const;
 const DEFAULT_MARKET_FLOAT = 0.15;
-const FLOAT_FILTER_SLIDER_STEP = 0.000001;
 const FLOAT_PURCHASE_SLIDER_STEP = 0.000001;
 
 type MarketplaceFilters = {
   query: string;
   itemType: string;
   rarity: string;
-  minFloat: string;
-  maxFloat: string;
 };
 
 type MarketplacePagination = {
@@ -96,8 +95,6 @@ function marketHref(filters: MarketplaceFilters, page: number) {
   if (filters.query) parameters.set("q", filters.query);
   if (filters.itemType) parameters.set("type", filters.itemType);
   if (filters.rarity) parameters.set("rarity", filters.rarity);
-  if (filters.minFloat) parameters.set("minFloat", filters.minFloat);
-  if (filters.maxFloat) parameters.set("maxFloat", filters.maxFloat);
   if (page > 1) parameters.set("page", String(page));
   const query = parameters.toString();
   return query ? `/market?${query}` : "/market";
@@ -132,33 +129,12 @@ function validRarity(value: string) {
 }
 
 function normalizeFilters(filters: MarketplaceFilters) {
-  const minFloat = parseFloatInput(filters.minFloat);
-  const maxFloat = parseFloatInput(filters.maxFloat);
-  if (!minFloat.valid || !maxFloat.valid)
-    return {
-      error: "Float values must be between 0.000000 and 1.000000.",
-      filters: null,
-    };
-  if (
-    minFloat.number !== null &&
-    maxFloat.number !== null &&
-    minFloat.number > maxFloat.number
-  ) {
-    return {
-      error: "The minimum float cannot be higher than the maximum float.",
-      filters: null,
-    };
-  }
   return {
     error: null,
     filters: {
       query: filters.query.replace(/\s+/g, " ").trim().slice(0, 120),
       itemType: validItemType(filters.itemType),
       rarity: validRarity(filters.rarity),
-      // Slider endpoints represent the natural unfiltered 0-to-1 range. Keep
-      // generated URLs clean and preserve the meaning of an unset filter.
-      minFloat: minFloat.number === 0 ? "" : minFloat.value,
-      maxFloat: maxFloat.number === 1 ? "" : maxFloat.value,
     } satisfies MarketplaceFilters,
   };
 }
@@ -175,8 +151,34 @@ function formatFloat(value: number) {
   return value.toFixed(6).replace(/\.?0+$/, "");
 }
 
+function discountPercentLabel(item: EconomyItemView) {
+  const price = item.marketPriceTokens;
+  const basePrice = item.marketBasePriceTokens;
+  if (
+    !item.marketDiscount ||
+    price === null ||
+    basePrice === null ||
+    basePrice <= 0 ||
+    price >= basePrice
+  ) {
+    return null;
+  }
+  const percentage = ((basePrice - price) / basePrice) * 100;
+  return `${new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 1,
+  }).format(percentage)}% OFF`;
+}
+
 function floatInRange(value: number, minimum: number, maximum: number) {
   return value >= minimum && value <= maximum;
+}
+
+function wearLabel(floatValue: number) {
+  if (floatValue <= 0.07) return "Factory New";
+  if (floatValue <= 0.15) return "Minimal Wear";
+  if (floatValue <= 0.38) return "Field-Tested";
+  if (floatValue <= 0.45) return "Well-Worn";
+  return "Battle-Scarred";
 }
 
 function numberFromUnknown(value: unknown) {
@@ -211,24 +213,6 @@ function defaultFloatForItem(item: EconomyItemView, fallback: string) {
 
 function floatsMatch(left: number, right: number) {
   return Math.abs(left - right) < 0.0000005;
-}
-
-function displayQuotedWear(item: EconomyItemView) {
-  if (item.marketPriceWear) return item.marketPriceWear;
-  const value = item.raw.displayPriceWear ?? item.raw.marketPriceWear;
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function displayQuotedFloatDiscountBps(item: EconomyItemView) {
-  const value =
-    item.marketPriceFloatDiscountBps ??
-    numberFromUnknown(
-      item.raw.displayPriceFloatDiscountBps ??
-        item.raw.marketPriceFloatDiscountBps,
-    );
-  return value !== null && Number.isSafeInteger(value) && value >= 0
-    ? value
-    : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -308,35 +292,6 @@ function marketplaceQuoteError(value: unknown) {
   return value.message.trim() || null;
 }
 
-function marketPriceSourceLabel(source: string | null) {
-  switch (source) {
-    case "skinport-30d-median":
-      return "30-day public sales median";
-    case "skinport-7d-median":
-      return "7-day public sales median";
-    case "skinport-90d-median":
-      return "90-day public sales median";
-    case "skinport-listing-median":
-      return "public listing median";
-    case "skinport-listing-mean":
-      return "public listing mean";
-    case "skinport-listing-suggested":
-      return "public suggested price";
-    case "csfloat-price-index":
-      return "CSFloat current listing index";
-    case "skincash-listing":
-      return "SkinCash current listing";
-    case "multi-market-index":
-      return "cross-market current price";
-    case "csfloat-exact-listing":
-      return "CSFloat exact float/pattern listing";
-    case "staff-last-known":
-      return "staff last-known price";
-    default:
-      return source ? "recorded price" : null;
-  }
-}
-
 function paginationPages(pageCount: number, currentPage: number) {
   const pages = new Set([
     1,
@@ -394,8 +349,6 @@ function MarketplacePurchaseAction({
   // The standard catalogue price must never be shown or charged while the
   // separately quoted StatTrak™ variant is still being resolved.
   const knownPrice = stattrak && !quote ? null : item.marketPriceTokens;
-  const basePrice = stattrak && !quote ? null : item.marketBasePriceTokens;
-  const activeDiscount = stattrak && !quote ? null : item.marketDiscount;
   const needsMarketPrice = knownPrice === null;
   const canFetchMarketPrice = supportsFloat
     ? Boolean(item.catalogueId)
@@ -411,8 +364,6 @@ function MarketplacePurchaseAction({
     );
   const floatControlId = `market-purchase-float-${item.catalogueId ?? item.id}`;
   const stattrakControlId = `market-purchase-stattrak-${item.catalogueId ?? item.id}`;
-  const containerRate = item.itemType === "crate" || item.itemType === "capsule";
-  const priceSource = marketPriceSourceLabel(item.marketPriceSource);
   const missingFloat = supportsFloat && selectedFloat.number === null;
   const floatIsSupported =
     !supportsFloat ||
@@ -423,39 +374,7 @@ function MarketplacePurchaseAction({
     quoteStatus !== "error" &&
     (quoteStatus === "loading" || quotePending);
   const quoteFailed = supportsFloat && quoteStatus === "error";
-  const quoteWear = quote?.wear ?? displayQuotedWear(item);
-  const quoteDiscountBps =
-    quote?.floatDiscountBps ?? displayQuotedFloatDiscountBps(item);
-  const floatPriceDetail =
-    supportsFloat && selectedFloat.number !== null
-      ? [
-          `Float ${selectedFloat.number.toFixed(6)}`,
-          quoteWear,
-          quoteDiscountBps !== null
-            ? `${(quoteDiscountBps / 100).toFixed(2)}% float adjustment`
-            : "higher float lowers this price",
-        ]
-          .filter(Boolean)
-          .join(" | ")
-      : null;
-  const priceDetail = quoteLoading
-    ? `Updating the ${stattrak ? "StatTrak™ " : ""}Token price for this float...`
-    : quoteFailed
-      ? quoteError ?? "The float-specific price could not be refreshed."
-      : knownPrice === null
-    ? canFetchMarketPrice
-      ? "No public price match yet. Try again later or ask staff to set a last-known price."
-      : "This item needs an exact public market name or a staff last-known price."
-    : [
-        priceSource,
-        stattrak ? "StatTrak™ variant" : "Standard variant",
-        activeDiscount
-          ? `${activeDiscount.displayName}: -${formatTokens(activeDiscount.discountTokens)} Tokens`
-          : null,
-        floatPriceDetail,
-      ]
-        .filter(Boolean)
-        .join(" · ");
+  const quoteWear = quote?.wear ?? wearLabel(currentFloat);
   const disabled =
     pending ||
     !item.catalogueId ||
@@ -468,37 +387,12 @@ function MarketplacePurchaseAction({
 
   return (
     <div className="market-item-purchase">
-      <div
-        className={`market-price-hud ${knownPrice === null ? "is-unavailable" : ""}`}
-        aria-label={
-          knownPrice === null
-            ? "Marketplace price unavailable"
-            : `Marketplace price: ${formatTokens(knownPrice)} Tokens`
-        }
-      >
-        <span>
-          {vipMembership
-            ? "VIP membership price"
-            : containerRate
-              ? "Container price"
-            : stattrak
-              ? "StatTrak™ marketplace price"
-              : "Marketplace price"}
-        </span>
-        <strong>
-          {quoteLoading
-            ? "Updating price..."
-            : knownPrice === null
-            ? "Price unavailable"
-            : `${formatTokens(knownPrice)} Tokens`}
-        </strong>
-        {knownPrice !== null && basePrice !== null && basePrice > knownPrice ? (
-          <del className="market-base-price">
-            Original {formatTokens(basePrice)} Tokens
-          </del>
-        ) : null}
-        <small>{priceDetail}</small>
-      </div>
+      {supportsFloat && quoteWear ? (
+        <div className="market-item-wear" aria-label={`Exterior: ${quoteWear}`}>
+          <span>Exterior</span>
+          <strong>{quoteWear}</strong>
+        </div>
+      ) : null}
       {supportsStattrak ? (
         <label className="market-purchase-stattrak" htmlFor={stattrakControlId}>
           <input
@@ -536,10 +430,16 @@ function MarketplacePurchaseAction({
           </small>
         </div>
       ) : null}
+      {quoteFailed ? (
+        <p className="market-purchase-error" role="alert">
+          {quoteError ?? "The price for this exterior could not be refreshed."}
+        </p>
+      ) : null}
       <button
         type="button"
-        className="button button-primary"
+        className="button button-primary market-buy-button"
         disabled={disabled}
+        aria-busy={pending}
         onClick={() =>
           onPurchase(
             item,
@@ -553,7 +453,12 @@ function MarketplacePurchaseAction({
         }
       >
         {pending
-          ? "Processing…"
+          ? (
+              <>
+                <LoaderCircle className="ui-button-spinner" aria-hidden="true" />
+                Processing…
+              </>
+            )
           : missingFloat
             ? "Enter a float"
             : supportsFloat && (!selectedFloat.valid || !floatIsSupported)
@@ -567,8 +472,8 @@ function MarketplacePurchaseAction({
               : needsMarketPrice
                 ? "Refresh public price & buy"
                 : vipMembership
-                  ? `Buy membership for ${formatTokens(knownPrice)}`
-                  : `Buy for ${formatTokens(knownPrice)}`}
+                  ? `Buy membership for ${formatTokens(knownPrice)} Tokens`
+                  : `Buy for ${formatTokens(knownPrice)} Tokens`}
       </button>
     </div>
   );
@@ -719,12 +624,20 @@ function MarketplaceListing({
         }
       : {}),
   };
+  const discountLabel = discountPercentLabel(pricedItem);
   return (
     <EconomyItemCard
       item={pricedItem}
       className={isVipMembershipItem(item) ? "market-item-special" : ""}
       enableMarketPreview
       previewFloat={previewFloat}
+      previewOverlay={
+        discountLabel ? (
+          <span className="market-artwork-discount-tag">
+            <BadgePercent aria-hidden="true" /> {discountLabel}
+          </span>
+        ) : null
+      }
       actions={
         <MarketplacePurchaseAction
           item={pricedItem}
@@ -763,7 +676,10 @@ export function MarketplaceBrowser({
     type: "success" | "error";
     text: string;
   } | null>(null);
-  const [pending, startTransition] = useTransition();
+  const pendingPurchaseIdsRef = useRef(new Set<number>());
+  const [pendingPurchaseIds, setPendingPurchaseIds] = useState<ReadonlySet<number>>(
+    () => new Set<number>(),
+  );
   const pageCount = Math.max(
     1,
     Math.ceil(pagination.total / pagination.pageSize),
@@ -779,8 +695,6 @@ export function MarketplaceBrowser({
   // silently change the exact float a player is about to buy. Each card starts
   // on its server-quoted default and lets the player select a specific float.
   const suggestedPurchaseFloat = formatFloat(DEFAULT_MARKET_FLOAT);
-  const filterMinimumFloat = parseFloatInput(draft.minFloat).number ?? 0;
-  const filterMaximumFloat = parseFloatInput(draft.maxFloat).number ?? 1;
 
   useEffect(() => {
     setDraft({
@@ -789,8 +703,6 @@ export function MarketplaceBrowser({
     });
   }, [
     filters.itemType,
-    filters.maxFloat,
-    filters.minFloat,
     filters.query,
     filters.rarity,
   ]);
@@ -813,39 +725,47 @@ export function MarketplaceBrowser({
     router.push(marketHref(normalized.filters, 1), { scroll: false });
   }
 
-  function purchase(item: EconomyItemView, options: MarketplacePurchaseOptions) {
+  async function purchase(
+    item: EconomyItemView,
+    options: MarketplacePurchaseOptions,
+  ) {
     if (!item.catalogueId) return;
+    const catalogueId = item.catalogueId;
+    if (pendingPurchaseIdsRef.current.has(catalogueId)) return;
+    pendingPurchaseIdsRef.current.add(catalogueId);
+    setPendingPurchaseIds(new Set(pendingPurchaseIdsRef.current));
     setNotice(null);
-    startTransition(async () => {
-      try {
-        const result = await postEconomyAction(
-          "/api/economy/market/purchase",
-          csrf,
-          {
-            catalogueId: item.catalogueId,
-            stattrak: options.stattrak,
-            ...(options.floatValue === undefined
-              ? {}
-              : { floatValue: options.floatValue }),
-          },
-        );
-        setNotice({
-          type: "success",
-          text:
-            result.message ||
-            `${item.displayName} was added to your inventory.`,
-        });
-        router.refresh();
-      } catch (error) {
-        setNotice({
-          type: "error",
-          text:
-            error instanceof Error
-              ? error.message
-              : "The purchase could not be completed.",
-        });
-      }
-    });
+    try {
+      const result = await postEconomyAction(
+        "/api/economy/market/purchase",
+        csrf,
+        {
+          catalogueId,
+          stattrak: options.stattrak,
+          ...(options.floatValue === undefined
+            ? {}
+            : { floatValue: options.floatValue }),
+        },
+      );
+      setNotice({
+        type: "success",
+        text:
+          result.message ||
+          `${item.displayName} was added to your inventory.`,
+      });
+      router.refresh();
+    } catch (error) {
+      setNotice({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "The purchase could not be completed.",
+      });
+    } finally {
+      pendingPurchaseIdsRef.current.delete(catalogueId);
+      setPendingPurchaseIds(new Set(pendingPurchaseIdsRef.current));
+    }
   }
 
   return (
@@ -935,61 +855,6 @@ export function MarketplaceBrowser({
               ))}
             </select>
           </label>
-          <fieldset className="market-float-range">
-            <legend>Float range</legend>
-            <div className="market-float-slider-controls">
-              <div>
-                <div className="market-float-slider-label">
-                  <label htmlFor="market-min-float">Minimum</label>
-                  <output htmlFor="market-min-float">
-                    {filterMinimumFloat.toFixed(6)}
-                  </output>
-                </div>
-                <input
-                  id="market-min-float"
-                  name="minFloat"
-                  type="range"
-                  min="0"
-                  max={filterMaximumFloat}
-                  step={FLOAT_FILTER_SLIDER_STEP}
-                  value={filterMinimumFloat}
-                  aria-valuetext={`Minimum float ${filterMinimumFloat.toFixed(6)}`}
-                  onChange={(event) => {
-                    const value = Number(event.currentTarget.value);
-                    updateDraft(
-                      "minFloat",
-                      formatFloat(Math.min(value, filterMaximumFloat)),
-                    );
-                  }}
-                />
-              </div>
-              <div>
-                <div className="market-float-slider-label">
-                  <label htmlFor="market-max-float">Maximum</label>
-                  <output htmlFor="market-max-float">
-                    {filterMaximumFloat.toFixed(6)}
-                  </output>
-                </div>
-                <input
-                  id="market-max-float"
-                  name="maxFloat"
-                  type="range"
-                  min={filterMinimumFloat}
-                  max="1"
-                  step={FLOAT_FILTER_SLIDER_STEP}
-                  value={filterMaximumFloat}
-                  aria-valuetext={`Maximum float ${filterMaximumFloat.toFixed(6)}`}
-                  onChange={(event) => {
-                    const value = Number(event.currentTarget.value);
-                    updateDraft(
-                      "maxFloat",
-                      formatFloat(Math.max(value, filterMinimumFloat)),
-                    );
-                  }}
-                />
-              </div>
-            </div>
-          </fieldset>
           <div className="market-filter-actions">
             <SearchSubmitButton variant="secondary">
               Search catalogue
@@ -1013,7 +878,10 @@ export function MarketplaceBrowser({
             <MarketplaceListing
               key={`${item.catalogueId ?? item.id}-${item.displayName}`}
               item={item}
-              pending={pending}
+              pending={
+                item.catalogueId !== null &&
+                pendingPurchaseIds.has(item.catalogueId)
+              }
               walletBalance={walletView.balance}
               suggestedPurchaseFloat={suggestedPurchaseFloat}
               onPurchase={purchase}

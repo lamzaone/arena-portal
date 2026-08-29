@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
 
     const token = await createSessionToken(steamId);
 
-    const response = NextResponse.redirect(new URL("/dashboard", request.url));
+    const response = NextResponse.redirect(new URL(`/players/${steamId}`, request.url));
     response.cookies.set(COOKIE_NAME, token, sessionCookieOptions());
     return response;
   } catch {

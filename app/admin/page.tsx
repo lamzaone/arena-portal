@@ -133,7 +133,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   if (!session) return <SignInRequired title="Staff moderation" description="Sign in with the Steam account that has your ARENA admin group." />;
 
   const access = await getAdminAccess(session.steamId);
-  if (!access.isAdmin) return <main className="tapped-page"><div className="shell"><SiteHeader authenticated /><section className="staff-denied"><LockKeyhole aria-hidden="true" /><p className="tapped-kicker">Restricted area</p><h1>Staff access required.</h1><p>Your Steam account does not have an active Admins.Core staff assignment for ARENA.TAPPED.RO.</p><Link className="button button-secondary" href="/dashboard">Back to profile</Link></section></div></main>;
+  if (!access.isAdmin) return <main className="tapped-page"><div className="shell"><SiteHeader authenticated /><section className="staff-denied"><LockKeyhole aria-hidden="true" /><p className="tapped-kicker">Restricted area</p><h1>Staff access required.</h1><p>Your Steam account does not have an active Admins.Core staff assignment for ARENA.TAPPED.RO.</p><Link className="button button-secondary" href={`/players/${session.steamId}`}>Back to profile</Link></section></div></main>;
 
   const requestedTab = getTab(params.tab);
   const tab = requestedTab === "appeals" && !access.canUnban ? "bans" : requestedTab;

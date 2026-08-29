@@ -6955,6 +6955,11 @@ export async function getEconomyCrateDropPreview(
       const attributes = economyRecord(row.attributes);
       const minFloat = economyDecimal(row.min_float, "loot minimum float");
       const maxFloat = economyDecimal(row.max_float, "loot maximum float");
+      const effectiveFloatRange = economyEffectiveLootFloatRange(
+        catalogue,
+        minFloat,
+        maxFloat,
+      );
       const rarityRank = economyPresentationRarity(
         catalogue.itemType,
         catalogue.displayName,
@@ -6970,13 +6975,13 @@ export async function getEconomyCrateDropPreview(
           rarityRank,
           rarityName: economyRarityName(rarityRank),
           imageUrl: economyMetadataImageUrl(attributes) ?? catalogue.imageUrl,
-          minFloat: minFloat ?? catalogue.minFloat,
-          maxFloat: maxFloat ?? catalogue.maxFloat,
+          minFloat: effectiveFloatRange.minimum,
+          maxFloat: effectiveFloatRange.maximum,
           metadata: { ...catalogue.metadata, ...attributes },
         },
         weight: weights[index],
-        minFloat,
-        maxFloat,
+        minFloat: effectiveFloatRange.minimum,
+        maxFloat: effectiveFloatRange.maximum,
         stattrakChanceBps: economyNumber(
           row.stattrak_chance_bps,
           "loot StatTrak chance",
@@ -7493,6 +7498,43 @@ function rollEconomyInteger(minimum: number | null, maximum: number | null) {
   return minimum + randomInt(maximum - minimum + 1);
 }
 
+function economyEffectiveLootFloatRange(
+  catalogue: Pick<EconomyCatalogueItem, "itemType" | "minFloat" | "maxFloat">,
+  entryMinimum: number | null,
+  entryMaximum: number | null,
+) {
+  if (!economyIsSkinLike(catalogue.itemType))
+    return { minimum: null, maximum: null };
+
+  const catalogueMinimum = catalogue.minFloat ?? 0;
+  const catalogueMaximum = catalogue.maxFloat ?? 1;
+  const requestedMinimum = entryMinimum ?? catalogueMinimum;
+  const requestedMaximum = entryMaximum ?? catalogueMaximum;
+  if (
+    (entryMinimum !== null && (entryMinimum < 0 || entryMinimum > 1)) ||
+    (entryMaximum !== null && (entryMaximum < 0 || entryMaximum > 1)) ||
+    (entryMinimum !== null &&
+      entryMaximum !== null &&
+      entryMinimum > entryMaximum)
+  ) {
+    economyError(
+      "loot_table_invalid",
+      "The loot table float range is invalid.",
+    );
+  }
+
+  // Imported loot tables can carry a generic 0-1 range even when the finish
+  // itself has tighter wear limits. Clamp both endpoints to the authoritative
+  // catalogue range before rolling so no crate or random drop can create an
+  // impossible float value.
+  const clampToCatalogue = (value: number) =>
+    Math.min(catalogueMaximum, Math.max(catalogueMinimum, value));
+  return {
+    minimum: Number(clampToCatalogue(requestedMinimum).toFixed(6)),
+    maximum: Number(clampToCatalogue(requestedMaximum).toFixed(6)),
+  };
+}
+
 function rollEconomyFloat(minimum: number | null, maximum: number | null) {
   if (minimum === null || maximum === null) return null;
   if (minimum < 0 || maximum > 1 || minimum > maximum)
@@ -7610,6 +7652,18 @@ async function createEconomyInventoryItem(
     requested.floatValue === undefined
       ? economyFloat(defaultFloat, "Item float")
       : economyFloat(requested.floatValue, "Item float");
+  if (
+    catalogue &&
+    economyIsSkinLike(catalogue.itemType) &&
+    floatValue !== null &&
+    (floatValue < (catalogue.minFloat ?? 0) ||
+      floatValue > (catalogue.maxFloat ?? 1))
+  ) {
+    economyError(
+      "invalid_input",
+      "The item float is outside this catalogue finish's limits.",
+    );
+  }
   const stattrakCount =
     requested.stattrakCount === undefined
       ? economyAmount(defaultStattrakCount, "StatTrak count")
@@ -7886,6 +7940,18 @@ export async function getEconomyDiscountRules(): Promise<EconomyDiscountRule[]> 
       Number(right.enabled) - Number(left.enabled) ||
       right.priority - left.priority ||
       right.id - left.id,
+  );
+}
+
+export async function getActiveEconomyDiscountRules(): Promise<
+  EconomyDiscountRule[]
+> {
+  const pool = getPortalPool();
+  if (!pool) return [];
+  const rules = await loadEconomyDiscountRules(pool, { activeOnly: true });
+  return rules.sort(
+    (left, right) =>
+      right.priority - left.priority || right.id - left.id,
   );
 }
 
@@ -9599,6 +9665,11 @@ export async function openEconomyCrate(
         roll.entry.catalogueId,
         true,
       );
+      const rewardFloatRange = economyEffectiveLootFloatRange(
+        rewardCatalogue,
+        roll.entry.minFloat,
+        roll.entry.maxFloat,
+      );
       const stattrak =
         economyIsSkinLike(rewardCatalogue.itemType) &&
         randomInt(10_000) < roll.entry.stattrakChanceBps;
@@ -9612,8 +9683,8 @@ export async function openEconomyCrate(
         customization: {
           seed: rollEconomyInteger(roll.entry.seedMin, roll.entry.seedMax),
           floatValue: rollEconomyFloat(
-            roll.entry.minFloat,
-            roll.entry.maxFloat,
+            rewardFloatRange.minimum,
+            rewardFloatRange.maximum,
           ),
           stattrak,
           attributes: roll.entry.attributes,
@@ -9777,6 +9848,11 @@ export async function awardEconomyDrop(
         roll.entry.catalogueId,
         true,
       );
+      const dropFloatRange = economyEffectiveLootFloatRange(
+        catalogue,
+        roll.entry.minFloat,
+        roll.entry.maxFloat,
+      );
       const stattrak =
         economyIsSkinLike(catalogue.itemType) &&
         randomInt(10_000) < roll.entry.stattrakChanceBps;
@@ -9786,8 +9862,8 @@ export async function awardEconomyDrop(
         customization: {
           seed: rollEconomyInteger(roll.entry.seedMin, roll.entry.seedMax),
           floatValue: rollEconomyFloat(
-            roll.entry.minFloat,
-            roll.entry.maxFloat,
+            dropFloatRange.minimum,
+            dropFloatRange.maximum,
           ),
           stattrak,
           attributes: roll.entry.attributes,
