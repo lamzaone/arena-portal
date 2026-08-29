@@ -209,9 +209,10 @@ export function ProfileSettingsForm({
           <strong>Select a theme owned by your account.</strong>
         </legend>
         <p className="empty-copy">
-          Themes always style your profile. Selected themes can also extend to
-          public surfaces such as your ranking entry. Buy one from the Market,
-          then equip its owned inventory instance here or from Inventory.
+          Theme manifests independently control your full profile, the portal
+          UI you see, and compact profile objects shown in rankings, tables,
+          search, and mentions. Buy one from the Market, then equip its owned
+          inventory instance here or from Inventory.
         </p>
         <div className="settings-theme-grid">
           <label
@@ -234,9 +235,10 @@ export function ProfileSettingsForm({
           </label>
           {initialSettings.ownedThemes.map((theme) => {
             const trustedTheme = getTrustedProfileTheme(theme.key);
-            const extendsToRanking = Boolean(
-              trustedTheme.surfaces.rankingEntry,
-            );
+            const themedSurfaces = [
+              trustedTheme.surfaces.global ? "portal UI" : null,
+              trustedTheme.surfaces.rankingEntry ? "profile mentions" : null,
+            ].filter(Boolean);
 
             return (
               <label
@@ -265,10 +267,10 @@ export function ProfileSettingsForm({
                 <span>
                   <strong>{theme.displayName}</strong>
                   <small>{theme.description}</small>
-                  {extendsToRanking ? (
+                  {themedSurfaces.length ? (
                     <small className="settings-theme-surface-note">
-                      <Trophy aria-hidden="true" /> Also styles your ranking
-                      entry
+                      <Trophy aria-hidden="true" /> Also styles{" "}
+                      {themedSurfaces.join(" and ")}
                     </small>
                   ) : null}
                 </span>

@@ -161,6 +161,7 @@ type AppealEligibilityRow = RowDataPacket & {
 type PortalSessionRow = RowDataPacket & {
   steam_id: string;
   expires_at: number;
+  active_theme_key: string | null;
 };
 
 type PlayerSettingsRow = RowDataPacket & {
@@ -556,6 +557,7 @@ export type StaffVip = {
 export type VipRosterEntry = StaffVip & {
   adminGroups: GroupMembership[];
   identityGroups: IdentityGroupBadgeData[];
+  profileThemeKey: string | null;
 };
 
 export type VipRosterPage = {
@@ -1896,25 +1898,30 @@ export async function getVipRoster(
     const memberships = await getGroupMembershipsForPlayers(
       vips.map((vip) => vip.steamId),
     );
-    const identityGroups = await getEffectiveIdentityGroupBadgesForPlayers(
-      [...new Set(vips.map((vip) => vip.steamId))].map((steamId) => {
-        const playerMemberships = memberships.get(steamId);
-        return {
-          steamId,
-          vipGroupNames: (playerMemberships?.vipGroups ?? []).map(
-            (group) => group.externalKey ?? group.name,
-          ),
-          adminGroupNames: (playerMemberships?.adminGroups ?? []).map(
-            (group) => group.externalKey ?? group.name,
-          ),
-        };
-      }),
-    );
+    const uniqueSteamIds = [...new Set(vips.map((vip) => vip.steamId))];
+    const [identityGroups, profileThemeKeys] = await Promise.all([
+      getEffectiveIdentityGroupBadgesForPlayers(
+        uniqueSteamIds.map((steamId) => {
+          const playerMemberships = memberships.get(steamId);
+          return {
+            steamId,
+            vipGroupNames: (playerMemberships?.vipGroups ?? []).map(
+              (group) => group.externalKey ?? group.name,
+            ),
+            adminGroupNames: (playerMemberships?.adminGroups ?? []).map(
+              (group) => group.externalKey ?? group.name,
+            ),
+          };
+        }),
+      ),
+      getPlayerProfileThemeKeys(uniqueSteamIds),
+    ]);
     return {
       vips: vips.map((vip) => ({
         ...vip,
         adminGroups: memberships.get(vip.steamId)?.adminGroups ?? [],
         identityGroups: identityGroups.get(vip.steamId) ?? [],
+        profileThemeKey: profileThemeKeys.get(vip.steamId) ?? null,
       })),
       total: Number(countRows[0]?.total ?? 0),
       page,
@@ -2140,7 +2147,14 @@ export async function getPortalSession(tokenHash: string) {
 
   try {
     const [rows] = await pool.query<PortalSessionRow[]>(
-      "SELECT steam_id, expires_at FROM portal_sessions WHERE token_hash = ? AND expires_at > ? LIMIT 1",
+      "SELECT s.steam_id, s.expires_at, t.theme_key AS active_theme_key " +
+        "FROM portal_sessions AS s " +
+        "LEFT JOIN portal_player_settings AS ps ON ps.steam_id = s.steam_id " +
+        "LEFT JOIN portal_inventory_items AS i ON i.id = ps.active_theme_item_id " +
+        "AND i.owner_steam_id = s.steam_id AND i.item_type = 'profile_theme' AND i.state = 'available' " +
+        "LEFT JOIN portal_profile_themes AS t ON t.id = ps.active_theme_id " +
+        "AND t.catalogue_id = i.catalogue_id AND t.enabled = TRUE " +
+        "WHERE s.token_hash = ? AND s.expires_at > ? LIMIT 1",
       [tokenHash, Date.now()],
     );
     const session = rows[0];
@@ -2150,7 +2164,16 @@ export async function getPortalSession(tokenHash: string) {
       "UPDATE portal_sessions SET last_seen_at = CURRENT_TIMESTAMP WHERE token_hash = ?",
       [tokenHash],
     );
-    return { steamId: session.steam_id, expiresAt: Number(session.expires_at) };
+    const activeThemeKey = session.active_theme_key
+      ? String(session.active_theme_key)
+      : null;
+    return {
+      steamId: session.steam_id,
+      expiresAt: Number(session.expires_at),
+      profileThemeKey: isTrustedOwnedProfileThemeKey(activeThemeKey)
+        ? activeThemeKey
+        : null,
+    };
   } catch {
     return null;
   }

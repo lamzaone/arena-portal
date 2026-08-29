@@ -165,8 +165,8 @@ function SettingsLoadingContent() {
           <strong>Select a theme owned by your account.</strong>
         </legend>
         <p className="empty-copy">
-          Themes change profile presentation only. Purchased themes will
-          appear here automatically when profile-theme products launch.
+          Theme support can cover the profile, portal UI, and compact player
+          mentions. Purchased themes appear here automatically.
         </p>
         <div className="settings-theme-grid" aria-hidden="true">
           <div className="settings-theme-card">

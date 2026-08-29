@@ -7,7 +7,9 @@ type EmptyStateProps = {
   icon?: ReactNode;
   actions?: ReactNode;
   className?: string;
-  headingLevel?: "h1" | "h2";
+  headingLevel?: "h1" | "h2" | "h3";
+  size?: "compact" | "default";
+  tone?: "default" | "danger" | "quiet";
 };
 
 export function EmptyState({
@@ -17,11 +19,15 @@ export function EmptyState({
   actions,
   className = "",
   headingLevel = "h2",
+  size = "default",
+  tone = "default",
 }: EmptyStateProps) {
   const Heading = headingLevel;
 
   return (
-    <section className={`panel ui-empty-state ${className}`.trim()}>
+    <section
+      className={`panel ui-empty-state ui-empty-state-${size} ui-empty-state-${tone} ${className}`.trim()}
+    >
       <div className="icon-box">{icon}</div>
       <div>
         <Heading>{title}</Heading>

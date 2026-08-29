@@ -13,8 +13,14 @@ export function PortalShell({
   authenticated = false,
   className = "",
 }: PortalShellProps) {
+  const rootClassName = [
+    ...new Set(["tapped-page", "portal-page", ...className.split(/\s+/)]),
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <main className={className}>
+    <main className={rootClassName} data-page-shell="portal">
       <div className="shell">
         <SiteHeader authenticated={authenticated} />
         {children}

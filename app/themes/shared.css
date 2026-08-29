@@ -1,0 +1,353 @@
+/*
+ * Global theme consumers. Keep this list to reusable portal primitives; profile
+ * hero geometry and theme-specific effects remain isolated in each theme file.
+ */
+.theme-background-slot {
+  display: contents;
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) {
+  color: var(--theme-text);
+  background-color: var(--theme-page-bg);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) :is(.portal-content, .portal-page, [data-page-shell="portal"]) {
+  color: var(--theme-text);
+  background-color: var(--theme-page-bg);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) .site-header {
+  border-color: var(--theme-border);
+  color: var(--theme-text);
+  background: color-mix(in srgb, var(--theme-surface-raised) 91%, transparent);
+  box-shadow: var(--theme-shadow);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) .account-nav {
+  border-color: var(--theme-border);
+  border-radius: var(--theme-radius);
+  background: var(--theme-control-bg);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) .account-nav a {
+  color: var(--theme-text-muted);
+  border-radius: calc(var(--theme-radius) - 1px);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) .account-nav a:is(:hover, :focus-visible) {
+  color: var(--theme-text);
+  background: var(--theme-control-hover);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) .account-nav a.active {
+  color: var(--theme-page-bg);
+  background: var(--theme-accent-strong);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--theme-accent) 30%, transparent);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) :is(
+  .panel,
+  .feature-card,
+  .history-panel,
+  .vip-card,
+  .arena-mode-card,
+  .duel-main-card,
+  .duel-info-card,
+  .duel-flow-card,
+  .case-card,
+  .staff-group-card,
+  .trade-history-card,
+  .trade-side-panel,
+  .inventory-filter-panel,
+  .inventory-detail-panel,
+  .inventory-customize-panel,
+  .inventory-sell-panel,
+  .profile-inventory-panel,
+  .settings-theme-card
+) {
+  border-color: var(--theme-border);
+  border-radius: var(--theme-radius);
+  color: var(--theme-text);
+  background: color-mix(in srgb, var(--theme-surface) 84%, transparent);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) :is(.panel-heading, .section-heading) :is(p, span),
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) :is(.empty-copy, .account-nav-note) {
+  color: var(--theme-text-subtle);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) :is(.button, .button-primary, .button-secondary, .button-quiet) {
+  border-color: var(--theme-border-strong);
+  border-radius: var(--theme-radius);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) :is(.button-primary, .button:is([data-variant="primary"])) {
+  color: var(--theme-page-bg);
+  background: var(--theme-accent-strong);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) :is(.button-secondary, .button-quiet) {
+  color: var(--theme-text);
+  background: var(--theme-control-bg);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) .button-primary:is(:hover, :focus-visible) {
+  border-color: var(--theme-accent-strong);
+  color: var(--theme-page-bg);
+  background-color: var(--theme-accent-soft);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) :is(.button-secondary, .button-quiet, .button:not(.button-primary):not(.button-secondary):not(.button-quiet)):is(:hover, :focus-visible) {
+  border-color: var(--theme-accent-strong);
+  background-color: var(--theme-control-hover);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  border-color: var(--theme-border);
+  border-radius: var(--theme-radius);
+  color: var(--theme-text);
+  background-color: var(--theme-control-bg);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea):is(:hover, :focus) {
+  border-color: var(--theme-border-strong);
+  background-color: var(--theme-control-hover);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) :where(a, button, summary, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--theme-focus-ring) !important;
+  outline-offset: 3px;
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) :is(.leaderboard-scroll, .staff-table-scroll, .vip-roster-scroll) {
+  border-color: var(--theme-border);
+  background: var(--theme-table-row);
+  scrollbar-color: var(--theme-accent) var(--theme-surface-muted);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) :is(.leaderboard-table, .staff-table, .vip-roster-table) th {
+  border-color: var(--theme-border);
+  color: var(--theme-text-subtle);
+  background: var(--theme-table-head);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) :is(.leaderboard-table, .staff-table, .vip-roster-table) td {
+  border-color: var(--theme-border);
+  color: var(--theme-text-muted);
+  background: var(--theme-table-row);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) :is(.leaderboard-table, .staff-table, .vip-roster-table) tbody tr:hover > td {
+  color: var(--theme-text);
+  background: var(--theme-table-hover);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) .pagination {
+  color: var(--theme-text-subtle);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) .pagination :is(a, .pagination-link) {
+  border-color: var(--theme-border);
+  border-radius: var(--theme-radius);
+  color: var(--theme-text);
+  background: var(--theme-control-bg);
+}
+
+:is(
+  [data-theme-surface="global"],
+  .global-theme-default,
+  .global-theme-beta-tester,
+  .global-theme-tap-god
+) .pagination a:is(:hover, :focus-visible) {
+  border-color: var(--theme-accent-strong);
+  background: var(--theme-control-hover);
+}
+
+/* Shared small-profile badge structure. Theme files own all presentation. */
+.leaderboard-theme-badge {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  min-height: 21px;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  padding: 4px 8px 4px 6px;
+  border: 1px solid transparent;
+  color: inherit;
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: .08em;
+  line-height: 1;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.leaderboard-badge-rack {
+  display: flex !important;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.leaderboard-badge-rack :where(.leaderboard-theme-badge, .leaderboard-role-badges) {
+  margin-top: 0;
+}
+
+.leaderboard-theme-badge > svg {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+  stroke-width: 3;
+}
+
+.leaderboard-theme-badge > span { white-space: nowrap; }
+
+.leaderboard-theme-badge > small {
+  padding-left: 5px;
+  border-left: 1px solid currentColor;
+  font-size: 7px !important;
+  letter-spacing: .05em;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  :is(.player-profile-page.profile-theme-beta-tester, .player-profile-page.profile-theme-tap-god) .public-player-copy { width: 100%; min-width: 0; }
+  :is(.player-profile-page.profile-theme-beta-tester, .player-profile-page.profile-theme-tap-god) .public-player-identity {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 62px minmax(0, 1fr);
+  }
+  :is(.player-profile-page.profile-theme-beta-tester, .player-profile-page.profile-theme-tap-god) .public-player-identity > div:last-child {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+  :is(.player-profile-page.profile-theme-beta-tester, .player-profile-page.profile-theme-tap-god) .profile-identity-badge-rack { width: 100%; }
+  .leaderboard-theme-badge { gap: 4px; padding-right: 7px; }
+  .leaderboard-theme-badge > small { display: none; }
+}

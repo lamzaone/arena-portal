@@ -1,115 +1,79 @@
-export type ProfileThemeSurface = "profile" | "rankingEntry";
+import {
+  getPortalTheme,
+  getPortalThemeSurface,
+  isOwnedPortalThemeKey,
+  isPortalThemeKey,
+  resolvePortalThemeSurface,
+  type PortalThemeKey,
+} from "@/lib/themes/registry";
+import type {
+  PortalThemeDefinition,
+  PortalThemeSurfaceDefinition,
+} from "@/lib/themes/types";
 
-export type ProfileThemeSurfacePresentation = {
-  className: string;
-  badge?: {
-    className: string;
-    detail: string;
-    icon: "crown" | "zap";
-    label: string;
+/** @deprecated Prefer the canonical global/profile/smallProfile surface names. */
+export type ProfileThemeSurface =
+  | "global"
+  | "profile"
+  | "smallProfile"
+  | "rankingEntry";
+
+export type ProfileThemeSurfacePresentation = PortalThemeSurfaceDefinition;
+
+export type TrustedProfileTheme = Omit<PortalThemeDefinition, "surfaces"> & {
+  surfaces: {
+    global?: ProfileThemeSurfacePresentation;
+    profile: ProfileThemeSurfacePresentation;
+    smallProfile?: ProfileThemeSurfacePresentation;
+    /** @deprecated Compatibility alias for smallProfile. */
+    rankingEntry?: ProfileThemeSurfacePresentation;
   };
 };
 
-type ProfileThemeSurfaces = Partial<
-  Record<ProfileThemeSurface, ProfileThemeSurfacePresentation>
-> & {
-  profile: ProfileThemeSurfacePresentation;
-};
-
-export type TrustedProfileTheme = {
-  key: string;
-  displayName: string;
-  previewImageUrl: string | null;
-  surfaces: ProfileThemeSurfaces;
-};
-
-// Theme presentation and surface support stay in source control. A database
-// entitlement only unlocks one of these keys and can never inject CSS, markup,
-// or remote assets into a player's profile or another public portal surface.
-const trustedProfileThemes = {
-  default: {
-    key: "default",
-    displayName: "ARENA default",
-    previewImageUrl: null,
-    surfaces: {
-      profile: { className: "profile-theme-default" },
-    },
-  },
-  beta_tester: {
-    key: "beta_tester",
-    displayName: "BETA TESTER",
-    previewImageUrl: "/images/economy/profile-themes/beta-tester.svg",
-    surfaces: {
-      profile: {
-        className: "profile-theme-beta-tester",
-        badge: {
-          className: "beta-tester-theme-badge",
-          detail: "Profile theme",
-          icon: "zap",
-          label: "BETA TESTER",
-        },
-      },
-      rankingEntry: {
-        className: "ranking-theme-beta-tester",
-        badge: {
-          className: "leaderboard-theme-badge",
-          detail: "Theme",
-          icon: "zap",
-          label: "BETA TESTER",
-        },
-      },
-    },
-  },
-  tap_god: {
-    key: "tap_god",
-    displayName: "TAP GOD",
-    previewImageUrl: "/images/economy/profile-themes/tap-god.svg",
-    surfaces: {
-      profile: {
-        className: "profile-theme-tap-god",
-        badge: {
-          className: "tap-god-theme-badge",
-          detail: "Profile theme",
-          icon: "crown",
-          label: "TAP GOD",
-        },
-      },
-      rankingEntry: {
-        className: "ranking-theme-tap-god",
-        badge: {
-          className: "leaderboard-theme-badge tap-god-leaderboard-theme-badge",
-          detail: "Theme",
-          icon: "crown",
-          label: "TAP GOD",
-        },
-      },
-    },
-  },
-} satisfies Record<string, TrustedProfileTheme>;
-
 export function isTrustedProfileThemeKey(
   value: string | null | undefined,
-): value is keyof typeof trustedProfileThemes {
-  return Boolean(value && Object.hasOwn(trustedProfileThemes, value));
+): value is PortalThemeKey {
+  return isPortalThemeKey(value);
 }
 
 export function isTrustedOwnedProfileThemeKey(
   value: string | null | undefined,
-): value is Exclude<keyof typeof trustedProfileThemes, "default"> {
-  return value !== "default" && isTrustedProfileThemeKey(value);
+): value is Exclude<PortalThemeKey, "default"> {
+  return isOwnedPortalThemeKey(value);
 }
 
+/**
+ * Compatibility view used by existing profile/settings callers. The canonical
+ * registry names the compact public surface smallProfile; rankingEntry remains
+ * an alias until all consumers have migrated.
+ */
 export function getTrustedProfileTheme(
   value: string | null | undefined,
 ): TrustedProfileTheme {
-  return isTrustedProfileThemeKey(value)
-    ? trustedProfileThemes[value]
-    : trustedProfileThemes.default;
+  const theme = getPortalTheme(value);
+  const profile = resolvePortalThemeSurface(value, "profile").surface;
+  const global = getPortalThemeSurface(value, "global") ?? undefined;
+  const smallProfile =
+    getPortalThemeSurface(value, "smallProfile") ?? undefined;
+
+  return {
+    key: theme.key,
+    displayName: theme.displayName,
+    previewImageUrl: theme.previewImageUrl,
+    surfaces: {
+      ...(global ? { global } : {}),
+      profile,
+      ...(smallProfile ? { smallProfile, rankingEntry: smallProfile } : {}),
+    },
+  };
 }
 
 export function getTrustedProfileThemeSurface(
   value: string | null | undefined,
   surface: ProfileThemeSurface,
 ): ProfileThemeSurfacePresentation | null {
-  return getTrustedProfileTheme(value).surfaces[surface] ?? null;
+  return getPortalThemeSurface(
+    value,
+    surface === "rankingEntry" ? "smallProfile" : surface,
+  );
 }

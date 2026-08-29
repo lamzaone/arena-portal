@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { LogIn, LogOut, ShieldCheck, UserRound } from "lucide-react";
+import { LogIn, LogOut, ShieldCheck } from "lucide-react";
 
 import { getSession } from "@/lib/auth/session";
 import { getAdminAccess } from "@/lib/admin/access";
 import { AccountNav } from "@/components/account-nav";
+import { PlayerIdentity } from "@/components/player-identity";
 import { PrimaryNavigation } from "@/components/primary-navigation";
-import { ResilientRemoteImage } from "@/components/resilient-remote-image";
 import { getSteamProfiles } from "@/lib/steam/profiles";
 
 type SiteHeaderProps = {
@@ -29,10 +29,19 @@ export async function SiteHeader({ authenticated = false }: SiteHeaderProps) {
         <PrimaryNavigation />
         {session ? (
           <>
-            <Link className="header-account" href={profileHref} aria-label={`Open ${displayName}'s profile`}>
-              <ResilientRemoteImage src={steamProfile?.avatarFull} alt="" referrerPolicy="no-referrer" fallback={<span className="header-account-avatar-fallback" aria-hidden="true"><UserRound /></span>} />
-              <span className="header-account-copy"><strong>{displayName}</strong><small>{session.steamId}</small></span>
-            </Link>
+            <PlayerIdentity
+              player={{
+                steamId: session.steamId,
+                displayName,
+                avatarUrl: steamProfile?.avatarFull ?? null,
+                presence: steamProfile?.presence ?? "unknown",
+                profileThemeKey: session.profileThemeKey,
+                identityGroups: [],
+              }}
+              variant="compact"
+              className="header-account"
+              secondary={session.steamId}
+            />
             {staffAccess?.isAdmin ? <Link className="button button-quiet header-staff-link" href="/admin" aria-label="Open staff panel"><ShieldCheck aria-hidden="true" /><span>Staff panel</span></Link> : null}
             <form action="/api/auth/logout" method="post">
               <button className="button button-quiet" type="submit"><LogOut aria-hidden="true" /> Sign out</button>

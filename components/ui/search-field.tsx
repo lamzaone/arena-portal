@@ -61,6 +61,7 @@ export function SearchNavigationForm({
         {...formProps}
         action={action}
         method="get"
+        role={formProps.role ?? "search"}
         aria-busy={pending || undefined}
         onSubmit={submit}
       >

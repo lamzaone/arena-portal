@@ -1,0 +1,49 @@
+/*
+ * Semantic baseline for every themed surface. Components should consume these
+ * variables instead of theme-specific colors so a new theme only needs to
+ * provide overrides in its own stylesheet.
+ */
+:root,
+[data-theme="default"] {
+  --theme-page-bg: var(--bg);
+  --theme-surface: var(--surface);
+  --theme-surface-raised: var(--surface-strong);
+  --theme-surface-muted: rgba(15, 3, 6, .8);
+  --theme-text: var(--text);
+  --theme-text-muted: var(--muted);
+  --theme-text-subtle: var(--subtle);
+  --theme-accent: var(--accent);
+  --theme-accent-strong: var(--accent-bright);
+  --theme-accent-soft: var(--accent-soft);
+  --theme-border: var(--border);
+  --theme-border-strong: var(--border-bright);
+  --theme-focus-ring: var(--accent-soft);
+  --theme-control-bg: rgba(18, 7, 9, .86);
+  --theme-control-hover: var(--accent-surface);
+  --theme-table-head: rgba(18, 7, 9, .92);
+  --theme-table-row: rgba(15, 3, 6, .8);
+  --theme-table-hover: rgba(225, 29, 72, .1);
+  --theme-radius: 6px;
+  --theme-shadow: 0 12px 34px rgba(0, 0, 0, .22);
+}
+
+/* Surface names are part of the public theme contract. Keep overrides scoped
+ * to these selectors so profile, global, and compact presentation can evolve
+ * independently without changing component markup.
+ */
+[data-theme="default"][data-theme-surface~="global"],
+[data-theme="default"][data-theme-surface="profile"],
+[data-theme="default"][data-theme-surface="small-profile"] {
+  color: var(--theme-text);
+}
+
+:is(
+  .small-profile-theme-default,
+  [data-theme="default"][data-theme-surface="small-profile"]
+) {
+  --player-identity-name: var(--theme-text);
+  --player-identity-muted: var(--theme-text-muted);
+  --player-identity-accent: var(--theme-accent);
+  --player-identity-hover: var(--theme-accent-soft);
+  --player-identity-card: var(--theme-surface-raised);
+}

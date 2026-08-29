@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { cache } from "react";
 
 import { createPortalSession, getPortalSession, revokePortalSession } from "@/lib/data/portal-repository";
 
@@ -12,6 +13,7 @@ export type PortalSession = {
   steamId: string;
   expiresAt: number;
   tokenHash: string;
+  profileThemeKey: string | null;
 };
 
 function getSecret() {
@@ -46,7 +48,7 @@ export async function createSessionToken(steamId: string) {
   return token;
 }
 
-export async function getSession() {
+async function getSessionUncached() {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token || token.length < 32) return null;
@@ -56,6 +58,11 @@ export async function getSession() {
   if (!storedSession || storedSession.expiresAt <= Date.now()) return null;
   return { ...storedSession, tokenHash };
 }
+
+// Layouts, pages, and shared navigation often need the same viewer. React's
+// request cache keeps those consumers on one validated session read instead
+// of repeating the database lookup during a single server render.
+export const getSession = cache(getSessionUncached);
 
 export async function revokeCurrentSession() {
   const cookieStore = await cookies();

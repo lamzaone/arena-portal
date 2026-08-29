@@ -7,11 +7,14 @@ import {
   IdentityGroupBadge,
   IdentityGroupBadgeList,
 } from "@/components/identity-group-badge";
-import { ResilientRemoteImage } from "@/components/resilient-remote-image";
-import { SiteHeader } from "@/components/site-header";
+import { PlayerIdentity } from "@/components/player-identity";
+import { DataTable } from "@/components/ui/data-table";
+import { LinkPagination } from "@/components/ui/link-pagination";
+import { PortalShell } from "@/components/ui/portal-shell";
 import { getSession } from "@/lib/auth/session";
 import { getVipTiers, type VipTier } from "@/lib/content/game-catalogue";
 import { identityExternalBadgeLookupKey } from "@/lib/content/identity-group-badges";
+import { getTrustedProfileThemeSurface } from "@/lib/content/profile-themes";
 import {
   getIdentityGroupBadgeCatalogue,
   type IdentityGroupBadgeData,
@@ -31,10 +34,6 @@ function requestUrl(tier: VipTier, plan: "access" | "permanent", price: number) 
 function getPageNumber(value: string | undefined) {
   const parsed = Number.parseInt(value ?? "1", 10);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 1;
-}
-
-function avatarInitial(name: string) {
-  return name.trim().slice(0, 1).toUpperCase() || "?";
 }
 
 type VipPageProps = { searchParams: Promise<{ page?: string }> };
@@ -72,9 +71,7 @@ export default async function VipPage({ searchParams }: VipPageProps) {
   const currentPage = Math.min(vipRoster.page, totalPages);
 
   return (
-    <main className="tapped-page catalog-page">
-      <div className="shell">
-        <SiteHeader authenticated={Boolean(session)} />
+    <PortalShell authenticated={Boolean(session)} className="catalog-page vip-page">
 
         <section className="catalog-hero" aria-labelledby="vip-title">
           <div>
@@ -131,28 +128,112 @@ export default async function VipPage({ searchParams }: VipPageProps) {
             <div><p className="tapped-kicker"><UsersRound aria-hidden="true" /> VIPCore roster</p><h2 id="vip-roster-title">Current VIPs.</h2></div>
             <p>{vipRoster.total.toLocaleString()} active VIP{vipRoster.total === 1 ? "" : "s"} on ARENA.TAPPED.RO. Profiles open publicly from the roster.</p>
           </div>
-          {vipRoster.vips.length ? <div className="leaderboard-scroll vip-roster-scroll"><table className="leaderboard-table vip-roster-table"><thead><tr><th>Player</th><th>VIP tier</th><th>Admin rank</th><th>Access</th></tr></thead><tbody>{vipRoster.vips.map((vip) => {
-            const profile = steamProfiles.get(vip.steamId);
-            const name = profile?.name || vip.name;
-            const vipGroup = vip.identityGroups.find(
-              (group) =>
-                group.sourceType === "vipcore" &&
-                identityExternalBadgeLookupKey(
-                  "vipcore",
-                  group.externalKey ?? group.displayName,
-                ) === identityExternalBadgeLookupKey("vipcore", vip.group),
-            );
-            const adminGroups = vip.identityGroups.filter(
-              (group) => group.sourceType === "admins_core",
-            );
-            const customGroups = vip.identityGroups.filter(
-              (group) => group.sourceType === "custom",
-            );
-            return <tr key={`${vip.steamId}-${vip.group}`}><td><Link className="leaderboard-player" href={`/players/${vip.steamId}`}><ResilientRemoteImage src={profile?.avatarFull} alt={`${name}'s Steam avatar`} referrerPolicy="no-referrer" fallback={<span className="player-avatar-fallback" aria-hidden="true">{avatarInitial(name)}</span>} /><div><strong>{name}</strong><small>SteamID64 {vip.steamId}</small><IdentityGroupBadgeList groups={customGroups} compact className="vip-roster-player-groups" /></div></Link></td><td>{vipGroup ? <IdentityGroupBadge group={vipGroup} compact /> : <span className="role-empty">{vip.group}</span>}</td><td><IdentityGroupBadgeList groups={adminGroups} compact className="vip-roster-role-badges" />{adminGroups.length ? null : <span className="role-empty">—</span>}</td><td><strong>{vip.expiresAt === 0 ? "Permanent" : `Until ${formatDate(vip.expiresAt)}`}</strong></td></tr>;
-          })}</tbody></table></div> : <section className="vip-roster-empty"><UsersRound aria-hidden="true" /><h3>No active VIPs yet.</h3><p>VIPs with active or permanent access will appear here.</p></section>}
-          <nav className="pagination vip-roster-pagination" aria-label="VIP roster pages"><Link className={currentPage <= 1 ? "is-disabled" : ""} aria-disabled={currentPage <= 1} href={`/vip?page=${Math.max(1, currentPage - 1)}`}>Previous</Link><span>Page {currentPage} of {totalPages}</span><Link className={currentPage >= totalPages ? "is-disabled" : ""} aria-disabled={currentPage >= totalPages} href={`/vip?page=${Math.min(totalPages, currentPage + 1)}`}>Next</Link></nav>
+          {vipRoster.vips.length ? (
+            <DataTable
+              className="vip-roster-scroll"
+              tableClassName="vip-roster-table"
+              caption="Current ARENA VIP roster"
+            >
+              <thead>
+                <tr>
+                  <th scope="col">Player</th>
+                  <th scope="col">VIP tier</th>
+                  <th scope="col">Admin rank</th>
+                  <th scope="col">Access</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vipRoster.vips.map((vip) => {
+                  const profile = steamProfiles.get(vip.steamId);
+                  const name = profile?.name || vip.name;
+                  const smallProfileTheme = getTrustedProfileThemeSurface(
+                    vip.profileThemeKey,
+                    "smallProfile",
+                  );
+                  const vipGroup = vip.identityGroups.find(
+                    (group) =>
+                      group.sourceType === "vipcore" &&
+                      identityExternalBadgeLookupKey(
+                        "vipcore",
+                        group.externalKey ?? group.displayName,
+                      ) ===
+                        identityExternalBadgeLookupKey("vipcore", vip.group),
+                  );
+                  const adminGroups = vip.identityGroups.filter(
+                    (group) => group.sourceType === "admins_core",
+                  );
+                  const customGroups = vip.identityGroups.filter(
+                    (group) => group.sourceType === "custom",
+                  );
+
+                  return (
+                    <tr
+                      className={`leaderboard-player-row${smallProfileTheme ? ` ${smallProfileTheme.className}` : ""}`}
+                      data-theme={
+                        smallProfileTheme ? vip.profileThemeKey : undefined
+                      }
+                      data-theme-surface={
+                        smallProfileTheme ? "small-profile" : undefined
+                      }
+                      key={`${vip.steamId}-${vip.group}`}
+                    >
+                      <td>
+                        <PlayerIdentity
+                          player={{
+                            steamId: vip.steamId,
+                            displayName: name,
+                            avatarUrl: profile?.avatarFull ?? null,
+                            presence: profile?.presence ?? "unknown",
+                            profileThemeKey: vip.profileThemeKey,
+                            identityGroups: customGroups,
+                          }}
+                          variant="table"
+                        />
+                      </td>
+                      <td>
+                        {vipGroup ? (
+                          <IdentityGroupBadge group={vipGroup} compact />
+                        ) : (
+                          <span className="role-empty">{vip.group}</span>
+                        )}
+                      </td>
+                      <td>
+                        <IdentityGroupBadgeList
+                          groups={adminGroups}
+                          compact
+                          className="vip-roster-role-badges"
+                        />
+                        {adminGroups.length ? null : (
+                          <span className="role-empty">—</span>
+                        )}
+                      </td>
+                      <td>
+                        <strong>
+                          {vip.expiresAt === 0
+                            ? "Permanent"
+                            : `Until ${formatDate(vip.expiresAt)}`}
+                        </strong>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </DataTable>
+          ) : (
+            <section className="vip-roster-empty">
+              <UsersRound aria-hidden="true" />
+              <h3>No active VIPs yet.</h3>
+              <p>VIPs with active or permanent access will appear here.</p>
+            </section>
+          )}
+          <LinkPagination
+            className="vip-roster-pagination"
+            page={currentPage}
+            totalPages={totalPages}
+            label="VIP roster pages"
+            hrefForPage={(targetPage) => `/vip?page=${targetPage}`}
+          />
         </section>
-      </div>
-    </main>
+    </PortalShell>
   );
 }

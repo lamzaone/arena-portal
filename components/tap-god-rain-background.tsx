@@ -1,6 +1,4 @@
-"use client";
-
-import { useEffect, type CSSProperties } from "react";
+import type { CSSProperties } from "react";
 
 type RainDropStyle = CSSProperties & {
   "--rain-x": string;
@@ -28,20 +26,7 @@ const rainDrops = Array.from({ length: 44 }, (_, index) => {
   };
 });
 
-const THEME_CHANGE_EVENT = "arena:profile-theme-change";
-
 export function TapGodRainBackground() {
-  useEffect(() => {
-    const root = document.documentElement;
-    root.classList.add("tap-god-theme-active");
-    window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
-
-    return () => {
-      root.classList.remove("tap-god-theme-active");
-      window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
-    };
-  }, []);
-
   return (
     <div className="tap-god-rain-background" aria-hidden="true">
       <span className="tap-god-rain-architecture" />

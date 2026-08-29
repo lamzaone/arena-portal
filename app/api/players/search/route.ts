@@ -5,7 +5,7 @@ import {
   EconomyRepositoryError,
   searchTradePlayers,
 } from "@/lib/data/portal-repository";
-import { getSteamProfiles } from "@/lib/steam/profiles";
+import { resolvePlayerIdentities } from "@/lib/player-identities";
 
 const noStore = { "Cache-Control": "no-store" };
 
@@ -35,17 +35,22 @@ export async function GET(request: Request) {
       excludeSteamId: includeSelf ? undefined : session?.steamId,
       limit: 8,
     });
-    const steamProfiles = await getSteamProfiles(
-      players.map((player) => player.steamId),
+    const identities = await resolvePlayerIdentities(
+      players.map((player) => ({
+        steamId: player.steamId,
+        displayName: player.displayName,
+      })),
     );
     return json({
       ok: true,
       players: players.map((player) => {
-        const profile = steamProfiles.get(player.steamId);
+        const identity = identities[player.steamId];
         return {
           steamId: player.steamId,
-          displayName: profile?.name ?? player.displayName,
-          ...(profile?.avatarFull ? { avatarUrl: profile.avatarFull } : {}),
+          displayName: identity?.displayName ?? player.displayName,
+          avatarUrl: identity?.avatarUrl ?? null,
+          presence: identity?.presence ?? "unknown",
+          profileThemeKey: identity?.profileThemeKey ?? null,
           inventoryVisibility: player.inventoryVisibility,
         };
       }),

@@ -1,0 +1,141 @@
+/* Imported after every theme so user accessibility preferences always win. */
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="beta_tester"] *,
+  [data-theme="beta_tester"] *::before,
+  [data-theme="beta_tester"] *::after,
+  [data-theme="tap_god"] *,
+  [data-theme="tap_god"] *::before,
+  [data-theme="tap_god"] *::after,
+  .global-theme-beta-tester *,
+  .global-theme-beta-tester *::before,
+  .global-theme-beta-tester *::after,
+  .global-theme-tap-god *,
+  .global-theme-tap-god *::before,
+  .global-theme-tap-god *::after,
+  .small-profile-theme-beta-tester *,
+  .small-profile-theme-beta-tester *::before,
+  .small-profile-theme-beta-tester *::after,
+  .small-profile-theme-tap-god *,
+  .small-profile-theme-tap-god *::before,
+  .small-profile-theme-tap-god *::after,
+  .player-profile-page.profile-theme-beta-tester *,
+  .player-profile-page.profile-theme-beta-tester *::before,
+  .player-profile-page.profile-theme-beta-tester *::after,
+  .leaderboard-player-row.ranking-theme-beta-tester *,
+  .leaderboard-player-row.ranking-theme-beta-tester *::before,
+  .leaderboard-player-row.ranking-theme-beta-tester *::after,
+  .player-profile-page.profile-theme-tap-god *,
+  .player-profile-page.profile-theme-tap-god *::before,
+  .player-profile-page.profile-theme-tap-god *::after,
+  .leaderboard-player-row.ranking-theme-tap-god *,
+  .leaderboard-player-row.ranking-theme-tap-god *::before,
+  .leaderboard-player-row.ranking-theme-tap-god *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+
+  .tap-god-rain-field {
+    background-image: repeating-linear-gradient(97deg, transparent 0 62px, rgba(225, 29, 72, .1) 63px, transparent 64px 126px);
+  }
+
+  .tap-god-rain-field i { display: none; }
+  .tap-god-rain-haze,
+  .tap-god-rain-flash,
+  .tap-god-rain-architecture { animation: none !important; }
+  .tap-god-rain-haze { opacity: .28; transform: none; }
+  .tap-god-rain-flash { opacity: .035; }
+}
+
+@media (forced-colors: active) {
+  .tap-god-rain-background { display: none; }
+  .beta-tester-avatar-mark,
+  .tap-god-avatar-mark,
+  .beta-tester-theme-badge,
+  .tap-god-theme-badge,
+  .leaderboard-theme-badge,
+  :is(
+    [data-theme="beta_tester"],
+    [data-theme="tap_god"],
+    .global-theme-beta-tester,
+    .global-theme-tap-god,
+    .player-profile-page.profile-theme-beta-tester,
+    .player-profile-page.profile-theme-tap-god,
+    .small-profile-theme-beta-tester,
+    .small-profile-theme-tap-god,
+    .leaderboard-player-row.ranking-theme-beta-tester,
+    .leaderboard-player-row.ranking-theme-tap-god
+  ) .identity-group-badge {
+    border: 2px solid ButtonText;
+    color: ButtonText;
+    background: Canvas;
+    box-shadow: none;
+    clip-path: none;
+    filter: none;
+    text-shadow: none;
+    animation: none;
+  }
+
+  :is(
+    [data-theme="beta_tester"],
+    [data-theme="tap_god"],
+    .global-theme-beta-tester,
+    .global-theme-tap-god,
+    .player-profile-page.profile-theme-beta-tester,
+    .player-profile-page.profile-theme-tap-god,
+    .small-profile-theme-beta-tester,
+    .small-profile-theme-tap-god,
+    .leaderboard-player-row.ranking-theme-beta-tester,
+    .leaderboard-player-row.ranking-theme-tap-god
+  ) .identity-group-badge::before,
+  :is(
+    [data-theme="beta_tester"],
+    [data-theme="tap_god"],
+    .global-theme-beta-tester,
+    .global-theme-tap-god,
+    .player-profile-page.profile-theme-beta-tester,
+    .player-profile-page.profile-theme-tap-god,
+    .small-profile-theme-beta-tester,
+    .small-profile-theme-tap-god,
+    .leaderboard-player-row.ranking-theme-beta-tester,
+    .leaderboard-player-row.ranking-theme-tap-god
+  ) .identity-group-badge::after { display: none; }
+
+  :is([data-theme="beta_tester"], [data-theme="tap_god"], .global-theme-beta-tester, .global-theme-tap-god, .player-profile-page.profile-theme-beta-tester, .player-profile-page.profile-theme-tap-god) .account-nav,
+  :is([data-theme="beta_tester"], [data-theme="tap_god"], .global-theme-beta-tester, .global-theme-tap-god, .player-profile-page.profile-theme-beta-tester, .player-profile-page.profile-theme-tap-god) .account-nav a {
+    border-color: CanvasText;
+    color: LinkText;
+    background: Canvas;
+    box-shadow: none;
+    text-shadow: none;
+  }
+
+  :is([data-theme="beta_tester"], [data-theme="tap_god"], .global-theme-beta-tester, .global-theme-tap-god, .player-profile-page.profile-theme-beta-tester, .player-profile-page.profile-theme-tap-god) .account-nav a.active {
+    color: HighlightText;
+    background: Highlight;
+  }
+
+  .leaderboard-table tbody tr:is(.ranking-theme-beta-tester, .ranking-theme-tap-god) > td {
+    border-color: CanvasText;
+    color: CanvasText;
+    background: Canvas;
+    box-shadow: none;
+  }
+
+  :is(.ranking-theme-beta-tester, .ranking-theme-tap-god) :where(.leaderboard-position, .leaderboard-player strong),
+  :is(.ranking-theme-beta-tester, .ranking-theme-tap-god) .points-cell,
+  .leaderboard-theme-badge > small {
+    color: CanvasText !important;
+    text-shadow: none;
+  }
+
+  :is(.ranking-theme-beta-tester, .ranking-theme-tap-god) .leaderboard-player img,
+  :is(.ranking-theme-beta-tester, .ranking-theme-tap-god) .player-avatar-fallback {
+    border-color: CanvasText;
+    color: CanvasText;
+    background: Canvas;
+    box-shadow: none;
+    clip-path: none;
+  }
+}

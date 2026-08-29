@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { getAdminAuthorization, getPlayerDashboard, portalStorageConfigured } from "@/lib/data/portal-repository";
 import {
   getEffectiveIdentity,
@@ -66,7 +68,7 @@ function isStaffPermission(permission: string) {
   return permission === "*" || permission === "admins.*" || permission.startsWith("admins.") || permission === "tapped.*" || permission.startsWith("tapped.");
 }
 
-export async function getAdminAccess(steamId: string): Promise<AdminAccess> {
+async function getAdminAccessUncached(steamId: string): Promise<AdminAccess> {
   const [profile, admin, configuredGroups] = await Promise.all([getPlayerDashboard(steamId), getAdminAuthorization(steamId), getConfiguredGroups()]);
   const matchedGroups = configuredGroups.filter((configuredGroup) => {
     const groupName = typeof configuredGroup.name === "string" ? configuredGroup.name : "";
@@ -126,6 +128,11 @@ export async function getAdminAccess(steamId: string): Promise<AdminAccess> {
     canManageEconomyLoadouts: isAdmin && (hasPermission(permissions, "tapped.inventory.admin") || hasPermission(permissions, "tapped.inventory.manage-loadout"))
   };
 }
+
+// The header and the active staff page both need the same authorization
+// snapshot. Share it for the lifetime of one server render instead of running
+// the game/identity queries twice.
+export const getAdminAccess = cache(getAdminAccessUncached);
 
 export async function getStaffGroupDefinitions() {
   const groups = await getConfiguredGroups();

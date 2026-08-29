@@ -1,11 +1,10 @@
-import Link from "next/link";
-import { ChevronLeft, ChevronRight, Crown, Crosshair, Medal, Trophy, UsersRound } from "lucide-react";
+import { Crown, Crosshair, Medal, Trophy, UsersRound } from "lucide-react";
 
-import { SiteHeader } from "@/components/site-header";
-import { IdentityGroupBadgeList } from "@/components/identity-group-badge";
+import { PlayerIdentity } from "@/components/player-identity";
 import { PlayerSearchField } from "@/components/player-search-field";
-import { ProfileThemeSurfaceBadge } from "@/components/profile-theme-surface-badge";
-import { ResilientRemoteImage } from "@/components/resilient-remote-image";
+import { DataTable } from "@/components/ui/data-table";
+import { LinkPagination } from "@/components/ui/link-pagination";
+import { PortalShell } from "@/components/ui/portal-shell";
 import { SearchNavigationForm, SearchSubmitButton } from "@/components/ui/search-field";
 import { getSession } from "@/lib/auth/session";
 import { getLevelRank } from "@/lib/content/levelranks";
@@ -20,10 +19,6 @@ type RankingPageProps = { searchParams: Promise<{ page?: string; q?: string }> }
 function getPageNumber(value: string | undefined) {
   const parsed = Number.parseInt(value ?? "1", 10);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 1;
-}
-
-function avatarInitial(name: string) {
-  return name.trim().slice(0, 1).toUpperCase() || "?";
 }
 
 function rankingLink(page: number, query: string) {
@@ -42,9 +37,7 @@ export default async function RankingPage({ searchParams }: RankingPageProps) {
   const page = Math.min(leaderboard.page, totalPages);
 
   return (
-    <main className="tapped-page ranking-page">
-      <div className="shell">
-        <SiteHeader authenticated={Boolean(session)} />
+    <PortalShell authenticated={Boolean(session)} className="ranking-page">
         <section className="ranking-hero" aria-labelledby="ranking-title">
           <div><p className="tapped-kicker"><Trophy aria-hidden="true" /> TAPPED.RO leaderboard</p><h1 id="ranking-title">Every point<br /><span>has a place.</span></h1><p>The top ARENA.TAPPED.RO players, ordered by K4 LevelRanks points. Each displayed rank is derived from the current K4 rank ladder.</p></div>
           <aside className="ranking-summary"><Crown aria-hidden="true" /><span>COMPETITORS</span><strong>{leaderboard.total.toLocaleString()}</strong><small>25 players per page</small></aside>
@@ -77,8 +70,7 @@ export default async function RankingPage({ searchParams }: RankingPageProps) {
             </div>
           </div>
           {leaderboard.players.length ? (
-            <div className="leaderboard-scroll">
-              <table className="leaderboard-table">
+            <DataTable caption="ARENA player ranking">
                 <thead>
                   <tr>
                     <th scope="col">Position</th>
@@ -105,9 +97,10 @@ export default async function RankingPage({ searchParams }: RankingPageProps) {
                     return (
                       <tr
                         className={`leaderboard-player-row${rankingTheme ? ` ${rankingTheme.className}` : ""}`}
-                        data-profile-theme={
+                        data-theme={
                           rankingTheme ? player.profileThemeKey : undefined
                         }
+                        data-theme-surface={rankingTheme ? "small-profile" : undefined}
                         key={player.steamId}
                       >
                         <td>
@@ -131,39 +124,17 @@ export default async function RankingPage({ searchParams }: RankingPageProps) {
                           </span>
                         </td>
                         <td>
-                          <Link
-                            className="leaderboard-player"
-                            href={`/players/${player.steamId}`}
-                          >
-                            <ResilientRemoteImage
-                              src={profile?.avatarFull}
-                              alt=""
-                              referrerPolicy="no-referrer"
-                              fallback={
-                                <span
-                                  className="player-avatar-fallback"
-                                  aria-hidden="true"
-                                >
-                                  {avatarInitial(displayName)}
-                                </span>
-                              }
-                            />
-                            <div>
-                              <strong>{displayName}</strong>
-                              <small>{player.steamId}</small>
-                              <span className="leaderboard-badge-rack">
-                                <ProfileThemeSurfaceBadge
-                                  themeKey={player.profileThemeKey}
-                                  surface="rankingEntry"
-                                />
-                                <IdentityGroupBadgeList
-                                  groups={player.identityGroups}
-                                  compact
-                                  className="leaderboard-role-badges"
-                                />
-                              </span>
-                            </div>
-                          </Link>
+                          <PlayerIdentity
+                            player={{
+                              steamId: player.steamId,
+                              displayName,
+                              avatarUrl: profile?.avatarFull ?? null,
+                              presence: profile?.presence ?? "unknown",
+                              profileThemeKey: player.profileThemeKey,
+                              identityGroups: player.identityGroups,
+                            }}
+                            variant="table"
+                          />
                         </td>
                         <td className="points-cell">
                           {player.points.toLocaleString()}
@@ -175,8 +146,7 @@ export default async function RankingPage({ searchParams }: RankingPageProps) {
                     );
                   })}
                 </tbody>
-              </table>
-            </div>
+            </DataTable>
           ) : (
             <div className="ranking-empty">
               <UsersRound aria-hidden="true" />
@@ -187,9 +157,13 @@ export default async function RankingPage({ searchParams }: RankingPageProps) {
               </p>
             </div>
           )}
-          <nav className="pagination" aria-label="Leaderboard pages"><Link className={page <= 1 ? "is-disabled" : ""} aria-disabled={page <= 1} href={rankingLink(Math.max(1, page - 1), query)}><ChevronLeft aria-hidden="true" /> Previous</Link><span>Page {page} of {totalPages}</span><Link className={page >= totalPages ? "is-disabled" : ""} aria-disabled={page >= totalPages} href={rankingLink(Math.min(totalPages, page + 1), query)}>Next <ChevronRight aria-hidden="true" /></Link></nav>
+          <LinkPagination
+            page={page}
+            totalPages={totalPages}
+            label="Leaderboard pages"
+            hrefForPage={(targetPage) => rankingLink(targetPage, query)}
+          />
         </section>
-      </div>
-    </main>
+    </PortalShell>
   );
 }

@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 
+import { PORTAL_THEME_CHANGE_EVENT } from "@/lib/themes/runtime";
+
 export function CursorGridBackground() {
   useEffect(() => {
     const root = document.documentElement;
@@ -11,8 +13,8 @@ export function CursorGridBackground() {
     let latestPoint: { x: number; y: number } | null = null;
     let renderedPoint = { x: window.innerWidth / 2, y: window.innerHeight * 0.36 };
 
-    const tapGodThemeActive = () =>
-      root.classList.contains("tap-god-theme-active");
+    const cursorGridHidden = () =>
+      root.getAttribute("data-theme-cursor-grid") === "hidden";
 
     const reset = () => {
       latestPoint = null;
@@ -39,7 +41,7 @@ export function CursorGridBackground() {
     };
 
     const onPointerMove = (event: PointerEvent) => {
-      if (tapGodThemeActive()) return;
+      if (cursorGridHidden()) return;
       latestPoint = { x: event.clientX, y: event.clientY };
       if (!frame) frame = window.requestAnimationFrame(paint);
     };
@@ -48,7 +50,7 @@ export function CursorGridBackground() {
       const enabled =
         finePointer.matches &&
         !reducedMotion.matches &&
-        !tapGodThemeActive();
+        !cursorGridHidden();
       root.classList.toggle("has-cursor-grid", enabled);
       if (!enabled) reset();
     };
@@ -58,6 +60,8 @@ export function CursorGridBackground() {
     window.addEventListener("blur", reset);
     finePointer.addEventListener("change", sync);
     reducedMotion.addEventListener("change", sync);
+    window.addEventListener(PORTAL_THEME_CHANGE_EVENT, sync);
+    // Keep older effect components interoperable during the theme migration.
     window.addEventListener("arena:profile-theme-change", sync);
 
     return () => {
@@ -66,6 +70,7 @@ export function CursorGridBackground() {
       window.removeEventListener("blur", reset);
       finePointer.removeEventListener("change", sync);
       reducedMotion.removeEventListener("change", sync);
+      window.removeEventListener(PORTAL_THEME_CHANGE_EVENT, sync);
       window.removeEventListener("arena:profile-theme-change", sync);
       root.classList.remove("has-cursor-grid");
       reset();

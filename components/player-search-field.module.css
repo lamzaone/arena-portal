@@ -13,7 +13,7 @@
 }
 
 .root .labelText {
-  color: #cba8ae;
+  color: var(--theme-text-muted, #cba8ae);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.07em;
@@ -28,31 +28,31 @@
   grid-template-columns: 38px minmax(0, 1fr) 38px;
   align-items: center;
   overflow: hidden;
-  border: 1px solid rgba(255, 113, 133, 0.34);
-  border-radius: 5px;
-  background: rgba(11, 3, 6, 0.88);
+  border: 1px solid var(--theme-border-strong, rgba(255, 113, 133, 0.34));
+  border-radius: var(--theme-control-radius, 5px);
+  background: var(--theme-control-bg, rgba(11, 3, 6, 0.88));
   transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
 }
 
 .root .combobox:hover {
-  border-color: rgba(255, 145, 164, 0.55);
+  border-color: var(--theme-accent-soft, rgba(255, 145, 164, 0.55));
 }
 
 .root .combobox:focus-within {
-  border-color: #ff91a4;
-  background: rgba(16, 4, 8, 0.94);
-  box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.17);
+  border-color: var(--theme-accent-strong, #ff91a4);
+  background: var(--theme-control-focus-bg, var(--theme-control-bg, rgba(16, 4, 8, 0.94)));
+  box-shadow: 0 0 0 3px var(--theme-focus-ring, rgba(225, 29, 72, 0.17));
 }
 
 .root .combobox[data-invalid="true"] {
-  border-color: #ff6078;
+  border-color: var(--theme-danger, #ff6078);
 }
 
 .root .searchIcon {
   width: 16px;
   height: 16px;
   justify-self: center;
-  color: #aa858c;
+  color: var(--theme-text-subtle, #aa858c);
   pointer-events: none;
 }
 
@@ -66,7 +66,7 @@
   border: 0;
   border-radius: 0;
   outline: 0;
-  color: #f8e3e6;
+  color: var(--theme-text, #f8e3e6);
   background: transparent;
   font: inherit;
   font-size: 13px;
@@ -75,12 +75,12 @@
 }
 
 .root .input::placeholder {
-  color: #806168;
+  color: var(--theme-placeholder, var(--theme-text-subtle, #806168));
   opacity: 1;
 }
 
 .root .input:disabled {
-  color: #8f7278;
+  color: var(--theme-text-subtle, #8f7278);
   cursor: not-allowed;
 }
 
@@ -104,8 +104,8 @@
   gap: 0;
   justify-self: center;
   border: 1px solid transparent;
-  border-radius: 4px;
-  color: #b78f96;
+  border-radius: var(--theme-control-radius, 4px);
+  color: var(--theme-text-muted, #b78f96);
   background: transparent;
   font: inherit;
 }
@@ -117,10 +117,10 @@
 
 .root button.trailing:hover,
 .root button.trailing:focus-visible {
-  color: #ffe3e8;
-  border-color: rgba(255, 113, 133, 0.35);
+  color: var(--theme-text, #ffe3e8);
+  border-color: var(--theme-border-strong, rgba(255, 113, 133, 0.35));
   outline: 0;
-  background: rgba(225, 29, 72, 0.16);
+  background: var(--theme-control-hover, rgba(225, 29, 72, 0.16));
 }
 
 .root .trailing svg {
@@ -135,7 +135,7 @@
 .root .meta {
   min-height: 16px;
   margin: 0;
-  color: #95727a;
+  color: var(--theme-text-subtle, #95727a);
   font-size: 10px;
   font-weight: 500;
   line-height: 1.45;
@@ -144,12 +144,12 @@
 }
 
 .root .meta strong {
-  color: #e8cbd0;
+  color: var(--theme-text, #e8cbd0);
   font-weight: 700;
 }
 
 .root .error {
-  color: #ff9cac;
+  color: var(--theme-danger-text, #ff9cac);
 }
 
 .root .results {
@@ -162,10 +162,10 @@
   max-height: min(330px, 55vh);
   padding: 5px;
   overflow-y: auto;
-  border: 1px solid rgba(255, 113, 133, 0.4);
-  background: rgba(15, 3, 6, 0.98);
-  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.48);
-  scrollbar-color: #b91c3a rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--theme-border-strong, rgba(255, 113, 133, 0.4));
+  background: var(--theme-surface-raised, rgba(15, 3, 6, 0.98));
+  box-shadow: var(--theme-shadow, 0 18px 45px rgba(0, 0, 0, 0.48));
+  scrollbar-color: var(--theme-accent, #b91c3a) var(--theme-surface-muted, rgba(0, 0, 0, 0.3));
 }
 
 .root .result {
@@ -174,28 +174,61 @@
   min-height: 52px;
   padding: 7px 9px;
   border: 1px solid transparent;
-  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
-  color: #f8e3e6;
+  color: var(--theme-text, #f8e3e6);
   background: transparent;
   font: inherit;
   font-weight: 400;
   text-align: left;
-  cursor: pointer;
   transition: border-color 160ms ease, background-color 160ms ease;
 }
 
 .root .resultWithMeta {
-  grid-template-columns: 36px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
 }
 
 .root .result:hover,
-.root .result:focus-visible,
+.root .result:focus-within,
 .root .result[data-active="true"] {
-  border-color: rgba(255, 113, 133, 0.42);
+  border-color: var(--theme-border-strong, rgba(255, 113, 133, 0.42));
   outline: 0;
-  background: rgba(225, 29, 72, 0.14);
+  background: var(--theme-table-hover, var(--theme-control-hover, rgba(225, 29, 72, 0.14)));
+}
+
+.root .resultProfile {
+  width: 100%;
+  min-width: 0;
+}
+
+.root .selectResult {
+  min-height: 30px;
+  padding: 6px 8px;
+  border: 1px solid var(--theme-border-strong, rgba(255, 113, 133, 0.32));
+  border-radius: var(--theme-control-radius, 4px);
+  color: var(--theme-text, #ffd9df);
+  background: var(--theme-control-hover, rgba(225, 29, 72, 0.12));
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.root .selectResult:hover,
+.root .selectResult:focus-visible,
+.root .selectResult[aria-selected="true"] {
+  border-color: var(--theme-accent-strong, #ff91a4);
+  outline: 0;
+  background: color-mix(in srgb, var(--theme-accent, #e11d48) 28%, transparent);
+}
+
+.root .selectedProfile {
+  color: var(--theme-text, #e8cbd0);
+  font-weight: 700;
 }
 
 .root .avatar,
@@ -205,10 +238,10 @@
   height: 36px;
   place-items: center;
   overflow: hidden;
-  border: 1px solid rgba(255, 113, 133, 0.37);
+  border: 1px solid var(--theme-border-strong, rgba(255, 113, 133, 0.37));
   border-radius: 50%;
-  color: #ffd9df;
-  background: linear-gradient(135deg, #7f102a, #1b0509);
+  color: var(--theme-text, #ffd9df);
+  background: var(--theme-avatar-bg, linear-gradient(135deg, #7f102a, #1b0509));
   object-fit: cover;
 }
 
@@ -240,9 +273,9 @@
   align-items: center;
   gap: 4px;
   padding: 4px 6px;
-  border: 1px solid rgba(255, 113, 133, 0.25);
-  color: #b99198;
-  background: rgba(225, 29, 72, 0.08);
+  border: 1px solid var(--theme-border, rgba(255, 113, 133, 0.25));
+  color: var(--theme-text-muted, #b99198);
+  background: var(--theme-control-hover, rgba(225, 29, 72, 0.08));
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -256,20 +289,20 @@
 }
 
 .root .public {
-  color: #96e8bd;
-  border-color: rgba(104, 229, 179, 0.3);
-  background: rgba(6, 78, 59, 0.18);
+  color: var(--theme-success-text, #96e8bd);
+  border-color: var(--theme-success-border, rgba(104, 229, 179, 0.3));
+  background: var(--theme-success-surface, rgba(6, 78, 59, 0.18));
 }
 
 .root .private {
-  color: #d6adb4;
-  border-color: rgba(255, 113, 133, 0.3);
-  background: rgba(91, 20, 34, 0.24);
+  color: var(--theme-text-muted, #d6adb4);
+  border-color: var(--theme-border, rgba(255, 113, 133, 0.3));
+  background: var(--theme-surface-muted, rgba(91, 20, 34, 0.24));
 }
 
 @media (max-width: 430px) {
   .root .resultWithMeta {
-    grid-template-columns: 36px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .root .resultWithMeta .visibility {
@@ -278,19 +311,19 @@
 }
 
 .root .resultCopy strong {
-  color: #f9e1e4;
+  color: var(--theme-text, #f9e1e4);
   font-size: 12px;
 }
 
 .root .resultCopy small {
-  color: #95727a;
+  color: var(--theme-text-subtle, #95727a);
   font-size: 10px;
 }
 
 .root .empty {
   margin: 0;
   padding: 12px;
-  color: #aa858c;
+  color: var(--theme-text-subtle, #aa858c);
   font-size: 11px;
   line-height: 1.5;
 }
@@ -307,7 +340,7 @@
 .root .skeletonAvatar,
 .root .skeletonLine {
   display: block;
-  background: linear-gradient(90deg, rgba(255, 113, 133, 0.08), rgba(255, 113, 133, 0.18), rgba(255, 113, 133, 0.08));
+  background: var(--theme-skeleton, linear-gradient(90deg, rgba(255, 113, 133, 0.08), rgba(255, 113, 133, 0.18), rgba(255, 113, 133, 0.08)));
   background-size: 200% 100%;
   animation: player-search-shimmer 1.2s ease-in-out infinite;
 }
@@ -344,6 +377,7 @@
 @media (prefers-reduced-motion: reduce) {
   .root .combobox,
   .root .result,
+  .root .selectResult,
   .root button.trailing {
     transition: none;
   }

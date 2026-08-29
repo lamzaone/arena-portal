@@ -1,52 +1,57 @@
-import Link from "next/link";
-
 import type { CaseMessage } from "@/lib/data/portal-repository";
+import type { PlayerIdentityData } from "@/lib/player-identities";
 import type { SteamProfile } from "@/lib/steam/profiles";
 
 import { formatPortalDate } from "@/components/formatters";
-import { ResilientRemoteImage } from "@/components/resilient-remote-image";
+import { PlayerIdentity } from "@/components/player-identity";
 
 type CaseConversationProps = {
   openingBody: string;
   openingAt: string;
   openingAuthorId: string;
   messages: CaseMessage[];
-  steamProfiles: Map<string, SteamProfile>;
+  steamProfiles?: Map<string, SteamProfile>;
   viewerSteamId: string;
+  playerIdentities?: Readonly<Record<string, PlayerIdentityData>>;
 };
 
-function authorName(authorId: string, authorType: "player" | "staff", steamProfiles: Map<string, SteamProfile>, viewerSteamId: string) {
-  if (authorId === viewerSteamId) return steamProfiles.get(authorId)?.name ?? "You";
-  return steamProfiles.get(authorId)?.name ?? (authorType === "staff" ? "Staff member" : "Player");
+function authorName(authorId: string, authorType: "player" | "staff", steamProfiles: Map<string, SteamProfile> | undefined, viewerSteamId: string) {
+  if (authorId === viewerSteamId) return steamProfiles?.get(authorId)?.name ?? "You";
+  return steamProfiles?.get(authorId)?.name ?? (authorType === "staff" ? "Staff member" : "Player");
 }
 
-function avatarInitial(name: string) {
-  return name.trim().slice(0, 1).toUpperCase() || "?";
-}
-
-function isSteamId(value: string) {
-  return /^7656119\d{10}$/.test(value);
-}
-
-function MessageCard({ authorId, authorType, body, createdAt, attachments, steamProfiles, viewerSteamId, opening = false }: {
+function MessageCard({ authorId, authorType, body, createdAt, attachments, steamProfiles, viewerSteamId, playerIdentities, opening = false }: {
   authorId: string;
   authorType: "player" | "staff";
   body: string;
   createdAt: string;
   attachments: CaseMessage["attachments"];
-  steamProfiles: Map<string, SteamProfile>;
+  steamProfiles?: Map<string, SteamProfile>;
   viewerSteamId: string;
+  playerIdentities?: Readonly<Record<string, PlayerIdentityData>>;
   opening?: boolean;
 }) {
-  const profile = steamProfiles.get(authorId);
-  const name = authorName(authorId, authorType, steamProfiles, viewerSteamId);
+  const profile = steamProfiles?.get(authorId);
+  const resolvedPlayer = playerIdentities?.[authorId];
+  const name = resolvedPlayer?.displayName ?? authorName(authorId, authorType, steamProfiles, viewerSteamId);
   const role = authorId === viewerSteamId ? "You" : authorType === "staff" ? "Staff" : "Player";
-
-  const author = <><ResilientRemoteImage src={profile?.avatarFull} alt="" referrerPolicy="no-referrer" fallback={<span aria-hidden="true">{avatarInitial(name)}</span>} /><div><b>{name}</b><small>{opening ? "Original message" : role}</small></div></>;
+  const player = resolvedPlayer ?? {
+    steamId: authorId,
+    displayName: name,
+    avatarUrl: profile?.avatarFull ?? null,
+    presence: profile?.presence ?? "unknown",
+    profileThemeKey: null,
+    identityGroups: [],
+  } satisfies PlayerIdentityData;
 
   return <article className={`case-message case-conversation-message ${authorType}${opening ? " opening" : ""}`}>
     <header className="case-message-header">
-      {isSteamId(authorId) ? <Link className="case-message-author" href={`/players/${authorId}`}>{author}</Link> : <div className="case-message-author">{author}</div>}
+      <PlayerIdentity
+        player={player}
+        variant="compact"
+        className="case-message-author"
+        secondary={opening ? "Original message" : role}
+      />
       <time dateTime={createdAt}>{formatPortalDate(createdAt)}</time>
     </header>
     <p>{body}</p>
@@ -54,10 +59,10 @@ function MessageCard({ authorId, authorType, body, createdAt, attachments, steam
   </article>;
 }
 
-export function CaseConversation({ openingBody, openingAt, openingAuthorId, messages, steamProfiles, viewerSteamId }: CaseConversationProps) {
+export function CaseConversation({ openingBody, openingAt, openingAuthorId, messages, steamProfiles, viewerSteamId, playerIdentities }: CaseConversationProps) {
   return <section className="case-conversation" aria-label="Case conversation">
     <div className="case-conversation-label">Conversation</div>
-    <MessageCard authorId={openingAuthorId} authorType="player" body={openingBody} createdAt={openingAt} attachments={[]} steamProfiles={steamProfiles} viewerSteamId={viewerSteamId} opening />
-    {messages.map((message) => <MessageCard key={message.id} authorId={message.authorId} authorType={message.authorType} body={message.body} createdAt={message.createdAt} attachments={message.attachments} steamProfiles={steamProfiles} viewerSteamId={viewerSteamId} />)}
+    <MessageCard authorId={openingAuthorId} authorType="player" body={openingBody} createdAt={openingAt} attachments={[]} steamProfiles={steamProfiles} viewerSteamId={viewerSteamId} playerIdentities={playerIdentities} opening />
+    {messages.map((message) => <MessageCard key={message.id} authorId={message.authorId} authorType={message.authorType} body={message.body} createdAt={message.createdAt} attachments={message.attachments} steamProfiles={steamProfiles} viewerSteamId={viewerSteamId} playerIdentities={playerIdentities} />)}
   </section>;
 }

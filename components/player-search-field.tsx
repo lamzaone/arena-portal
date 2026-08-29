@@ -1,6 +1,6 @@
 "use client";
 
-import { LoaderCircle, LockKeyhole, Search, UserRound, X } from "lucide-react";
+import { LoaderCircle, LockKeyhole, Search, X } from "lucide-react";
 import {
   type FormEvent,
   type KeyboardEvent,
@@ -10,7 +10,8 @@ import {
   useState,
 } from "react";
 
-import { ResilientRemoteImage } from "@/components/resilient-remote-image";
+import { PlayerIdentity } from "@/components/player-identity";
+import type { PlayerIdentityData } from "@/lib/player-identities";
 import styles from "@/components/player-search-field.module.css";
 
 export const PLAYER_SEARCH_ENDPOINT = "/api/players/search";
@@ -19,6 +20,8 @@ export type PlayerSearchResult = {
   steamId: string;
   displayName: string;
   avatarUrl: string | null;
+  presence: PlayerIdentityData["presence"];
+  profileThemeKey: string | null;
   inventoryVisibility: "public" | "private";
 };
 
@@ -68,6 +71,11 @@ function parsePlayers(value: unknown): PlayerSearchResult[] {
       steamId,
       displayName: text(candidate.displayName) || steamId,
       avatarUrl: text(candidate.avatarUrl) || text(candidate.avatarFull) || null,
+      presence:
+        candidate.presence === "online" || candidate.presence === "offline"
+          ? candidate.presence
+          : "unknown",
+      profileThemeKey: text(candidate.profileThemeKey) || null,
       inventoryVisibility: candidate.inventoryVisibility === "public" ? "public" : "private",
     }];
   });
@@ -92,20 +100,15 @@ function setCompanionField(form: HTMLFormElement | null, name: string | undefine
   control.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-function PlayerAvatar({ player }: { player: PlayerSearchResult }) {
-  return (
-    <ResilientRemoteImage
-      className={styles.avatar}
-      src={player.avatarUrl}
-      alt=""
-      referrerPolicy="no-referrer"
-      fallback={
-        <span className={styles.avatarFallback} aria-hidden="true">
-          {player.displayName.slice(0, 1).toUpperCase() || <UserRound />}
-        </span>
-      }
-    />
-  );
+function playerIdentity(player: PlayerSearchResult): PlayerIdentityData {
+  return {
+    steamId: player.steamId,
+    displayName: player.displayName,
+    avatarUrl: player.avatarUrl,
+    presence: player.presence,
+    profileThemeKey: player.profileThemeKey,
+    identityGroups: [],
+  };
 }
 
 export function PlayerSearchField({
@@ -386,7 +389,15 @@ export function PlayerSearchField({
       <input type="hidden" name={name} value={submittedValue} readOnly />
       {selectionName ? <input type="hidden" name={selectionName} value={selectedSteamId} readOnly /> : null}
       <p className={`${styles.meta}${validationMessage ? ` ${styles.error}` : ""}`} id={validationMessage ? errorId : undefined}>
-        {validationMessage ? validationMessage : selected ? <><strong>{selected.displayName}</strong> · {selected.steamId}</> : helpText ?? defaultHelp}
+        {validationMessage ? validationMessage : selected ? (
+          <PlayerIdentity
+            player={playerIdentity(selected)}
+            variant="inline"
+            className={styles.selectedProfile}
+            showSteamId
+            hoverCard={false}
+          />
+        ) : helpText ?? defaultHelp}
       </p>
       <span className="sr-only" id={statusId} role="status" aria-live="polite">
         {selected
@@ -407,29 +418,36 @@ export function PlayerSearchField({
               <span className={styles.skeletonCopy}><i className={styles.skeletonLine} /><i className={styles.skeletonLine} /></span>
             </span>
           )) : searchState === "ready" && results.length ? results.map((player, index) => (
-            <button
+            <div
               className={`${styles.result}${showInventoryVisibility ? ` ${styles.resultWithMeta}` : ""}`}
-              id={`${inputId}-option-${index}`}
               key={player.steamId}
-              type="button"
-              role="option"
-              aria-selected={activeIndex === index}
+              role="presentation"
               data-active={activeIndex === index ? "true" : "false"}
               onMouseEnter={() => setActiveIndex(index)}
-              onFocus={() => setActiveIndex(index)}
-              onClick={() => choosePlayer(player)}
+              onFocusCapture={() => setActiveIndex(index)}
             >
-              <PlayerAvatar player={player} />
-              <span className={styles.resultCopy}>
-                <strong>{player.displayName}</strong>
-                <small>{player.steamId}</small>
-              </span>
+              <PlayerIdentity
+                player={playerIdentity(player)}
+                variant="compact"
+                className={styles.resultProfile}
+              />
               {showInventoryVisibility ? (
                 <span className={`${styles.visibility} ${player.inventoryVisibility === "public" ? styles.public : styles.private}`}>
                   {player.inventoryVisibility === "public" ? "Public" : <><LockKeyhole aria-hidden="true" /> Private</>}
                 </span>
               ) : null}
-            </button>
+              <button
+                className={styles.selectResult}
+                id={`${inputId}-option-${index}`}
+                type="button"
+                role="option"
+                aria-label={`Select ${player.displayName}`}
+                aria-selected={activeIndex === index}
+                onClick={() => choosePlayer(player)}
+              >
+                Select
+              </button>
+            </div>
           )) : (
             <p className={styles.empty}>
               {searchState === "error"
