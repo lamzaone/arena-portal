@@ -169,11 +169,22 @@ a.identity:focus-visible {
   content: "";
 }
 
-.frame:hover .hoverCard,
+.frame:has(.avatar:hover, .avatarFallback:hover, .name:hover) .hoverCard,
+.hoverCard:hover,
 .frame:focus-within .hoverCard {
   visibility: visible;
   opacity: 1;
   transform: translateY(0);
+  transition-delay: 0s;
+}
+
+/* The grace period above lets the pointer cross into the floating card. When
+   another player identity is hovered, dismiss the previous card immediately
+   so previews never overlap. */
+:global(body:has(.profile-object:hover) .profile-object:not(:hover) .player-identity-hover-card) {
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(-4px);
   transition-delay: 0s;
 }
 
