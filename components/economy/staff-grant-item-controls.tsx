@@ -912,12 +912,13 @@ export function StaffGrantItemControls({
                               Display name
                               <input
                                 value={line.displayName}
-                                onChange={(event) =>
+                                onChange={(event) => {
+                                  const value = event.currentTarget.value;
                                   updateLine(line.key, (current) => ({
                                     ...current,
-                                    displayName: event.currentTarget.value,
-                                  }))
-                                }
+                                    displayName: value,
+                                  }));
+                                }}
                                 maxLength={180}
                               />
                             </label>
@@ -925,12 +926,13 @@ export function StaffGrantItemControls({
                               Definition index
                               <input
                                 value={line.definitionIndex}
-                                onChange={(event) =>
+                                onChange={(event) => {
+                                  const value = event.currentTarget.value;
                                   updateLine(line.key, (current) => ({
                                     ...current,
-                                    definitionIndex: event.currentTarget.value,
-                                  }))
-                                }
+                                    definitionIndex: value,
+                                  }));
+                                }}
                                 inputMode="numeric"
                               />
                             </label>
@@ -938,12 +940,13 @@ export function StaffGrantItemControls({
                               Paintkit
                               <input
                                 value={line.paintkit}
-                                onChange={(event) =>
+                                onChange={(event) => {
+                                  const value = event.currentTarget.value;
                                   updateLine(line.key, (current) => ({
                                     ...current,
-                                    paintkit: event.currentTarget.value,
-                                  }))
-                                }
+                                    paintkit: value,
+                                  }));
+                                }}
                                 inputMode="numeric"
                               />
                             </label>
@@ -951,12 +954,13 @@ export function StaffGrantItemControls({
                               Rarity rank
                               <select
                                 value={line.rarityRank}
-                                onChange={(event) =>
+                                onChange={(event) => {
+                                  const value = Number(event.currentTarget.value);
                                   updateLine(line.key, (current) => ({
                                     ...current,
-                                    rarityRank: Number(event.currentTarget.value),
-                                  }))
-                                }
+                                    rarityRank: value,
+                                  }));
+                                }}
                               >
                                 {ECONOMY_RARITIES.map((rarity) => (
                                   <option key={rarity.rank} value={rarity.rank}>
@@ -983,15 +987,14 @@ export function StaffGrantItemControls({
                               type="checkbox"
                               checked={line.stattrak}
                               disabled={!stattrakSupported}
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                const checked = event.currentTarget.checked;
                                 updateLine(line.key, (current) => ({
                                   ...current,
-                                  stattrak: event.currentTarget.checked,
-                                  souvenir: event.currentTarget.checked
-                                    ? false
-                                    : current.souvenir,
-                                }))
-                              }
+                                  stattrak: checked,
+                                  souvenir: checked ? false : current.souvenir,
+                                }));
+                              }}
                             />
                             <Crosshair aria-hidden="true" />
                             <span>
@@ -1011,18 +1014,15 @@ export function StaffGrantItemControls({
                               type="checkbox"
                               checked={line.souvenir}
                               disabled={!souvenirSupported}
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                const checked = event.currentTarget.checked;
                                 updateLine(line.key, (current) => ({
                                   ...current,
-                                  souvenir: event.currentTarget.checked,
-                                  stattrak: event.currentTarget.checked
-                                    ? false
-                                    : current.stattrak,
-                                  tradable: event.currentTarget.checked
-                                    ? false
-                                    : current.tradable,
-                                }))
-                              }
+                                  souvenir: checked,
+                                  stattrak: checked ? false : current.stattrak,
+                                  tradable: checked ? false : current.tradable,
+                                }));
+                              }}
                             />
                             <Sparkles aria-hidden="true" />
                             <span>
@@ -1039,12 +1039,13 @@ export function StaffGrantItemControls({
                               type="checkbox"
                               checked={!line.tradable}
                               disabled={line.souvenir}
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                const checked = event.currentTarget.checked;
                                 updateLine(line.key, (current) => ({
                                   ...current,
-                                  tradable: !event.currentTarget.checked,
-                                }))
-                              }
+                                  tradable: !checked,
+                                }));
+                              }}
                             />
                             <ShieldOff aria-hidden="true" />
                             <span>
@@ -1060,12 +1061,13 @@ export function StaffGrantItemControls({
                               <input
                                 type="number"
                                 value={line.quantity}
-                                onChange={(event) =>
+                                onChange={(event) => {
+                                  const value = Number(event.currentTarget.value);
                                   updateLine(line.key, (current) => ({
                                     ...current,
-                                    quantity: Number(event.currentTarget.value),
-                                  }))
-                                }
+                                    quantity: value,
+                                  }));
+                                }}
                                 min={1}
                                 max={100}
                                 required
@@ -1077,12 +1079,13 @@ export function StaffGrantItemControls({
                             Float
                             <input
                               value={line.floatValue}
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                const value = event.currentTarget.value;
                                 updateLine(line.key, (current) => ({
                                   ...current,
-                                  floatValue: event.currentTarget.value,
-                                }))
-                              }
+                                  floatValue: value,
+                                }));
+                              }}
                               inputMode="decimal"
                               min="0"
                               max="1"
@@ -1097,12 +1100,13 @@ export function StaffGrantItemControls({
                             Seed
                             <input
                               value={line.seed}
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                const value = event.currentTarget.value;
                                 updateLine(line.key, (current) => ({
                                   ...current,
-                                  seed: event.currentTarget.value,
-                                }))
-                              }
+                                  seed: value,
+                                }));
+                              }}
                               inputMode="numeric"
                               min="0"
                               max="1000"
@@ -1116,12 +1120,13 @@ export function StaffGrantItemControls({
                             StatTrak count
                             <input
                               value={line.stattrakCount}
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                const value = event.currentTarget.value;
                                 updateLine(line.key, (current) => ({
                                   ...current,
-                                  stattrakCount: event.currentTarget.value,
-                                }))
-                              }
+                                  stattrakCount: value,
+                                }));
+                              }}
                               inputMode="numeric"
                               min="0"
                               disabled={!line.stattrak}
@@ -1131,12 +1136,13 @@ export function StaffGrantItemControls({
                             Name tag
                             <input
                               value={line.nametag}
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                const value = event.currentTarget.value;
                                 updateLine(line.key, (current) => ({
                                   ...current,
-                                  nametag: event.currentTarget.value,
-                                }))
-                              }
+                                  nametag: value,
+                                }));
+                              }}
                               maxLength={128}
                               disabled={!skinLike}
                             />
@@ -1152,12 +1158,13 @@ export function StaffGrantItemControls({
                               Custom item metadata JSON
                               <textarea
                                 value={line.metadata}
-                                onChange={(event) =>
+                                onChange={(event) => {
+                                  const value = event.currentTarget.value;
                                   updateLine(line.key, (current) => ({
                                     ...current,
-                                    metadata: event.currentTarget.value,
-                                  }))
-                                }
+                                    metadata: value,
+                                  }));
+                                }}
                                 placeholder='{"supportsNametag": true, "stickerSlots": 5}'
                               />
                             </label>
@@ -1166,12 +1173,13 @@ export function StaffGrantItemControls({
                             Instance attributes JSON
                             <textarea
                               value={line.attributes}
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                const value = event.currentTarget.value;
                                 updateLine(line.key, (current) => ({
                                   ...current,
-                                  attributes: event.currentTarget.value,
-                                }))
-                              }
+                                  attributes: value,
+                                }));
+                              }}
                               placeholder='{"modelPath": "..."}'
                             />
                           </label>
@@ -1183,12 +1191,13 @@ export function StaffGrantItemControls({
                             </small>
                             <textarea
                               value={line.initialStickers}
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                const value = event.currentTarget.value;
                                 updateLine(line.key, (current) => ({
                                   ...current,
-                                  initialStickers: event.currentTarget.value,
-                                }))
-                              }
+                                  initialStickers: value,
+                                }));
+                              }}
                               placeholder='[{"slot":0,"catalogueId":123}]'
                               disabled={line.itemType !== "skin"}
                             />
