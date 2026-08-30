@@ -35,9 +35,18 @@ function redirect(
   request: Request,
   key: "notice" | "error",
   value: string,
+  groupId?: string,
+  tab = "connected",
 ) {
   const url = new URL("/admin/groups", request.url);
   url.searchParams.set(key, value);
+  if (["connected", "create", "membership", "tags", "permissions", "awards"].includes(tab)) {
+    url.searchParams.set("tab", tab);
+  }
+  if (groupId && /^\d+$/.test(groupId)) {
+    url.searchParams.set("group", groupId);
+    if (tab === "connected") url.hash = `group-${groupId}`;
+  }
   return NextResponse.redirect(url, 303);
 }
 
@@ -55,18 +64,52 @@ function bool(formData: FormData, key: string) {
   );
 }
 
+function returnTab(request: Request, formData: FormData) {
+  const allowed = new Set([
+    "connected",
+    "create",
+    "membership",
+    "tags",
+    "permissions",
+    "awards",
+  ]);
+  const submitted = text(formData, "returnTab");
+  if (allowed.has(submitted)) return submitted;
+  const referer = request.headers.get("referer");
+  if (referer) {
+    try {
+      const tab = new URL(referer).searchParams.get("tab") ?? "";
+      if (allowed.has(tab)) return tab;
+    } catch {
+      // A malformed optional Referer does not affect mutation validation.
+    }
+  }
+  const action = text(formData, "action");
+  if (action === "group-create") return "create";
+  if (action.startsWith("membership-")) return "membership";
+  if (action === "tag-create" || action === "tag-update") return "tags";
+  if (action === "privilege-create" || action === "privilege-update") {
+    return "permissions";
+  }
+  if (action.startsWith("player-")) return "awards";
+  return "connected";
+}
+
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session) {
     return NextResponse.redirect(new URL("/api/auth/steam", request.url), 303);
   }
   const formData = await request.formData();
+  const redirectTab = returnTab(request, formData);
+  const redirectResult = (key: "notice" | "error", value: string) =>
+    redirect(request, key, value, text(formData, "groupId"), redirectTab);
   if (!verifyAdminActionToken(session, text(formData, "csrf"))) {
-    return redirect(request, "error", "verification");
+    return redirectResult("error", "verification");
   }
   const access = await getAdminAccess(session.steamId);
   if (!access.isAdmin || !access.canManageGroups || !access.isFounder) {
-    return redirect(request, "error", "founder-required");
+    return redirectResult("error", "founder-required");
   }
   const actor: IdentityFounderActor = {
     steamId: session.steamId,
@@ -79,10 +122,10 @@ export async function POST(request: Request) {
     switch (action) {
       case "external-catalogue-sync":
         await syncExternalIdentityCatalogue({ actor, requestKey });
-        return redirect(request, "notice", "catalogue-synced");
+        return redirectResult("notice", "catalogue-synced");
 
       case "group-create":
-        await createIdentityGroup({
+        const createdGroup = await createIdentityGroup({
           actor,
           requestKey,
           key: text(formData, "groupKey"),
@@ -94,7 +137,13 @@ export async function POST(request: Request) {
           badgeSoftColor: text(formData, "badgeSoftColor"),
           profilePriority: number(formData, "profilePriority"),
         });
-        return redirect(request, "notice", "group-created");
+        return redirect(
+          request,
+          "notice",
+          "group-created",
+          String(createdGroup.groupId),
+          "connected",
+        );
 
       case "group-update":
         await updateIdentityGroup({
@@ -110,7 +159,7 @@ export async function POST(request: Request) {
           profilePriority: number(formData, "profilePriority"),
           enabled: bool(formData, "enabled"),
         });
-        return redirect(request, "notice", "group-updated");
+        return redirectResult("notice", "group-updated");
 
       case "group-archive":
         await archiveIdentityGroup({
@@ -118,7 +167,7 @@ export async function POST(request: Request) {
           requestKey,
           groupId: number(formData, "groupId"),
         });
-        return redirect(request, "notice", "group-archived");
+        return redirectResult("notice", "group-archived");
 
       case "membership-assign":
         await assignIdentityGroup({
@@ -129,7 +178,7 @@ export async function POST(request: Request) {
           durationMinutes: number(formData, "durationMinutes"),
           reason: text(formData, "reason"),
         });
-        return redirect(request, "notice", "membership-assigned");
+        return redirectResult("notice", "membership-assigned");
 
       case "membership-remove":
         await removeIdentityGroupMembership({
@@ -138,7 +187,7 @@ export async function POST(request: Request) {
           groupId: number(formData, "groupId"),
           steamId: text(formData, "steamId"),
         });
-        return redirect(request, "notice", "membership-removed");
+        return redirectResult("notice", "membership-removed");
 
       case "tag-create":
         await createIdentityChatTag({
@@ -150,7 +199,7 @@ export async function POST(request: Request) {
           nameColorToken: text(formData, "nameColorToken"),
           messageColorToken: text(formData, "messageColorToken"),
         });
-        return redirect(request, "notice", "tag-created");
+        return redirectResult("notice", "tag-created");
 
       case "tag-update":
         await updateIdentityChatTag({
@@ -163,7 +212,7 @@ export async function POST(request: Request) {
           messageColorToken: text(formData, "messageColorToken"),
           enabled: bool(formData, "enabled"),
         });
-        return redirect(request, "notice", "tag-updated");
+        return redirectResult("notice", "tag-updated");
 
       case "group-tag-attach":
         await attachIdentityGroupTag({
@@ -173,7 +222,7 @@ export async function POST(request: Request) {
           tagId: number(formData, "tagId"),
           sortOrder: number(formData, "sortOrder"),
         });
-        return redirect(request, "notice", "group-tag-attached");
+        return redirectResult("notice", "group-tag-attached");
 
       case "group-tag-detach":
         await detachIdentityGroupTag({
@@ -182,7 +231,7 @@ export async function POST(request: Request) {
           groupId: number(formData, "groupId"),
           tagId: number(formData, "tagId"),
         });
-        return redirect(request, "notice", "group-tag-detached");
+        return redirectResult("notice", "group-tag-detached");
 
       case "player-tag-grant":
         await grantIdentityPlayerTag({
@@ -193,7 +242,7 @@ export async function POST(request: Request) {
           durationMinutes: number(formData, "durationMinutes"),
           reason: text(formData, "reason"),
         });
-        return redirect(request, "notice", "player-tag-granted");
+        return redirectResult("notice", "player-tag-granted");
 
       case "player-tag-revoke":
         await revokeIdentityPlayerTag({
@@ -202,7 +251,7 @@ export async function POST(request: Request) {
           steamId: text(formData, "steamId"),
           tagId: number(formData, "tagId"),
         });
-        return redirect(request, "notice", "player-tag-revoked");
+        return redirectResult("notice", "player-tag-revoked");
 
       case "privilege-create":
         await createIdentityPrivilege({
@@ -214,7 +263,7 @@ export async function POST(request: Request) {
           description: text(formData, "description"),
           sensitive: bool(formData, "sensitive"),
         });
-        return redirect(request, "notice", "privilege-created");
+        return redirectResult("notice", "privilege-created");
 
       case "privilege-update":
         await updateIdentityPrivilege({
@@ -226,7 +275,7 @@ export async function POST(request: Request) {
           sensitive: bool(formData, "sensitive"),
           enabled: bool(formData, "enabled"),
         });
-        return redirect(request, "notice", "privilege-updated");
+        return redirectResult("notice", "privilege-updated");
 
       case "group-privilege-attach":
         await attachIdentityGroupPrivilege({
@@ -235,7 +284,7 @@ export async function POST(request: Request) {
           groupId: number(formData, "groupId"),
           privilegeId: number(formData, "privilegeId"),
         });
-        return redirect(request, "notice", "group-privilege-attached");
+        return redirectResult("notice", "group-privilege-attached");
 
       case "group-privilege-detach":
         await detachIdentityGroupPrivilege({
@@ -244,7 +293,7 @@ export async function POST(request: Request) {
           groupId: number(formData, "groupId"),
           privilegeId: number(formData, "privilegeId"),
         });
-        return redirect(request, "notice", "group-privilege-detached");
+        return redirectResult("notice", "group-privilege-detached");
 
       case "player-privilege-grant":
         await grantIdentityPlayerPrivilege({
@@ -255,7 +304,7 @@ export async function POST(request: Request) {
           durationMinutes: number(formData, "durationMinutes"),
           reason: text(formData, "reason"),
         });
-        return redirect(request, "notice", "player-privilege-granted");
+        return redirectResult("notice", "player-privilege-granted");
 
       case "player-privilege-revoke":
         await revokeIdentityPlayerPrivilege({
@@ -264,7 +313,7 @@ export async function POST(request: Request) {
           steamId: text(formData, "steamId"),
           privilegeId: number(formData, "privilegeId"),
         });
-        return redirect(request, "notice", "player-privilege-revoked");
+        return redirectResult("notice", "player-privilege-revoked");
 
       case "reward-add":
         const rewardGroupId = number(formData, "groupId");
@@ -288,7 +337,7 @@ export async function POST(request: Request) {
           tradePolicy: text(formData, "tradePolicy") as IdentityTradePolicy,
           trustedExternalMemberSteamIds,
         });
-        return redirect(request, "notice", "reward-added");
+        return redirectResult("notice", "reward-added");
 
       case "reward-retire":
         await retireIdentityGroupReward({
@@ -296,15 +345,15 @@ export async function POST(request: Request) {
           requestKey,
           rewardId: number(formData, "rewardId"),
         });
-        return redirect(request, "notice", "reward-retired");
+        return redirectResult("notice", "reward-retired");
 
       default:
-        return redirect(request, "error", "action");
+        return redirectResult("error", "action");
     }
   } catch (error) {
     if (error instanceof IdentityGroupError) {
-      return redirect(request, "error", error.code);
+      return redirectResult("error", error.code);
     }
-    return redirect(request, "error", "database");
+    return redirectResult("error", "database");
   }
 }

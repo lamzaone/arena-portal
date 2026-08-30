@@ -8,6 +8,7 @@ import {
   LockKeyhole,
   RefreshCw,
   ShieldCheck,
+  Sparkles,
   Tags,
   UsersRound,
 } from "lucide-react";
@@ -33,20 +34,57 @@ import {
   type IdentityPrivilege,
 } from "@/lib/data/identity-groups";
 import {
+  gameStorageConfigured,
+  getExternalIdentityGroupMembershipIndex,
+} from "@/lib/data/portal-repository";
+import {
   resolvePlayerIdentities,
   type PlayerIdentityData,
 } from "@/lib/player-identities";
 
 import {
+  ConfirmSubmitButton,
+  GroupWorkspace,
   PermissionPicker,
   SearchableCatalogue,
+  type GroupWorkspaceEntry,
   type PermissionCatalogueOption,
 } from "./groups-controls";
 import styles from "./groups-page.module.css";
 
 type GroupsPageProps = {
-  searchParams: Promise<{ notice?: string; error?: string }>;
+  searchParams: Promise<{
+    notice?: string;
+    error?: string;
+    group?: string;
+    tab?: string;
+  }>;
 };
+
+const groupAdminTabs = [
+  { id: "connected", label: "Connected groups", icon: Database },
+  { id: "create", label: "Create group", icon: ShieldCheck },
+  { id: "membership", label: "Membership", icon: UsersRound },
+  { id: "tags", label: "Chat tags", icon: Tags },
+  { id: "permissions", label: "Permissions", icon: KeyRound },
+  { id: "awards", label: "Direct awards", icon: Gift },
+] as const;
+
+type GroupAdminTab = (typeof groupAdminTabs)[number]["id"];
+
+function groupAdminTab(value: string | undefined): GroupAdminTab {
+  return groupAdminTabs.some((tab) => tab.id === value)
+    ? (value as GroupAdminTab)
+    : "connected";
+}
+
+function groupTabHref(tab: GroupAdminTab, selectedGroupId: number | null) {
+  const search = new URLSearchParams({ tab });
+  if (tab === "connected" && selectedGroupId !== null) {
+    search.set("group", String(selectedGroupId));
+  }
+  return `/admin/groups?${search.toString()}`;
+}
 
 const chatColors = [
   "[default]",
@@ -167,6 +205,21 @@ function privilegeSourceSummary(privilege: IdentityPrivilege) {
     : source.sourceKind).join(" · ");
 }
 
+function groupWorkspaceEntries(groups: IdentityGroup[]): GroupWorkspaceEntry[] {
+  return groups.map((group) => ({
+    id: group.id,
+    key: group.key,
+    displayName: group.displayName,
+    source: sourceLabel(group),
+    enabled: group.enabled,
+    accent: group.badgeColor,
+    memberCount: group.memberCount,
+    tagCount: group.tags.length,
+    privilegeCount: group.privileges.length,
+    rewardCount: group.rewards.filter((reward) => reward.enabled).length,
+  }));
+}
+
 function GroupCard({
   group,
   snapshot,
@@ -183,21 +236,30 @@ function GroupCard({
   const sourceDescription = group.sourceType === "custom"
     ? `${group.memberCount} portal member${group.memberCount === 1 ? "" : "s"}`
     : `External key · ${group.externalKey ?? "Unlinked"}`;
+  const activeRewards = group.rewards.filter((reward) => reward.enabled);
   return (
-    <article className="staff-group-card" data-enabled={group.enabled ? "true" : "false"}>
-      <div>
-        <div className={styles.cardTitle}>
-          <h3>
-            <IdentityGroupBadge group={group} />
-          </h3>
-          <span className={styles.sourceBadge} data-source={group.sourceType}>{sourceLabel(group)}</span>
-          <span className={styles.statusBadge} data-enabled={group.enabled ? "true" : "false"}>
-            {group.enabled ? "Enabled" : "Disabled"}
-          </span>
+    <article id={`group-${group.id}`} className="staff-group-card" data-enabled={group.enabled ? "true" : "false"}>
+      <header className={styles.groupCardHeader}>
+        <div className={styles.groupCardIdentity}>
+          <div className={styles.cardTitle}>
+            <h3>
+              <IdentityGroupBadge group={group} />
+            </h3>
+            <span className={styles.sourceBadge} data-source={group.sourceType}>{sourceLabel(group)}</span>
+            <span className={styles.statusBadge} data-enabled={group.enabled ? "true" : "false"}>
+              {group.enabled ? "Enabled" : "Disabled"}
+            </span>
+          </div>
+          <p>{group.description || sourceDescription}</p>
           <code className={styles.groupKey}>{group.key}</code>
         </div>
-        <span>{sourceDescription}</span>
-      </div>
+        <dl className={styles.groupCardStats} aria-label={`${group.displayName} relationship totals`}>
+          <div><dt>Tags</dt><dd>{group.tags.length}</dd></div>
+          <div><dt>Privileges</dt><dd>{group.privileges.length}</dd></div>
+          <div><dt>Rewards</dt><dd>{activeRewards.length}</dd></div>
+          <div><dt>Members</dt><dd>{group.memberCount}</dd></div>
+        </dl>
+      </header>
 
       {externalDefinition ? (
         <section className={styles.externalDefinition} aria-labelledby={`group-${group.id}-source-title`}>
@@ -238,152 +300,251 @@ function GroupCard({
         </p>
       ) : null}
 
-      <form className="staff-management-form" action="/api/admin/groups" method="post" aria-label={`Edit ${group.displayName} definition`}>
+      <form className={`staff-management-form ${styles.groupPresentationForm}`} action="/api/admin/groups" method="post" aria-label={`Edit ${group.displayName} presentation`}>
         <MutationFields csrf={csrf} />
         <input type="hidden" name="groupId" value={group.id} />
-        <label>
-          Display name
-          <input name="displayName" defaultValue={group.displayName} maxLength={100} required />
-        </label>
-        <label>
-          Description
-          <input name="description" defaultValue={group.description ?? ""} maxLength={255} />
-        </label>
-        <label>
-          Badge label
-          <input name="badgeLabel" defaultValue={group.badgeLabel} maxLength={32} required />
-        </label>
-        <label>
-          Badge icon
-          <select name="badgeIconKey" defaultValue={group.badgeIconKey}>
-            {identityGroupBadgeIconOptions.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Accent
-          <input name="badgeColor" type="color" defaultValue={group.badgeColor} required />
-        </label>
-        <label>
-          Badge background
-          <input name="badgeSoftColor" type="color" defaultValue={group.badgeSoftColor} required />
-        </label>
-        <label>
-          Profile priority
-          <input name="profilePriority" type="number" min="-32768" max="32767" defaultValue={group.profilePriority} required />
-        </label>
-        <label>
-          Status
-          <select name="enabled" defaultValue={group.enabled ? "true" : "false"}>
-            <option value="true">Enabled</option>
-            <option value="false">Disabled</option>
-          </select>
-        </label>
-        <button className="button button-primary" name="action" value="group-update" type="submit">
-          Save group
-        </button>
-        {group.sourceType === "custom" ? (
-          <button className="staff-danger-button" name="action" value="group-archive" type="submit">
-            Archive
+        <div className={styles.presentationHeading}>
+          <div>
+            <span>{group.sourceType === "custom" ? "Group presentation" : "Portal-managed presentation"}</span>
+            <strong>Player-facing identity</strong>
+          </div>
+          <p>{group.sourceType === "custom"
+            ? "Edit how this custom group is identified throughout ARENA."
+            : `These display settings do not change the read-only ${sourceLabel(group)} rank, permissions, capabilities, or membership.`}</p>
+        </div>
+        <fieldset className={styles.formSection}>
+          <legend>Identity</legend>
+          <p>Human-readable details shown across staff tools and player-facing group surfaces.</p>
+          <div className={styles.formGrid}>
+            <label>
+              Display name
+              <input name="displayName" defaultValue={group.displayName} maxLength={100} required />
+            </label>
+            <label>
+              Description
+              <input name="description" defaultValue={group.description ?? ""} maxLength={255} />
+            </label>
+          </div>
+        </fieldset>
+        <fieldset className={styles.formSection}>
+          <legend>Badge presentation</legend>
+          <p>Controls the reusable badge shown on profiles, tables, and compact player cards.</p>
+          <div className={`${styles.formGrid} ${styles.badgeFormGrid}`}>
+            <label>
+              Badge label
+              <input name="badgeLabel" defaultValue={group.badgeLabel} maxLength={32} required />
+            </label>
+            <label>
+              Badge icon
+              <select name="badgeIconKey" defaultValue={group.badgeIconKey}>
+                {identityGroupBadgeIconOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className={styles.colorField}>
+              Accent
+              <input name="badgeColor" type="color" defaultValue={group.badgeColor} required />
+            </label>
+            <label className={styles.colorField}>
+              Badge background
+              <input name="badgeSoftColor" type="color" defaultValue={group.badgeSoftColor} required />
+            </label>
+          </div>
+        </fieldset>
+        <fieldset className={styles.formSection}>
+          <legend>Visibility &amp; priority</legend>
+          <p>Priority resolves which group leads when a player belongs to several identities.</p>
+          <div className={styles.formGrid}>
+            <label>
+              Profile priority
+              <input name="profilePriority" type="number" min="-32768" max="32767" defaultValue={group.profilePriority} required />
+            </label>
+            <label>
+              Status
+              <select name="enabled" defaultValue={group.enabled ? "true" : "false"}>
+                <option value="true">Enabled</option>
+                <option value="false">Disabled</option>
+              </select>
+              <small>Disabling revokes active account-bound rewards until the group is enabled again.</small>
+            </label>
+          </div>
+        </fieldset>
+        <div className={styles.formActions}>
+          <button className="button button-primary" name="action" value="group-update" type="submit">
+            Save presentation
           </button>
-        ) : null}
+          {group.sourceType === "custom" ? (
+            <ConfirmSubmitButton
+              className="staff-danger-button"
+              name="action"
+              value="group-archive"
+              confirmation={`Archive ${group.displayName}? All active memberships will be revoked and account-bound group rewards removed from player inventories.`}
+            >
+              Archive group
+            </ConfirmSubmitButton>
+          ) : null}
+        </div>
       </form>
 
-      <details className={styles.groupDetails}>
-        <summary>Tags, additional privileges, rewards{group.sourceType === "custom" ? ", and members" : ""}</summary>
-        <div className="staff-group-list">
-          <form className="staff-management-form" action="/api/admin/groups" method="post">
-            <MutationFields csrf={csrf} />
-            <input type="hidden" name="groupId" value={group.id} />
-            <label>
-              Chat tag
-              <select name="tagId" required defaultValue="">
-                <option value="" disabled>Choose a tag</option>
-                {snapshot.tags.filter((tag) => tag.enabled).map((tag) => <option key={tag.id} value={tag.id}>{tag.text}</option>)}
-              </select>
-            </label>
-            <label>
-              Order
-              <input name="sortOrder" type="number" min="0" max="65535" defaultValue="0" required />
-            </label>
-            <button className="staff-unban-button" name="action" value="group-tag-attach" type="submit">Attach tag</button>
-            <button className="staff-danger-button" name="action" value="group-tag-detach" type="submit">Detach tag</button>
-          </form>
-          <p>{group.tags.length ? group.tags.map((tag) => tag.text).join(" · ") : "No group tag. Chat remains untagged."}</p>
+      <details className={styles.groupDetails} open>
+        <summary>
+          <span>{group.sourceType === "custom" ? "Group access, rewards & members" : "Portal-managed overrides"}</span>
+          <small>{group.tags.length} tags · {group.privileges.length} privileges · {activeRewards.length} rewards</small>
+        </summary>
+        <div className={styles.managementGrid}>
+          <section className={styles.managementSection} aria-labelledby={`group-${group.id}-tags-title`}>
+            <div className={styles.managementHeading}>
+              <span className={styles.managementIcon}><Tags aria-hidden="true" /></span>
+              <div><h4 id={`group-${group.id}-tags-title`}>Chat presentation</h4><p>Attach a reusable GlobalChatTags definition.</p></div>
+              <strong>{group.tags.length}</strong>
+            </div>
+            <div className={styles.managementBody}>
+              <form className={`staff-management-form ${styles.compactManagementForm}`} action="/api/admin/groups" method="post">
+                <MutationFields csrf={csrf} />
+                <input type="hidden" name="groupId" value={group.id} />
+                <label>
+                  Chat tag
+                  <select name="tagId" required defaultValue="">
+                    <option value="" disabled>Choose a tag</option>
+                    {snapshot.tags.filter((tag) => tag.enabled).map((tag) => <option key={tag.id} value={tag.id}>{tag.text}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Display order
+                  <input name="sortOrder" type="number" min="0" max="65535" defaultValue="0" required />
+                </label>
+                <div className={styles.inlineActions}>
+                  <button className="staff-unban-button" name="action" value="group-tag-attach" type="submit">Attach</button>
+                  <button className="staff-danger-button" name="action" value="group-tag-detach" type="submit">Detach</button>
+                </div>
+              </form>
+              <p className={styles.relationshipSummary}>{group.tags.length ? group.tags.map((tag) => tag.text).join(" · ") : "No chat tag attached."}</p>
+            </div>
+          </section>
 
-          <form className={`staff-management-form ${styles.relationshipForm}`} action="/api/admin/groups" method="post">
-            <MutationFields csrf={csrf} action="group-privilege-attach" />
-            <input type="hidden" name="groupId" value={group.id} />
-            <PermissionPicker
-              id={`group-${group.id}-permission-search`}
-              label="Additional privilege"
-              permissions={availablePermissions}
-              required
-            />
-            <button className="staff-unban-button" type="submit" disabled={!availablePermissions.length}>Grant privilege</button>
-          </form>
-          {group.privileges.length ? (
-            <div className={styles.relationshipList} aria-label={`${group.displayName} additional privileges`}>
-              {group.privileges.map((privilege) => (
-                <form className={styles.relationshipRow} action="/api/admin/groups" method="post" key={privilege.id}>
-                  <MutationFields csrf={csrf} action="group-privilege-detach" />
+          <section className={styles.managementSection} aria-labelledby={`group-${group.id}-access-title`}>
+            <div className={styles.managementHeading}>
+              <span className={styles.managementIcon}><KeyRound aria-hidden="true" /></span>
+              <div><h4 id={`group-${group.id}-access-title`}>Additional access</h4><p>Portal-managed grants added on top of the source baseline.</p></div>
+              <strong>{group.privileges.length}</strong>
+            </div>
+            <div className={styles.managementBody}>
+              <form className={`staff-management-form ${styles.compactManagementForm}`} action="/api/admin/groups" method="post">
+                <MutationFields csrf={csrf} action="group-privilege-attach" />
+                <input type="hidden" name="groupId" value={group.id} />
+                <PermissionPicker
+                  id={`group-${group.id}-permission-search`}
+                  label="Additional privilege"
+                  permissions={availablePermissions}
+                  required
+                />
+                <button className="staff-unban-button" type="submit" disabled={!availablePermissions.length}>Grant privilege</button>
+              </form>
+              {group.privileges.length ? (
+                <div className={styles.relationshipList} aria-label={`${group.displayName} additional privileges`}>
+                  {group.privileges.map((privilege) => (
+                    <form className={styles.relationshipRow} action="/api/admin/groups" method="post" key={privilege.id}>
+                      <MutationFields csrf={csrf} action="group-privilege-detach" />
+                      <input type="hidden" name="groupId" value={group.id} />
+                      <input type="hidden" name="privilegeId" value={privilege.id} />
+                      <span><strong>{privilege.displayName}</strong><code>{privilege.key}</code></span>
+                      <span className={styles.scopeBadge} data-scope={privilege.scope}>{privilege.scope}</span>
+                      <button className="staff-danger-button" type="submit">Remove</button>
+                    </form>
+                  ))}
+                </div>
+              ) : <p className={styles.relationshipSummary}>No additional portal-managed privileges.</p>}
+            </div>
+          </section>
+
+          <section className={styles.managementSection} aria-labelledby={`group-${group.id}-rewards-title`}>
+            <div className={styles.managementHeading}>
+              <span className={styles.managementIcon}><Gift aria-hidden="true" /></span>
+              <div><h4 id={`group-${group.id}-rewards-title`}>Catalogue rewards</h4><p>Items delivered while this group membership is active.</p></div>
+              <strong>{activeRewards.length}</strong>
+            </div>
+            <div className={styles.managementBody}>
+              <form className={`staff-management-form ${styles.compactManagementForm}`} action="/api/admin/groups" method="post">
+                <MutationFields csrf={csrf} action="reward-add" />
+                <input type="hidden" name="groupId" value={group.id} />
+                <CatalogueSearchField
+                  id={`group-${group.id}-reward-catalogue`}
+                  name="catalogueId"
+                  label="Find a reward item"
+                  required
+                />
+                <div className={styles.rewardOptions}>
+                  <label>
+                    Quantity
+                    <input name="quantity" type="number" min="1" max="25" defaultValue="1" required />
+                  </label>
+                  <label>
+                    Trade policy
+                    <select name="tradePolicy" defaultValue="account_bound">
+                      <option value="account_bound">Account-bound</option>
+                      <option value="tradable">Tradable</option>
+                    </select>
+                  </label>
+                </div>
+                <button className="button button-primary" type="submit"><Gift aria-hidden="true" /> Add reward</button>
+              </form>
+              <div className={styles.relationshipList}>
+                {activeRewards.map((reward) => (
+                  <form className={styles.rewardRow} action="/api/admin/groups" method="post" key={reward.id}>
+                    <MutationFields csrf={csrf} action="reward-retire" />
+                    <input type="hidden" name="rewardId" value={reward.id} />
+                    <input type="hidden" name="groupId" value={group.id} />
+                    <span><strong>{reward.quantity}× {reward.catalogueName}</strong><small>{reward.tradePolicy === "tradable" ? "Tradable" : "Account-bound"}</small></span>
+                    <ConfirmSubmitButton
+                      className="staff-danger-button"
+                      confirmation={reward.tradePolicy === "account_bound"
+                        ? `Retire ${reward.catalogueName}? Account-bound awarded items will be removed from member inventories.`
+                        : `Retire ${reward.catalogueName}? Existing tradable awards will remain, but no new awards will be delivered.`}
+                    >
+                      Retire
+                    </ConfirmSubmitButton>
+                  </form>
+                ))}
+                {!activeRewards.length ? <p className={styles.relationshipSummary}>No active catalogue rewards.</p> : null}
+              </div>
+            </div>
+          </section>
+
+          <section className={styles.managementSection} aria-labelledby={`group-${group.id}-members-title`}>
+            <div className={styles.managementHeading}>
+              <span className={styles.managementIcon}><UsersRound aria-hidden="true" /></span>
+              <div><h4 id={`group-${group.id}-members-title`}>Membership</h4><p>{group.sourceType === "custom" ? "Portal-managed players currently assigned to this group." : `Owned by ${sourceLabel(group)} and read-only here.`}</p></div>
+              <strong>{group.memberCount}</strong>
+            </div>
+            <div className={styles.managementBody}>
+              {group.memberships.map((membership) => group.sourceType === "custom" ? (
+                <form className={styles.memberRow} action="/api/admin/groups" method="post" key={membership.steamId}>
+                  <MutationFields csrf={csrf} action="membership-remove" />
                   <input type="hidden" name="groupId" value={group.id} />
-                  <input type="hidden" name="privilegeId" value={privilege.id} />
-                  <span><strong>{privilege.displayName}</strong><code>{privilege.key}</code></span>
-                  <span className={styles.scopeBadge} data-scope={privilege.scope}>{privilege.scope}</span>
+                  <input type="hidden" name="steamId" value={membership.steamId} />
+                  <PlayerIdentity player={playerIdentities[membership.steamId] ?? { steamId: membership.steamId, displayName: membership.steamId, avatarUrl: null, presence: "unknown", profileThemeKey: null, identityGroups: [] }} variant="compact" />
+                  <span>{membership.expiresAt ? `Until ${new Date(membership.expiresAt).toLocaleDateString()}` : "Permanent"}</span>
                   <button className="staff-danger-button" type="submit">Remove</button>
                 </form>
+              ) : (
+                <div className={styles.memberRow} key={membership.steamId}>
+                  <PlayerIdentity player={playerIdentities[membership.steamId] ?? { steamId: membership.steamId, displayName: membership.steamId, avatarUrl: null, presence: "unknown", profileThemeKey: null, identityGroups: [] }} variant="compact" />
+                  <span>Active in {sourceLabel(group)}</span>
+                  <Link className={styles.memberSourceLink} href={`/admin?tab=${group.sourceType === "vipcore" ? "vips" : "admins"}&page=1`}>
+                    Manage
+                  </Link>
+                </div>
               ))}
+              {!group.memberships.length ? (
+                <p className={styles.relationshipSummary}>
+                  {group.sourceType === "custom"
+                    ? "No active custom members."
+                    : `No active ${sourceLabel(group)} database memberships.`}
+                </p>
+              ) : null}
             </div>
-          ) : <p className={styles.externalMembershipNote}>No additional portal-managed privileges.</p>}
-
-          <form className="staff-management-form" action="/api/admin/groups" method="post">
-            <MutationFields csrf={csrf} action="reward-add" />
-            <input type="hidden" name="groupId" value={group.id} />
-            <CatalogueSearchField
-              id={`group-${group.id}-reward-catalogue`}
-              name="catalogueId"
-              label="Find a reward item"
-              required
-            />
-            <label>
-              Quantity
-              <input name="quantity" type="number" min="1" max="25" defaultValue="1" required />
-            </label>
-            <label>
-              Trade policy
-              <select name="tradePolicy" defaultValue="account_bound">
-                <option value="account_bound">Account-bound</option>
-                <option value="tradable">Tradable</option>
-              </select>
-            </label>
-            <button className="button button-primary" type="submit"><Gift aria-hidden="true" /> Add reward</button>
-          </form>
-          {group.rewards.filter((reward) => reward.enabled).map((reward) => (
-            <form className="staff-admin-edit" action="/api/admin/groups" method="post" key={reward.id}>
-              <MutationFields csrf={csrf} action="reward-retire" />
-              <input type="hidden" name="rewardId" value={reward.id} />
-              <span>{reward.quantity}× {reward.catalogueName}</span>
-              <span>{reward.tradePolicy === "tradable" ? "Tradable" : "Account-bound"}</span>
-              <button className="staff-danger-button" type="submit">Retire</button>
-            </form>
-          ))}
-
-          {group.sourceType === "custom" ? group.memberships.map((membership) => (
-              <form className="staff-admin-edit" action="/api/admin/groups" method="post" key={membership.steamId}>
-                <MutationFields csrf={csrf} action="membership-remove" />
-                <input type="hidden" name="groupId" value={group.id} />
-                <input type="hidden" name="steamId" value={membership.steamId} />
-                <PlayerIdentity player={playerIdentities[membership.steamId] ?? { steamId: membership.steamId, displayName: membership.steamId, avatarUrl: null, presence: "unknown", profileThemeKey: null, identityGroups: [] }} variant="compact" />
-                <span>{membership.expiresAt ? `Until ${new Date(membership.expiresAt).toLocaleDateString()}` : "Permanent"}</span>
-                <button className="staff-danger-button" type="submit">Remove</button>
-              </form>
-            )) : (
-              <p className={styles.externalMembershipNote}>
-                Membership is owned by {sourceLabel(group)} under <code>{group.externalKey}</code>. Manage players from the existing Admins or VIPs staff tab.
-              </p>
-            )}
+          </section>
         </div>
       </details>
     </article>
@@ -410,6 +571,8 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
     );
   }
 
+  const activeTab = groupAdminTab(params.tab);
+
   let snapshot: IdentityAdminSnapshot = {
     groups: [],
     tags: [],
@@ -431,18 +594,58 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
       storageError = true;
     }
   }
+  let externalMembershipError = false;
+  const externalGroups = snapshot.groups.filter(
+    (group) => group.sourceType !== "custom" && group.externalKey,
+  );
+  if (activeTab === "connected" && externalGroups.length && gameStorageConfigured()) {
+    try {
+      const memberships = await getExternalIdentityGroupMembershipIndex();
+      for (const group of externalGroups) {
+        const externalKey = group.externalKey;
+        if (!externalKey) continue;
+        const lookupKey = `${group.sourceType}\0${externalKey
+          .normalize("NFKC")
+          .trim()
+          .toLocaleLowerCase("en-US")}`;
+        const steamIds = memberships.get(lookupKey) ?? [];
+        group.memberships = steamIds.map((steamId) => ({
+          steamId,
+          startsAt: new Date(0).toISOString(),
+          expiresAt: null,
+          grantReason: `Authoritative ${sourceLabel(group)} membership`,
+        }));
+        group.memberCount = group.memberships.length;
+      }
+    } catch {
+      externalMembershipError = true;
+    }
+  } else if (activeTab === "connected" && externalGroups.length) {
+    externalMembershipError = true;
+  }
   const csrf = createAdminActionToken(session);
-  const playerIdentities = await resolvePlayerIdentities([
-    ...snapshot.groups.flatMap((group) => group.memberships.map((membership) => ({ steamId: membership.steamId }))),
-    ...snapshot.directTagGrants.map((grant) => ({ steamId: grant.steamId })),
-    ...snapshot.directPrivilegeGrants.map((grant) => ({ steamId: grant.steamId })),
-  ]);
-  const externalGroups = snapshot.groups.filter((group) => group.sourceType !== "custom");
+  const playerIdentities = await resolvePlayerIdentities(
+    activeTab === "connected"
+      ? snapshot.groups.flatMap((group) =>
+          group.memberships.map((membership) => ({ steamId: membership.steamId })),
+        )
+      : activeTab === "awards"
+        ? [
+            ...snapshot.directTagGrants.map((grant) => ({ steamId: grant.steamId })),
+            ...snapshot.directPrivilegeGrants.map((grant) => ({ steamId: grant.steamId })),
+          ]
+        : [],
+  );
   const customGroupDefinitions = snapshot.groups.filter((group) => group.sourceType === "custom");
+  // The connected registry is the canonical inventory of identities. Keep
+  // runtime-only adapters visible even if their richer definition could not be
+  // loaded yet; hiding them would also hide their authoritative memberships.
+  const connectedGroups = snapshot.groups;
   const customGroups = customGroupDefinitions.filter((group) => group.enabled);
   const availablePermissions = privilegeOptions(snapshot.privileges);
   const notice = params.notice ? noticeMessages[params.notice] : null;
   const error = params.error ? errorMessages[params.error] ?? "The identity action could not be completed." : null;
+  const selectedGroupId = /^\d+$/.test(params.group ?? "") ? Number(params.group) : null;
 
   return (
     <PortalShell authenticated className="staff-page">
@@ -459,15 +662,38 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
           </aside>
         </section>
         <StaffSubmenu access={access} active="groups" />
+        <nav className={styles.sectionNav} aria-label="Group management sections">
+          {groupAdminTabs.map((tab) => {
+            const Icon = tab.icon;
+            const active = tab.id === activeTab;
+            return (
+              <Link
+                key={tab.id}
+                href={groupTabHref(tab.id, selectedGroupId)}
+                aria-label={tab.label}
+                aria-current={active ? "page" : undefined}
+                data-active={active ? "true" : "false"}
+              >
+                <Icon aria-hidden="true" />
+                <span>{tab.label}</span>
+              </Link>
+            );
+          })}
+          <Link href="/admin/groups/perks" aria-label="VIP perks">
+            <Sparkles aria-hidden="true" />
+            <span>VIP perks</span>
+          </Link>
+        </nav>
         {notice ? <PortalToast message={notice} /> : null}
         {error ? <PortalToast variant="danger" message={error} /> : null}
         {storageError ? <PortalToast variant="danger" message="Identity storage is unavailable. Apply portal migrations through db/014_external_identity_catalogue.sql." /> : null}
+        {externalMembershipError ? <PortalToast variant="danger" message="One or more live Admins.Core/VIPCore membership lists could not be read. Connected group counts may be incomplete until the game database is available." /> : null}
 
-        <section className="staff-record-section" aria-labelledby="external-group-definitions-title">
+        {activeTab === "connected" ? <section id="connected-groups" className="staff-record-section" aria-labelledby="external-group-definitions-title">
           <div className="staff-section-heading">
             <div>
               <p className="tapped-kicker"><Database aria-hidden="true" /> Connected identities</p>
-              <h2 id="external-group-definitions-title">Admins.Core &amp; VIPCore</h2>
+              <h2 id="external-group-definitions-title">All connected groups</h2>
             </div>
             <form className={styles.syncForm} action="/api/admin/groups" method="post">
               <MutationFields csrf={csrf} action="external-catalogue-sync" />
@@ -478,37 +704,60 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
             </form>
           </div>
           <p className={styles.sectionIntro}>
-            These database-backed adapters define how externally owned groups appear and what they receive in ARENA. Source rank, permissions, capabilities, and membership remain read-only; tags, badges, rewards, and additional grants are portal-managed.
+            Admins.Core, VIPCore, and portal-created identities share one connected registry. External definitions and active memberships come from the live plug-in database after its optional JSON bootstrap; custom membership remains portal-managed.
           </p>
           <div className={styles.catalogueStatus} aria-label="External identity catalogue status">
             <div><span>Admins.Core groups</span><strong>{snapshot.catalogueStatus.adminsCoreDefinitions}</strong></div>
             <div><span>VIPCore groups</span><strong>{snapshot.catalogueStatus.vipCoreDefinitions}</strong></div>
             <div><span>Discovered permissions</span><strong>{snapshot.catalogueStatus.discoveredPrivileges}</strong></div>
           </div>
-          {externalGroups.length ? externalGroups.map((group) => (
-            <GroupCard key={group.id} group={group} snapshot={snapshot} csrf={csrf} playerIdentities={playerIdentities} />
-          )) : (
-            <p className="empty-copy">No external definitions are available. Synchronize the catalogue after applying the identity migrations.</p>
+          {connectedGroups.length ? (
+            <GroupWorkspace id="connected-groups-workspace" groups={groupWorkspaceEntries(connectedGroups)} initialSelectedId={selectedGroupId}>
+              {connectedGroups.map((group) => (
+                <GroupCard key={group.id} group={group} snapshot={snapshot} csrf={csrf} playerIdentities={playerIdentities} />
+              ))}
+            </GroupWorkspace>
+          ) : (
+            <p className="empty-copy">No connected definitions are available. Synchronize the catalogue after applying the identity migrations.</p>
           )}
-        </section>
+        </section> : null}
 
-        <section className="staff-record-section">
+        {activeTab === "create" ? <section id="create-group" className="staff-record-section">
           <div className="staff-section-heading"><div><p className="tapped-kicker"><ShieldCheck aria-hidden="true" /> Custom identity</p><h2>Create a group</h2></div><span>{customGroups.length} custom groups</span></div>
-          <form className="staff-management-form" action="/api/admin/groups" method="post">
+          <p className={styles.sectionIntro}>Start with a stable internal key, then define the player-facing identity and badge. Tags, access, rewards, and members are attached after creation.</p>
+          <form className={`staff-management-form ${styles.createGroupForm}`} action="/api/admin/groups" method="post">
             <MutationFields csrf={csrf} action="group-create" />
-            <label>Stable key<input name="groupKey" pattern="[a-z0-9][a-z0-9._:-]{0,63}" maxLength={64} required placeholder="beta_testers" /></label>
-            <label>Display name<input name="displayName" maxLength={100} required placeholder="Beta Testers" /></label>
-            <label>Description<input name="description" maxLength={255} placeholder="What this group represents" /></label>
-            <label>Badge label<input name="badgeLabel" maxLength={32} required placeholder="BETA" /></label>
-            <label>Badge icon<select name="badgeIconKey" defaultValue="shield">{identityGroupBadgeIconOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-            <label>Accent<input name="badgeColor" type="color" defaultValue="#f0b35a" required /></label>
-            <label>Badge background<input name="badgeSoftColor" type="color" defaultValue="#ffe4b8" required /></label>
-            <label>Profile priority<input name="profilePriority" type="number" min="-32768" max="32767" defaultValue="0" required /></label>
-            <button className="button button-primary" type="submit">Create group</button>
+            <fieldset className={styles.formSection}>
+              <legend>Group identity</legend>
+              <p>The stable key is permanent and used by integrations. The name and description can change later.</p>
+              <div className={styles.formGrid}>
+                <label>Stable key<input name="groupKey" pattern="[a-z0-9][a-z0-9._:-]{0,63}" maxLength={64} required placeholder="beta_testers" /><small>Lowercase letters, numbers, dots, dashes, colons, or underscores.</small></label>
+                <label>Display name<input name="displayName" maxLength={100} required placeholder="Beta Testers" /></label>
+                <label className={styles.fullField}>Description<input name="description" maxLength={255} placeholder="What this group represents" /></label>
+              </div>
+            </fieldset>
+            <fieldset className={styles.formSection}>
+              <legend>Badge presentation</legend>
+              <p>These values feed the shared badge component across profiles, tables, and compact player cards.</p>
+              <div className={`${styles.formGrid} ${styles.badgeFormGrid}`}>
+                <label>Badge label<input name="badgeLabel" maxLength={32} required placeholder="BETA" /></label>
+                <label>Badge icon<select name="badgeIconKey" defaultValue="shield">{identityGroupBadgeIconOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+                <label className={styles.colorField}>Accent<input name="badgeColor" type="color" defaultValue="#f0b35a" required /></label>
+                <label className={styles.colorField}>Badge background<input name="badgeSoftColor" type="color" defaultValue="#ffe4b8" required /></label>
+              </div>
+            </fieldset>
+            <fieldset className={styles.formSection}>
+              <legend>Profile ordering</legend>
+              <p>Higher values take visual priority when one player belongs to multiple groups.</p>
+              <div className={styles.formGrid}>
+                <label>Profile priority<input name="profilePriority" type="number" min="-32768" max="32767" defaultValue="0" required /></label>
+              </div>
+            </fieldset>
+            <div className={styles.formActions}><button className="button button-primary" type="submit">Create group</button></div>
           </form>
-        </section>
+        </section> : null}
 
-        <section className="staff-record-section">
+        {activeTab === "membership" ? <section id="membership" className="staff-record-section">
           <div className="staff-section-heading"><div><p className="tapped-kicker"><UsersRound aria-hidden="true" /> Membership</p><h2>Assign a custom group</h2></div><span>Founder audited</span></div>
           <form className="staff-management-form" action="/api/admin/groups" method="post">
             <MutationFields csrf={csrf} />
@@ -519,9 +768,9 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
             <button className="button button-primary" name="action" value="membership-assign" type="submit">Assign group</button>
             <button className="staff-danger-button" name="action" value="membership-remove" type="submit">Remove group</button>
           </form>
-        </section>
+        </section> : null}
 
-        <section className="staff-record-section">
+        {activeTab === "tags" ? <section id="tag-definitions" className="staff-record-section">
           <div className="staff-section-heading"><div><p className="tapped-kicker"><Tags aria-hidden="true" /> GlobalChatTags</p><h2>Tag definitions</h2></div><span>{snapshot.tags.length} tags</span></div>
           <form className="staff-management-form" action="/api/admin/groups" method="post">
             <MutationFields csrf={csrf} action="tag-create" />
@@ -535,9 +784,9 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
           <div className="staff-group-list">
             {snapshot.tags.map((tag) => <form className="staff-admin-edit" action="/api/admin/groups" method="post" key={tag.id}><MutationFields csrf={csrf} action="tag-update" /><input type="hidden" name="tagId" value={tag.id} /><input name="tagText" defaultValue={tag.text} maxLength={64} required aria-label={`Text for ${tag.key}`} /><select name="colorToken" defaultValue={tag.colorToken} aria-label={`Color for ${tag.key}`}>{chatColors.map((color) => <option key={color}>{color}</option>)}</select><select name="nameColorToken" defaultValue={tag.nameColorToken ?? ""} aria-label={`Name color for ${tag.key}`}><option value="">Inherit</option>{chatColors.map((color) => <option key={color}>{color}</option>)}</select><select name="messageColorToken" defaultValue={tag.messageColorToken ?? ""} aria-label={`Message color for ${tag.key}`}><option value="">Inherit</option>{chatColors.map((color) => <option key={color}>{color}</option>)}</select><select name="enabled" defaultValue={tag.enabled ? "true" : "false"} aria-label={`Status for ${tag.key}`}><option value="true">Enabled</option><option value="false">Disabled</option></select><button className="staff-unban-button" type="submit">Save</button></form>)}
           </div>
-        </section>
+        </section> : null}
 
-        <section className="staff-record-section">
+        {activeTab === "permissions" ? <section id="permission-catalogue" className="staff-record-section">
           <div className="staff-section-heading"><div><p className="tapped-kicker"><KeyRound aria-hidden="true" /> Authorization</p><h2>Permission catalogue</h2></div><span>{snapshot.privileges.length} definitions</span></div>
           <p className={styles.sectionIntro}>
             Synchronized game permissions and portal-defined privileges share one searchable catalogue. Discovery provenance is read-only; display details, sensitivity, status, and additive group or player grants remain Founder-managed.
@@ -589,26 +838,50 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
               ),
             }))}
           />
-        </section>
+        </section> : null}
 
-        <section className="staff-record-section">
+        {activeTab === "awards" ? <section id="direct-awards" className="staff-record-section">
           <div className="staff-section-heading"><div><p className="tapped-kicker"><KeyRound aria-hidden="true" /> Direct awards</p><h2>Player-specific tag or privilege</h2></div><span>Optional expiry</span></div>
-          <form className="staff-management-form" action="/api/admin/groups" method="post">
-            <MutationFields csrf={csrf} />
-            <PlayerSearchField name="steamId" label="Player" mode="target" required includeSelf />
-            <label>Chat tag<select name="tagId" defaultValue=""><option value="">No tag selected</option>{snapshot.tags.filter((tag) => tag.enabled).map((tag) => <option key={tag.id} value={tag.id}>{tag.text}</option>)}</select></label>
-            <PermissionPicker
-              id="direct-player-permission-search"
-              label="Player privilege"
-              permissions={availablePermissions}
-            />
-            <label>Duration (minutes)<input name="durationMinutes" type="number" min="0" max="525600" defaultValue="0" required /></label>
-            <label>Reason<input name="reason" maxLength={180} placeholder="Optional internal reason" /></label>
-            <button className="staff-unban-button" name="action" value="player-tag-grant" type="submit">Grant tag</button>
-            <button className="staff-danger-button" name="action" value="player-tag-revoke" type="submit">Revoke tag</button>
-            <button className="staff-unban-button" name="action" value="player-privilege-grant" type="submit">Grant privilege</button>
-            <button className="staff-danger-button" name="action" value="player-privilege-revoke" type="submit">Revoke privilege</button>
-          </form>
+          <p className={styles.sectionIntro}>Direct grants are exceptions for one player. Group-based access remains easier to audit and should be preferred whenever possible.</p>
+          <div className={styles.directAwardGrid}>
+            <form className={`staff-management-form ${styles.directAwardForm}`} action="/api/admin/groups" method="post" aria-labelledby="direct-tag-title">
+              <MutationFields csrf={csrf} />
+              <div className={styles.directAwardHeading}><Tags aria-hidden="true" /><div><strong id="direct-tag-title">Direct chat tag</strong><span>Grant or revoke one reusable tag.</span></div></div>
+              <PlayerSearchField name="steamId" label="Player" mode="target" required includeSelf />
+              <label>Chat tag<select name="tagId" required defaultValue=""><option value="" disabled>Choose a tag</option>{snapshot.tags.filter((tag) => tag.enabled).map((tag) => <option key={tag.id} value={tag.id}>{tag.text}</option>)}</select></label>
+              <div className={styles.formGrid}>
+                <label>Duration (minutes)<input name="durationMinutes" type="number" min="0" max="525600" defaultValue="0" required /><small>0 is permanent.</small></label>
+                <label>Reason<input name="reason" maxLength={180} placeholder="Optional internal reason" /></label>
+              </div>
+              <div className={styles.inlineActions}>
+                <button className="staff-unban-button" name="action" value="player-tag-grant" type="submit">Grant tag</button>
+                <button className="staff-danger-button" name="action" value="player-tag-revoke" type="submit">Revoke tag</button>
+              </div>
+            </form>
+            <form className={`staff-management-form ${styles.directAwardForm}`} action="/api/admin/groups" method="post" aria-labelledby="direct-privilege-title">
+              <MutationFields csrf={csrf} />
+              <div className={styles.directAwardHeading}><KeyRound aria-hidden="true" /><div><strong id="direct-privilege-title">Direct privilege</strong><span>Add or remove one scoped permission.</span></div></div>
+              <PlayerSearchField name="steamId" label="Player" mode="target" required includeSelf />
+              <PermissionPicker
+                id="direct-player-permission-search"
+                label="Player privilege"
+                permissions={availablePermissions}
+                required
+              />
+              <div className={styles.formGrid}>
+                <label>Duration (minutes)<input name="durationMinutes" type="number" min="0" max="525600" defaultValue="0" required /><small>0 is permanent.</small></label>
+                <label>Reason<input name="reason" maxLength={180} placeholder="Optional internal reason" /></label>
+              </div>
+              <div className={styles.inlineActions}>
+                <button className="staff-unban-button" name="action" value="player-privilege-grant" type="submit">Grant privilege</button>
+                <button className="staff-danger-button" name="action" value="player-privilege-revoke" type="submit">Revoke privilege</button>
+              </div>
+            </form>
+          </div>
+          <div className={styles.subsectionHeading}>
+            <div><strong>Active direct awards</strong><span>Review and revoke player-specific exceptions.</span></div>
+            <small>{snapshot.directTagGrants.length + snapshot.directPrivilegeGrants.length} active</small>
+          </div>
           <div className="staff-group-list">
             {snapshot.directTagGrants.map((grant) => (
               <form className="staff-admin-edit" action="/api/admin/groups" method="post" key={`${grant.steamId}:${grant.tag.id}`}>
@@ -636,12 +909,7 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
               <p className="empty-copy">No active direct player tags or privileges.</p>
             ) : null}
           </div>
-        </section>
-
-        <section className="staff-record-section">
-          <div className="staff-section-heading"><div><p className="tapped-kicker"><ShieldCheck aria-hidden="true" /> Registry</p><h2>Custom identity groups</h2></div><span>{customGroupDefinitions.length} definitions</span></div>
-          {customGroupDefinitions.length ? customGroupDefinitions.map((group) => <GroupCard key={group.id} group={group} snapshot={snapshot} csrf={csrf} playerIdentities={playerIdentities} />) : <p className="empty-copy">No custom groups have been created yet.</p>}
-        </section>
+        </section> : null}
     </PortalShell>
   );
 }

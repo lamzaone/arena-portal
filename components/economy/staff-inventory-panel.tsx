@@ -4,9 +4,13 @@ import {
   Archive,
   ArrowLeftRight,
   Coins,
+  Filter,
+  PackagePlus,
+  Search,
   SlidersHorizontal,
   Tag,
   WalletCards,
+  X,
 } from "lucide-react";
 
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
@@ -21,15 +25,38 @@ import { rarityClass, rarityName } from "@/components/economy/economy-view-model
 import { economyItemTypeLabel } from "@/lib/economy/item-taxonomy";
 import {
   type EconomyInventoryItem,
+  type EconomyItemState,
+  type EconomyItemType,
   type EconomyLoadoutSlot,
   type StaffEconomyAccount,
 } from "@/lib/data/portal-repository";
+import { ECONOMY_ITEM_TYPES } from "@/lib/economy/item-taxonomy";
 import type { PlayerIdentityData } from "@/lib/player-identities";
 
 type Pagination = {
   previousHref: string | null;
   nextHref: string | null;
 };
+
+type DirectoryContext = {
+  query: string;
+  page: number;
+};
+
+type InventoryFilters = {
+  query: string;
+  itemType: EconomyItemType | null;
+  state: EconomyItemState | null;
+  clearHref: string;
+};
+
+const inventoryStates: Array<{ value: EconomyItemState; label: string }> = [
+  { value: "available", label: "Available" },
+  { value: "escrowed", label: "In trade escrow" },
+  { value: "attached", label: "Attached" },
+  { value: "consumed", label: "Consumed" },
+  { value: "revoked", label: "Revoked" },
+];
 
 function formatTokens(value: number) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
@@ -119,6 +146,14 @@ function ItemEditor({
   action: string;
 }) {
   const attributes = JSON.stringify(item.attributes, null, 2);
+  const skinLike =
+    item.itemType === "skin" ||
+    item.itemType === "knife" ||
+    item.itemType === "glove";
+  const supportsStattrak =
+    item.itemType === "skin" || item.itemType === "knife";
+  const supportsSouvenir = item.itemType === "skin";
+  const isSouvenir = item.attributes.souvenir === true;
   return (
     <article className="economy-admin-item staff-inventory-item">
       <MarketplaceItemPreview
@@ -145,11 +180,9 @@ function ItemEditor({
         <span className="tag">{item.state}</span>
       </header>
       <div className="tag-list">
-        <span className="tag">Float {item.floatValue ?? "-"}</span>
-        <span className="tag">Seed {item.seed ?? "-"}</span>
-        <span className="tag">
-          StatTrak {item.stattrak ? formatTokens(item.stattrakCount) : "off"}
-        </span>
+        {item.floatValue !== null ? <span className="tag">Float {item.floatValue}</span> : null}
+        {item.seed !== null ? <span className="tag">Seed {item.seed}</span> : null}
+        <span className="tag">{item.tradable ? "Tradable" : "Untradable"}</span>
         {item.nametag ? (
           <span className="tag tag-vip">Name: {item.nametag}</span>
         ) : null}
@@ -186,14 +219,76 @@ function ItemEditor({
           <form className="form-panel economy-admin-form" action={action} method="post">
             <ActionFields csrf={csrf} action="update" steamId={steamId} />
             <input type="hidden" name="itemId" value={item.id} />
-            <div className="form-grid">
-              <label>Float<input name="floatValue" inputMode="decimal" defaultValue={item.floatValue ?? ""} /></label>
-              <label>Seed<input name="seed" inputMode="numeric" defaultValue={item.seed ?? ""} /></label>
-              <label>StatTrak<select name="stattrak" defaultValue={item.stattrak ? "true" : "false"}><option value="false">Off</option><option value="true">On</option></select></label>
-              <label>StatTrak count<input name="stattrakCount" inputMode="numeric" defaultValue={item.stattrakCount} /></label>
-              <label>Name tag<input name="nametag" maxLength={128} defaultValue={item.nametag ?? ""} /></label>
-              <label className="economy-check"><input type="checkbox" name="clearNametag" value="true" /> Clear name tag</label>
-            </div>
+            {skinLike ? (
+              <div className="form-grid">
+                <label>
+                  Float
+                  <input
+                    name="floatValue"
+                    inputMode="decimal"
+                    defaultValue={item.floatValue ?? ""}
+                  />
+                </label>
+                <label>
+                  Seed
+                  <input
+                    name="seed"
+                    inputMode="numeric"
+                    defaultValue={item.seed ?? ""}
+                  />
+                </label>
+                {supportsStattrak ? (
+                  <>
+                    <label>
+                      StatTrak
+                      <select
+                        name="stattrak"
+                        defaultValue={item.stattrak ? "true" : "false"}
+                      >
+                        <option value="false">Off</option>
+                        <option value="true">On</option>
+                      </select>
+                    </label>
+                    <label>
+                      StatTrak count
+                      <input
+                        name="stattrakCount"
+                        inputMode="numeric"
+                        defaultValue={item.stattrakCount}
+                      />
+                    </label>
+                  </>
+                ) : null}
+                {supportsSouvenir ? (
+                  <label>
+                    Souvenir
+                    <select
+                      name="souvenir"
+                      defaultValue={isSouvenir ? "true" : "false"}
+                    >
+                      <option value="false">Off</option>
+                      <option value="true">On (forces untradable)</option>
+                    </select>
+                  </label>
+                ) : null}
+                <label>
+                  Name tag
+                  <input
+                    name="nametag"
+                    maxLength={128}
+                    defaultValue={item.nametag ?? ""}
+                  />
+                </label>
+                <label className="economy-check">
+                  <input
+                    type="checkbox"
+                    name="clearNametag"
+                    value="true"
+                  />
+                  Clear name tag
+                </label>
+              </div>
+            ) : null}
             <label>Attributes JSON<textarea name="attributes" defaultValue={attributes} /></label>
             <label>Reason<input name="reason" required maxLength={180} defaultValue="Staff item correction" /></label>
             <button className="button button-primary" type="submit">Save customization</button>
@@ -239,6 +334,8 @@ export function StaffInventoryPanel({
   grantCatalogue,
   mutationAction,
   pagination,
+  directory,
+  inventoryFilters,
 }: {
   account: StaffEconomyAccount;
   playerIdentity?: PlayerIdentityData;
@@ -250,12 +347,17 @@ export function StaffInventoryPanel({
   grantCatalogue: GrantCatalogueItem[];
   mutationAction: string;
   pagination: Pagination;
+  directory: DirectoryContext;
+  inventoryFilters: InventoryFilters;
 }) {
-  const availableItems = account.inventory.items.filter((item) => item.state === "available");
+  const availableItems = account.loadoutCandidates;
   const hasMultiplePages = account.inventory.total > account.inventory.pageSize;
   const inventoryPageCount = Math.max(
     1,
     Math.ceil(account.inventory.total / account.inventory.pageSize),
+  );
+  const hasInventoryFilters = Boolean(
+    inventoryFilters.query || inventoryFilters.itemType || inventoryFilters.state,
   );
   const resolvedPlayerIdentity: PlayerIdentityData = playerIdentity ?? {
     steamId: account.steamId,
@@ -273,16 +375,22 @@ export function StaffInventoryPanel({
           <PlayerIdentity
             player={resolvedPlayerIdentity}
             variant="compact"
-            secondary={`Showing ${account.inventory.items.length} of ${account.inventory.total} items`}
+            secondary={`Showing ${account.inventory.items.length} of ${account.inventory.total}${hasInventoryFilters ? " matching" : ""} items`}
+            profileLink="hover-card"
           />
         </div>
-        {canGrant ? <Link className="button button-secondary" href="#staff-grant-item">Grant item</Link> : null}
+        <nav className="staff-inventory-shortcuts" aria-label="Inventory sections">
+          <Link className="button button-secondary" href="#staff-inventory-items">
+            <Archive aria-hidden="true" /> Inventory
+          </Link>
+          {canGrant ? <Link className="button button-primary" href="#staff-grant-item"><PackagePlus aria-hidden="true" /> Grant item</Link> : null}
+        </nav>
       </header>
       <section className="content-grid economy-admin-summary">
         <article className="panel">
           <p className="eyebrow"><WalletCards aria-hidden="true" /> Token wallet</p>
           <h2>{formatTokens(account.wallet.balance)} Tokens</h2>
-          <div className="tag-list"><span className="tag">{formatTokens(account.wallet.lifetimeEarned)} earned</span><span className="tag">{formatTokens(account.wallet.lifetimeSpent)} spent</span><span className="tag">{account.inventory.total} inventory instances</span></div>
+          <div className="tag-list"><span className="tag">{formatTokens(account.wallet.lifetimeEarned)} earned</span><span className="tag">{formatTokens(account.wallet.lifetimeSpent)} spent</span><span className="tag">{account.inventory.total} {hasInventoryFilters ? "matching" : "inventory"} instances</span></div>
         </article>
         <article className="panel">
           <p className="eyebrow"><ArrowLeftRight aria-hidden="true" /> Pending trades</p>
@@ -290,42 +398,49 @@ export function StaffInventoryPanel({
           <p className="empty-copy">{account.pendingIncomingTrades} incoming · {account.pendingOutgoingTrades} outgoing</p>
         </article>
       </section>
-      {canGrant ? (
-        <StaffGrantItemForm
-          action={mutationAction}
-          catalogue={grantCatalogue}
-          csrf={csrf}
-          playerIdentity={resolvedPlayerIdentity}
-          steamId={account.steamId}
-        />
-      ) : null}
-      {canAdjustTokens ? (
-        <section className="panel economy-admin-section">
-          <div className="panel-heading"><div><p className="eyebrow"><Coins aria-hidden="true" /> Wallet control</p><h2>Award, take, or set Tokens</h2></div></div>
-          <form className="form-panel economy-admin-form" action={mutationAction} method="post">
-            <ActionFields csrf={csrf} action="tokens" steamId={account.steamId} />
-            <div className="form-grid"><label>Action<select name="tokenAction" defaultValue="award"><option value="award">Award</option><option value="take">Take</option><option value="set">Set balance</option></select></label><label>Tokens<input name="amount" required inputMode="numeric" min="0" /></label></div>
-            <label>Reason<input name="reason" required maxLength={180} defaultValue="Staff Token adjustment" /></label>
-            <button className="button button-primary" type="submit">Save Token change</button>
-          </form>
-        </section>
-      ) : null}
-      {canManageLoadouts ? (
-        <section className="panel economy-admin-section">
-          <div className="panel-heading"><div><p className="eyebrow"><SlidersHorizontal aria-hidden="true" /> Loadout control</p><h2>Player loadout</h2><p>Server refresh is queued after every change.</p></div></div>
-          <div className="economy-loadout-list">{account.loadout.length ? account.loadout.map((slot) => <article key={slot.slotKey}><div><strong>{slot.slotKey}</strong><span>{slot.item?.displayName ?? "Empty"}</span></div><form action={mutationAction} method="post"><ActionFields csrf={csrf} action="clear-slot" steamId={account.steamId} /><input type="hidden" name="slotType" value={slot.slotType} /><input type="hidden" name="slotTeam" value={slot.team ?? ""} /><input type="hidden" name="slotDefinitionIndex" value={slot.definitionIndex ?? ""} /><input type="hidden" name="reason" value="Staff loadout clear" /><button className="staff-unban-button" type="submit">Clear</button></form></article>) : <p className="empty-copy">No loadout slots have been saved yet.</p>}</div>
-          <form className="form-panel economy-admin-form" action={mutationAction} method="post"><ActionFields csrf={csrf} action="equip" steamId={account.steamId} /><label>Owned available item<select name="itemId" required><option value="">Choose item</option>{availableItems.map((item) => <option key={item.id} value={item.id}>{item.displayName} · {economyItemTypeLabel(item.itemType)} · {item.id}</option>)}</select></label><SlotFields /><label>Reason<input name="reason" required maxLength={180} defaultValue="Staff loadout assignment" /></label><button className="button button-primary" type="submit">Set loadout slot</button></form>
-        </section>
-      ) : null}
-      {canManage ? (
-        <section className="panel economy-admin-section">
-          <div className="panel-heading"><div><p className="eyebrow"><Tag aria-hidden="true" /> Sticker control</p><h2>Attach an existing or catalogue sticker</h2></div></div>
-          <form className="form-panel economy-admin-form" action={mutationAction} method="post"><ActionFields csrf={csrf} action="attach-sticker" steamId={account.steamId} /><div className="form-grid"><label>Weapon item ID<input name="weaponItemId" required /></label><label>Existing owned sticker ID<input name="stickerItemId" /></label><label>Or sticker catalogue ID<input name="stickerCatalogueId" inputMode="numeric" /></label><label>Sticker slot<input name="stickerSlot" required inputMode="numeric" min="0" max="5" defaultValue="0" /></label></div><label>Reason<input name="reason" required maxLength={180} defaultValue="Staff sticker attachment" /></label><button className="button button-secondary" type="submit">Attach sticker</button></form>
-        </section>
-      ) : null}
-      <section className="economy-admin-inventory">
-        <div className="section-heading compact"><p className="eyebrow"><Archive aria-hidden="true" /> Full inventory</p><h2>{account.inventory.total} instances</h2></div>
-        {account.inventory.items.length ? <div className="economy-admin-item-grid">{account.inventory.items.map((item) => <ItemEditor key={item.id} item={item} steamId={account.steamId} csrf={csrf} canManage={canManage} action={mutationAction} />)}</div> : <p className="empty-copy">This player has no inventory items yet.</p>}
+      <section className="economy-admin-inventory staff-inventory-collection" id="staff-inventory-items">
+        <div className="section-heading compact staff-inventory-collection-heading">
+          <div>
+            <p className="eyebrow"><Archive aria-hidden="true" /> Inventory instances</p>
+            <h2>{account.inventory.total} {hasInventoryFilters ? "matches" : "items"}</h2>
+          </div>
+          {hasInventoryFilters ? <Link className="staff-inventory-clear" href={inventoryFilters.clearHref}><X aria-hidden="true" /> Clear filters</Link> : null}
+        </div>
+        <form className="staff-inventory-filters" action="/admin/inventories" method="get">
+          {directory.query ? <input type="hidden" name="q" value={directory.query} /> : null}
+          {directory.page > 1 ? <input type="hidden" name="page" value={directory.page} /> : null}
+          <input type="hidden" name="steamId" value={account.steamId} />
+          <label className="staff-inventory-query">
+            Search inventory
+            <span><Search aria-hidden="true" /><input name="inventoryQ" defaultValue={inventoryFilters.query} maxLength={120} placeholder="Item name, tag or instance ID" /></span>
+          </label>
+          <label>
+            Item type
+            <select name="inventoryType" defaultValue={inventoryFilters.itemType ?? ""}>
+              <option value="">All item types</option>
+              {ECONOMY_ITEM_TYPES.map((itemType) => <option key={itemType} value={itemType}>{economyItemTypeLabel(itemType)}</option>)}
+            </select>
+          </label>
+          <label>
+            State
+            <select name="inventoryState" defaultValue={inventoryFilters.state ?? ""}>
+              <option value="">All states</option>
+              {inventoryStates.map((state) => <option key={state.value} value={state.value}>{state.label}</option>)}
+            </select>
+          </label>
+          <button className="button button-secondary" type="submit"><Filter aria-hidden="true" /> Apply</button>
+        </form>
+        {account.inventory.items.length ? (
+          <div className="economy-admin-item-grid">
+            {account.inventory.items.map((item) => <ItemEditor key={item.id} item={item} steamId={account.steamId} csrf={csrf} canManage={canManage} action={mutationAction} />)}
+          </div>
+        ) : (
+          <div className="staff-inventory-no-results">
+            <Archive aria-hidden="true" />
+            <strong>{hasInventoryFilters ? "No items match these filters." : "This player has no inventory items yet."}</strong>
+            <p>{hasInventoryFilters ? "Clear or adjust the inventory search to see other instances." : "Grant an item to create the first inventory instance."}</p>
+          </div>
+        )}
         {hasMultiplePages ? (
           <LinkPagination
             className="staff-inventory-pagination"
@@ -340,6 +455,49 @@ export function StaffInventoryPanel({
           />
         ) : null}
       </section>
+      {canGrant ? (
+        <StaffGrantItemForm
+          action={mutationAction}
+          catalogue={grantCatalogue}
+          csrf={csrf}
+          playerIdentity={resolvedPlayerIdentity}
+          steamId={account.steamId}
+        />
+      ) : null}
+      {canAdjustTokens || canManageLoadouts || canManage ? (
+        <section className="staff-inventory-operations" id="staff-inventory-controls">
+          <div className="section-heading compact">
+            <p className="eyebrow"><SlidersHorizontal aria-hidden="true" /> Staff controls</p>
+            <h2>Wallet, loadout and item tools</h2>
+          </div>
+          <div className="staff-inventory-operations-grid">
+      {canAdjustTokens ? (
+        <section className="panel economy-admin-section staff-inventory-tool">
+          <div className="panel-heading"><div><p className="eyebrow"><Coins aria-hidden="true" /> Wallet control</p><h2>Award, take, or set Tokens</h2></div></div>
+          <form className="form-panel economy-admin-form" action={mutationAction} method="post">
+            <ActionFields csrf={csrf} action="tokens" steamId={account.steamId} />
+            <div className="form-grid"><label>Action<select name="tokenAction" defaultValue="award"><option value="award">Award</option><option value="take">Take</option><option value="set">Set balance</option></select></label><label>Tokens<input name="amount" required inputMode="numeric" min="0" /></label></div>
+            <label>Reason<input name="reason" required maxLength={180} defaultValue="Staff Token adjustment" /></label>
+            <button className="button button-primary" type="submit">Save Token change</button>
+          </form>
+        </section>
+      ) : null}
+      {canManageLoadouts ? (
+        <section className="panel economy-admin-section staff-inventory-tool staff-inventory-tool-wide">
+          <div className="panel-heading"><div><p className="eyebrow"><SlidersHorizontal aria-hidden="true" /> Loadout control</p><h2>Player loadout</h2><p>Server refresh is queued after every change.</p></div></div>
+          <div className="economy-loadout-list">{account.loadout.length ? account.loadout.map((slot) => <article key={slot.slotKey}><div><strong>{slot.slotKey}</strong><span>{slot.item?.displayName ?? "Empty"}</span></div><form action={mutationAction} method="post"><ActionFields csrf={csrf} action="clear-slot" steamId={account.steamId} /><input type="hidden" name="slotType" value={slot.slotType} /><input type="hidden" name="slotTeam" value={slot.team ?? ""} /><input type="hidden" name="slotDefinitionIndex" value={slot.definitionIndex ?? ""} /><input type="hidden" name="reason" value="Staff loadout clear" /><button className="staff-unban-button" type="submit">Clear</button></form></article>) : <p className="empty-copy">No loadout slots have been saved yet.</p>}</div>
+          <form className="form-panel economy-admin-form" action={mutationAction} method="post"><ActionFields csrf={csrf} action="equip" steamId={account.steamId} /><label>Owned available item<select name="itemId" required><option value="">Choose item</option>{availableItems.map((item) => <option key={item.id} value={item.id}>{item.displayName} · {economyItemTypeLabel(item.itemType)} · {item.id}</option>)}</select></label><SlotFields /><label>Reason<input name="reason" required maxLength={180} defaultValue="Staff loadout assignment" /></label><button className="button button-primary" type="submit">Set loadout slot</button></form>
+        </section>
+      ) : null}
+      {canManage ? (
+        <section className="panel economy-admin-section staff-inventory-tool staff-inventory-tool-wide">
+          <div className="panel-heading"><div><p className="eyebrow"><Tag aria-hidden="true" /> Sticker control</p><h2>Attach an existing or catalogue sticker</h2></div></div>
+          <form className="form-panel economy-admin-form" action={mutationAction} method="post"><ActionFields csrf={csrf} action="attach-sticker" steamId={account.steamId} /><div className="form-grid"><label>Weapon item ID<input name="weaponItemId" required /></label><label>Existing owned sticker ID<input name="stickerItemId" /></label><label>Or sticker catalogue ID<input name="stickerCatalogueId" inputMode="numeric" /></label><label>Sticker slot<input name="stickerSlot" required inputMode="numeric" min="0" max="5" defaultValue="0" /></label></div><label>Reason<input name="reason" required maxLength={180} defaultValue="Staff sticker attachment" /></label><button className="button button-secondary" type="submit">Attach sticker</button></form>
+        </section>
+      ) : null}
+          </div>
+        </section>
+      ) : null}
     </section>
   );
 }

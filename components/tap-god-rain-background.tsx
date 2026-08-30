@@ -10,18 +10,18 @@ type RainDropStyle = CSSProperties & {
   "--rain-width": string;
 };
 
-const rainDrops = Array.from({ length: 44 }, (_, index) => {
+const rainDrops = Array.from({ length: 56 }, (_, index) => {
   const style: RainDropStyle = {
     "--rain-x": `${(index * 37 + 11) % 101}%`,
-    "--rain-delay": `${-((index * 0.71) % 8.7).toFixed(2)}s`,
-    "--rain-duration": `${(3.15 + (index % 9) * 0.31).toFixed(2)}s`,
-    "--rain-length": `${78 + (index % 8) * 17}px`,
-    "--rain-opacity": `${(0.25 + (index % 6) * 0.095).toFixed(3)}`,
-    "--rain-drift": `${-38 + (index % 7) * 9}px`,
-    "--rain-width": index % 9 === 0 ? "2px" : "1px",
+    "--rain-delay": `${-((index * 0.61) % 7.9).toFixed(2)}s`,
+    "--rain-duration": `${(2.75 + (index % 9) * 0.27).toFixed(2)}s`,
+    "--rain-length": `${88 + (index % 8) * 19}px`,
+    "--rain-opacity": `${(0.34 + (index % 6) * 0.1).toFixed(3)}`,
+    "--rain-drift": `${-46 + (index % 7) * 11}px`,
+    "--rain-width": index % 7 === 0 ? "3px" : "1px",
   };
   return {
-    className: `${index % 9 === 0 ? "is-heavy" : ""}${index % 4 === 0 ? " is-distant" : ""}`.trim(),
+    className: `${index % 7 === 0 ? "is-heavy" : ""}${index % 4 === 0 ? " is-distant" : ""}${index % 11 === 0 ? " is-blood-drop" : ""}`.trim(),
     style,
   };
 });
@@ -29,8 +29,10 @@ const rainDrops = Array.from({ length: 44 }, (_, index) => {
 export function TapGodRainBackground() {
   return (
     <div className="tap-god-rain-background" aria-hidden="true">
+      <span className="tap-god-blood-moon" />
       <span className="tap-god-rain-architecture" />
       <span className="tap-god-rain-haze" />
+      <span className="tap-god-blood-tide" />
       <div className="tap-god-rain-field">
         {rainDrops.map((drop, index) => (
           <i className={drop.className} style={drop.style} key={index} />

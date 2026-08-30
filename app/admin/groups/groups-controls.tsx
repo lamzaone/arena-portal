@@ -1,14 +1,19 @@
 "use client";
 
 import {
+  Children,
   Fragment,
+  type ButtonHTMLAttributes,
+  type CSSProperties,
   type KeyboardEvent,
   type ReactNode,
   useDeferredValue,
+  useEffect,
   useId,
   useMemo,
   useState,
 } from "react";
+import { ChevronRight } from "lucide-react";
 
 import { SearchField } from "@/components/ui/search-field";
 
@@ -29,6 +34,36 @@ export type SearchableCatalogueEntry = {
   content: ReactNode;
 };
 
+export type GroupWorkspaceEntry = {
+  id: number;
+  key: string;
+  displayName: string;
+  source: string;
+  enabled: boolean;
+  accent: string;
+  memberCount: number;
+  tagCount: number;
+  privilegeCount: number;
+  rewardCount: number;
+};
+
+export function ConfirmSubmitButton({
+  confirmation,
+  onClick,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { confirmation: string }) {
+  return (
+    <button
+      {...props}
+      type="submit"
+      onClick={(event) => {
+        onClick?.(event);
+        if (!event.defaultPrevented && !window.confirm(confirmation)) event.preventDefault();
+      }}
+    />
+  );
+}
+
 function searchable(value: string) {
   return value.normalize("NFKD").toLocaleLowerCase("en-US").trim();
 }
@@ -38,6 +73,144 @@ function matches(value: string, query: string) {
   const words = searchable(query).split(/\s+/).filter(Boolean);
   const candidate = searchable(value);
   return words.every((word) => candidate.includes(word));
+}
+
+function replaceSelectedGroupUrl(groupId: number) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("group", String(groupId));
+  url.hash = `group-${groupId}`;
+  window.history.replaceState(window.history.state, "", url);
+}
+
+export function GroupWorkspace({
+  id,
+  groups,
+  initialSelectedId,
+  children,
+}: {
+  id: string;
+  groups: GroupWorkspaceEntry[];
+  initialSelectedId?: number | null;
+  children: ReactNode;
+}) {
+  const [selectedId, setSelectedId] = useState(
+    groups.some((group) => group.id === initialSelectedId)
+      ? initialSelectedId ?? null
+      : groups[0]?.id ?? null,
+  );
+  const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
+  const panels = Children.toArray(children);
+  const filteredGroups = useMemo(
+    () => groups.filter((group) => matches([
+      group.displayName,
+      group.key,
+      group.source,
+      group.enabled ? "enabled active" : "disabled inactive",
+    ].join(" "), deferredQuery)),
+    [deferredQuery, groups],
+  );
+  const selectedGroup =
+    filteredGroups.find((group) => group.id === selectedId) ??
+    filteredGroups[0] ??
+    null;
+  const visibleSelectedId = selectedGroup?.id ?? null;
+  const statusId = `${id}-status`;
+
+  useEffect(() => {
+    if (visibleSelectedId === null || visibleSelectedId === selectedId) return;
+    setSelectedId(visibleSelectedId);
+    replaceSelectedGroupUrl(visibleSelectedId);
+  }, [selectedId, visibleSelectedId]);
+
+  function selectGroup(groupId: number) {
+    setSelectedId(groupId);
+    replaceSelectedGroupUrl(groupId);
+  }
+
+  return (
+    <div className={styles.groupWorkspace}>
+      <aside className={styles.groupNavigator} aria-label="Group selector">
+        <div className={styles.navigatorHeading}>
+          <div>
+            <span>Group browser</span>
+            <strong>{groups.length} available</strong>
+          </div>
+          <output htmlFor={`${id}-search`}>{filteredGroups.length}</output>
+        </div>
+        <div className={styles.navigatorSearch}>
+          <SearchField
+            id={`${id}-search`}
+            label="Find a group"
+            value={query}
+            onValueChange={setQuery}
+            onClear={() => setQuery("")}
+            placeholder="Name, key, source, or status"
+            autoComplete="off"
+            maxLength={100}
+            pending={query !== deferredQuery}
+            aria-describedby={statusId}
+          />
+        </div>
+        <span className="sr-only" id={statusId} role="status" aria-live="polite">
+          {filteredGroups.length} matching group{filteredGroups.length === 1 ? "" : "s"}.
+          {selectedGroup ? ` ${selectedGroup.displayName} selected.` : " No group selected."}
+        </span>
+        <div className={styles.groupNavigationList}>
+          {filteredGroups.length ? filteredGroups.map((group) => {
+            const selected = group.id === visibleSelectedId;
+            const relatedCount = group.tagCount + group.privilegeCount + group.rewardCount;
+            return (
+              <button
+                key={group.id}
+                className={styles.groupNavigationItem}
+                type="button"
+                aria-pressed={selected}
+                data-selected={selected ? "true" : "false"}
+                style={{ "--group-accent": group.accent } as CSSProperties}
+                onClick={() => selectGroup(group.id)}
+              >
+                <span className={styles.groupNavigationAccent} aria-hidden="true" />
+                <span className={styles.groupNavigationCopy}>
+                  <span>
+                    <strong>{group.displayName}</strong>
+                    <i data-enabled={group.enabled ? "true" : "false"}>
+                      {group.enabled ? "Active" : "Disabled"}
+                    </i>
+                  </span>
+                  <code>{group.key}</code>
+                  <small>
+                    {group.source} · {group.memberCount} member{group.memberCount === 1 ? "" : "s"} · {relatedCount} linked
+                  </small>
+                </span>
+                <ChevronRight aria-hidden="true" />
+              </button>
+            );
+          }) : (
+            <p className={styles.navigatorEmpty}>No groups match this search.</p>
+          )}
+        </div>
+      </aside>
+
+      <div className={styles.groupWorkspacePanels}>
+        {selectedGroup ? (
+          panels.map((panel, index) => (
+            <div key={groups[index]?.id ?? index} hidden={groups[index]?.id !== visibleSelectedId}>
+              {panel}
+            </div>
+          ))
+        ) : (
+          <div className={styles.groupWorkspaceEmpty}>
+            <strong>No matching group to edit.</strong>
+            <span>Adjust the group search or clear it to return to the current selection.</span>
+            <button className="button button-secondary" type="button" onClick={() => setQuery("")}>
+              Clear search
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function PermissionPicker({
@@ -111,7 +284,7 @@ export function PermissionPicker({
           </option>
           {filteredPermissions.map((permission) => (
             <option key={permission.id} value={permission.id}>
-              {permission.displayName} · {permission.key} · {permission.scope}
+              {permission.displayName} · {permission.key} · {permission.scope}{permission.sensitive ? " · sensitive" : ""}
             </option>
           ))}
         </select>

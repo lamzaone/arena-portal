@@ -2,6 +2,8 @@ const stattrakPrefix = /^StatTrak(?:™)?\s+/iu;
 const starredStattrakPrefix = /^★\s*StatTrak(?:™)?\s+/iu;
 const starPrefix = /^★\s*/u;
 
+const souvenirPrefix = /^Souvenir\s+/iu;
+
 /**
  * Presents StatTrak item names in Counter-Strike's order. The formatter is
  * idempotent because catalogue and provider names may already contain either
@@ -10,8 +12,11 @@ const starPrefix = /^★\s*/u;
 export function economyItemDisplayName(
   displayName: string,
   stattrak: boolean,
+  souvenir = false,
 ) {
   const normalized = displayName.trim();
+  if (souvenir && normalized)
+    return souvenirPrefix.test(normalized) ? normalized : `Souvenir ${normalized}`;
   if (!stattrak || !normalized) return normalized;
 
   if (starredStattrakPrefix.test(normalized)) {

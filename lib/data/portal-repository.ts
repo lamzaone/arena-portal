@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash, randomInt, randomUUID } from "node:crypto";
 
-import mysql, {
+import {
   type Pool,
   type PoolConnection,
   type ResultSetHeader,
@@ -16,6 +16,10 @@ import {
   getEffectiveIdentityGroupBadgesForPlayers,
   type IdentityGroupBadgeData,
 } from "@/lib/data/identity-groups";
+import {
+  getGameDatabasePool,
+  getPortalDatabasePool,
+} from "@/lib/data/database-pools";
 import {
   ECONOMY_ITEM_TYPES,
   ECONOMY_MAX_RARITY_RANK,
@@ -36,6 +40,7 @@ import {
   normalizeMarketplaceFloatValue,
   selectMarketplacePriceFallback,
 } from "@/lib/economy/market-pricing";
+import { economySellbackPayoutTokens } from "@/lib/economy/sellback";
 
 type StatRow = RowDataPacket & {
   name: string;
@@ -639,37 +644,15 @@ export type StaffModerationPage = {
   pageSize: number;
 };
 
-let gamePool: Pool | undefined;
-let portalPool: Pool | undefined;
 let mvpColumnPromise: Promise<string | null> | undefined;
 let noscopeColumnPromise: Promise<string | null> | undefined;
 
-function createPool(connectionUrl: string) {
-  return mysql.createPool({
-    uri: connectionUrl,
-    connectionLimit: 5,
-    enableKeepAlive: true,
-    namedPlaceholders: false,
-    // SteamID64 values exceed JavaScript's safe integer range. mysql2 must
-    // return BIGINT columns as strings so IDs are never rounded to a nearby
-    // account when rendered or sent to the server bridge.
-    supportBigNumbers: true,
-    bigNumberStrings: true,
-  });
-}
-
 function getGamePool() {
-  const connectionUrl = process.env.GAME_DATABASE_URL;
-  if (!connectionUrl) return null;
-  gamePool ??= createPool(connectionUrl);
-  return gamePool;
+  return getGameDatabasePool();
 }
 
 function getPortalPool() {
-  const connectionUrl = process.env.PORTAL_DATABASE_URL;
-  if (!connectionUrl) return null;
-  portalPool ??= createPool(connectionUrl);
-  return portalPool;
+  return getPortalDatabasePool();
 }
 
 function getAdminPool() {
@@ -1505,6 +1488,36 @@ async function getGroupMembershipsForPlayers(steamIds: string[]) {
 }
 
 /**
+ * Resolves the complete player-facing badge set in bulk. This combines live
+ * Admins.Core/VIPCore membership with portal-managed custom groups so pages
+ * outside the ranking and VIP rosters can render the same profile hover card.
+ */
+export async function getPlayerIdentityGroupBadges(steamIds: string[]) {
+  const uniqueSteamIds = [
+    ...new Set(steamIds.filter((steamId) => /^7656119\d{10}$/.test(steamId))),
+  ];
+  if (!uniqueSteamIds.length) {
+    return new Map<string, IdentityGroupBadgeData[]>();
+  }
+
+  const memberships = await getGroupMembershipsForPlayers(uniqueSteamIds);
+  return getEffectiveIdentityGroupBadgesForPlayers(
+    uniqueSteamIds.map((steamId) => {
+      const playerMemberships = memberships.get(steamId);
+      return {
+        steamId,
+        vipGroupNames: (playerMemberships?.vipGroups ?? []).map(
+          (group) => group.externalKey ?? group.name,
+        ),
+        adminGroupNames: (playerMemberships?.adminGroups ?? []).map(
+          (group) => group.externalKey ?? group.name,
+        ),
+      };
+    }),
+  );
+}
+
+/**
  * Reads both external membership providers without the dashboard's optional,
  * fail-soft query wrappers. Reward reconciliation must distinguish "no groups"
  * from "the game database could not be read" or it could revoke valid items.
@@ -1586,6 +1599,57 @@ export async function getExternalIdentityGroupMemberSteamIds(input: {
         .filter(isSteamId),
     ),
   ];
+}
+
+/**
+ * Reads the complete active Admins.Core/VIPCore membership index with one
+ * query per provider. The Groups workspace uses this instead of issuing one
+ * database round-trip for every visible external group.
+ */
+export async function getExternalIdentityGroupMembershipIndex() {
+  const pool = getGamePool();
+  if (!pool) throw new Error("The game database is not configured.");
+
+  const [vipResult, adminResult] = await Promise.all([
+    pool.query<Array<RowDataPacket & { account_id: string | number; group_name: string }>>(
+      "SELECT account_id, `group` AS group_name FROM vip_users WHERE sid = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) ORDER BY `group`, account_id",
+      [getVipServerId()],
+    ),
+    pool.query<AdminListRow[]>(
+      "SELECT Id, SteamId64, Username, Permissions, Groups, Immunity, Servers FROM admins ORDER BY SteamId64",
+    ),
+  ]);
+
+  const sets = new Map<string, Set<string>>();
+  const add = (
+    sourceType: "admins_core" | "vipcore",
+    externalKey: string,
+    memberSteamId: string,
+  ) => {
+    const normalizedKey = externalKey.normalize("NFKC").trim().toLocaleLowerCase("en-US");
+    if (!normalizedKey || !isSteamId(memberSteamId)) return;
+    const lookupKey = `${sourceType}\0${normalizedKey}`;
+    const members = sets.get(lookupKey) ?? new Set<string>();
+    members.add(memberSteamId);
+    sets.set(lookupKey, members);
+  };
+
+  for (const row of vipResult[0]) {
+    const groupName = String(row.group_name ?? "").trim();
+    const memberSteamId = vipAccountToSteamId(String(row.account_id));
+    if (groupName) add("vipcore", groupName, memberSteamId);
+  }
+  for (const row of adminResult[0]) {
+    if (!isAssignedToConfiguredGameServer(toGroups(row.Servers))) continue;
+    const memberSteamId = String(row.SteamId64);
+    for (const groupName of toGroups(row.Groups)) {
+      add("admins_core", groupName, memberSteamId);
+    }
+  }
+
+  return new Map(
+    [...sets].map(([lookupKey, members]) => [lookupKey, [...members].sort()]),
+  );
 }
 
 function leaderboardFilter(query: string) {
@@ -4025,6 +4089,8 @@ export type StaffEconomyItemCustomization = {
   floatValue?: number | null;
   stattrak?: boolean;
   stattrakCount?: number;
+  /** Canonical instance flag. Souvenir grants are weapon-skin-only and untradable. */
+  souvenir?: boolean;
   nametag?: string | null;
   attributes?: Record<string, unknown>;
 };
@@ -4061,6 +4127,45 @@ export type StaffGrantEconomyItemResult = {
   itemId: string;
   stickerItemIds: string[];
 };
+
+export type StaffGrantEconomyItemLine = {
+  catalogueId?: number;
+  customItem?: StaffCustomEconomyItem | null;
+  customization?: StaffEconomyItemCustomization;
+  tradable?: boolean;
+  stickers?: StaffStickerGrant[];
+  /** Only catalogue-backed crates and capsules may use a quantity above one. */
+  quantity?: number;
+};
+
+export type StaffGrantEconomyItemsInput = {
+  actorSteamId: string;
+  targetSteamId: string;
+  lines: StaffGrantEconomyItemLine[];
+  reason: string;
+  idempotencyKey: string;
+};
+
+export type StaffGrantEconomyItemsResult = {
+  itemIds: string[];
+  stickerItemIds: string[];
+  lineResults: Array<{
+    lineIndex: number;
+    itemIds: string[];
+    stickerItemIds: string[];
+  }>;
+};
+
+/** Adds line context to an otherwise ordinary repository validation error. */
+export class StaffGrantLineError extends EconomyRepositoryError {
+  readonly lineIndex: number;
+
+  constructor(lineIndex: number, error: EconomyRepositoryError) {
+    super(error.code, `Selected item ${lineIndex + 1}: ${error.message}`);
+    this.name = "StaffGrantLineError";
+    this.lineIndex = lineIndex;
+  }
+}
 
 export type StaffUpdateEconomyItemResult = {
   itemId: string;
@@ -4153,8 +4258,17 @@ export type StaffEconomyAccount = {
   wallet: TokenWallet;
   inventory: EconomyInventoryPage;
   loadout: EconomyLoadoutSlot[];
+  /** Unfiltered authoritative available-item source for staff loadout assignment. */
+  loadoutCandidates: StaffEconomyLoadoutCandidate[];
   pendingIncomingTrades: number;
   pendingOutgoingTrades: number;
+};
+
+export type StaffEconomyLoadoutCandidate = {
+  id: string;
+  itemType: EconomyItemType;
+  displayName: string;
+  definitionIndex: number | null;
 };
 
 export type StaffEconomyAccountSummary = {
@@ -4174,6 +4288,9 @@ export type StaffEconomyAccountFilter = {
 export type StaffEconomyAccountOptions = {
   inventoryPage?: number;
   inventoryPageSize?: number;
+  inventoryQuery?: string;
+  inventoryItemTypes?: EconomyItemType[];
+  inventoryStates?: EconomyItemState[];
 };
 
 export type StaffEconomyAccountPage = {
@@ -5346,6 +5463,7 @@ function toEconomyInventoryItem(
       ? String(row.display_name)
       : economyCustomDisplayName(attributes, itemType)),
     stattrak,
+    attributes.souvenir === true,
   );
   const storedRarityRank = economyNumber(row.rarity_rank, "inventory rarity");
   const catalogueRarityRank =
@@ -7441,9 +7559,9 @@ export async function getPlayerEconomyInventory(
     const query =
       "%" + economyText(filter.query, "Inventory search", 120) + "%";
     where.push(
-      "(c.display_name LIKE ? OR c.market_hash_name LIKE ? OR i.nametag LIKE ? OR JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.displayName')) LIKE ?)",
+      "(i.id LIKE ? OR c.display_name LIKE ? OR c.market_hash_name LIKE ? OR i.nametag LIKE ? OR JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.displayName')) LIKE ?)",
     );
-    values.push(query, query, query, query);
+    values.push(query, query, query, query, query);
   }
   const clause = " WHERE " + where.join(" AND ");
   const [countRows] = await pool.query<
@@ -7625,6 +7743,7 @@ export async function getPlayerEconomyLoadout(
                   ),
             ),
             itemStattrak,
+            itemAttributes?.souvenir === true,
           )
         : null;
     const item =
@@ -8203,6 +8322,24 @@ async function createEconomyInventoryItem(
   const displayName = catalogue?.displayName ?? custom?.displayName ?? itemType;
   const baseMetadata = catalogue?.metadata ?? custom?.metadata ?? {};
   const requested = input.customization ?? {};
+  const requestedSouvenir =
+    requested.souvenir ?? economyMetadataBoolean(baseMetadata, "souvenir");
+  if (
+    !economyIsSkinLike(itemType) &&
+    ((requested.seed !== undefined && requested.seed !== null) ||
+      (requested.floatValue !== undefined && requested.floatValue !== null))
+  ) {
+    economyError(
+      "incompatible_item",
+      "Float and seed customization is available only for skins, knives, and gloves.",
+    );
+  }
+  if (requestedSouvenir && itemType !== "skin") {
+    economyError(
+      "incompatible_item",
+      "Souvenir is available only for weapon skins.",
+    );
+  }
   const defaultSeed =
     economyMetadataInteger(baseMetadata, "seed") ??
     economyMetadataInteger(baseMetadata, "defaultSeed");
@@ -8231,20 +8368,49 @@ async function createEconomyInventoryItem(
       "The item float is outside this catalogue finish's limits.",
     );
   }
-  const stattrakCount =
+  const requestedStattrakCount =
     requested.stattrakCount === undefined
       ? economyAmount(defaultStattrakCount, "StatTrak count")
       : economyAmount(requested.stattrakCount, "StatTrak count");
   const stattrak =
     requested.stattrak ??
-    (economyMetadataBoolean(baseMetadata, "stattrak") || stattrakCount > 0);
+    (economyMetadataBoolean(baseMetadata, "stattrak") ||
+      requestedStattrakCount > 0);
+  if (
+    !economyItemSupportsStattrak(itemType) &&
+    (stattrak || requestedStattrakCount > 0)
+  ) {
+    economyError(
+      "incompatible_item",
+      "StatTrak is available only for weapon skins and knives.",
+    );
+  }
+  if (requestedSouvenir && (stattrak || requestedStattrakCount > 0)) {
+    economyError(
+      "incompatible_item",
+      "Souvenir and StatTrak cannot be combined on one item.",
+    );
+  }
+  const stattrakCount = stattrak ? requestedStattrakCount : 0;
   const nametag = economyNullableText(requested.nametag, "Name tag", 128);
   const attributes = { ...baseMetadata, ...(requested.attributes ?? {}) };
+  // Souvenir is a canonical instance property, not an arbitrary JSON escape
+  // hatch. Normalize it after raw attributes so a crafted staff request cannot
+  // produce a tradable item that merely presents itself as Souvenir.
+  if (
+    requested.souvenir !== undefined ||
+    Object.hasOwn(baseMetadata, "souvenir") ||
+    Object.hasOwn(requested.attributes ?? {}, "souvenir")
+  ) {
+    attributes.souvenir = requestedSouvenir;
+  }
   if (!catalogue) attributes.displayName = displayName;
   if (!catalogue && rarityRank === ECONOMY_SPECIAL_RARITY_RANK) {
     attributes.customProduct = true;
   }
-  const tradable = input.tradable ?? true;
+  // Until Souvenir has its own market-price identity, these instances must
+  // not enter trade or sale flows as ordinary weapon skins.
+  const tradable = requestedSouvenir ? false : input.tradable ?? true;
   const id = randomUUID().toLowerCase();
 
   await connection.execute(
@@ -8281,6 +8447,7 @@ async function createEconomyInventoryItem(
       nametag,
       stattrak,
       stattrakCount,
+      souvenir: requestedSouvenir,
       seed,
       floatValue,
     },
@@ -9961,7 +10128,7 @@ export async function purchaseEconomyItem(
 }
 
 /**
- * Buys an owned inventory instance back for 10% of the price resolved by the
+ * Buys an owned inventory instance back for 30% of the price resolved by the
  * same public adapter as the portal Market. The saved market snapshot remains
  * the fallback when the public database has no current quote.
  */
@@ -10347,9 +10514,8 @@ export async function sellEconomyItem(
           "This item has no current market or last-known price.",
         );
       }
-      // Low-value market items still have a meaningful, predictable return:
-      // anything below 50 Tokens sells for the 5-Token minimum.
-      const payoutTokens = Math.max(5, Math.floor(marketPriceTokens / 10));
+      // Low-value market items still have the shared 5-Token minimum.
+      const payoutTokens = economySellbackPayoutTokens(marketPriceTokens);
 
       await applyTokenDelta({
         connection: context.connection,
@@ -10532,7 +10698,7 @@ export async function sellEconomyItems(
             "price_unavailable",
             "One or more selected items have no current market or last-known price.",
           );
-        const payoutTokens = Math.max(5, Math.floor(marketPriceTokens / 10));
+        const payoutTokens = economySellbackPayoutTokens(marketPriceTokens);
         return { sale, item, marketPriceTokens, payoutTokens, fallbackPrice };
       });
       const payoutTokens = prepared.reduce((total, sale) => {
@@ -12992,6 +13158,297 @@ export async function staffGrantEconomyItem(
   });
 }
 
+/**
+ * Grants a staff-curated set of catalogue/custom items in one idempotent
+ * transaction. Every selected line passes the authoritative catalogue and
+ * instance validators, and any later line failure rolls back the complete grant.
+ */
+export async function staffGrantEconomyItems(
+  input: StaffGrantEconomyItemsInput,
+): Promise<StaffGrantEconomyItemsResult> {
+  const actorSteamId = economySteamId(input.actorSteamId, "Staff Steam ID");
+  const targetSteamId = economySteamId(input.targetSteamId, "Target Steam ID");
+  const reason = economyText(input.reason, "Staff reason", 300);
+  if (!Array.isArray(input.lines) || input.lines.length < 1 || input.lines.length > 50) {
+    economyError(
+      "invalid_input",
+      "Select between 1 and 50 item lines for a bulk grant.",
+    );
+  }
+
+  const lines = input.lines.map((line, lineIndex) => {
+    try {
+      if (!line || typeof line !== "object")
+        economyError("invalid_input", "The selected item is invalid.");
+      const customItem = line.customItem ?? undefined;
+      if ((line.catalogueId === undefined) === (customItem === undefined)) {
+        economyError(
+          "invalid_input",
+          "Choose exactly one catalogue item or custom item.",
+        );
+      }
+      const quantity = line.quantity ?? 1;
+      if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 100) {
+        economyError("invalid_input", "Quantity must be between 1 and 100.");
+      }
+      const stickers = line.stickers ?? [];
+      if (!Array.isArray(stickers) || stickers.length > 6) {
+        economyError(
+          "invalid_input",
+          "The initial sticker configuration is invalid.",
+        );
+      }
+      return {
+        catalogueId: line.catalogueId,
+        customItem,
+        customization: line.customization ?? {},
+        tradable: line.tradable ?? true,
+        stickers,
+        quantity,
+      };
+    } catch (error) {
+      if (error instanceof EconomyRepositoryError)
+        throw new StaffGrantLineError(lineIndex, error);
+      throw error;
+    }
+  });
+  const totalQuantity = lines.reduce((total, line) => total + line.quantity, 0);
+  if (totalQuantity > 500) {
+    economyError(
+      "invalid_input",
+      "A single bulk grant may create at most 500 inventory items.",
+    );
+  }
+
+  return runEconomyMutation({
+    operationName: "staff.items.grant",
+    actorSteamId,
+    idempotencyKey: input.idempotencyKey,
+    request: { targetSteamId, lines, reason },
+    work: async (context) => {
+      await lockTokenAccounts(context.connection, [targetSteamId]);
+      const catalogueIds = lines.flatMap((line) => [
+        ...(line.catalogueId === undefined ? [] : [line.catalogueId]),
+        ...line.stickers.flatMap((sticker) =>
+          sticker.catalogueId === undefined ? [] : [sticker.catalogueId],
+        ),
+      ]);
+      const catalogues = await lockEconomyCatalogues(
+        context.connection,
+        catalogueIds,
+        true,
+      );
+
+      const containerCatalogueIds: number[] = [];
+      for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+        const line = lines[lineIndex];
+        try {
+          const catalogue =
+            line.catalogueId === undefined
+              ? null
+              : catalogues.get(line.catalogueId) ?? null;
+          const custom = catalogue ? null : economyCustomItem(line.customItem);
+          const itemType = catalogue?.itemType ?? custom?.itemType;
+          if (
+            line.quantity > 1 &&
+            itemType !== "crate" &&
+            itemType !== "capsule"
+          ) {
+            economyError(
+              "incompatible_item",
+              "Only crates and capsules support a quantity above one.",
+            );
+          }
+          if (
+            catalogue &&
+            (catalogue.itemType === "crate" || catalogue.itemType === "capsule")
+          ) {
+            containerCatalogueIds.push(catalogue.id);
+          }
+        } catch (error) {
+          if (error instanceof EconomyRepositoryError)
+            throw new StaffGrantLineError(lineIndex, error);
+          throw error;
+        }
+      }
+
+      // Lock all container tables and entries in deterministic order before
+      // writing inventory rows. This keeps bulk grants atomic and deadlock-safe.
+      const lootTables = await lockEconomyContainerLootTables(
+        context.connection,
+        containerCatalogueIds,
+      );
+      await lockEconomyLootEntriesByTable(
+        context.connection,
+        [...lootTables.values()].map((table) => table.id),
+      );
+
+      const itemIds: string[] = [];
+      const allStickerItemIds: string[] = [];
+      const lineResults: StaffGrantEconomyItemsResult["lineResults"] = [];
+
+      for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+        const line = lines[lineIndex];
+        const catalogue =
+          line.catalogueId === undefined
+            ? null
+            : catalogues.get(line.catalogueId) ?? null;
+        const lineItemIds: string[] = [];
+        const lineStickerItemIds: string[] = [];
+        try {
+          for (let copyIndex = 0; copyIndex < line.quantity; copyIndex += 1) {
+            const lineKey = `staff:grant:${lineIndex}:${copyIndex}`;
+            const created = await createEconomyInventoryItem(
+              context.connection,
+              {
+                ownerSteamId: targetSteamId,
+                catalogue,
+                customItem: line.customItem,
+                customization: line.customization,
+                tradable: line.tradable,
+                source: {
+                  type: "staff_bulk_grant",
+                  actorSteamId,
+                  reason,
+                  lineIndex,
+                  copyIndex,
+                },
+                actorSteamId,
+                idempotencyKey: context.idempotencyKey,
+                lineKey,
+                eventType: "staff.item.granted",
+              },
+            );
+            const weapon = line.stickers.length
+              ? await lockEconomyInventoryItem(context.connection, created.id)
+              : null;
+            const usedSlots = new Set<number>();
+            for (
+              let stickerIndex = 0;
+              stickerIndex < line.stickers.length;
+              stickerIndex += 1
+            ) {
+              const stickerGrant = line.stickers[stickerIndex];
+              if (
+                !Number.isSafeInteger(stickerGrant.slot) ||
+                stickerGrant.slot < 0 ||
+                stickerGrant.slot > 5 ||
+                usedSlots.has(stickerGrant.slot)
+              ) {
+                economyError(
+                  "invalid_input",
+                  "An initial sticker slot is invalid or duplicated.",
+                );
+              }
+              usedSlots.add(stickerGrant.slot);
+              const customSticker = stickerGrant.customItem ?? undefined;
+              if (
+                (stickerGrant.catalogueId === undefined) ===
+                (customSticker === undefined)
+              ) {
+                economyError(
+                  "invalid_input",
+                  "Each initial sticker must use a catalogue or custom item.",
+                );
+              }
+              const stickerCatalogue =
+                stickerGrant.catalogueId === undefined
+                  ? null
+                  : catalogues.get(stickerGrant.catalogueId) ?? null;
+              const stickerCreated = await createEconomyInventoryItem(
+                context.connection,
+                {
+                  ownerSteamId: targetSteamId,
+                  catalogue: stickerCatalogue,
+                  customItem: customSticker,
+                  customization: stickerGrant.customization,
+                  source: {
+                    type: "staff_bulk_grant_sticker",
+                    actorSteamId,
+                    reason,
+                    parentItemId: created.id,
+                    lineIndex,
+                    copyIndex,
+                  },
+                  actorSteamId,
+                  idempotencyKey: context.idempotencyKey,
+                  lineKey: `${lineKey}:sticker:${stickerIndex}`,
+                  eventType: "staff.sticker.granted",
+                },
+              );
+              const sticker = await lockEconomyInventoryItem(
+                context.connection,
+                stickerCreated.id,
+              );
+              await attachEconomyStickerRecord({
+                connection: context.connection,
+                weapon: weapon!,
+                sticker,
+                slot: stickerGrant.slot,
+                actorSteamId,
+                idempotencyKey: context.idempotencyKey,
+                linePrefix: `bulk-grant:${lineIndex}:${copyIndex}:${stickerIndex}`,
+                eventType: "staff.sticker.attached",
+              });
+              lineStickerItemIds.push(sticker.id);
+              allStickerItemIds.push(sticker.id);
+            }
+            lineItemIds.push(created.id);
+            itemIds.push(created.id);
+          }
+        } catch (error) {
+          if (error instanceof StaffGrantLineError) throw error;
+          if (error instanceof EconomyRepositoryError)
+            throw new StaffGrantLineError(lineIndex, error);
+          throw error;
+        }
+        lineResults.push({
+          lineIndex,
+          itemIds: lineItemIds,
+          stickerItemIds: lineStickerItemIds,
+        });
+      }
+
+      await writeEconomyAdminAudit({
+        connection: context.connection,
+        actorSteamId,
+        action: "items.granted",
+        targetSteamId,
+        targetType: "inventory-account",
+        targetId: targetSteamId,
+        idempotencyKey: context.idempotencyKey,
+        metadata: {
+          lineCount: lines.length,
+          itemCount: itemIds.length,
+          stickerItemCount: allStickerItemIds.length,
+          reason,
+        },
+      });
+      await createEconomyNotification({
+        connection: context.connection,
+        steamId: targetSteamId,
+        notificationType: "staff.items.granted",
+        payload: {
+          itemCount: itemIds.length,
+          lineCount: lines.length,
+          itemIds: itemIds.slice(0, 50),
+          reason,
+        },
+      });
+      if (allStickerItemIds.length) {
+        await enqueueEconomyLoadoutRefresh(
+          context.connection,
+          targetSteamId,
+          context.idempotencyKey,
+          "staff-bulk-grant-stickers",
+          [...itemIds, ...allStickerItemIds],
+        );
+      }
+      return { itemIds, stickerItemIds: allStickerItemIds, lineResults };
+    },
+  });
+}
+
 export async function staffUpdateEconomyItem(
   input: StaffUpdateEconomyItemInput,
 ): Promise<StaffUpdateEconomyItemResult> {
@@ -13024,49 +13481,132 @@ export async function staffUpdateEconomyItem(
         typeof customization.stattrak !== "boolean"
       )
         economyError("invalid_input", "StatTrak must be enabled or disabled.");
-      const nextSeed = Object.prototype.hasOwnProperty.call(
+      if (
+        customization.souvenir !== undefined &&
+        typeof customization.souvenir !== "boolean"
+      )
+        economyError("invalid_input", "Souvenir must be enabled or disabled.");
+      if (
+        customization.attributes !== undefined &&
+        !asRecord(customization.attributes)
+      )
+        economyError("invalid_input", "Item attributes must be an object.");
+
+      const skinLike = economyIsSkinLike(item.itemType);
+      const supportsStattrak = economyItemSupportsStattrak(item.itemType);
+      const hasSeed = Object.prototype.hasOwnProperty.call(
         customization,
         "seed",
-      )
-        ? economySeed(customization.seed, "Item seed")
-        : item.seed;
-      const nextFloat = Object.prototype.hasOwnProperty.call(
+      );
+      const hasFloat = Object.prototype.hasOwnProperty.call(
         customization,
         "floatValue",
-      )
+      );
+      const requestedSeed = hasSeed
+        ? economySeed(customization.seed, "Item seed")
+        : item.seed;
+      const requestedFloat = hasFloat
         ? economyFloat(customization.floatValue, "Item float")
         : item.floatValue;
-      const nextCount =
+      if (
+        !skinLike &&
+        ((hasSeed && requestedSeed !== null) ||
+          (hasFloat && requestedFloat !== null))
+      ) {
+        economyError(
+          "incompatible_item",
+          "Float and seed customization is available only for skins, knives, and gloves.",
+        );
+      }
+      const nextSeed = skinLike ? requestedSeed : null;
+      const nextFloat = skinLike ? requestedFloat : null;
+      if (nextFloat !== null && item.catalogue) {
+        const floatRange = economyCatalogueFloatRange(
+          item.itemType,
+          item.catalogue.metadata,
+        );
+        if (
+          floatRange &&
+          (nextFloat < floatRange.min || nextFloat > floatRange.max)
+        ) {
+          economyError(
+            "invalid_input",
+            `Item float must be between ${floatRange.min} and ${floatRange.max}.`,
+          );
+        }
+      }
+
+      const requestedCount =
         customization.stattrakCount === undefined
           ? item.stattrakCount
           : economyAmount(customization.stattrakCount, "StatTrak count");
-      const nextStattrak =
+      const requestedStattrak =
         customization.stattrak === undefined
           ? item.stattrak
           : customization.stattrak;
+      if (
+        !supportsStattrak &&
+        (customization.stattrak === true ||
+          (customization.stattrakCount ?? 0) > 0)
+      ) {
+        economyError(
+          "incompatible_item",
+          "StatTrak is available only for weapon skins and knives.",
+        );
+      }
+      const nextStattrak = supportsStattrak ? requestedStattrak : false;
+      const nextCount =
+        supportsStattrak && nextStattrak ? requestedCount : 0;
+
       const nextNametag = Object.prototype.hasOwnProperty.call(
         customization,
         "nametag",
       )
         ? economyNullableText(customization.nametag, "Name tag", 128)
         : item.nametag;
-      if (
-        customization.attributes !== undefined &&
-        !asRecord(customization.attributes)
-      )
-        economyError("invalid_input", "Item attributes must be an object.");
       const nextAttributes =
         customization.attributes === undefined
-          ? item.attributes
+          ? { ...item.attributes }
           : { ...item.attributes, ...customization.attributes };
+      // The dedicated boolean field is authoritative. Raw attributes may
+      // preserve the current value, but cannot turn an ordinary item into a
+      // Souvenir or bypass the corresponding trade restriction.
+      const currentSouvenir =
+        item.itemType === "skin" &&
+        economyMetadataBoolean(item.attributes, "souvenir");
+      const requestedSouvenir =
+        customization.souvenir ?? currentSouvenir;
+      if (customization.souvenir === true && item.itemType !== "skin") {
+        economyError(
+          "incompatible_item",
+          "Souvenir is available only for weapon skins.",
+        );
+      }
+      const nextSouvenir =
+        item.itemType === "skin" ? requestedSouvenir : false;
+      if (nextSouvenir && (nextStattrak || nextCount > 0)) {
+        economyError(
+          "incompatible_item",
+          "Souvenir and StatTrak cannot be combined on one item.",
+        );
+      }
+      if (
+        customization.souvenir !== undefined ||
+        Object.hasOwn(item.attributes, "souvenir") ||
+        Object.hasOwn(customization.attributes ?? {}, "souvenir")
+      ) {
+        nextAttributes.souvenir = nextSouvenir;
+      }
+      const nextTradable = nextSouvenir ? false : item.tradable;
       await context.connection.execute(
-        "UPDATE portal_inventory_items SET seed = ?, float_value = ?, stattrak = ?, stattrak_count = ?, nametag = ?, attributes = ? WHERE id = ?",
+        "UPDATE portal_inventory_items SET seed = ?, float_value = ?, stattrak = ?, stattrak_count = ?, nametag = ?, tradable = ?, attributes = ? WHERE id = ?",
         [
           nextSeed,
           nextFloat,
           nextStattrak,
           nextCount,
           nextNametag,
+          nextTradable,
           JSON.stringify(nextAttributes),
           itemId,
         ],
@@ -13086,6 +13626,7 @@ export async function staffUpdateEconomyItem(
           stattrak: nextStattrak,
           stattrakCount: nextCount,
           nametag: nextNametag,
+          tradable: nextTradable,
           attributes: nextAttributes,
         },
         metadata: { reason },
@@ -13650,20 +14191,80 @@ export async function staffClearEconomyLoadoutSlot(
   });
 }
 
+/**
+ * Returns every available item that can participate in a loadout assignment.
+ * This deliberately does not reuse the staff inventory page: that page may be
+ * filtered and is capped for presentation, while this list is an authoritative
+ * mutation candidate source whose rows are still revalidated under lock when
+ * staff submits an equip action.
+ */
+export async function getStaffEconomyLoadoutCandidates(
+  steamId: string,
+): Promise<StaffEconomyLoadoutCandidate[]> {
+  const ownerSteamId = economySteamId(steamId);
+  const pool = getPortalPool();
+  if (!pool) return [];
+  const [rows] = await pool.query<
+    Array<
+      RowDataPacket & {
+        id: string;
+        item_type: string;
+        definition_index: number | string | null;
+        display_name: string | null;
+        stattrak: number | boolean;
+        attributes: unknown;
+      }
+    >
+  >(
+    "SELECT i.id, i.item_type, i.definition_index, c.display_name, i.stattrak, i.attributes " +
+      "FROM portal_inventory_items AS i " +
+      "LEFT JOIN portal_economy_catalogue AS c ON c.id = i.catalogue_id " +
+      "WHERE i.owner_steam_id = ? AND i.state = 'available' " +
+      "AND i.item_type IN ('skin', 'knife', 'glove', 'agent', 'music_kit') " +
+      "ORDER BY i.item_type ASC, COALESCE(c.display_name, JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.displayName')), i.id) ASC, i.acquired_at DESC, i.id ASC",
+    [ownerSteamId],
+  );
+  return rows.map((row) => {
+    const itemType = economyItemType(String(row.item_type));
+    const attributes = economyRecord(row.attributes);
+    const baseDisplayName = row.display_name
+      ? String(row.display_name)
+      : economyCustomDisplayName(attributes, itemType);
+    return {
+      id: economyItemId(String(row.id)),
+      itemType,
+      displayName: economyItemDisplayName(
+        economyDisplayName(itemType, baseDisplayName),
+        economyBoolean(row.stattrak),
+        attributes.souvenir === true,
+      ),
+      definitionIndex: economyOptionalInteger(
+        row.definition_index,
+        "staff loadout candidate definition index",
+      ),
+    };
+  });
+}
+
 export async function getStaffEconomyAccount(
   steamId: string,
   options: StaffEconomyAccountOptions = {},
 ): Promise<StaffEconomyAccount> {
   economySteamId(steamId);
   const inventoryFilter: EconomyInventoryFilter = {
-    states: ["available", "escrowed", "attached", "consumed", "revoked"],
+    query: options.inventoryQuery,
+    itemTypes: options.inventoryItemTypes,
+    states:
+      options.inventoryStates ??
+      ["available", "escrowed", "attached", "consumed", "revoked"],
     page: options.inventoryPage,
     pageSize: options.inventoryPageSize,
   };
-  const [wallet, inventory, loadout, displayName] = await Promise.all([
+  const [wallet, inventory, loadout, loadoutCandidates, displayName] = await Promise.all([
     getTokenWallet(steamId),
     getPlayerEconomyInventory(steamId, inventoryFilter),
     getPlayerEconomyLoadout(steamId),
+    getStaffEconomyLoadoutCandidates(steamId),
     getEconomyPlayerDisplayName(steamId),
   ]);
   const pool = getPortalPool();
@@ -13674,6 +14275,7 @@ export async function getStaffEconomyAccount(
       wallet,
       inventory,
       loadout,
+      loadoutCandidates,
       pendingIncomingTrades: 0,
       pendingOutgoingTrades: 0,
     };
@@ -13692,6 +14294,7 @@ export async function getStaffEconomyAccount(
     wallet,
     inventory,
     loadout,
+    loadoutCandidates,
     pendingIncomingTrades: economyNumber(
       tradeRows[0]?.incoming ?? 0,
       "pending incoming trade count",

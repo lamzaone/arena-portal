@@ -1,16 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-labelledby="title description">
   <title id="title">TAP GOD profile theme</title>
-  <description id="description">Gothic crimson tracery, a black cathedral arch, and a blood-red crown sigil.</description>
+  <description id="description">A high-contrast blood moon, scarlet rain, gothic tracery, and a glowing crown sigil.</description>
   <defs>
     <radialGradient id="field" cx="50%" cy="42%" r="72%">
-      <stop offset="0" stop-color="#2a050d"/>
-      <stop offset=".48" stop-color="#0d0307"/>
-      <stop offset="1" stop-color="#020102"/>
+      <stop offset="0" stop-color="#39000d"/>
+      <stop offset=".48" stop-color="#0d0004"/>
+      <stop offset="1" stop-color="#010001"/>
     </radialGradient>
     <linearGradient id="blood" x1="0" y1="0" x2="1" y2="1">
-      <stop stop-color="#ff334f"/>
-      <stop offset=".48" stop-color="#b20d2f"/>
-      <stop offset="1" stop-color="#5b0719"/>
+      <stop stop-color="#ff5c75"/>
+      <stop offset=".48" stop-color="#e90032"/>
+      <stop offset="1" stop-color="#520012"/>
     </linearGradient>
     <pattern id="tracery" width="72" height="72" patternUnits="userSpaceOnUse">
       <path d="M36 3 69 36 36 69 3 36Z" fill="none" stroke="#e11d48" stroke-opacity=".12" stroke-width="2"/>
@@ -23,6 +23,22 @@
   </defs>
   <path fill="url(#field)" d="M0 0h1200v800H0z"/>
   <path fill="url(#tracery)" d="M0 0h1200v800H0z"/>
+  <g filter="url(#glow)">
+    <circle cx="930" cy="166" r="126" fill="#290009" stroke="#ff5c75" stroke-width="5"/>
+    <circle cx="930" cy="166" r="112" fill="#c8002e" stroke="#ff1744" stroke-width="3"/>
+    <circle cx="892" cy="124" r="45" fill="#ff5c75" opacity=".42"/>
+    <circle cx="973" cy="199" r="37" fill="#520012" opacity=".8"/>
+    <circle cx="930" cy="166" r="145" fill="none" stroke="#ff1744" stroke-width="3" stroke-dasharray="3 18"/>
+  </g>
+  <g fill="#ff1744" opacity=".72">
+    <path d="M854 266h13l-4 102-7 61-7-61z"/>
+    <path d="M912 273h10l5 74-9 106-8-106z"/>
+    <path d="M975 258h14l7 94-13 79-9-79z"/>
+  </g>
+  <g stroke="#ff1744" stroke-linecap="round" opacity=".56">
+    <path d="m72 34-18 172M148 0l-21 203M242 51l-17 191M334 7l-22 216M754 20l-18 181M1062 8l-22 216M1148 55l-16 162" stroke-width="4"/>
+    <path d="m104 0-10 115M294 0l-12 136M690 0l-9 124M1110 0l-11 142" stroke="#ffdce2" stroke-width="2"/>
+  </g>
   <path d="M38 0h1124v34H38zM38 766h1124v34H38z" fill="#050104" stroke="#c81036" stroke-width="3"/>
   <path d="M116 694V278C116 115 262 46 386 46s230 69 230 232v416" fill="none" stroke="#6b0b22" stroke-width="5" opacity=".65"/>
   <path d="M1084 694V278C1084 115 938 46 814 46S584 115 584 278v416" fill="none" stroke="#6b0b22" stroke-width="5" opacity=".65"/>
@@ -30,14 +46,14 @@
     <path d="M168 644 282 530l84 84 234-278 234 278 84-84 114 114" stroke-width="8"/>
     <path d="M255 214h690" stroke-width="3" opacity=".62"/>
   </g>
-  <path d="m600 126 58 72 92-34-26 101 82 61-106 12-38 99-62-87-62 87-38-99-106-12 82-61-26-101 92 34Z" fill="#070104" stroke="#ff334f" stroke-width="7" filter="url(#glow)"/>
+  <path d="m600 126 58 72 92-34-26 101 82 61-106 12-38 99-62-87-62 87-38-99-106-12 82-61-26-101 92 34Z" fill="#050001" stroke="#ff5c75" stroke-width="7" filter="url(#glow)"/>
   <path d="m531 252 38 35 31-88 31 88 38-35-16 92H547Z" fill="url(#blood)"/>
   <path d="M224 390h752l-54 182H278z" fill="#030103" stroke="#9f1239" stroke-width="5"/>
   <path d="M278 572h644l-20 68H298z" fill="url(#blood)"/>
-  <text x="600" y="512" fill="#fff1f2" font-family="Georgia, 'Times New Roman', serif" font-size="116" font-weight="700" letter-spacing="14" text-anchor="middle">TAP GOD</text>
+  <text x="600" y="512" fill="#fff7f8" stroke="#86001f" stroke-width="2" font-family="Georgia, 'Times New Roman', serif" font-size="116" font-weight="900" letter-spacing="14" text-anchor="middle" filter="url(#glow)">TAP GOD</text>
   <text x="600" y="619" fill="#090104" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="900" letter-spacing="14" text-anchor="middle">CRIMSON ASCENDANCY</text>
-  <text x="600" y="710" fill="#fb7185" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="700" letter-spacing="7" text-anchor="middle">ARENA PROFILE SYSTEM // 002</text>
-  <g fill="#ff334f">
+  <text x="600" y="710" fill="#ff5c75" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="700" letter-spacing="7" text-anchor="middle">ARENA PROFILE SYSTEM // 002</text>
+  <g fill="#ff1744">
     <path d="M105 112h18v128h-18zm972 448h18v128h-18z"/>
     <path d="M83 132h62v7H83zm972 536h62v7h-62z"/>
   </g>

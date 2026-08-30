@@ -2,12 +2,15 @@ import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
-import type {
-  Pool,
-  PoolConnection,
-  ResultSetHeader,
-  RowDataPacket,
+import {
+  type Pool,
+  type PoolConnection,
+  type ResultSetHeader,
+  type RowDataPacket,
 } from "mysql2/promise";
+
+import { configuredGameServerGuid } from "@/lib/admin/server-scope";
+import { getGameDatabasePool } from "@/lib/data/database-pools";
 
 export type ExternalIdentitySource = "admins_core" | "vipcore";
 
@@ -26,6 +29,7 @@ export type IdentityCatalogueSyncResult = IdentityCatalogueStatus & {
 
 type ExternalGroupInput = {
   sourceType: ExternalIdentitySource;
+  sourceKind: "config" | "runtime";
   externalKey: string;
   displayName: string;
   rankWeight: number;
@@ -38,6 +42,7 @@ type ExternalGroupInput = {
 type PermissionSource = {
   sourceKind:
     | "admins_config"
+    | "admins_database"
     | "swiftly_config"
     | "command_override"
     | "source_code"
@@ -415,6 +420,7 @@ function parseAdminsGroups(file: LocatedTextFile) {
     const immunity = boundedInteger(group.immunity);
     groups.push({
       sourceType: "admins_core",
+      sourceKind: "config",
       externalKey: name,
       displayName: name,
       rankWeight: immunity,
@@ -447,6 +453,7 @@ function parseVipGroups(file: LocatedTextFile) {
     ).slice(0, 1_000);
     groups.push({
       sourceType: "vipcore",
+      sourceKind: "config",
       externalKey: name,
       displayName: name,
       rankWeight: weight,
@@ -457,6 +464,251 @@ function parseVipGroups(file: LocatedTextFile) {
     });
   }
   return groups;
+}
+
+type AdminDatabaseGroupRow = RowDataPacket & {
+  name: string;
+  permissions: unknown;
+  servers: unknown;
+  immunity: number | string;
+};
+
+type AdminDatabaseAssignmentRow = RowDataPacket & {
+  groups: unknown;
+  servers: unknown;
+};
+
+type VipDatabaseGroupRow = RowDataPacket & {
+  name: string;
+  weight: number | string;
+  values_json: unknown;
+  enabled: number | boolean;
+};
+
+type VipDatabaseAssignmentRow = RowDataPacket & { group_name: string };
+
+function storedStringList(value: unknown) {
+  let entries: unknown[] = [];
+  if (Array.isArray(value)) {
+    entries = value;
+  } else if (typeof value === "string" && value.trim()) {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      entries = Array.isArray(parsed) ? parsed : value.split(",");
+    } catch {
+      entries = value.split(",");
+    }
+  }
+  const result = new Map<string, string>();
+  for (const entry of entries) {
+    const text = String(entry ?? "").normalize("NFKC").trim();
+    if (!text || text.length > 100 || /[\r\n\0]/.test(text)) continue;
+    const key = text.toLocaleLowerCase("en-US");
+    if (!result.has(key)) result.set(key, text);
+  }
+  return [...result.values()];
+}
+
+function databasePermissionList(value: unknown) {
+  return storedStringList(value)
+    .map((permission) => permission.toLocaleLowerCase("en-US"))
+    .filter(
+      (permission) =>
+        permission === "*" ||
+        /^[a-z0-9][a-z0-9.*:_-]{0,95}$/.test(permission),
+    )
+    .slice(0, 1_000);
+}
+
+function appliesToConfiguredServer(value: unknown) {
+  const expected = configuredGameServerGuid().toLocaleLowerCase("en-US");
+  return storedStringList(value).some(
+    (server) => server.toLocaleLowerCase("en-US") === expected,
+  );
+}
+
+function configuredVipServerId() {
+  const configured = Number.parseInt(process.env.GAME_VIP_SERVER_ID ?? "1", 10);
+  return Number.isSafeInteger(configured) && configured >= 0 ? configured : 1;
+}
+
+function runtimeGroupKey(group: Pick<ExternalGroupInput, "sourceType" | "externalKey">) {
+  return `${group.sourceType}\0${group.externalKey.toLocaleLowerCase("en-US")}`;
+}
+
+/**
+ * Admins.Core and VIPCore both bootstrap their definition tables from JSON,
+ * then treat those database tables as authoritative. The portal follows the
+ * same rule and also discovers names which exist only in live assignments so
+ * an out-of-date JSON file can never hide a connected group.
+ */
+async function loadRuntimeDatabaseGroups() {
+  const connectionUrl = process.env.GAME_DATABASE_URL?.trim();
+  const warnings: string[] = [];
+  if (!connectionUrl) {
+    return {
+      groups: [] as ExternalGroupInput[],
+      authoritativeSources: new Set<ExternalIdentitySource>(),
+      warnings,
+    };
+  }
+
+  const pool = getGameDatabasePool();
+  if (!pool) {
+    return {
+      groups: [] as ExternalGroupInput[],
+      authoritativeSources: new Set<ExternalIdentitySource>(),
+      warnings,
+    };
+  }
+  const connection = await pool.getConnection();
+  const byKey = new Map<string, ExternalGroupInput>();
+  const populatedSources = new Set<ExternalIdentitySource>();
+  const add = (group: ExternalGroupInput) => {
+    const key = runtimeGroupKey(group);
+    const existing = byKey.get(key);
+    // Complete definition-table records take precedence over membership-only
+    // discovery rows, regardless of query order.
+    if (!existing || Object.keys(group.definition).length > Object.keys(existing.definition).length) {
+      byKey.set(key, group);
+    }
+  };
+
+  try {
+    try {
+      const [rows] = await connection.query<AdminDatabaseGroupRow[]>(
+        "SELECT Name AS name, Permissions AS permissions, Servers AS servers, Immunity AS immunity FROM `groups` ORDER BY Immunity DESC, Name ASC",
+      );
+      const applicable = rows.filter((row) => appliesToConfiguredServer(row.servers));
+      if (applicable.length) populatedSources.add("admins_core");
+      for (const row of applicable) {
+        const name = cleanGroupName(row.name);
+        if (!name) continue;
+        const permissions = databasePermissionList(row.permissions);
+        const immunity = boundedInteger(row.immunity);
+        add({
+          sourceType: "admins_core",
+          sourceKind: "runtime",
+          externalKey: name,
+          displayName: name,
+          rankWeight: immunity,
+          definition: { name, immunity, permissions },
+          baselinePermissions: permissions,
+          capabilityKeys: [],
+          sourceReference: "Admins.Core database · groups",
+        });
+      }
+    } catch {
+      warnings.push("Admins.Core database definitions are unavailable; using live assignments or JSON seeds.");
+    }
+
+    try {
+      const [rows] = await connection.query<AdminDatabaseAssignmentRow[]>(
+        "SELECT Groups AS `groups`, Servers AS servers FROM admins ORDER BY Id",
+      );
+      const assignedNames = unique(
+        rows
+          .filter((row) => appliesToConfiguredServer(row.servers))
+          .flatMap((row) => storedStringList(row.groups)),
+      );
+      if (assignedNames.length) populatedSources.add("admins_core");
+      for (const name of assignedNames) {
+        add({
+          sourceType: "admins_core",
+          sourceKind: "runtime",
+          externalKey: name,
+          displayName: name,
+          rankWeight: 0,
+          definition: { name, discoveredFrom: "admins.Groups" },
+          baselinePermissions: [],
+          capabilityKeys: [],
+          sourceReference: "Admins.Core database · live assignments",
+        });
+      }
+    } catch {
+      warnings.push("Admins.Core live group assignments could not be discovered.");
+    }
+
+    const vipServerId = configuredVipServerId();
+    try {
+      const [rows] = await connection.query<VipDatabaseGroupRow[]>(
+        "SELECT name, weight, values_json, enabled FROM vip_group_definitions WHERE server_id = ? ORDER BY weight DESC, name ASC",
+        [vipServerId],
+      );
+      if (rows.length) populatedSources.add("vipcore");
+      for (const row of rows) {
+        const name = cleanGroupName(row.name);
+        if (!name) continue;
+        let values: Record<string, unknown> = {};
+        try {
+          const parsed = typeof row.values_json === "string"
+            ? JSON.parse(row.values_json) as unknown
+            : row.values_json;
+          values = asObject(parsed) ?? {};
+        } catch {
+          warnings.push(`VIPCore database definition ${name} has invalid Values JSON.`);
+        }
+        const weight = boundedInteger(row.weight);
+        const capabilityKeys = unique(
+          Object.keys(values)
+            .map(cleanCapabilityKey)
+            .filter((value): value is string => Boolean(value)),
+        ).slice(0, 1_000);
+        add({
+          sourceType: "vipcore",
+          sourceKind: "runtime",
+          externalKey: name,
+          displayName: name,
+          rankWeight: weight,
+          definition: {
+            name,
+            weight,
+            enabled: row.enabled === true || Number(row.enabled) === 1,
+            values,
+          },
+          baselinePermissions: [],
+          capabilityKeys,
+          sourceReference: `VIPCore database · vip_group_definitions:${vipServerId}`,
+        });
+      }
+    } catch {
+      warnings.push("VIPCore database definitions are unavailable; using live assignments or JSON seeds.");
+    }
+
+    try {
+      const [rows] = await connection.query<VipDatabaseAssignmentRow[]>(
+        "SELECT DISTINCT `group` AS group_name FROM vip_users WHERE sid = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) ORDER BY `group`",
+        [vipServerId],
+      );
+      const assignedNames = rows
+        .map((row) => cleanGroupName(row.group_name))
+        .filter((name): name is string => Boolean(name));
+      if (assignedNames.length) populatedSources.add("vipcore");
+      for (const name of assignedNames) {
+        add({
+          sourceType: "vipcore",
+          sourceKind: "runtime",
+          externalKey: name,
+          displayName: name,
+          rankWeight: 0,
+          definition: { name, discoveredFrom: "vip_users.group" },
+          baselinePermissions: [],
+          capabilityKeys: [],
+          sourceReference: `VIPCore database · live assignments:${vipServerId}`,
+        });
+      }
+    } catch {
+      warnings.push("VIPCore live group assignments could not be discovered.");
+    }
+  } finally {
+    connection.release();
+  }
+
+  return {
+    groups: [...byKey.values()],
+    authoritativeSources: populatedSources,
+    warnings,
+  };
 }
 
 function groupSlug(value: string) {
@@ -715,7 +967,8 @@ async function loadInputs(input: {
   loadPermissions: boolean;
 }) {
   const warnings: string[] = [];
-  const groups: ExternalGroupInput[] = [];
+  let groups: ExternalGroupInput[] = [];
+  const authoritativeSources = new Set<ExternalIdentitySource>();
   const permissions = new Map<string, DiscoveredPermission>();
   if (input.loadAdmins) {
     const file = await locateTextFile(adminsConfigCandidates());
@@ -745,6 +998,68 @@ async function loadInputs(input: {
       }
     }
   }
+  if (input.loadAdmins || input.loadVip) {
+    try {
+      const runtime = await loadRuntimeDatabaseGroups();
+      warnings.push(...runtime.warnings);
+      for (const sourceType of runtime.authoritativeSources) {
+        if (
+          (sourceType === "admins_core" && !input.loadAdmins) ||
+          (sourceType === "vipcore" && !input.loadVip)
+        ) continue;
+        authoritativeSources.add(sourceType);
+        const seededByKey = new Map(
+          groups
+            .filter((group) => group.sourceType === sourceType)
+            .map((group) => [runtimeGroupKey(group), group]),
+        );
+        const runtimeGroups = runtime.groups
+          .filter((group) => group.sourceType === sourceType)
+          .map((group) => {
+            const seed = seededByKey.get(runtimeGroupKey(group));
+            const membershipOnly = "discoveredFrom" in group.definition;
+            if (!seed || !membershipOnly) return group;
+            // If an assignment exists before the plug-in's definition-table
+            // migration has run, keep the matching JSON presentation and
+            // permissions while treating the database name/membership as the
+            // authoritative evidence that the group exists.
+            return {
+              ...seed,
+              sourceKind: "runtime" as const,
+              externalKey: group.externalKey,
+              displayName: group.displayName,
+              definition: {
+                ...seed.definition,
+                discoveredFrom: group.definition.discoveredFrom,
+              },
+              sourceReference: `${group.sourceReference} · metadata seeded by ${seed.sourceReference}`.slice(0, 255),
+            };
+          });
+        // A populated plug-in database scope is authoritative. JSON remains
+        // only the bootstrap fallback for a scope which has no database rows.
+        groups = groups.filter((group) => group.sourceType !== sourceType);
+        groups.push(...runtimeGroups);
+      }
+      groups.push(
+        ...runtime.groups.filter((group) =>
+          !runtime.authoritativeSources.has(group.sourceType) &&
+          (group.sourceType === "admins_core" ? input.loadAdmins : input.loadVip),
+        ),
+      );
+    } catch {
+      warnings.push("The live Admins.Core/VIPCore group database could not be read; JSON seeds remain available.");
+    }
+  }
+
+  for (const group of groups.filter((entry) => entry.sourceType === "admins_core")) {
+    for (const key of group.baselinePermissions) {
+      addPermission(permissions, key, {
+        sourceKind:
+          group.sourceKind === "runtime" ? "admins_database" : "admins_config",
+        sourceReference: `${group.sourceReference} · ${group.externalKey}`.slice(0, 255),
+      });
+    }
+  }
   if (input.loadPermissions) {
     for (const key of builtinGamePermissions) {
       addPermission(permissions, key, {
@@ -755,7 +1070,8 @@ async function loadInputs(input: {
     for (const group of groups.filter((entry) => entry.sourceType === "admins_core")) {
       for (const key of group.baselinePermissions) {
         addPermission(permissions, key, {
-          sourceKind: "admins_config",
+          sourceKind:
+            group.sourceKind === "runtime" ? "admins_database" : "admins_config",
           sourceReference: `${group.sourceReference} · ${group.externalKey}`.slice(0, 255),
         });
       }
@@ -765,7 +1081,12 @@ async function loadInputs(input: {
       discoverSourcePermissions(permissions),
     ]);
   }
-  return { groups, permissions: [...permissions.values()], warnings };
+  return {
+    groups,
+    permissions: [...permissions.values()],
+    authoritativeSources,
+    warnings,
+  };
 }
 
 async function readStatus(executor: Pick<Pool, "query"> | Pick<PoolConnection, "query">) {
@@ -844,7 +1165,7 @@ async function storeGroup(
   await connection.execute(
     "INSERT INTO portal_identity_external_group_definitions " +
       "(group_id, source_type, external_key, rank_weight, definition, baseline_permissions, capability_keys, source_kind, source_reference, content_hash, synced_at) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, 'config', ?, ?, CURRENT_TIMESTAMP) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) " +
       "ON DUPLICATE KEY UPDATE rank_weight = VALUES(rank_weight), definition = VALUES(definition), baseline_permissions = VALUES(baseline_permissions), capability_keys = VALUES(capability_keys), source_kind = VALUES(source_kind), source_reference = VALUES(source_reference), content_hash = VALUES(content_hash), synced_at = CURRENT_TIMESTAMP",
     [
       groupId,
@@ -854,9 +1175,24 @@ async function storeGroup(
       JSON.stringify(group.definition),
       JSON.stringify(group.baselinePermissions),
       JSON.stringify(group.capabilityKeys),
+      group.sourceKind,
       group.sourceReference,
       definitionHash,
     ],
+  );
+}
+
+async function removeStaleExternalDefinitions(
+  connection: PoolConnection,
+  sourceType: ExternalIdentitySource,
+  activeExternalKeys: string[],
+) {
+  if (!activeExternalKeys.length) return;
+  const placeholders = activeExternalKeys.map(() => "?").join(", ");
+  await connection.execute(
+    "DELETE FROM portal_identity_external_group_definitions " +
+      `WHERE source_type = ? AND external_key NOT IN (${placeholders})`,
+    [sourceType, ...activeExternalKeys],
   );
 }
 
@@ -933,10 +1269,17 @@ export async function syncIdentityCatalogue(
   } = {},
 ): Promise<IdentityCatalogueSyncResult> {
   const initial = await readStatus(pool);
-  const loadAdmins = Boolean(options.force) || initial.adminsCoreDefinitions === 0;
-  const loadVip = Boolean(options.force) || initial.vipCoreDefinitions === 0;
+  const runtimeDatabaseConfigured = Boolean(process.env.GAME_DATABASE_URL?.trim());
+  const loadAdmins =
+    Boolean(options.force) ||
+    initial.adminsCoreDefinitions === 0 ||
+    runtimeDatabaseConfigured;
+  const loadVip =
+    Boolean(options.force) ||
+    initial.vipCoreDefinitions === 0 ||
+    runtimeDatabaseConfigured;
   const loadPermissions =
-    Boolean(options.force) || initial.discoveredPrivileges === 0 || loadAdmins;
+    Boolean(options.force) || initial.discoveredPrivileges === 0;
   if (!loadAdmins && !loadVip && !loadPermissions) {
     return { ...initial, importedGroups: 0, importedPrivileges: 0, warnings: [] };
   }
@@ -957,8 +1300,13 @@ export async function syncIdentityCatalogue(
     await connection.beginTransaction();
     const current = await readStatus(connection);
     const shouldImportAdmins =
-      Boolean(options.force) || current.adminsCoreDefinitions === 0;
-    const shouldImportVip = Boolean(options.force) || current.vipCoreDefinitions === 0;
+      Boolean(options.force) ||
+      current.adminsCoreDefinitions === 0 ||
+      runtimeDatabaseConfigured;
+    const shouldImportVip =
+      Boolean(options.force) ||
+      current.vipCoreDefinitions === 0 ||
+      runtimeDatabaseConfigured;
     const groups = inputs.groups.filter(
       (group) =>
         group.sourceType === "admins_core"
@@ -966,6 +1314,15 @@ export async function syncIdentityCatalogue(
           : shouldImportVip,
     );
     for (const group of groups) await storeGroup(connection, group);
+    for (const sourceType of inputs.authoritativeSources) {
+      await removeStaleExternalDefinitions(
+        connection,
+        sourceType,
+        groups
+          .filter((group) => group.sourceType === sourceType)
+          .map((group) => group.externalKey),
+      );
+    }
     for (const permission of inputs.permissions) {
       await storePermission(connection, permission);
     }

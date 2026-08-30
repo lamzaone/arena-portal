@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AlertTriangle, ArrowLeft, ArrowRight, Ban, Clock3, Crosshair, Settings2, ShieldCheck, Target, UserRound, VolumeX } from "lucide-react";
 import type { CSSProperties } from "react";
 
+import { CopyToClipboardButton } from "@/components/copy-to-clipboard-button";
 import { formatDate, formatPlaytime, isActiveSanction } from "@/components/formatters";
 import {
   IdentityGroupBadge,
@@ -193,8 +194,9 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
                 <p className="tapped-kicker"><UserRound aria-hidden="true" /> {isOwnProfile ? "Your player profile" : "Player profile"}<span className="profile-presence" title={presenceLabel}><i aria-hidden="true" /> {presenceLabel}</span></p>
                 <h1>{displayName}</h1>
                 <div className="profile-steam-theme-row">
-                  <a className="public-player-steam-identity" href={steamProfileUrl} target="_blank" rel="noreferrer" title={`Open ${displayName}'s Steam profile`}>{steamId}</a>
                   <ProfileThemeSurfaceBadge themeKey={profileTheme.key} surface="profile" />
+                  <a className="public-player-steam-identity" href={steamProfileUrl} target="_blank" rel="noreferrer" title={`Open ${displayName}'s Steam profile`}>{steamId}</a>
+                  <CopyToClipboardButton value={steamId} label={`Copy ${displayName}'s SteamID64`} />
                 </div>
                 {secondaryIdentityGroups.length > 0 ? <div className="profile-identity-badge-rack">
                   <IdentityGroupBadgeList groups={secondaryIdentityGroups} compact />

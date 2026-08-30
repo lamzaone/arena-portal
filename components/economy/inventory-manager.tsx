@@ -47,6 +47,11 @@ import { TokenBalance } from "@/components/economy/token-balance";
 import { PortalToast } from "@/components/success-toast";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { SearchField } from "@/components/ui/search-field";
+import {
+  ECONOMY_SELLBACK_PERCENT_LABEL,
+  economySellbackPayoutTokens,
+  economySellbackUsesMinimum,
+} from "@/lib/economy/sellback";
 
 type InventoryManagerProps = {
   inventory: unknown;
@@ -234,7 +239,7 @@ export function InventoryManager({
       total +
       (item.marketPriceTokens === null
         ? 0
-        : Math.max(5, Math.floor(item.marketPriceTokens / 10))),
+        : economySellbackPayoutTokens(item.marketPriceTokens)),
     0,
   );
   const bulkUnknownPriceCount = bulkSelectedItems.filter(
@@ -245,7 +250,7 @@ export function InventoryManager({
   const selectedIndex = visibleItems.findIndex((item) => item.id === selectedId);
   const selectedSalePayout =
     selected?.marketPriceTokens !== null && selected?.marketPriceTokens !== undefined
-      ? Math.max(5, Math.floor(selected.marketPriceTokens / 10))
+      ? economySellbackPayoutTokens(selected.marketPriceTokens)
       : null;
   const salePriceIsKnown =
     selectedSalePayout !== null && selectedSalePayout >= 1;
@@ -1206,10 +1211,10 @@ export function InventoryManager({
                           </strong>
                           <small>
                             {salePriceIsKnown
-                              ? selected.marketPriceTokens !== null && selected.marketPriceTokens < 50
+                              ? selected.marketPriceTokens !== null && economySellbackUsesMinimum(selected.marketPriceTokens)
                                 ? `Minimum 5-Token buyback for this ${formatTokens(selected.marketPriceTokens)}-Token market price.`
-                                : `10% of the current ${formatTokens(selected.marketPriceTokens ?? 0)}-Token market price.`
-                              : "Your final 10% payout is resolved from the same current quote shown in Market."}
+                                : `${ECONOMY_SELLBACK_PERCENT_LABEL} of the current ${formatTokens(selected.marketPriceTokens ?? 0)}-Token market price.`
+                              : `Your final ${ECONOMY_SELLBACK_PERCENT_LABEL} payout is resolved from the same current quote shown in Market.`}
                           </small>
                         </div>
                         <p className="empty-copy">

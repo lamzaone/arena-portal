@@ -20,6 +20,7 @@ import {
   staffDetachEconomySticker,
   staffEquipEconomyItem,
   staffGrantEconomyItem,
+  staffGrantEconomyItems,
   staffSetEconomyItemState,
   staffTransferEconomyItem,
   staffUpdateEconomyItem,
@@ -34,6 +35,8 @@ import {
   type EconomyLoadoutSlotInput,
   type StaffCustomEconomyItem,
   type StaffEconomyItemCustomization,
+  type StaffGrantEconomyItemLine,
+  StaffGrantLineError,
   type StaffStickerGrant,
 } from "@/lib/data/portal-repository";
 import { getSkinportHistoricalPrice } from "@/lib/economy/skinport-prices";
@@ -77,11 +80,33 @@ function redirect(
     const returnInventoryPage = returnPage(
       requestUrl.searchParams.get("returnInventoryPage"),
     );
+    const returnInventoryQuery = requestUrl.searchParams
+      .get("returnInventoryQ")
+      ?.trim()
+      .slice(0, 120);
+    const returnInventoryType = requestUrl.searchParams.get("returnInventoryType");
+    const returnInventoryState = requestUrl.searchParams.get("returnInventoryState");
     if (returnQuery) url.searchParams.set("q", returnQuery);
     if (returnPlayerPage)
       url.searchParams.set("page", String(returnPlayerPage));
     if (returnInventoryPage)
       url.searchParams.set("inventoryPage", String(returnInventoryPage));
+    if (returnInventoryQuery)
+      url.searchParams.set("inventoryQ", returnInventoryQuery);
+    if (
+      returnInventoryType &&
+      itemTypes.includes(returnInventoryType as EconomyItemType)
+    ) {
+      url.searchParams.set("inventoryType", returnInventoryType);
+    }
+    if (
+      returnInventoryState &&
+      ["available", "escrowed", "attached", "consumed", "revoked"].includes(
+        returnInventoryState,
+      )
+    ) {
+      url.searchParams.set("inventoryState", returnInventoryState);
+    }
   } else {
     const returnTab = requestUrl.searchParams.get("returnTab");
     if (
@@ -328,11 +353,15 @@ function parseSlot(formData: FormData): EconomyLoadoutSlotInput | null {
 
 function parseCustomization(
   formData: FormData,
+  options: { allowSouvenir?: boolean } = {},
 ): StaffEconomyItemCustomization | null {
   const seed = optionalInteger(formData, "seed", 0, 1000);
   const floatValue = optionalFloat(formData, "floatValue");
   const stattrakCount = optionalInteger(formData, "stattrakCount", 0);
   const stattrakValue = optionalText(formData, "stattrak", 5);
+  const souvenirValue = options.allowSouvenir
+    ? optionalText(formData, "souvenir", 5)
+    : undefined;
   const nametag = optionalText(formData, "nametag", 128);
   const attributesText = optionalText(formData, "attributes", 12_000);
   const attributes =
@@ -348,9 +377,13 @@ function parseCustomization(
     nametag === null ||
     attributes === null ||
     stattrakValue === null ||
+    souvenirValue === null ||
     (stattrakValue !== undefined &&
       stattrakValue !== "true" &&
-      stattrakValue !== "false")
+      stattrakValue !== "false") ||
+    (souvenirValue !== undefined &&
+      souvenirValue !== "true" &&
+      souvenirValue !== "false")
   )
     return null;
 
@@ -360,6 +393,8 @@ function parseCustomization(
   if (stattrakCount !== undefined) customization.stattrakCount = stattrakCount;
   if (stattrakValue !== undefined)
     customization.stattrak = stattrakValue === "true";
+  if (souvenirValue !== undefined)
+    customization.souvenir = souvenirValue === "true";
   if (nametag !== undefined) customization.nametag = nametag;
   if (formData.get("clearNametag") === "true") customization.nametag = null;
   if (attributes !== undefined) customization.attributes = attributes;
@@ -471,6 +506,185 @@ function parseInitialStickers(formData: FormData): StaffStickerGrant[] | null {
   }
 }
 
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function parseBulkGrantCustomItem(value: unknown): StaffCustomEconomyItem | null {
+  if (!isJsonRecord(value)) return null;
+  const itemType = value.itemType;
+  const displayName =
+    typeof value.displayName === "string" ? value.displayName.trim() : "";
+  const definitionIndex = value.definitionIndex;
+  const paintkit = value.paintkit;
+  const rarityRank = value.rarityRank;
+  const metadata = value.metadata;
+  if (
+    !itemTypes.includes(itemType as EconomyItemType) ||
+    !displayName ||
+    displayName.length > 180 ||
+    (definitionIndex !== undefined &&
+      definitionIndex !== null &&
+      (!Number.isSafeInteger(definitionIndex) ||
+        Number(definitionIndex) < 0 ||
+        Number(definitionIndex) > 65_535)) ||
+    (paintkit !== undefined &&
+      paintkit !== null &&
+      (!Number.isSafeInteger(paintkit) ||
+        Number(paintkit) < 0 ||
+        Number(paintkit) > 2_000_000)) ||
+    (rarityRank !== undefined &&
+      (!Number.isSafeInteger(rarityRank) ||
+        Number(rarityRank) < 0 ||
+        Number(rarityRank) > ECONOMY_MAX_RARITY_RANK)) ||
+    (metadata !== undefined && !isJsonRecord(metadata))
+  ) {
+    return null;
+  }
+  return {
+    itemType: itemType as EconomyItemType,
+    displayName,
+    definitionIndex: definitionIndex as number | null | undefined,
+    paintkit: paintkit as number | null | undefined,
+    rarityRank: rarityRank as number | undefined,
+    metadata: metadata as Record<string, unknown> | undefined,
+  };
+}
+
+function parseBulkGrantCustomization(
+  value: unknown,
+): StaffEconomyItemCustomization | null {
+  if (value === undefined) return {};
+  if (!isJsonRecord(value)) return null;
+  const seed = value.seed;
+  const floatValue = value.floatValue;
+  const stattrak = value.stattrak;
+  const stattrakCount = value.stattrakCount;
+  const souvenir = value.souvenir;
+  const nametag = value.nametag;
+  const attributes = value.attributes;
+  if (
+    (seed !== undefined &&
+      seed !== null &&
+      (!Number.isSafeInteger(seed) || Number(seed) < 0 || Number(seed) > 1000)) ||
+    (floatValue !== undefined &&
+      floatValue !== null &&
+      (typeof floatValue !== "number" ||
+        !Number.isFinite(floatValue) ||
+        floatValue < 0 ||
+        floatValue > 1)) ||
+    (stattrak !== undefined && typeof stattrak !== "boolean") ||
+    (stattrakCount !== undefined &&
+      (!Number.isSafeInteger(stattrakCount) || Number(stattrakCount) < 0)) ||
+    (souvenir !== undefined && typeof souvenir !== "boolean") ||
+    (nametag !== undefined &&
+      nametag !== null &&
+      (typeof nametag !== "string" || nametag.trim().length > 128)) ||
+    (attributes !== undefined && !isJsonRecord(attributes))
+  ) {
+    return null;
+  }
+  return {
+    seed: seed as number | null | undefined,
+    floatValue: floatValue as number | null | undefined,
+    stattrak: stattrak as boolean | undefined,
+    stattrakCount: stattrakCount as number | undefined,
+    souvenir: souvenir as boolean | undefined,
+    nametag:
+      typeof nametag === "string" ? nametag.trim() || null : (nametag as null | undefined),
+    attributes: attributes as Record<string, unknown> | undefined,
+  };
+}
+
+function parseBulkGrantStickers(value: unknown): StaffStickerGrant[] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 6) return null;
+  const stickers: StaffStickerGrant[] = [];
+  const usedSlots = new Set<number>();
+  for (const candidate of value) {
+    if (!isJsonRecord(candidate)) return null;
+    const slot = candidate.slot;
+    const catalogueId = candidate.catalogueId;
+    const customItem =
+      candidate.customItem === undefined
+        ? undefined
+        : parseBulkGrantCustomItem(candidate.customItem);
+    const customization = parseBulkGrantCustomization(candidate.customization);
+    if (
+      !Number.isSafeInteger(slot) ||
+      Number(slot) < 0 ||
+      Number(slot) > 5 ||
+      usedSlots.has(Number(slot)) ||
+      (catalogueId !== undefined &&
+        (!Number.isSafeInteger(catalogueId) || Number(catalogueId) < 1)) ||
+      (catalogueId === undefined) === (candidate.customItem === undefined) ||
+      (candidate.customItem !== undefined &&
+        (!customItem || customItem.itemType !== "sticker")) ||
+      customization === null
+    ) {
+      return null;
+    }
+    usedSlots.add(Number(slot));
+    stickers.push({
+      slot: Number(slot),
+      catalogueId: catalogueId as number | undefined,
+      customItem,
+      customization,
+    });
+  }
+  return stickers;
+}
+
+function parseBulkGrantLines(formData: FormData): StaffGrantEconomyItemLine[] | null {
+  const raw = optionalText(formData, "grantLines", 256_000);
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length < 1 || parsed.length > 50)
+      return null;
+    const lines: StaffGrantEconomyItemLine[] = [];
+    let totalQuantity = 0;
+    for (const candidate of parsed) {
+      if (!isJsonRecord(candidate)) return null;
+      const catalogueId = candidate.catalogueId;
+      const customItem =
+        candidate.customItem === undefined
+          ? undefined
+          : parseBulkGrantCustomItem(candidate.customItem);
+      const customization = parseBulkGrantCustomization(candidate.customization);
+      const stickers = parseBulkGrantStickers(candidate.stickers);
+      const quantity = candidate.quantity ?? 1;
+      if (
+        (catalogueId !== undefined &&
+          (!Number.isSafeInteger(catalogueId) || Number(catalogueId) < 1)) ||
+        (catalogueId === undefined) === (candidate.customItem === undefined) ||
+        (candidate.customItem !== undefined && !customItem) ||
+        customization === null ||
+        stickers === null ||
+        typeof candidate.tradable !== "boolean" ||
+        !Number.isSafeInteger(quantity) ||
+        Number(quantity) < 1 ||
+        Number(quantity) > 100
+      ) {
+        return null;
+      }
+      totalQuantity += Number(quantity);
+      if (totalQuantity > 500) return null;
+      lines.push({
+        catalogueId: catalogueId as number | undefined,
+        customItem,
+        customization,
+        tradable: candidate.tradable,
+        stickers: stickers.length ? stickers : undefined,
+        quantity: Number(quantity),
+      });
+    }
+    return lines;
+  } catch {
+    return null;
+  }
+}
+
 function catalogueMarketVersion(metadata: Record<string, unknown>) {
   for (const key of ["marketVersion", "skinportVersion", "priceVersion"]) {
     const value = metadata[key];
@@ -513,17 +727,36 @@ async function ensureActorCanTarget(
 }
 
 export async function POST(request: Request) {
+  const expectsJson = request.headers.get("accept")?.includes("application/json") ?? false;
   const session = await getSession();
-  if (!session)
+  if (!session) {
+    if (expectsJson)
+      return NextResponse.json(
+        { ok: false, message: "Your staff session expired. Sign in and try again." },
+        { status: 401 },
+      );
     return NextResponse.redirect(new URL("/api/auth/steam", request.url), 303);
+  }
 
   const formData = await request.formData();
-  if (!verifyAdminActionToken(session, String(formData.get("csrf") ?? "")))
+  if (!verifyAdminActionToken(session, String(formData.get("csrf") ?? ""))) {
+    if (expectsJson)
+      return NextResponse.json(
+        { ok: false, message: "Session verification failed. Reload and try again." },
+        { status: 403 },
+      );
     return redirect(request, "error", "verification");
+  }
 
   const actor = await getAdminAccess(session.steamId);
-  if (!actor.isAdmin || !actor.canViewEconomy)
+  if (!actor.isAdmin || !actor.canViewEconomy) {
+    if (expectsJson)
+      return NextResponse.json(
+        { ok: false, message: "Your staff group cannot access inventory administration." },
+        { status: 403 },
+      );
     return redirect(request, "error", "permission");
+  }
 
   const action = formText(formData, "action", 48);
   const targetSteamId = validSteamId(formText(formData, "steamId", 17));
@@ -834,8 +1067,14 @@ export async function POST(request: Request) {
     if (
       !targetSteamId ||
       !(await ensureActorCanTarget(actor.steamId, targetSteamId))
-    )
+    ) {
+      if (expectsJson)
+        return NextResponse.json(
+          { ok: false, message: "The selected player is invalid or protected by higher staff immunity." },
+          { status: 403 },
+        );
       return redirect(request, "error", "target", targetSteamId ?? undefined);
+    }
 
     if (action === "tokens") {
       if (!actor.canAdjustEconomyTokens)
@@ -869,7 +1108,7 @@ export async function POST(request: Request) {
       if (!actor.canGrantEconomyItems)
         return redirect(request, "error", "grant-permission", targetSteamId);
       const catalogueId = optionalInteger(formData, "catalogueId", 1);
-      const customization = parseCustomization(formData);
+      const customization = parseCustomization(formData, { allowSouvenir: true });
       const stickers = parseInitialStickers(formData);
       const parsedCustomItem =
         catalogueId === undefined ? parseCustomItem(formData) : undefined;
@@ -906,11 +1145,51 @@ export async function POST(request: Request) {
       return redirect(request, "notice", "item-granted", targetSteamId);
     }
 
+    if (action === "grant-batch") {
+      if (!actor.canGrantEconomyItems) {
+        if (expectsJson)
+          return NextResponse.json(
+            { ok: false, message: "Your staff group cannot grant inventory items." },
+            { status: 403 },
+          );
+        return redirect(request, "error", "grant-permission", targetSteamId);
+      }
+      const lines = parseBulkGrantLines(formData);
+      if (!lines || !reason) {
+        if (expectsJson)
+          return NextResponse.json(
+            {
+              ok: false,
+              message:
+                "Review the selected items. A grant supports up to 50 lines and 500 total instances.",
+            },
+            { status: 400 },
+          );
+        return redirect(request, "error", "item-details", targetSteamId);
+      }
+      const result = await staffGrantEconomyItems({
+        actorSteamId: actor.steamId,
+        targetSteamId,
+        lines,
+        reason,
+        idempotencyKey,
+      });
+      if (expectsJson) {
+        return NextResponse.json({
+          ok: true,
+          grantedCount: result.itemIds.length,
+          lineCount: result.lineResults.length,
+          message: `${result.itemIds.length.toLocaleString()} item${result.itemIds.length === 1 ? "" : "s"} granted atomically.`,
+        });
+      }
+      return redirect(request, "notice", "items-granted", targetSteamId);
+    }
+
     if (action === "update") {
       if (!actor.canManageEconomy)
         return redirect(request, "error", "manage-permission", targetSteamId);
       const itemId = formText(formData, "itemId", 64);
-      const customization = parseCustomization(formData);
+      const customization = parseCustomization(formData, { allowSouvenir: true });
       if (
         !itemId ||
         !customization ||
@@ -1053,18 +1332,40 @@ export async function POST(request: Request) {
 
     return redirect(request, "error", "action", targetSteamId);
   } catch (error) {
+    if (expectsJson && action === "grant-batch") {
+      return NextResponse.json(
+        {
+          ok: false,
+          message:
+            error instanceof EconomyRepositoryError
+              ? error.message
+              : "The selected items could not be granted. Nothing was added.",
+          ...(error instanceof StaffGrantLineError
+            ? { lineIndex: error.lineIndex }
+            : {}),
+        },
+        { status: 400 },
+      );
+    }
     const discountError = action?.startsWith("discount-rule-") &&
       error instanceof EconomyRepositoryError
       ? error.code === "discount_not_found"
         ? "discount-missing"
         : "discount-details"
       : null;
+    const itemCustomizationError =
+      (action === "grant" || action === "grant-batch" || action === "update") &&
+      error instanceof EconomyRepositoryError
+      ? ["invalid_input", "incompatible_item", "catalogue_not_found", "catalogue_unavailable"].includes(error.code)
+        ? "item-details"
+        : null
+      : null;
     return redirect(
       request,
       "error",
       error instanceof Error && error.message === "artwork"
         ? "artwork"
-        : discountError ?? crateActionErrorKey(error, crateContextId) ?? "database",
+        : itemCustomizationError ?? discountError ?? crateActionErrorKey(error, crateContextId) ?? "database",
       targetSteamId ?? undefined,
       crateContextId ?? undefined,
     );

@@ -1,14 +1,15 @@
 import Link from "next/link";
 import {
   Archive,
-  ArrowRight,
   Boxes,
+  ChevronRight,
   LockKeyhole,
   ShieldCheck,
   UserRoundSearch,
 } from "lucide-react";
 
 import { StaffInventoryPanel } from "@/components/economy/staff-inventory-panel";
+import { StaffInventoryPlayerRow } from "@/components/economy/staff-inventory-player-row";
 import { PlayerIdentity } from "@/components/player-identity";
 import { PlayerSearchField } from "@/components/player-search-field";
 import { SignInRequired } from "@/components/sign-in-required";
@@ -26,7 +27,12 @@ import {
   findStaffEconomyAccounts,
   getEconomyCatalogue,
   getStaffEconomyAccount,
+  type EconomyItemState,
 } from "@/lib/data/portal-repository";
+import {
+  isEconomyItemType,
+  type EconomyItemType,
+} from "@/lib/economy/item-taxonomy";
 import { resolvePlayerIdentities } from "@/lib/player-identities";
 
 type AdminInventoriesPageProps = {
@@ -35,6 +41,9 @@ type AdminInventoriesPageProps = {
     page?: string;
     steamId?: string;
     inventoryPage?: string;
+    inventoryQ?: string;
+    inventoryType?: string;
+    inventoryState?: string;
     notice?: string;
     error?: string;
   }>;
@@ -49,6 +58,24 @@ function positivePage(value: string | undefined) {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 1;
 }
 
+const inventoryStates = new Set<EconomyItemState>([
+  "available",
+  "escrowed",
+  "attached",
+  "consumed",
+  "revoked",
+]);
+
+function validInventoryType(value: string | undefined): EconomyItemType | null {
+  return isEconomyItemType(value) ? value : null;
+}
+
+function validInventoryState(value: string | undefined): EconomyItemState | null {
+  return value && inventoryStates.has(value as EconomyItemState)
+    ? (value as EconomyItemState)
+    : null;
+}
+
 function formatTokens(value: number) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
 }
@@ -58,11 +85,17 @@ function inventoriesHref({
   page,
   steamId,
   inventoryPage,
+  inventoryQ,
+  inventoryType,
+  inventoryState,
 }: {
   query: string;
   page?: number;
   steamId?: string | null;
   inventoryPage?: number;
+  inventoryQ?: string;
+  inventoryType?: EconomyItemType | null;
+  inventoryState?: EconomyItemState | null;
 }) {
   const params = new URLSearchParams();
   if (query) params.set("q", query);
@@ -70,6 +103,9 @@ function inventoriesHref({
   if (steamId) params.set("steamId", steamId);
   if (inventoryPage && inventoryPage > 1)
     params.set("inventoryPage", String(inventoryPage));
+  if (inventoryQ) params.set("inventoryQ", inventoryQ);
+  if (inventoryType) params.set("inventoryType", inventoryType);
+  if (inventoryState) params.set("inventoryState", inventoryState);
   const search = params.toString();
   return search ? `/admin/inventories?${search}` : "/admin/inventories";
 }
@@ -78,16 +114,25 @@ function inventoryMutationAction({
   query,
   page,
   inventoryPage,
+  inventoryQ,
+  inventoryType,
+  inventoryState,
 }: {
   query: string;
   page: number;
   inventoryPage: number;
+  inventoryQ: string;
+  inventoryType: EconomyItemType | null;
+  inventoryState: EconomyItemState | null;
 }) {
   const params = new URLSearchParams({ returnTo: "inventories" });
   if (query) params.set("returnQ", query);
   if (page > 1) params.set("returnPage", String(page));
   if (inventoryPage > 1)
     params.set("returnInventoryPage", String(inventoryPage));
+  if (inventoryQ) params.set("returnInventoryQ", inventoryQ);
+  if (inventoryType) params.set("returnInventoryType", inventoryType);
+  if (inventoryState) params.set("returnInventoryState", inventoryState);
   return `/api/admin/economy?${params.toString()}`;
 }
 
@@ -96,6 +141,7 @@ function feedback(value: string | undefined, kind: "notice" | "error") {
   const notices: Record<string, string> = {
     "tokens-updated": "Token balance updated.",
     "item-granted": "Item granted to the selected player's inventory.",
+    "items-granted": "The selected items were granted in one atomic operation.",
     "item-updated": "Item customization saved and queued for server refresh.",
     "item-state-updated": "Item state updated.",
     "item-transferred": "Item transferred and both loadouts refreshed.",
@@ -140,10 +186,19 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
   const playerPage = positivePage(params.page);
   const steamId = validSteamId(params.steamId);
   const inventoryPage = positivePage(params.inventoryPage);
+  const inventoryQ = (params.inventoryQ ?? "").trim().slice(0, 120);
+  const inventoryType = validInventoryType(params.inventoryType);
+  const inventoryState = validInventoryState(params.inventoryState);
   const [players, account, grantCatalogue] = await Promise.all([
     findStaffEconomyAccounts({ query: query || undefined, page: playerPage, pageSize: 24 }),
     steamId
-      ? getStaffEconomyAccount(steamId, { inventoryPage, inventoryPageSize: 48 })
+      ? getStaffEconomyAccount(steamId, {
+          inventoryPage,
+          inventoryPageSize: 48,
+          inventoryQuery: inventoryQ || undefined,
+          inventoryItemTypes: inventoryType ? [inventoryType] : undefined,
+          inventoryStates: inventoryState ? [inventoryState] : undefined,
+        })
       : Promise.resolve(null),
     steamId && access.canGrantEconomyItems
       ? getEconomyCatalogue({ includeDisabled: true, pageSize: 100 })
@@ -161,15 +216,21 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
   const notice = feedback(params.notice, "notice");
   const error = feedback(params.error, "error");
   const playerPageCount = Math.max(1, Math.ceil(players.total / players.pageSize));
-  const previousPlayerHref = players.page > 1 ? inventoriesHref({ query, page: players.page - 1, steamId, inventoryPage }) : null;
-  const nextPlayerHref = players.page < playerPageCount ? inventoriesHref({ query, page: players.page + 1, steamId, inventoryPage }) : null;
-  const previousInventoryHref = account && account.inventory.page > 1 ? inventoriesHref({ query, page: players.page, steamId, inventoryPage: account.inventory.page - 1 }) : null;
+  const previousInventoryHref = account && account.inventory.page > 1 ? inventoriesHref({ query, page: players.page, steamId, inventoryPage: account.inventory.page - 1, inventoryQ, inventoryType, inventoryState }) : null;
   const inventoryPageCount = account ? Math.max(1, Math.ceil(account.inventory.total / account.inventory.pageSize)) : 1;
-  const nextInventoryHref = account && account.inventory.page < inventoryPageCount ? inventoriesHref({ query, page: players.page, steamId, inventoryPage: account.inventory.page + 1 }) : null;
+  const nextInventoryHref = account && account.inventory.page < inventoryPageCount ? inventoriesHref({ query, page: players.page, steamId, inventoryPage: account.inventory.page + 1, inventoryQ, inventoryType, inventoryState }) : null;
   const mutationAction = inventoryMutationAction({
     query,
     page: players.page,
     inventoryPage: account?.inventory.page ?? inventoryPage,
+    inventoryQ,
+    inventoryType,
+    inventoryState,
+  });
+  const clearInventoryFiltersHref = inventoriesHref({
+    query,
+    page: players.page,
+    steamId,
   });
 
   return (
@@ -214,17 +275,27 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
                   profileThemeKey: null,
                   identityGroups: [],
                 };
-                return <div key={player.steamId} className={`staff-player-result-row${selected ? " is-selected" : ""}`}>
-                  <PlayerIdentity player={identity} variant="compact" />
+                const inventoryHref = inventoriesHref({
+                  query,
+                  page: players.page,
+                  steamId: player.steamId,
+                });
+                return <StaffInventoryPlayerRow
+                  key={player.steamId}
+                  href={inventoryHref}
+                  label={`${selected ? "Selected inventory for" : "Open inventory for"} ${identity.displayName}`}
+                  selected={selected}
+                >
+                  <PlayerIdentity player={identity} variant="compact" profileLink="hover-card" />
+                  <ChevronRight className="staff-player-open-indicator" aria-hidden="true" />
                   <span className="staff-player-result-meta"><Boxes aria-hidden="true" /> {player.inventoryCount} items <b>·</b> {formatTokens(player.wallet.balance)} Tokens</span>
-                  <Link className="staff-player-inspect" href={inventoriesHref({ query, page: players.page, steamId: player.steamId })} scroll={false} aria-current={selected ? "page" : undefined}>Inspect <ArrowRight aria-hidden="true" /></Link>
-                </div>;
+                </StaffInventoryPlayerRow>;
               }) : <div className="staff-player-empty"><Archive aria-hidden="true" /><strong>No wallet accounts found.</strong><p>Try a player name or SteamID64. Awarding Tokens or an item creates an account automatically.</p></div>}
             </div>
-            {playerPageCount > 1 ? <LinkPagination className="staff-player-pagination" page={players.page} totalPages={playerPageCount} label="Player results pages" hrefForPage={(targetPage) => inventoriesHref({ query, page: targetPage, steamId, inventoryPage })} /> : null}
+            {playerPageCount > 1 ? <LinkPagination className="staff-player-pagination" page={players.page} totalPages={playerPageCount} label="Player results pages" hrefForPage={(targetPage) => inventoriesHref({ query, page: targetPage, steamId, inventoryPage, inventoryQ, inventoryType, inventoryState })} /> : null}
           </aside>
           <div className="staff-inventory-workspace">
-            {account ? <StaffInventoryPanel account={account} playerIdentity={playerIdentities[account.steamId]} csrf={createAdminActionToken(session)} canAdjustTokens={access.canAdjustEconomyTokens} canGrant={access.canGrantEconomyItems} canManage={access.canManageEconomy} canManageLoadouts={access.canManageEconomyLoadouts} grantCatalogue={grantCatalogue?.items ?? []} mutationAction={mutationAction} pagination={{ previousHref: previousInventoryHref, nextHref: nextInventoryHref }} /> : <section className="panel staff-inventory-empty"><div className="staff-inventory-empty-icon"><Archive aria-hidden="true" /></div><p className="eyebrow">Select a player</p><h2>Choose an inventory to inspect.</h2><p>Search the directory by player name or SteamID64. Selecting a player opens their wallet, loadout controls, and preview-rich inventory right here.</p></section>}
+            {account ? <StaffInventoryPanel account={account} playerIdentity={playerIdentities[account.steamId]} csrf={createAdminActionToken(session)} canAdjustTokens={access.canAdjustEconomyTokens} canGrant={access.canGrantEconomyItems} canManage={access.canManageEconomy} canManageLoadouts={access.canManageEconomyLoadouts} grantCatalogue={grantCatalogue?.items ?? []} mutationAction={mutationAction} pagination={{ previousHref: previousInventoryHref, nextHref: nextInventoryHref }} directory={{ query, page: players.page }} inventoryFilters={{ query: inventoryQ, itemType: inventoryType, state: inventoryState, clearHref: clearInventoryFiltersHref }} /> : <section className="panel staff-inventory-empty"><div className="staff-inventory-empty-icon"><Archive aria-hidden="true" /></div><p className="eyebrow">Select a player</p><h2>Choose an inventory to inspect.</h2><p>Search the directory by player name or SteamID64. Selecting a player opens their wallet, loadout controls, and preview-rich inventory right here.</p></section>}
           </div>
         </section>
     </PortalShell>

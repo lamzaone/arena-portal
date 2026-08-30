@@ -25,6 +25,8 @@ export type EconomyActionResult = {
   trade?: unknown;
   payoutTokens?: number;
   marketPriceTokens?: number;
+  expiresAt?: string;
+  perkName?: string;
 };
 
 export function createEconomyIdempotencyKey() {

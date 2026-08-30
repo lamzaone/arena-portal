@@ -51,6 +51,8 @@ export async function GET(request: Request) {
         id: item.id,
         displayName: item.displayName,
         itemType: item.itemType,
+        rarityRank: item.rarityRank,
+        enabled: item.enabled,
       })),
     });
   } catch {

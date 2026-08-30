@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { AdaptivePlayerHoverCard } from "@/components/adaptive-player-hover-card";
+import { CopyToClipboardButton } from "@/components/copy-to-clipboard-button";
 import { IdentityGroupBadgeList } from "@/components/identity-group-badge";
 import { ProfileThemeSurfaceBadge } from "@/components/profile-theme-surface-badge";
 import { ResilientRemoteImage } from "@/components/resilient-remote-image";
@@ -88,20 +90,12 @@ export function PlayerIdentity({
       ) : secondaryContent ? (
         <small className={`player-identity-secondary ${styles.secondary}`}>{secondaryContent}</small>
       ) : null}
-      {variant === "table" || (showBadges && player.identityGroups.length) ? (
+      {showBadges && player.identityGroups.length ? (
         <span className={`player-identity-badges ${styles.badges}`}>
-          {variant === "table" ? (
-            <ProfileThemeSurfaceBadge
-              themeKey={player.profileThemeKey}
-              surface="smallProfile"
-            />
-          ) : null}
-          {showBadges && player.identityGroups.length ? (
-            <IdentityGroupBadgeList
-              groups={player.identityGroups}
-              compact
-            />
-          ) : null}
+          <IdentityGroupBadgeList
+            groups={player.identityGroups}
+            compact
+          />
         </span>
       ) : null}
     </>
@@ -147,23 +141,57 @@ export function PlayerIdentity({
           {content}
         </Link>
       ) : (
-        <StaticIdentity className={identityClassName}>{content}</StaticIdentity>
+        <StaticIdentity
+          className={identityClassName}
+          tabIndex={isPlayer && hoverCard && profileLink === "hover-card" ? 0 : undefined}
+          aria-label={isPlayer && hoverCard && profileLink === "hover-card" ? `Preview ${displayName}'s player profile` : undefined}
+        >
+          {content}
+        </StaticIdentity>
       )}
       {isPlayer && hoverCard && profileLink !== "none" ? (
-        <Link
+        <AdaptivePlayerHoverCard
           className={`player-identity-hover-card ${styles.hoverCard}`}
-          href={`/players/${steamId}`}
-          aria-label={`Open ${displayName}'s player profile`}
+          themeClassName={`leaderboard-player-row ${themeSurface?.className ?? "small-profile-theme-default"}`}
+          themeKey={themeSurface ? theme.key : "default"}
+          presence={player.presence}
+          ariaLabel={`${displayName}'s player profile preview`}
         >
-          <span className={styles.hoverHeading}>
-            <strong>{displayName}</strong>
-            <small>SteamID64 {steamId}</small>
+          <Link
+            className={styles.hoverProfile}
+            href={`/players/${steamId}`}
+            aria-label={`Open ${displayName}'s player profile`}
+          >
+            <ResilientRemoteImage
+              className={styles.hoverAvatar}
+              src={player.avatarUrl}
+              alt=""
+              referrerPolicy="no-referrer"
+              fallback={
+                <span className={styles.hoverAvatarFallback} aria-hidden="true">
+                  {avatarInitial(displayName)}
+                </span>
+              }
+            />
+            <span className={styles.hoverHeading}>
+              <strong>{displayName}</strong>
+              <ProfileThemeSurfaceBadge
+                themeKey={player.profileThemeKey}
+                surface="smallProfile"
+              />
+            </span>
+          </Link>
+          <span className={styles.hoverSteamRow}>
+            <Link href={`/players/${steamId}`} className={styles.hoverSteamId}>
+              {steamId}
+            </Link>
+            <CopyToClipboardButton
+              value={steamId}
+              label={`Copy ${displayName}'s SteamID64`}
+            />
           </span>
           <span className={styles.hoverMeta}>
             <span className={styles.presence}>{presenceLabel(player.presence)}</span>
-            {themeSurface ? (
-              <span className={styles.themeLabel}>{theme.displayName}</span>
-            ) : null}
           </span>
           {player.identityGroups.length ? (
             <IdentityGroupBadgeList
@@ -172,7 +200,7 @@ export function PlayerIdentity({
               label={`${displayName}'s player groups`}
             />
           ) : null}
-        </Link>
+        </AdaptivePlayerHoverCard>
       ) : null}
     </Frame>
   );

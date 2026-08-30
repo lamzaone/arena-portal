@@ -23,6 +23,7 @@ import {
   stringArrayField,
   textField,
 } from "@/lib/economy/request";
+import { ECONOMY_SELLBACK_PERCENT_LABEL } from "@/lib/economy/sellback";
 
 function metadataFloat(
   metadata: Record<string, unknown>,
@@ -260,7 +261,7 @@ export async function POST(request: Request) {
     return economyJsonSuccess({
       ...result,
       balance: result.wallet.balance,
-      message: `Item sold for ${result.payoutTokens} Tokens (10% of its ${result.marketPriceTokens}-Token portal market price).`,
+      message: `Item sold for ${result.payoutTokens} Tokens (${ECONOMY_SELLBACK_PERCENT_LABEL} of its ${result.marketPriceTokens}-Token portal market price).`,
     });
   } catch (error) {
     return economyMutationFailure(error);

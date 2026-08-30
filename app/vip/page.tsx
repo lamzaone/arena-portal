@@ -12,6 +12,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { LinkPagination } from "@/components/ui/link-pagination";
 import { PortalShell } from "@/components/ui/portal-shell";
 import { ThemedPlayerTableRow } from "@/components/ui/themed-player-table-row";
+import { VipSectionNav } from "@/components/vip-section-nav";
 import { getSession } from "@/lib/auth/session";
 import { getVipTiers, type VipTier } from "@/lib/content/game-catalogue";
 import { identityExternalBadgeLookupKey } from "@/lib/content/identity-group-badges";
@@ -85,6 +86,8 @@ export default async function VipPage({ searchParams }: VipPageProps) {
             <small>{currentTier ? "Higher tiers stay available as upgrades." : "Five tiers. EUR 5 steps. Permanent access is 3x."}</small>
           </aside>
         </section>
+
+        <VipSectionNav active="memberships" />
 
         {tiers.length ? (
           <section className="vip-catalogue" aria-label="VIP tiers">

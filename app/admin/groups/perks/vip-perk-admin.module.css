@@ -1,0 +1,96 @@
+.page { --perk-accent: var(--theme-accent, #f0b35a); }
+
+.subsectionHeading {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  margin: 1rem 0 .65rem;
+  color: var(--perk-accent);
+}
+
+.subsectionHeading > svg { width: 1.1rem; }
+.subsectionHeading > div { display: grid; gap: .1rem; }
+.subsectionHeading span { color: var(--theme-text-muted, #aeb5c3); font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; }
+.subsectionHeading strong { color: var(--theme-text, #fff); font-size: .86rem; }
+
+.intro { max-width: 70rem; color: var(--theme-text-muted, #aeb5c3); line-height: 1.55; }
+.wide { grid-column: 1 / -1; }
+
+.createForm,
+.offerForm { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.createForm textarea,
+.definition textarea,
+.assignGrid textarea { width: 100%; resize: vertical; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.78rem; }
+
+.definitionList { display: grid; gap: 0.65rem; margin-top: 1rem; }
+.definition { border: 1px solid var(--theme-border, rgba(255,255,255,.12)); border-radius: 0.75rem; background: var(--theme-panel-subtle, rgba(9,10,13,.72)); overflow: clip; }
+.definition summary { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.85rem 1rem; cursor: pointer; }
+.definition summary:hover { background: color-mix(in srgb, var(--perk-accent) 6%, transparent); }
+.definition summary > span:first-child { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.55rem; min-width: 0; }
+.definition summary strong { color: var(--theme-text, #fff); }
+.definition code { color: var(--theme-text-muted, #aeb5c3); }
+.definition form { margin: 0; border: 0; border-top: 1px solid var(--theme-border, rgba(255,255,255,.1)); border-radius: 0; }
+
+.status { width: fit-content; padding: 0.24rem 0.48rem; border: 1px solid var(--theme-border, rgba(255,255,255,.12)); border-radius: 999px; color: var(--theme-text-muted, #aeb5c3); font-size: .7rem; }
+.status[data-enabled="true"] { color: var(--theme-success, #70e0a0); border-color: color-mix(in srgb, var(--theme-success, #70e0a0) 42%, transparent); }
+.status[data-status="live"] { color: var(--theme-success, #70e0a0); border-color: color-mix(in srgb, var(--theme-success, #70e0a0) 42%, transparent); }
+.status[data-status="unavailable"] { color: var(--theme-warning, #f0b35a); border-color: color-mix(in srgb, var(--theme-warning, #f0b35a) 48%, transparent); }
+
+.assignGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.assignGrid form { align-content: start; }
+.formTitle { grid-column: 1 / -1; display: flex; align-items: center; gap: .7rem; padding-bottom: .7rem; border-bottom: 1px solid var(--theme-border, rgba(255,255,255,.1)); }
+.formTitle > svg { width: 1.2rem; color: var(--perk-accent); }
+.formTitle > div { display: grid; gap: .12rem; }
+.formTitle strong { color: var(--theme-text, #fff); }
+.formTitle span { color: var(--theme-text-muted, #aeb5c3); font-size: .75rem; }
+
+.offerAdminList,
+.grantList { display: grid; gap: .55rem; margin-top: 1rem; }
+.offerAdminRow,
+.grantRow { display: grid; align-items: center; gap: .8rem; padding: .75rem .85rem; border: 1px solid var(--theme-border, rgba(255,255,255,.12)); border-radius: .7rem; background: var(--theme-panel-subtle, rgba(9,10,13,.72)); }
+.offerAdminRow { grid-template-columns: minmax(12rem, 1fr) repeat(3, auto) 7rem; }
+.offerAdminRow > div,
+.grantRow > div { display: grid; gap: .12rem; }
+.offerAdminRow strong,
+.grantRow strong { color: var(--theme-text, #fff); }
+.offerAdminRow code,
+.grantRow span { color: var(--theme-text-muted, #aeb5c3); font-size: .75rem; }
+.grantRow { grid-template-columns: minmax(15rem, 1.2fr) minmax(12rem, 1fr) auto; }
+
+.groupIdentity { display: flex; align-items: center; gap: .6rem; }
+.groupIdentity > svg { width: 1.1rem; color: var(--perk-accent); }
+.groupIdentity > span { display: grid; gap: .1rem; }
+.groupIdentity small { color: var(--theme-text-muted, #aeb5c3); }
+.protectedGrant {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: .4rem;
+  padding: .42rem .58rem;
+  color: var(--theme-text-muted, #aeb5c3);
+  border: 1px solid var(--theme-border, rgba(255,255,255,.12));
+  border-radius: .55rem;
+  background: color-mix(in srgb, var(--theme-control, rgba(255,255,255,.04)) 72%, transparent);
+  font-size: .72rem;
+  white-space: nowrap;
+}
+.protectedGrant > svg { width: .9rem; height: .9rem; color: var(--perk-accent); }
+.pagination { margin-top: 1rem; }
+
+@media (max-width: 62rem) {
+  .createForm,
+  .offerForm { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .offerAdminRow { grid-template-columns: minmax(10rem, 1fr) repeat(2, auto); }
+  .offerAdminRow > :nth-child(4) { display: none; }
+}
+
+@media (max-width: 46rem) {
+  .createForm,
+  .offerForm,
+  .assignGrid { grid-template-columns: 1fr; }
+  .wide { grid-column: auto; }
+  .offerAdminRow,
+  .grantRow { grid-template-columns: 1fr; align-items: stretch; }
+  .offerAdminRow button,
+  .grantRow button { width: 100%; }
+}

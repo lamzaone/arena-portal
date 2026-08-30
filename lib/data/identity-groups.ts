@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
-import mysql, {
+import {
   type Pool,
   type PoolConnection,
   type ResultSetHeader,
@@ -18,6 +18,7 @@ import {
   identityExternalBadgeLookupKey,
   isIdentityGroupBadgeIconKey,
 } from "@/lib/content/identity-group-badges";
+import { getPortalDatabasePool } from "@/lib/data/database-pools";
 
 export type IdentityGroupSource = "custom" | "admins_core" | "vipcore";
 export type IdentityPrivilegeScope = "portal" | "game";
@@ -299,20 +300,8 @@ type IdentityAdminAuthorizationRow = RowDataPacket & {
   baseline_permissions: unknown;
 };
 
-let identityPool: Pool | undefined;
-
 function getIdentityPool() {
-  const connectionUrl = process.env.PORTAL_DATABASE_URL;
-  if (!connectionUrl) return null;
-  identityPool ??= mysql.createPool({
-    uri: connectionUrl,
-    connectionLimit: 5,
-    enableKeepAlive: true,
-    namedPlaceholders: false,
-    supportBigNumbers: true,
-    bigNumberStrings: true,
-  });
-  return identityPool;
+  return getPortalDatabasePool();
 }
 
 export function identityGroupStorageConfigured() {
