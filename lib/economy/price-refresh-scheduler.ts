@@ -1,5 +1,6 @@
 import "server-only";
 
+import { pruneCompletedEconomyOperationReceipts } from "@/lib/data/portal-repository";
 import { refreshAllEconomyPublicPrices } from "@/lib/economy/price-refresh";
 
 const schedulerKey = "__tappedEconomyPriceRefreshTimer";
@@ -25,6 +26,7 @@ function intervalMilliseconds() {
 async function runScheduledRefresh() {
   try {
     const result = await refreshAllEconomyPublicPrices();
+    await pruneCompletedEconomyOperationReceipts();
     if (result.status === "unavailable") {
       console.warn(
         "TAPPED economy price refresh skipped: PORTAL_DATABASE_URL is not configured.",

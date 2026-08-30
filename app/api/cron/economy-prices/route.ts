@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 
 import { NextResponse } from "next/server";
 
+import { pruneCompletedEconomyOperationReceipts } from "@/lib/data/portal-repository";
 import { refreshAllEconomyPublicPrices } from "@/lib/economy/price-refresh";
 
 export const runtime = "nodejs";
@@ -28,10 +29,15 @@ export async function GET(request: Request) {
 
   try {
     const result = await refreshAllEconomyPublicPrices();
-    return NextResponse.json(result, {
-      status: result.status === "busy" ? 202 : 200,
-      headers: { "Cache-Control": "no-store" },
-    });
+    const expiredOperationReceipts =
+      await pruneCompletedEconomyOperationReceipts();
+    return NextResponse.json(
+      { ...result, expiredOperationReceipts },
+      {
+        status: result.status === "busy" ? 202 : 200,
+        headers: { "Cache-Control": "no-store" },
+      },
+    );
   } catch {
     return NextResponse.json(
       { error: "The public price refresh failed." },

@@ -3568,6 +3568,34 @@ export type EconomyCrateDropPreviewResult = {
   drops: EconomyCrateDropPreview[];
 };
 
+export type EconomyCrateReelCatalogue = Pick<
+  EconomyCatalogueItem,
+  | "id"
+  | "marketHashName"
+  | "itemType"
+  | "definitionIndex"
+  | "paintkit"
+  | "rarityRank"
+  | "rarityName"
+  | "displayName"
+  | "imageUrl"
+  | "minFloat"
+  | "maxFloat"
+>;
+
+export type EconomyCrateReelPool = {
+  containerCatalogueId: number;
+  totalWeight: number;
+  drops: Array<{
+    lootEntryId: number;
+    catalogue: EconomyCrateReelCatalogue;
+    weight: number;
+    minFloat: number | null;
+    maxFloat: number | null;
+    stattrakChanceBps: number;
+  }>;
+};
+
 export type EconomyInventorySticker = {
   slot: number;
   stickerItemId: string;
@@ -3943,7 +3971,10 @@ export type OpenEconomyCratesInput = {
 export type OpenEconomyCratesResult = {
   openings: OpenEconomyCrateResult[];
   crateItemIds: string[];
-  dropPools: EconomyCrateDropPreviewResult[];
+  // Bulk opening only needs a short, server-sampled reel. The complete odds
+  // remain available from the dedicated crate-preview endpoint and are never
+  // copied into an idempotency receipt.
+  dropPools: EconomyCrateReelPool[];
 };
 
 export type EquipEconomyItemInput = {
@@ -5961,6 +5992,11 @@ async function runEconomyMutation<T extends Record<string, unknown>>(input: {
   idempotencyKey: string;
   request: unknown;
   work: (context: EconomyMutationContext) => Promise<T>;
+  persistResult?: (result: T) => Record<string, unknown>;
+  restoreResult?: (
+    storedResult: Record<string, unknown>,
+    context: EconomyMutationContext,
+  ) => Promise<T>;
 }): Promise<T> {
   const pool = economyStorageRequired();
   const actorSteamId = economySteamId(input.actorSteamId, "Actor Steam ID");
@@ -6000,16 +6036,25 @@ async function runEconomyMutation<T extends Record<string, unknown>>(input: {
         "This idempotency key was already used for a different request.",
       );
     }
+    const mutationContext: EconomyMutationContext = {
+      connection,
+      operationName: input.operationName,
+      idempotencyKey,
+      actorSteamId,
+    };
     if (operation.status === "completed") {
-      const result = economyNullableRecord(operation.result_json);
-      if (!result)
+      const storedResult = economyNullableRecord(operation.result_json);
+      if (!storedResult)
         economyError(
           "invalid_database_value",
           "The token economy operation has no saved result.",
         );
+      const result = input.restoreResult
+        ? await input.restoreResult(storedResult, mutationContext)
+        : (storedResult as T);
       await connection.commit();
       transactionStarted = false;
-      return result as T;
+      return result;
     }
     if (insert.affectedRows !== 1) {
       economyError(
@@ -6018,15 +6063,16 @@ async function runEconomyMutation<T extends Record<string, unknown>>(input: {
       );
     }
 
-    const result = await input.work({
-      connection,
-      operationName: input.operationName,
-      idempotencyKey,
-      actorSteamId,
-    });
+    const result = await input.work(mutationContext);
+    const persistedResult = input.persistResult
+      ? input.persistResult(result)
+      : result;
     await connection.execute(
       "UPDATE portal_economy_operations SET status = 'completed', result_json = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [JSON.stringify(result), economyNumber(operation.id, "operation ID")],
+      [
+        JSON.stringify(persistedResult),
+        economyNumber(operation.id, "operation ID"),
+      ],
     );
     await connection.commit();
     transactionStarted = false;
@@ -6043,6 +6089,28 @@ async function runEconomyMutation<T extends Record<string, unknown>>(input: {
   } finally {
     connection.release();
   }
+}
+
+/**
+ * Idempotency receipts protect short-lived retries; they are not an audit log.
+ * Canonical ledger, opening, trade, and inventory history remains normalized in
+ * its own tables, so expired receipts can be removed in small indexed batches.
+ */
+export async function pruneCompletedEconomyOperationReceipts() {
+  const pool = getPortalPool();
+  if (!pool) return 0;
+  const batchSize = 1_000;
+  const maximumBatches = 5;
+  let removed = 0;
+  for (let batch = 0; batch < maximumBatches; batch += 1) {
+    const [result] = await pool.execute<ResultSetHeader>(
+      "DELETE FROM portal_economy_operations WHERE status = 'completed' AND completed_at < CURRENT_TIMESTAMP - INTERVAL 7 DAY ORDER BY completed_at LIMIT ?",
+      [batchSize],
+    );
+    removed += result.affectedRows;
+    if (result.affectedRows < batchSize) break;
+  }
+  return removed;
 }
 
 async function ensureEconomySteamAccount(
@@ -8396,6 +8464,90 @@ function rollEconomyLoot<T extends { weight: number }>(entries: T[]) {
     if (rollValue < cursor) return { entry, rollValue, totalWeight };
   }
   economyError("loot_table_invalid", "The loot table could not be rolled.");
+}
+
+const ECONOMY_CRATE_REEL_POOL_SIZE = 48;
+type EconomyLockedLootEntry = Awaited<
+  ReturnType<typeof lockEconomyLootEntries>
+>[number];
+
+/**
+ * The complete loot table can contain thousands of entries. Sample the visual
+ * reel according to the authoritative weights, then give the sampled entries
+ * equal client-side weights so probability is not applied twice. Winning rows
+ * are always retained for their exact artwork and per-entry rarity metadata.
+ */
+function selectEconomyCrateReelEntries(
+  entries: EconomyLockedLootEntry[],
+  winningLootEntryIds: ReadonlySet<number>,
+) {
+  const selected = Array.from(
+    { length: ECONOMY_CRATE_REEL_POOL_SIZE },
+    () => rollEconomyLoot(entries).entry,
+  );
+  for (const lootEntryId of winningLootEntryIds) {
+    if (selected.some((entry) => entry.id === lootEntryId)) continue;
+    const winner = entries.find((entry) => entry.id === lootEntryId);
+    if (!winner)
+      economyError(
+        "loot_table_invalid",
+        "A winning loot entry no longer belongs to its locked table.",
+      );
+    selected.push(winner);
+  }
+  return selected;
+}
+
+function economyCrateReelPool(input: {
+  containerCatalogueId: number;
+  reelEntries: EconomyLockedLootEntry[];
+  catalogues: Map<number, EconomyCatalogueItem>;
+}): EconomyCrateReelPool {
+  return {
+    containerCatalogueId: input.containerCatalogueId,
+    totalWeight: input.reelEntries.length,
+    drops: input.reelEntries.map((entry) => {
+      const catalogue = input.catalogues.get(entry.catalogueId);
+      if (!catalogue)
+        economyError(
+          "catalogue_not_found",
+          "A reel item no longer exists in the catalogue.",
+        );
+      const effectiveFloatRange = economyEffectiveLootFloatRange(
+        catalogue,
+        entry.minFloat,
+        entry.maxFloat,
+      );
+      const rarityRank = economyPresentationRarity(
+        catalogue.itemType,
+        catalogue.displayName,
+        economyLootEntryRarityRank(entry.attributes, catalogue.rarityRank),
+      );
+      return {
+        lootEntryId: entry.id,
+        catalogue: {
+          id: catalogue.id,
+          marketHashName: catalogue.marketHashName,
+          itemType: catalogue.itemType,
+          definitionIndex: catalogue.definitionIndex,
+          paintkit: catalogue.paintkit,
+          rarityRank,
+          rarityName: economyRarityName(rarityRank),
+          displayName: catalogue.displayName,
+          imageUrl:
+            economyMetadataImageUrl(entry.attributes) ?? catalogue.imageUrl,
+          minFloat: effectiveFloatRange.minimum,
+          maxFloat: effectiveFloatRange.maximum,
+        },
+        // These entries have already been sampled using their authoritative
+        // weights. Equal weights preserve that sampled distribution in the UI.
+        weight: 1,
+        minFloat: effectiveFloatRange.minimum,
+        maxFloat: effectiveFloatRange.maximum,
+        stattrakChanceBps: entry.stattrakChanceBps,
+      };
+    }),
+  };
 }
 
 function rollEconomyInteger(minimum: number | null, maximum: number | null) {
@@ -11397,11 +11549,211 @@ export async function openEconomyCrate(
   });
 }
 
+type EconomyCrateOpeningReplayRow = RowDataPacket & {
+  id: number | string;
+  crate_item_id: string;
+  loot_table_id: number | string;
+  loot_entry_id: number | string;
+  reward_item_id: string;
+};
+
+async function restoreOpenEconomyCratesResult(
+  storedResult: Record<string, unknown>,
+  context: EconomyMutationContext,
+): Promise<OpenEconomyCratesResult> {
+  const rawOpeningIds = storedResult.openingIds;
+  const rawCrateItemIds = storedResult.crateItemIds;
+  if (
+    !Array.isArray(rawOpeningIds) ||
+    !Array.isArray(rawCrateItemIds) ||
+    rawOpeningIds.length < 1 ||
+    rawOpeningIds.length > 10 ||
+    rawOpeningIds.length !== rawCrateItemIds.length
+  ) {
+    economyError(
+      "invalid_database_value",
+      "The saved bulk-opening receipt is invalid.",
+    );
+  }
+  const openingIds = rawOpeningIds.map((value) =>
+    economyNumber(value, "opening ID", 1),
+  );
+  const crateItemIds = rawCrateItemIds.map((value) =>
+    economyItemId(String(value), "crate item ID"),
+  );
+  if (
+    new Set(openingIds).size !== openingIds.length ||
+    new Set(crateItemIds).size !== crateItemIds.length
+  ) {
+    economyError(
+      "invalid_database_value",
+      "The saved bulk-opening receipt contains duplicate references.",
+    );
+  }
+
+  const placeholders = openingIds.map(() => "?").join(", ");
+  const [rows] = await context.connection.query<
+    EconomyCrateOpeningReplayRow[]
+  >(
+    "SELECT id, crate_item_id, loot_table_id, loot_entry_id, reward_item_id FROM portal_crate_openings WHERE id IN (" +
+      placeholders +
+      ") FOR UPDATE",
+    openingIds,
+  );
+  if (rows.length !== openingIds.length)
+    economyError(
+      "invalid_database_value",
+      "One or more saved crate openings no longer exist.",
+    );
+  const rowsById = new Map(
+    rows.map((row) => [economyNumber(row.id, "opening ID", 1), row]),
+  );
+  const orderedRows = openingIds.map((openingId) => {
+    const row = rowsById.get(openingId);
+    if (!row)
+      economyError(
+        "invalid_database_value",
+        "A saved crate opening could not be restored.",
+      );
+    return row;
+  });
+  if (
+    orderedRows.some(
+      (row, index) =>
+        economyItemId(row.crate_item_id) !== crateItemIds[index],
+    )
+  ) {
+    economyError(
+      "invalid_database_value",
+      "The saved crate-opening references do not match.",
+    );
+  }
+
+  const rewardItemIds = orderedRows.map((row) =>
+    economyItemId(row.reward_item_id, "reward item ID"),
+  );
+  const items = await lockEconomyInventoryItems(context.connection, [
+    ...crateItemIds,
+    ...rewardItemIds,
+  ]);
+  const crates = crateItemIds.map((crateItemId) => {
+    const crate = items.get(crateItemId);
+    if (!crate || crate.catalogueId === null)
+      economyError(
+        "invalid_database_value",
+        "A saved crate reference is unavailable.",
+      );
+    return crate;
+  });
+  const containerCatalogueIds = [
+    ...new Set(crates.map((crate) => crate.catalogueId as number)),
+  ].sort((left, right) => left - right);
+  const lootTables = await lockEconomyContainerLootTables(
+    context.connection,
+    containerCatalogueIds,
+  );
+  const lootEntriesByTable = await lockEconomyLootEntriesByTable(
+    context.connection,
+    [...lootTables.values()].map((table) => table.id),
+  );
+  const winningLootEntryIdsByTable = new Map<number, Set<number>>();
+  for (const row of orderedRows) {
+    const lootTableId = economyNumber(row.loot_table_id, "loot table ID", 1);
+    const winners =
+      winningLootEntryIdsByTable.get(lootTableId) ?? new Set<number>();
+    winners.add(economyNumber(row.loot_entry_id, "loot entry ID", 1));
+    winningLootEntryIdsByTable.set(lootTableId, winners);
+  }
+  const reelEntriesByTable = new Map<number, EconomyLockedLootEntry[]>();
+  for (const lootTable of lootTables.values()) {
+    const entries = lootEntriesByTable.get(lootTable.id);
+    if (!entries?.length)
+      economyError(
+        "loot_table_empty",
+        "That crate loot table has no enabled rewards.",
+      );
+    reelEntriesByTable.set(
+      lootTable.id,
+      selectEconomyCrateReelEntries(
+        entries,
+        winningLootEntryIdsByTable.get(lootTable.id) ?? new Set<number>(),
+      ),
+    );
+  }
+  const reelCatalogueIds = [
+    ...new Set(
+      [...reelEntriesByTable.values()]
+        .flat()
+        .map((entry) => entry.catalogueId),
+    ),
+  ];
+  const reelCatalogues = await lockEconomyCatalogues(
+    context.connection,
+    reelCatalogueIds,
+    true,
+  );
+  const dropPools = containerCatalogueIds.map((containerCatalogueId) => {
+    const lootTable = lootTables.get(containerCatalogueId);
+    if (!lootTable)
+      economyError(
+        "loot_table_unavailable",
+        "That crate loot table is unavailable.",
+      );
+    const reelEntries = reelEntriesByTable.get(lootTable.id);
+    if (!reelEntries?.length)
+      economyError("loot_table_empty", "That crate reel is unavailable.");
+    return economyCrateReelPool({
+      containerCatalogueId,
+      reelEntries,
+      catalogues: reelCatalogues,
+    });
+  });
+  const openings = orderedRows.map((row) => {
+    const rewardItemId = economyItemId(row.reward_item_id, "reward item ID");
+    const reward = items.get(rewardItemId);
+    if (!reward || reward.catalogueId === null)
+      economyError(
+        "invalid_database_value",
+        "A saved crate reward is unavailable.",
+      );
+    return {
+      openingId: economyNumber(row.id, "opening ID", 1),
+      crateItemId: economyItemId(row.crate_item_id, "crate item ID"),
+      rewardItemId,
+      rewardCatalogueId: reward.catalogueId,
+      rewardLootEntryId: economyNumber(
+        row.loot_entry_id,
+        "loot entry ID",
+        1,
+      ),
+      rewardRarityRank: reward.rarityRank,
+      reward: {
+        id: reward.id,
+        catalogueId: reward.catalogueId,
+        itemType: reward.itemType,
+        displayName: reward.displayName,
+        definitionIndex: reward.definitionIndex,
+        paintkit: reward.paintkit,
+        seed: reward.seed,
+        floatValue: reward.floatValue,
+        stattrak: reward.stattrak,
+        stattrakCount: reward.stattrakCount,
+        nametag: reward.nametag,
+        rarityRank: reward.rarityRank,
+        attributes: reward.attributes,
+      },
+      globalAnnouncementQueued:
+        reward.rarityRank >= ECONOMY_PINK_RARITY_RANK,
+    } satisfies OpenEconomyCrateResult;
+  });
+  return { openings, crateItemIds, dropPools };
+}
+
 /**
  * Opens up to ten selected containers in one idempotent transaction and
- * returns the exact locked drop pools used for their reveal reels. The batch
- * is intentionally all-or-nothing: a stale or invalid selected crate cannot
- * leave the browser guessing which subset committed.
+ * returns compact, weighted reel samples alongside the authoritative rewards.
+ * The batch is intentionally all-or-nothing: a stale or invalid selected crate
+ * cannot leave the browser guessing which subset committed.
  */
 export async function openEconomyCrates(
   input: OpenEconomyCratesInput,
@@ -11427,6 +11779,14 @@ export async function openEconomyCrates(
     actorSteamId: steamId,
     idempotencyKey: input.idempotencyKey,
     request: { crateItemIds: requestCrateItemIds },
+    // Canonical opening/reward relationships already live in FK-backed tables.
+    // The operation row is only a retry receipt, so retain references rather
+    // than copying thousands of catalogue objects into LONGTEXT.
+    persistResult: (result) => ({
+      openingIds: result.openings.map((opening) => opening.openingId),
+      crateItemIds: result.crateItemIds,
+    }),
+    restoreResult: restoreOpenEconomyCratesResult,
     work: async (context) => {
       const lockedItems = await lockEconomyInventoryItems(
         context.connection,
@@ -11463,94 +11823,12 @@ export async function openEconomyCrates(
         context.connection,
         [...lootTables.values()].map((table) => table.id),
       );
-      const rewardCatalogueIds = [
-        ...new Set(
-          [...lootEntriesByTable.values()]
-            .flat()
-            .map((entry) => entry.catalogueId),
-        ),
-      ];
-      const rewardCatalogues = await lockEconomyCatalogues(
-        context.connection,
-        rewardCatalogueIds,
-        true,
-      );
-
-      const dropPools = containerCatalogueIds.map((containerCatalogueId) => {
-        const lootTable = lootTables.get(containerCatalogueId);
-        if (!lootTable)
-          economyError(
-            "loot_table_unavailable",
-            "That crate loot table is unavailable.",
-          );
-        const entries = lootEntriesByTable.get(lootTable.id);
-        if (!entries?.length)
-          economyError(
-            "loot_table_empty",
-            "That crate loot table has no enabled rewards.",
-          );
-        const totalWeight = entries.reduce((total, entry) => {
-          const next = total + entry.weight;
-          if (!Number.isSafeInteger(next))
-            economyError(
-              "loot_table_invalid",
-              "The loot table weight is too large.",
-            );
-          return next;
-        }, 0);
-        return {
-          containerCatalogueId,
-          totalWeight,
-          drops: entries.map((entry) => {
-            const catalogue = rewardCatalogues.get(entry.catalogueId);
-            if (!catalogue)
-              economyError(
-                "catalogue_not_found",
-                "That reward catalogue item no longer exists.",
-              );
-            const effectiveFloatRange = economyEffectiveLootFloatRange(
-              catalogue,
-              entry.minFloat,
-              entry.maxFloat,
-            );
-            const rarityRank = economyPresentationRarity(
-              catalogue.itemType,
-              catalogue.displayName,
-              economyLootEntryRarityRank(
-                entry.attributes,
-                catalogue.rarityRank,
-              ),
-            );
-            return {
-              lootEntryId: entry.id,
-              catalogue: {
-                ...catalogue,
-                rarityRank,
-                rarityName: economyRarityName(rarityRank),
-                imageUrl:
-                  economyMetadataImageUrl(entry.attributes) ??
-                  catalogue.imageUrl,
-                minFloat: effectiveFloatRange.minimum,
-                maxFloat: effectiveFloatRange.maximum,
-                metadata: { ...catalogue.metadata, ...entry.attributes },
-              },
-              weight: entry.weight,
-              minFloat: effectiveFloatRange.minimum,
-              maxFloat: effectiveFloatRange.maximum,
-              stattrakChanceBps: entry.stattrakChanceBps,
-            };
-          }),
-        } satisfies EconomyCrateDropPreviewResult;
-      });
-
-      const openingDrafts: Array<{
+      const rolledDrafts: Array<{
         crate: EconomyInventoryItem;
         lootTable: Awaited<ReturnType<typeof lockEconomyLootTable>>;
         roll: ReturnType<typeof rollEconomyLoot<
           Awaited<ReturnType<typeof lockEconomyLootEntries>>[number]
         >>;
-        rewardCatalogue: EconomyCatalogueItem;
-        reward: CreatedEconomyItem;
         childIdempotencyKey: string;
       }> = [];
       for (let index = 0; index < crates.length; index += 1) {
@@ -11568,7 +11846,84 @@ export async function openEconomyCrates(
             "That crate loot table has no enabled rewards.",
           );
         const roll = rollEconomyLoot(lootEntries);
-        const rewardCatalogue = rewardCatalogues.get(roll.entry.catalogueId);
+        const childIdempotencyKey = economyChildIdempotencyKey(
+          context.idempotencyKey,
+          `crate:${index}`,
+        );
+        rolledDrafts.push({ crate, lootTable, roll, childIdempotencyKey });
+      }
+
+      const winningLootEntryIdsByTable = new Map<number, Set<number>>();
+      for (const draft of rolledDrafts) {
+        const winners =
+          winningLootEntryIdsByTable.get(draft.lootTable.id) ?? new Set<number>();
+        winners.add(draft.roll.entry.id);
+        winningLootEntryIdsByTable.set(draft.lootTable.id, winners);
+      }
+      const reelEntriesByTable = new Map<number, EconomyLockedLootEntry[]>();
+      for (const lootTable of lootTables.values()) {
+        const entries = lootEntriesByTable.get(lootTable.id);
+        if (!entries?.length)
+          economyError(
+            "loot_table_empty",
+            "That crate loot table has no enabled rewards.",
+          );
+        reelEntriesByTable.set(
+          lootTable.id,
+          selectEconomyCrateReelEntries(
+            entries,
+            winningLootEntryIdsByTable.get(lootTable.id) ?? new Set<number>(),
+          ),
+        );
+      }
+      const rewardCatalogueIds = [
+        ...new Set([
+          ...rolledDrafts.map((draft) => draft.roll.entry.catalogueId),
+          ...[...reelEntriesByTable.values()]
+            .flat()
+            .map((entry) => entry.catalogueId),
+        ]),
+      ];
+      const rewardCatalogues = await lockEconomyCatalogues(
+        context.connection,
+        rewardCatalogueIds,
+        true,
+      );
+      const dropPools = containerCatalogueIds.map((containerCatalogueId) => {
+        const lootTable = lootTables.get(containerCatalogueId);
+        if (!lootTable)
+          economyError(
+            "loot_table_unavailable",
+            "That crate loot table is unavailable.",
+          );
+        const reelEntries = reelEntriesByTable.get(lootTable.id);
+        if (!reelEntries?.length)
+          economyError(
+            "loot_table_empty",
+            "That crate reel has no enabled rewards.",
+          );
+        return economyCrateReelPool({
+          containerCatalogueId,
+          reelEntries,
+          catalogues: rewardCatalogues,
+        });
+      });
+
+      const openingDrafts: Array<{
+        crate: EconomyInventoryItem;
+        lootTable: Awaited<ReturnType<typeof lockEconomyLootTable>>;
+        roll: ReturnType<typeof rollEconomyLoot<
+          Awaited<ReturnType<typeof lockEconomyLootEntries>>[number]
+        >>;
+        rewardCatalogue: EconomyCatalogueItem;
+        reward: CreatedEconomyItem;
+        childIdempotencyKey: string;
+      }> = [];
+      for (let index = 0; index < rolledDrafts.length; index += 1) {
+        const draft = rolledDrafts[index];
+        const rewardCatalogue = rewardCatalogues.get(
+          draft.roll.entry.catalogueId,
+        );
         if (!rewardCatalogue)
           economyError(
             "catalogue_not_found",
@@ -11576,42 +11931,38 @@ export async function openEconomyCrates(
           );
         const rewardFloatRange = economyEffectiveLootFloatRange(
           rewardCatalogue,
-          roll.entry.minFloat,
-          roll.entry.maxFloat,
+          draft.roll.entry.minFloat,
+          draft.roll.entry.maxFloat,
         );
         const stattrak =
           economyIsSkinLike(rewardCatalogue.itemType) &&
-          randomInt(10_000) < roll.entry.stattrakChanceBps;
-        const childIdempotencyKey = economyChildIdempotencyKey(
-          context.idempotencyKey,
-          `crate:${index}`,
-        );
+          randomInt(10_000) < draft.roll.entry.stattrakChanceBps;
         const reward = await createEconomyInventoryItem(context.connection, {
           ownerSteamId: steamId,
           catalogue: rewardCatalogue,
           rarityRank: economyLootEntryRarityRank(
-            roll.entry.attributes,
+            draft.roll.entry.attributes,
             rewardCatalogue.rarityRank,
           ),
           customization: {
             seed: rollEconomyInteger(
-              roll.entry.seedMin,
-              roll.entry.seedMax,
+              draft.roll.entry.seedMin,
+              draft.roll.entry.seedMax,
             ),
             floatValue: rollEconomyFloat(
               rewardFloatRange.minimum,
               rewardFloatRange.maximum,
             ),
             stattrak,
-            attributes: roll.entry.attributes,
+            attributes: draft.roll.entry.attributes,
           },
           source: {
             type: "crate_opening",
-            crateItemId: crate.id,
-            lootTableId: lootTable.id,
-            lootEntryId: roll.entry.id,
-            rollValue: roll.rollValue,
-            totalWeight: roll.totalWeight,
+            crateItemId: draft.crate.id,
+            lootTableId: draft.lootTable.id,
+            lootEntryId: draft.roll.entry.id,
+            rollValue: draft.roll.rollValue,
+            totalWeight: draft.roll.totalWeight,
           },
           actorSteamId: steamId,
           idempotencyKey: context.idempotencyKey,
@@ -11619,12 +11970,9 @@ export async function openEconomyCrates(
           eventType: "crate.rewarded",
         });
         openingDrafts.push({
-          crate,
-          lootTable,
-          roll,
+          ...draft,
           rewardCatalogue,
           reward,
-          childIdempotencyKey,
         });
       }
 
