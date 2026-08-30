@@ -77,18 +77,59 @@ html body [data-theme-surface="player-container"][data-ui="player-owned-containe
   color: var(--theme-accent-soft);
 }
 
-html body tr[data-theme-surface="player-container"][data-ui="player-table-row"] > td {
-  border-color: var(--theme-border);
+/*
+ * Table cells are commonly painted by page-level table themes. Keep the full
+ * ownership contract in this last-loaded stylesheet and deliberately include
+ * every stable row hook: that gives the player boundary greater specificity
+ * than a viewer theme such as TAP GOD's global `.staff-table td` rules.
+ *
+ * The background belongs to the row, while cells stay transparent. Besides
+ * preventing a viewer theme from leaking into later cells, this makes layered
+ * theme gradients continuous across the entire record instead of restarting
+ * once per column.
+ */
+html body tr[data-theme][data-theme-owner="player"][data-theme-surface="player-container"][data-ui="player-table-row"].leaderboard-player-row {
   color: var(--theme-text-muted);
   background: var(--player-container-bg, var(--theme-table-row));
 }
 
-html body tr[data-theme-surface="player-container"][data-ui="player-table-row"] > td:first-child {
+html body tr[data-theme][data-theme-owner="player"][data-theme-surface="player-container"][data-ui="player-table-row"].leaderboard-player-row > td {
+  border-color: var(--theme-border);
+  color: var(--theme-text-muted);
+  background: transparent;
+}
+
+html body tr[data-theme][data-theme-owner="player"][data-theme-surface="player-container"][data-ui="player-table-row"].leaderboard-player-row > td:first-child {
   box-shadow: inset 3px 0 0 var(--player-container-accent, var(--theme-accent));
 }
 
-html body tr[data-theme-surface="player-container"][data-ui="player-table-row"]:hover > td {
-  border-color: var(--theme-border-strong);
+html body tr[data-theme][data-theme-owner="player"][data-theme-surface="player-container"][data-ui="player-table-row"].leaderboard-player-row:is(:hover, :focus-within) {
   color: var(--theme-text);
   background: var(--player-container-hover, var(--theme-table-hover));
+}
+
+html body tr[data-theme][data-theme-owner="player"][data-theme-surface="player-container"][data-ui="player-table-row"].leaderboard-player-row:is(:hover, :focus-within) > td {
+  border-color: var(--theme-border-strong);
+  color: var(--theme-text);
+  background: transparent;
+}
+
+html body tr[data-theme][data-theme-owner="player"][data-theme-surface="player-container"][data-ui="player-table-row"].leaderboard-player-row > td :is(strong, b) {
+  color: var(--theme-text);
+}
+
+html body tr[data-theme][data-theme-owner="player"][data-theme-surface="player-container"][data-ui="player-table-row"].leaderboard-player-row > td :is(small, time) {
+  color: var(--theme-text-muted);
+}
+
+html body tr[data-theme][data-theme-owner="player"][data-theme-surface="player-container"][data-ui="player-table-row"].leaderboard-player-row .staff-unban-button {
+  border-color: var(--theme-border-strong);
+  border-radius: var(--theme-control-radius);
+  color: var(--theme-text);
+  background: var(--theme-control-bg);
+}
+
+html body tr[data-theme][data-theme-owner="player"][data-theme-surface="player-container"][data-ui="player-table-row"].leaderboard-player-row .staff-unban-button:is(:hover, :focus-visible) {
+  border-color: var(--theme-accent-strong);
+  background: var(--theme-control-hover);
 }

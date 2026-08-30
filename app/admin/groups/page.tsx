@@ -24,6 +24,7 @@ import { CatalogueSearchField } from "@/components/economy/catalogue-search-fiel
 import { SignInRequired } from "@/components/sign-in-required";
 import { StaffSubmenu } from "@/components/staff-submenu";
 import { PortalToast } from "@/components/success-toast";
+import { AdminPageHeader } from "@/components/ui/admin-page-header";
 import { PortalShell } from "@/components/ui/portal-shell";
 import { getAdminAccess } from "@/lib/admin/access";
 import { createAdminActionToken, getSession } from "@/lib/auth/session";
@@ -651,18 +652,12 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
 
   return (
     <PortalShell authenticated className="staff-page">
-        <section className="staff-hero">
-          <div>
-            <p className="tapped-kicker"><UsersRound aria-hidden="true" /> Identity control</p>
-            <h1>Groups &amp;<br /><span>privileges.</span></h1>
-            <p>Create custom identities, connect stable chat tags, assign tightly scoped privileges, and deliver catalogue-backed rewards.</p>
-          </div>
-          <aside className="staff-access-card">
-            <span>ROOT AUTHORITY</span>
-            <strong>FOUNDER</strong>
-            <small>Anchored to Admins.Core · Portal groups cannot grant this role</small>
-          </aside>
-        </section>
+        <AdminPageHeader
+          id="group-management-title"
+          title="Group management"
+          description="Create custom identities, connect stable chat tags, assign tightly scoped privileges, and deliver catalogue-backed rewards."
+          access={access}
+        />
         <StaffSubmenu access={access} active="groups" />
         <GroupAdminNav
           activeKey={activeTab}

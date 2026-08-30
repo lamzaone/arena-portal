@@ -1,8 +1,7 @@
-import { NextResponse } from "next/server";
-
 import { canActOnTarget, getAdminAccess } from "@/lib/admin/access";
 import { getSession, verifyAdminActionToken } from "@/lib/auth/session";
 import { addStaffCaseReply, enqueueStaffUnban, getStaffAppealTarget, getStaffTicketTarget, writeStaffActionAudit } from "@/lib/data/portal-repository";
+import { formActionRedirect } from "@/lib/form-action-response";
 
 const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const maxScreenshotBytes = 5 * 1024 * 1024;
@@ -11,7 +10,7 @@ function redirect(request: Request, tab: "appeals" | "tickets", key: "notice" | 
   const url = new URL("/admin", request.url);
   url.searchParams.set("tab", tab);
   url.searchParams.set(key, value);
-  return NextResponse.redirect(url, 303);
+  return formActionRedirect(request, url);
 }
 
 function parseCaseId(value: FormDataEntryValue | null) {
@@ -28,7 +27,7 @@ async function getScreenshot(value: FormDataEntryValue | null) {
 
 export async function POST(request: Request) {
   const session = await getSession();
-  if (!session) return NextResponse.redirect(new URL("/api/auth/steam", request.url), 303);
+  if (!session) return formActionRedirect(request, "/api/auth/steam");
 
   const formData = await request.formData();
   const action = String(formData.get("action") ?? "");

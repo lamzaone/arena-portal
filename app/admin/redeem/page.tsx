@@ -4,6 +4,7 @@ import { LockKeyhole } from "lucide-react";
 import { RedeemCodeAdmin } from "@/components/economy/redeem-code-admin";
 import { SignInRequired } from "@/components/sign-in-required";
 import { StaffSubmenu } from "@/components/staff-submenu";
+import { AdminPageHeader } from "@/components/ui/admin-page-header";
 import { PortalShell } from "@/components/ui/portal-shell";
 import { getAdminAccess } from "@/lib/admin/access";
 import { createAdminActionToken, getSession } from "@/lib/auth/session";
@@ -46,7 +47,13 @@ export default async function RedeemCodeAdminPage({
     getEconomyRedeemCodes({ pageSize: 100 }),
   ]);
   return (
-    <PortalShell authenticated>
+    <PortalShell authenticated className="staff-page economy-admin-page">
+      <AdminPageHeader
+        id="redeem-code-management-title"
+        title="Redeem codes"
+        description="Build a reward once, choose its global claim limit, and let every player claim that code only once from the server or portal."
+        access={access}
+      />
       <StaffSubmenu access={access} active="redeem" />
       <RedeemCodeAdmin
         csrf={createAdminActionToken(session)}

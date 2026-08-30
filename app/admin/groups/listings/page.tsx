@@ -7,7 +7,6 @@ import {
   LockKeyhole,
   PackageCheck,
   ShieldAlert,
-  ShoppingBag,
   Sparkles,
 } from "lucide-react";
 
@@ -16,6 +15,7 @@ import { IdentityGroupBadge } from "@/components/identity-group-badge";
 import { SignInRequired } from "@/components/sign-in-required";
 import { StaffSubmenu } from "@/components/staff-submenu";
 import { PortalToast } from "@/components/success-toast";
+import { AdminPageHeader } from "@/components/ui/admin-page-header";
 import { PortalShell } from "@/components/ui/portal-shell";
 import { SectionNav } from "@/components/ui/section-nav";
 import { getAdminAccess } from "@/lib/admin/access";
@@ -231,18 +231,17 @@ export default async function GroupListingsPage({
     }
   }
 
-  const activeMembershipListings = listingSnapshot.listings.filter((listing) => listing.enabled).length;
-  const activePerkOffers = perkSnapshot.offers.filter((offer) => offer.enabled).length;
 
   return (
     <PortalShell authenticated className={`staff-page ${styles.page}`}>
-      <section className="staff-hero">
-        <div><p className="tapped-kicker"><ShoppingBag aria-hidden="true" /> Storefront control</p><h1>Group & perk<br /><span>listings.</span></h1><p>Publish any connected group as an inventory-backed EUR donation or Token-market item, and manage standalone VIP perk offers from one compact workspace.</p></div>
-        <aside className="staff-access-card"><span>ACTIVE LISTINGS</span><strong>{activeView === "memberships" ? activeMembershipListings : activePerkOffers}</strong><small>{activeView === "memberships" ? `${listingSnapshot.listings.length} membership variants · inventory-backed` : `${perkSnapshot.offers.length} individual perk offers · Token shop`}</small></aside>
-      </section>
+      <AdminPageHeader
+        id="group-listings-title"
+        title="Group listings"
+        description="Publish any connected group as an inventory-backed EUR donation or Token-market item, and manage standalone VIP perk offers from one compact workspace."
+        access={access}
+      />
       <StaffSubmenu access={access} active="groups" />
       <GroupAdminNav activeKey="listings" />
-      <div className={styles.subsectionHeading}><ShoppingBag aria-hidden="true" /><div><span>Shop listings</span><strong>Choose a listing catalogue</strong></div></div>
       <SectionNav activeKey={activeView} ariaLabel="Shop listing catalogues" dense items={views.map((entry) => ({ key: entry.id, href: `/admin/groups/listings?view=${entry.id}`, label: entry.label, icon: entry.icon }))} />
 
       {params.notice && notices[params.notice] ? <PortalToast message={notices[params.notice]} /> : null}

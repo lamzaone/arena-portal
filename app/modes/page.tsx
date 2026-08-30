@@ -8,7 +8,6 @@ import { duelFlow, duelLengths, duelTypes, getArenaModes } from "@/lib/content/g
 export default async function ModesPage() {
   const [session, arenaModes] = await Promise.all([getSession(), getArenaModes()]);
   const connectUrl = process.env.NEXT_PUBLIC_SERVER_CONNECT_URL ?? "steam://connect/arena.tapped.ro";
-  const profileHref = session ? `/players/${session.steamId}` : "/api/auth/steam";
 
   return (
     <PortalShell authenticated={Boolean(session)} className="catalog-page modes-page">
@@ -43,7 +42,7 @@ export default async function ModesPage() {
               <article className="duel-info-card duel-flow-card"><Sparkles aria-hidden="true" /><p className="signal-label">DUEL FLOW</p><ol>{duelFlow.map((step, index) => <li key={step}><span>{String(index + 1).padStart(2, "0")}</span>{step}</li>)}</ol><a className="button button-primary" href={connectUrl}>Connect and duel <ArrowRight aria-hidden="true" /></a></article>
             </div>
           </div>
-          <div className="mode-login-callout"><div><p className="tapped-kicker"><Swords aria-hidden="true" /> Ready to compete?</p><h2>Bring a challenger.</h2></div><Link className="button button-secondary" href={profileHref}>{session ? "Open player profile" : "Login with Steam"}<ArrowRight aria-hidden="true" /></Link></div>
+          <div className="mode-login-callout"><div><p className="tapped-kicker"><Swords aria-hidden="true" /> Ready to compete?</p><h2>Bring a challenger.</h2></div>{session ? <Link className="button button-secondary" href={`/players/${session.steamId}`}>Open player profile<ArrowRight aria-hidden="true" /></Link> : <a className="button button-secondary" href="/api/auth/steam">Login with Steam<ArrowRight aria-hidden="true" /></a>}</div>
         </section>
     </PortalShell>
   );

@@ -9,6 +9,7 @@ import {
 
 import { ProfileShowcases } from "@/components/profile-showcases";
 import { SiteHeader } from "@/components/site-header";
+import { AdminPageHeader } from "@/components/ui/admin-page-header";
 import {
   StaffSubmenu,
   type StaffSection,
@@ -295,16 +296,30 @@ export function RouteLoading({
     >
       <div className="shell">
         <SiteHeader authenticated />
-        <section className="page-heading ui-loading-page-heading">
-          <div>
-            <p className="eyebrow">{eyebrow}</p>
-            <h1>{title}</h1>
-            <p>{description}</p>
-          </div>
-          <span className="ui-loading-status" role="status" aria-live="polite">
-            <LoaderCircle aria-hidden="true" /> Loading content
-          </span>
-        </section>
+        {staff ? (
+          <AdminPageHeader
+            className="ui-loading-page-heading"
+            id="staff-loading-title"
+            title={title}
+            description={description}
+            actions={(
+              <span className="ui-loading-status" role="status" aria-live="polite">
+                <LoaderCircle aria-hidden="true" /> Loading content
+              </span>
+            )}
+          />
+        ) : (
+          <section className="page-heading ui-loading-page-heading">
+            <div>
+              <p className="eyebrow">{eyebrow}</p>
+              <h1>{title}</h1>
+              <p>{description}</p>
+            </div>
+            <span className="ui-loading-status" role="status" aria-live="polite">
+              <LoaderCircle aria-hidden="true" /> Loading content
+            </span>
+          </section>
+        )}
         {staff ? <LoadingStaffSubmenu active={staffSection} /> : null}
         <LoadingContent layout={layout} />
       </div>

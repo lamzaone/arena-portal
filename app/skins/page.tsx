@@ -1,4 +1,5 @@
 import { AlertTriangle, Paintbrush, ShieldCheck, Sparkles } from "lucide-react";
+import Link from "next/link";
 
 import { LoadoutEditor } from "@/components/loadout-editor";
 import { SignInRequired } from "@/components/sign-in-required";
@@ -12,7 +13,7 @@ export default async function SkinsPage() {
   // not reachable in normal operation while TAPPED.Inventory owns cosmetics.
   if (process.env.LEGACY_WEAPONSKINS_ENABLED !== "true") {
     return <PortalShell authenticated className="tapped-page">
-      <section className="staff-denied"><ShieldCheck aria-hidden="true" /><p className="tapped-kicker">Legacy system retired</p><h1>The old loadout is disabled.</h1><p>Your cosmetic collection, crates, and equipped items now live in the Token Inventory.</p><a className="button button-primary" href="/inventory">Open inventory</a></section>
+      <section className="staff-denied"><ShieldCheck aria-hidden="true" /><p className="tapped-kicker">Legacy system retired</p><h1>The old loadout is disabled.</h1><p>Your cosmetic collection, crates, and equipped items now live in the Token Inventory.</p><Link className="button button-primary" href="/inventory">Open inventory</Link></section>
     </PortalShell>;
   }
   const session = await getSession();

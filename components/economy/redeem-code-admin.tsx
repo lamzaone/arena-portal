@@ -287,23 +287,6 @@ export function RedeemCodeAdmin({
 
   return (
     <div className="redeem-admin-layout">
-      <section className="redeem-admin-intro panel">
-        <div>
-          <p className="eyebrow">
-            <TicketCheck aria-hidden="true" /> Reward campaigns
-          </p>
-          <h1>Redeem codes</h1>
-          <p>
-            Build a reward once, choose its global claim limit, and let every
-            player claim that code only once from the server or portal.
-          </p>
-        </div>
-        <div className="redeem-admin-stat">
-          <strong>{codes.length.toLocaleString()}</strong>
-          <span>recent campaigns</span>
-        </div>
-      </section>
-
       <section className="redeem-admin-grid">
         <form className="panel redeem-builder" onSubmit={createCode}>
           <div className="panel-heading">

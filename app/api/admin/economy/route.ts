@@ -45,6 +45,7 @@ import {
   ECONOMY_MAX_RARITY_RANK,
   isCustomProductItemType,
 } from "@/lib/economy/item-taxonomy";
+import { formActionRedirect } from "@/lib/form-action-response";
 
 const itemTypes: readonly EconomyItemType[] = ECONOMY_ITEM_TYPES;
 const artworkContentTypes = new Map([
@@ -122,7 +123,7 @@ function redirect(
     url.searchParams.set("steamId", steamId);
   if (crateId && Number.isSafeInteger(crateId) && crateId > 0)
     url.searchParams.set("crate", String(crateId));
-  return NextResponse.redirect(url, 303);
+  return formActionRedirect(request, url);
 }
 
 function formText(formData: FormData, name: string, maximum = 256) {
@@ -735,7 +736,7 @@ export async function POST(request: Request) {
         { ok: false, message: "Your staff session expired. Sign in and try again." },
         { status: 401 },
       );
-    return NextResponse.redirect(new URL("/api/auth/steam", request.url), 303);
+    return formActionRedirect(request, "/api/auth/steam");
   }
 
   const formData = await request.formData();

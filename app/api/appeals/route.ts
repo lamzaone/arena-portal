@@ -1,8 +1,7 @@
-import { NextResponse } from "next/server";
-
 import { parseCaseScreenshots } from "@/lib/cases/evidence";
 import { getSession } from "@/lib/auth/session";
 import { addPlayerCaseReply, createAppeal, getAppealEligibility, getPlayerCaseTarget, getPlayerDashboard } from "@/lib/data/portal-repository";
+import { formActionRedirect } from "@/lib/form-action-response";
 
 function hasActiveBan(expiresAt: number) {
   return expiresAt === 0 || expiresAt > Math.floor(Date.now() / 1_000);
@@ -11,7 +10,7 @@ function hasActiveBan(expiresAt: number) {
 function redirect(request: Request, key: "submitted" | "replied" | "error", value = "1") {
   const url = new URL("/appeals", request.url);
   url.searchParams.set(key, value);
-  return NextResponse.redirect(url, 303);
+  return formActionRedirect(request, url);
 }
 
 function parseCaseId(value: FormDataEntryValue | null) {
@@ -25,7 +24,7 @@ function isClosedAppeal(status: string) {
 
 export async function POST(request: Request) {
   const session = await getSession();
-  if (!session) return NextResponse.redirect(new URL("/api/auth/steam", request.url), 303);
+  if (!session) return formActionRedirect(request, "/api/auth/steam");
 
   const formData = await request.formData();
   const action = String(formData.get("action") ?? "create");

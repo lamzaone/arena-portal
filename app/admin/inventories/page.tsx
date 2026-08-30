@@ -4,7 +4,6 @@ import {
   Boxes,
   ChevronRight,
   LockKeyhole,
-  ShieldCheck,
   UserRoundSearch,
 } from "lucide-react";
 
@@ -15,6 +14,7 @@ import { PlayerSearchField } from "@/components/player-search-field";
 import { SignInRequired } from "@/components/sign-in-required";
 import { StaffSubmenu } from "@/components/staff-submenu";
 import { PortalToast } from "@/components/success-toast";
+import { AdminPageHeader } from "@/components/ui/admin-page-header";
 import {
   SearchNavigationForm,
   SearchSubmitButton,
@@ -235,14 +235,12 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
 
   return (
     <PortalShell authenticated className="staff-page economy-admin-page">
-        <section className="page-heading">
-          <div>
-            <p className="eyebrow"><ShieldCheck aria-hidden="true" /> Staff economy</p>
-            <h1>Player inventories</h1>
-            <p>Find a player by display name or SteamID64, then inspect their live wallet, loadout, and paged item inventory without leaving the staff workspace.</p>
-          </div>
-          <Link className="button button-secondary" href="/admin">Back to staff panel</Link>
-        </section>
+        <AdminPageHeader
+          id="player-inventories-title"
+          title="Player inventories"
+          description="Find a player by display name or SteamID64, then inspect their live wallet, loadout, and paged item inventory without leaving the staff workspace."
+          access={access}
+        />
         <StaffSubmenu access={access} active="inventories" />
         {notice ? <PortalToast message={notice} /> : null}
         {error ? <PortalToast variant="danger" message={error} /> : null}

@@ -91,6 +91,7 @@ export function GroupAdminNav({
     <SectionNav
       activeKey={activeKey}
       ariaLabel="Group management sections"
+      className="group-admin-menu"
       dense
       items={items}
     />

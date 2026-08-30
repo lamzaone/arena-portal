@@ -1,10 +1,12 @@
-import { NextResponse } from "next/server";
-
 import { COOKIE_NAME, revokeCurrentSession, sessionCookieOptions } from "@/lib/auth/session";
+import { formActionRedirect } from "@/lib/form-action-response";
 
 export async function POST(request: Request) {
   await revokeCurrentSession();
-  const response = NextResponse.redirect(new URL("/", request.url), 303);
+  const response = formActionRedirect(request, "/", {
+    replace: true,
+    refresh: true,
+  });
   response.cookies.set(COOKIE_NAME, "", { ...sessionCookieOptions(), maxAge: 0 });
   return response;
 }

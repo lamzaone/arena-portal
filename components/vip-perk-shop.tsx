@@ -1,7 +1,6 @@
 "use client";
 
 import { Coins, LockKeyhole, ShoppingBag, Sparkles } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 
@@ -95,7 +94,7 @@ export function VipPerkShop({ offers, owned, csrf, initialBalance, authenticated
                             : "Buy perk"}
                       </AsyncButton>
                     ) : (
-                      <Link className="button button-primary" href="/api/auth/steam"><LockKeyhole aria-hidden="true" /> Sign in</Link>
+                      <a className="button button-primary" href="/api/auth/steam"><LockKeyhole aria-hidden="true" /> Sign in</a>
                     )}
                   </div>
                 ))}

@@ -1,5 +1,3 @@
-import { NextResponse } from "next/server";
-
 import { getAdminAccess } from "@/lib/admin/access";
 import { getSession, verifyAdminActionToken } from "@/lib/auth/session";
 import {
@@ -30,6 +28,7 @@ import {
   type IdentityTradePolicy,
 } from "@/lib/data/identity-groups";
 import { getExternalIdentityGroupMemberSteamIds } from "@/lib/data/portal-repository";
+import { formActionRedirect } from "@/lib/form-action-response";
 
 function redirect(
   request: Request,
@@ -47,7 +46,7 @@ function redirect(
     url.searchParams.set("group", groupId);
     if (tab === "connected") url.hash = `group-${groupId}`;
   }
-  return NextResponse.redirect(url, 303);
+  return formActionRedirect(request, url);
 }
 
 function text(formData: FormData, key: string) {
@@ -98,7 +97,7 @@ function returnTab(request: Request, formData: FormData) {
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session) {
-    return NextResponse.redirect(new URL("/api/auth/steam", request.url), 303);
+    return formActionRedirect(request, "/api/auth/steam");
   }
   const formData = await request.formData();
   const redirectTab = returnTab(request, formData);

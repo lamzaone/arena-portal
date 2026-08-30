@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, Ban, Gavel, LockKeyhole, ShieldCheck, Ticket, UsersRound, VolumeX } from "lucide-react";
+import { AlertTriangle, Ban, Gavel, LockKeyhole, Ticket, UsersRound, VolumeX } from "lucide-react";
 
 import { adminWriteConfigured, getAdminAccess, getStaffGroupDefinitions } from "@/lib/admin/access";
 import { getSession, createAdminActionToken } from "@/lib/auth/session";
@@ -7,7 +7,6 @@ import { CaseStatusTag } from "@/components/case-status-tag";
 import { formatDate, formatPortalDate, isActiveSanction } from "@/components/formatters";
 import {
   IdentityGroupBadge,
-  IdentityGroupBadgeList,
 } from "@/components/identity-group-badge";
 import { PlayerSearchField } from "@/components/player-search-field";
 import { PlayerIdentity } from "@/components/player-identity";
@@ -18,6 +17,7 @@ import {
   type StaffModerationSection,
 } from "@/components/staff-submenu";
 import { PortalToast } from "@/components/success-toast";
+import { AdminPageHeader } from "@/components/ui/admin-page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { LinkPagination } from "@/components/ui/link-pagination";
 import { PortalShell } from "@/components/ui/portal-shell";
@@ -232,16 +232,17 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
       badge,
     );
   }
-  const activeAdminBadges = access.groups.flatMap((group) => {
-    const badge = configuredExternalBadge(externalBadges, "admins_core", group);
-    return badge ? [badge] : [];
-  });
   const totalPages = moderation ? Math.max(1, Math.ceil(Math.max(moderation.banTotal, moderation.sanctionTotal) / moderation.pageSize)) : 1;
   const casePage = appealPage ?? ticketPage;
   const caseTotalPages = casePage ? Math.max(1, Math.ceil(casePage.total / casePage.pageSize)) : 1;
 
   return <PortalShell authenticated className="staff-page">
-    <section className="staff-hero"><div><p className="tapped-kicker"><ShieldCheck aria-hidden="true" /> Staff operations</p><h1>Command<br /><span>centre.</span></h1><p>Moderate the server, manage access, and respond to player cases from one protected control room.</p></div><aside className="staff-access-card"><span>ACTIVE ROLE</span><strong>{activeAdminBadges.length ? <IdentityGroupBadgeList groups={activeAdminBadges} compact label="Active staff groups" /> : access.groups.join(" + ")}</strong><small>Immunity {access.immunity} · Ban {access.canBan ? "allowed" : "no"} · Unban {access.canUnban ? "allowed" : "no"}</small></aside></section>
+    <AdminPageHeader
+      id="staff-management-title"
+      title="Staff management"
+      description="Moderate the server, manage staff and VIP access, and respond to player cases."
+      access={access}
+    />
     <StaffSubmenu access={access} active={tab} />
     {notice ? <PortalToast message={notice} /> : null}
     {error ? <PortalToast variant="danger" message={error} /> : null}

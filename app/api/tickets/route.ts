@@ -1,9 +1,8 @@
-import { NextResponse } from "next/server";
-
 import { parseCaseScreenshots } from "@/lib/cases/evidence";
 import { getSession } from "@/lib/auth/session";
 import { getIdentityGroupListing } from "@/lib/data/identity-group-listings";
 import { addPlayerCaseReply, createTicket, getPlayerCaseTarget } from "@/lib/data/portal-repository";
+import { formActionRedirect } from "@/lib/form-action-response";
 import {
   identityGroupListingRequestCopy,
   isPublishedDonationListing,
@@ -14,7 +13,7 @@ const categories = new Set(["player-report", "admin-report", "bug", "account", "
 function redirect(request: Request, key: "submitted" | "replied" | "error", value = "1") {
   const url = new URL("/tickets", request.url);
   url.searchParams.set(key, value);
-  return NextResponse.redirect(url, 303);
+  return formActionRedirect(request, url);
 }
 
 function parseCaseId(value: FormDataEntryValue | null) {
@@ -35,7 +34,7 @@ function isClosedTicket(status: string) {
 
 export async function POST(request: Request) {
   const session = await getSession();
-  if (!session) return NextResponse.redirect(new URL("/api/auth/steam", request.url), 303);
+  if (!session) return formActionRedirect(request, "/api/auth/steam");
 
   const formData = await request.formData();
   const action = String(formData.get("action") ?? "create");

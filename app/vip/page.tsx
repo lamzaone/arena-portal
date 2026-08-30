@@ -189,7 +189,7 @@ export default async function VipPage({ searchParams }: VipPageProps) {
                   <p className={styles.description}>{listing.description ?? listing.group.description ?? `Activates ${listing.group.displayName} membership when used from your inventory.`}</p>
                   {tier?.benefits.length ? <details className={styles.benefits}><summary>{tier.benefits.length} currently enabled VIPCore benefits</summary><ul className="vip-benefit-list">{tier.benefits.map((benefit) => <li key={benefit.name}><Check aria-hidden="true" /><span><strong>{benefit.name}</strong><small>{benefit.detail}</small></span></li>)}</ul></details> : <div className={styles.delivery}><Clock3 aria-hidden="true" /><span><strong>{duration(listing.durationMinutes)}</strong><small>Connected {sourceName(listing)} access</small></span></div>}
                   <div className="vip-actions">
-                    {!session ? <Link className="purchase-button" href="/api/auth/steam"><LockKeyhole aria-hidden="true" /> Login to request</Link> : permanentOwned ? <button className="purchase-button is-disabled" disabled>{action}</button> : <Link className="purchase-button" href={requestUrl(listing)}><PackageCheck aria-hidden="true" /> {action}</Link>}
+                    {!session ? <a className="purchase-button" href="/api/auth/steam"><LockKeyhole aria-hidden="true" /> Login to request</a> : permanentOwned ? <button className="purchase-button is-disabled" type="button" disabled>{action}</button> : <Link className="purchase-button" href={requestUrl(listing)}><PackageCheck aria-hidden="true" /> {action}</Link>}
                   </div>
                 </article>;
               })}

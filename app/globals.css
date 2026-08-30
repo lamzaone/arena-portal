@@ -3523,3 +3523,354 @@ fieldset.settings-section { padding-top: 20px; }
   .staff-grant-line { transition: none; }
   .staff-grant-spinner { animation: none; }
 }
+
+/* Staff workspace layout contract ------------------------------------------
+   Admin routes previously mixed a ranking-sized hero, a generic page heading,
+   and route-local intro cards. Keep the established theme hooks while giving
+   every workspace the same title measure, navigation width, section rhythm,
+   and two deliberate control sizes. */
+main.staff-page {
+  --admin-control-height: 44px;
+  --admin-compact-control-height: 34px;
+  --admin-content-gutter: clamp(14px, 1.4vw, 22px);
+  --admin-section-gap: clamp(28px, 3vw, 42px);
+}
+
+/* The outer portal shell owns the viewport gutter. This second, shared rail
+   keeps every admin header, menu, table and management container visibly away
+   from the shell edge without reintroducing route-specific spacing. */
+main.staff-page > .shell {
+  padding-right: var(--admin-content-gutter);
+  padding-left: var(--admin-content-gutter);
+}
+
+main.staff-page :is(.admin-page-header, .staff-hero) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 340px);
+  min-width: 0;
+  min-height: 0;
+  margin-top: 18px;
+  padding: clamp(32px, 4vw, 52px) 0 clamp(28px, 3vw, 40px);
+  align-items: center;
+  gap: clamp(24px, 4vw, 58px);
+  border-bottom-color: var(--theme-border, rgba(255, 105, 121, .2));
+  background: radial-gradient(
+    circle at 80% 16%,
+    color-mix(in srgb, var(--theme-accent, #e11d48) 17%, transparent),
+    transparent 22rem
+  );
+}
+
+main.staff-page :is(.admin-page-header, .staff-hero) > :first-child {
+  min-width: 0;
+}
+
+main.staff-page :is(.admin-page-header, .staff-hero) .tapped-kicker {
+  margin-bottom: 10px;
+  color: var(--theme-accent-soft, #ff93a4);
+}
+
+main.staff-page :is(.admin-page-header, .staff-hero) h1 {
+  max-width: 820px;
+  margin: 0;
+  color: var(--theme-text, #fff1f3);
+  font-size: clamp(2.65rem, 5.4vw, 5rem);
+  line-height: .91;
+  letter-spacing: -.06em;
+  overflow-wrap: anywhere;
+}
+
+main.staff-page :is(.admin-page-header, .staff-hero) h1 span {
+  color: var(--theme-accent-soft, #ff6078);
+  text-shadow: 0 0 28px color-mix(in srgb, var(--theme-accent, #e11d48) 26%, transparent);
+}
+
+main.staff-page :is(.admin-page-header, .staff-hero) > :first-child > p:last-child {
+  max-width: 680px;
+  margin: 18px 0 0;
+  color: var(--theme-text-muted, #d2abb2);
+  font-size: 13px;
+  line-height: 1.62;
+}
+
+.admin-page-header-side {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 9px;
+}
+
+main.staff-page .admin-page-summary,
+main.staff-page .staff-access-card {
+  min-width: 0;
+  padding: 17px 18px;
+  gap: 6px;
+  border-color: var(--theme-border-strong, rgba(255, 113, 133, .35));
+  border-radius: var(--theme-radius, 6px);
+  color: var(--theme-text, #fff1f3);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--theme-accent, #e11d48) 13%, var(--theme-surface-raised, #2f070d)),
+    color-mix(in srgb, var(--theme-page-bg, #0a0305) 92%, transparent)
+  );
+  box-shadow: var(--theme-shadow, inset 0 0 42px rgba(225, 29, 72, .1));
+}
+
+main.staff-page .staff-access-card > span {
+  color: var(--theme-accent-soft, #ff9cad);
+}
+
+main.staff-page .staff-access-card strong {
+  min-width: 0;
+  color: var(--theme-text, #fff1f3);
+  font-size: clamp(1.25rem, 2vw, 1.65rem);
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+}
+
+main.staff-page .staff-access-card small {
+  color: var(--theme-text-subtle, #aa8088);
+}
+
+.admin-page-header-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Both menu levels and optional route views now share the complete shell
+   width. Their own track remains horizontally scrollable at 375px instead of
+   pushing the page wider than the viewport. */
+main.staff-page nav[data-ui="section-nav"] {
+  width: 100%;
+  max-width: 100%;
+  margin: 9px 0 0;
+}
+
+main.staff-page nav[data-ui="section-nav"].staff-section-menu {
+  margin-top: 14px;
+}
+
+main.staff-page nav[data-ui="section-nav"].group-admin-menu {
+  margin-top: 7px;
+}
+
+/* One horizontal content edge for moderation, groups, economy, inventory,
+   and redeem-code routes. The staff shell supplies the shared inner gutter. */
+main.staff-page :is(.staff-record-section, .staff-tools) {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+main.staff-page :is(.staff-ban-form, .staff-permission-note) {
+  margin-right: 0;
+  margin-left: 0;
+}
+
+main.staff-page .redeem-admin-layout {
+  padding: 18px 0 48px;
+}
+
+main.staff-page .staff-record-section {
+  padding-top: var(--admin-section-gap);
+}
+
+main.staff-page .staff-record-section + .staff-record-section {
+  padding-top: calc(var(--admin-section-gap) - 8px);
+}
+
+main.staff-page :is(.staff-section-heading, .panel-heading) {
+  min-width: 0;
+  align-items: flex-end;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+main.staff-page .staff-section-heading h2 {
+  max-width: 900px;
+  color: var(--theme-text, #f9e1e4);
+  font-size: clamp(1.65rem, 3.25vw, 2.8rem);
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+main.staff-page .staff-section-heading > span {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border: 1px solid var(--theme-border, rgba(255, 113, 133, .2));
+  border-radius: var(--theme-radius, 4px);
+  color: var(--theme-text-subtle, #a17a82);
+  background: var(--theme-control-bg, rgba(14, 3, 6, .72));
+  line-height: 1.2;
+}
+
+main.staff-page :is(
+  .panel,
+  .staff-ban-form,
+  .staff-permission-note,
+  .staff-management-form,
+  .staff-group-card,
+  .staff-case,
+  .staff-inventory-detail-heading,
+  .staff-player-directory,
+  .staff-inventory-filters,
+  .staff-table-scroll,
+  .economy-crate-workbench,
+  .economy-crate-rewards-panel,
+  .economy-crate-reward-search,
+  .economy-crate-candidate,
+  .economy-crate-reward-row
+) {
+  border-radius: var(--theme-radius, 6px);
+}
+
+/* Full actions are visually identical whether they are primary, secondary,
+   neutral, or destructive. Dense records opt into the compact height below. */
+main.staff-page :is(.button, .staff-unban-button, .staff-danger-button) {
+  display: inline-flex;
+  min-width: 0;
+  min-height: var(--admin-control-height);
+  padding: 8px 12px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: var(--theme-radius, 5px);
+  box-sizing: border-box;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.1;
+  text-align: center;
+  white-space: nowrap;
+}
+
+main.staff-page :is(.button, .staff-unban-button, .staff-danger-button) > svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+main.staff-page :is(.button, .staff-unban-button, .staff-danger-button):focus-visible {
+  outline: 2px solid var(--theme-focus-ring, var(--theme-accent-soft, #ff91a4));
+  outline-offset: 2px;
+}
+
+main.staff-page :is(.button, .staff-unban-button, .staff-danger-button):disabled {
+  cursor: not-allowed;
+}
+
+main.staff-page :is(
+  .staff-table,
+  .staff-group-list,
+  .economy-admin-item,
+  .economy-loadout-list,
+  .economy-crate-candidate,
+  .economy-crate-reward-row
+) :is(.button, .staff-unban-button, .staff-danger-button) {
+  min-height: var(--admin-compact-control-height);
+  padding: 6px 9px;
+  font-size: 9px;
+}
+
+main.staff-page :is(.staff-admin-edit, .staff-vip-edit) :is(input, select),
+main.staff-page .economy-admin-actions input,
+main.staff-page .economy-crate-candidate input {
+  min-height: var(--admin-compact-control-height);
+  border-radius: var(--theme-radius, 4px);
+}
+
+main.staff-page :is(
+  .staff-ban-form,
+  .staff-management-form,
+  .staff-case-form,
+  .economy-admin-form,
+  .redeem-builder,
+  .redeem-picker
+) :is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), select) {
+  min-height: var(--admin-control-height);
+  border-radius: var(--theme-radius, 4px);
+}
+
+/* Compact record editors deliberately override the full form contract. */
+main.staff-page :is(
+  .staff-admin-edit,
+  .staff-vip-edit,
+  .economy-admin-actions,
+  .economy-crate-candidate
+) :is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), select) {
+  min-height: var(--admin-compact-control-height);
+}
+
+main.staff-page :is(.staff-case-form > div, .economy-admin-actions, .formActions) {
+  align-items: center;
+}
+
+main.staff-page :is(input, select, textarea, button) {
+  max-width: 100%;
+}
+
+@media (max-width: 900px) {
+  main.staff-page :is(.admin-page-header, .staff-hero) {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding-top: 34px;
+  }
+
+  .admin-page-header-side,
+  main.staff-page .staff-access-card {
+    width: 100%;
+    max-width: none;
+  }
+
+  .admin-page-header-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  main.staff-page :is(.admin-page-header, .staff-hero) {
+    margin-top: 8px;
+    padding: 28px 0 24px;
+  }
+
+  main.staff-page :is(.admin-page-header, .staff-hero) h1 {
+    font-size: clamp(2.45rem, 14vw, 3.9rem);
+  }
+
+  main.staff-page :is(.admin-page-header, .staff-hero) > :first-child > p:last-child {
+    margin-top: 14px;
+    font-size: 12px;
+  }
+
+  main.staff-page nav[data-ui="section-nav"] {
+    margin-right: 0;
+    margin-left: 0;
+  }
+
+  main.staff-page .staff-section-heading {
+    align-items: flex-start;
+  }
+
+  main.staff-page .staff-section-heading > span {
+    align-self: flex-start;
+  }
+
+  main.staff-page .panel-heading a {
+    position: static;
+    top: auto;
+    align-self: auto;
+    margin: 0;
+  }
+
+  .admin-page-header-actions > :is(.button, a, button) {
+    width: 100%;
+  }
+}
+
+@media (forced-colors: active) {
+  main.staff-page :is(.button, .staff-unban-button, .staff-danger-button):focus-visible {
+    outline-color: Highlight;
+  }
+}

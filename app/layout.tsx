@@ -4,6 +4,7 @@ import {
   GlobalThemeBackground,
   GlobalThemeDocumentEffects,
 } from "@/components/profile-theme-slots";
+import { ProgressiveFormRuntime } from "@/components/ui/progressive-form-runtime";
 import { getSession } from "@/lib/auth/session";
 import { resolvePortalThemeSurface } from "@/lib/themes/registry";
 import "./globals.css";
@@ -13,6 +14,7 @@ import "./themes/beta-tester.css";
 import "./themes/tap-god.css";
 import "./themes/player-containers.css";
 import "./themes/accessibility.css";
+import "./form-runtime.css";
 
 export const metadata: Metadata = {
   title: "TAPPED.RO — ARENA.TAPPED.RO",
@@ -38,6 +40,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <GlobalThemeBackground themeKey={session?.profileThemeKey} />
         <GlobalThemeDocumentEffects themeKey={session?.profileThemeKey} />
         <CursorGridBackground />
+        <ProgressiveFormRuntime />
         <div id="main-content" className="portal-content" tabIndex={-1}>
           {children}
         </div>

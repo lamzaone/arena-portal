@@ -1,0 +1,125 @@
+.progressive-form-progress {
+  position: fixed;
+  z-index: 10050;
+  inset: 0 0 auto;
+  height: 2px;
+  pointer-events: none;
+  opacity: 0;
+  transform: scaleX(0);
+  transform-origin: left;
+  background: var(--theme-accent, #ef4444);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--theme-accent, #ef4444) 65%, transparent);
+  transition: opacity 140ms ease;
+}
+
+.progressive-form-progress[data-active="true"] {
+  opacity: 1;
+  animation: progressive-form-loading 1.25s ease-in-out infinite;
+}
+
+.progressive-form-announcer {
+  position: fixed;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.progressive-form-notice {
+  position: fixed;
+  z-index: 10060;
+  inset: auto clamp(0.75rem, 2vw, 1.5rem) clamp(0.75rem, 2vw, 1.5rem) auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: min(28rem, calc(100vw - 1.5rem));
+  min-height: 2.75rem;
+  padding: 0.7rem 0.75rem 0.7rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--theme-accent, #ef4444) 45%, var(--theme-border, #334155));
+  border-radius: var(--theme-radius, 10px);
+  color: var(--theme-text, #f8fafc);
+  background: color-mix(in srgb, var(--theme-panel, #111827) 94%, transparent);
+  box-shadow: 0 14px 42px rgb(0 0 0 / 35%);
+  backdrop-filter: blur(12px);
+  animation: progressive-form-notice-in 180ms ease-out both;
+}
+
+.progressive-form-notice[data-kind="error"] {
+  border-color: color-mix(in srgb, #ef4444 62%, var(--theme-border, #334155));
+}
+
+.progressive-form-notice > span {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.progressive-form-notice > button {
+  display: grid;
+  flex: 0 0 2rem;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.progressive-form-notice > button:hover {
+  border-color: var(--theme-border, #475569);
+  background: color-mix(in srgb, var(--theme-text, #f8fafc) 8%, transparent);
+}
+
+.progressive-form-notice > button:focus-visible {
+  outline: 2px solid var(--theme-accent, #ef4444);
+  outline-offset: 2px;
+}
+
+.progressive-form-notice > button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+form[data-progressive-pending="true"] {
+  cursor: progress;
+}
+
+form[data-progressive-pending="true"] :is(button[type="submit"], input[type="submit"], input[type="image"]) {
+  cursor: progress;
+}
+
+@keyframes progressive-form-loading {
+  0% { transform: scaleX(0); }
+  48% { transform: scaleX(0.72); }
+  100% { transform: scaleX(1); transform-origin: right; }
+}
+
+@keyframes progressive-form-notice-in {
+  from { opacity: 0; transform: translateY(0.5rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progressive-form-progress[data-active="true"],
+  .progressive-form-notice {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .progressive-form-progress,
+  .progressive-form-notice {
+    background: Canvas;
+    color: CanvasText;
+    border-color: CanvasText;
+  }
+}

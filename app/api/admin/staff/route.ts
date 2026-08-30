@@ -1,15 +1,14 @@
-import { NextResponse } from "next/server";
-
 import { canActOnTarget, getAdminAccess, getServerGuid, getStaffGroupDefinitions } from "@/lib/admin/access";
 import { getSession, verifyAdminActionToken } from "@/lib/auth/session";
 import { getIdentityVipGroupDefinitions, reconcileIdentityGroupRewards } from "@/lib/data/identity-groups";
 import { gameStorageConfigured, removeStaffVip, upsertStaffAdmin, upsertStaffVip, writeStaffActionAudit } from "@/lib/data/portal-repository";
+import { formActionRedirect } from "@/lib/form-action-response";
 
 function redirect(request: Request, tab: "admins" | "vips", key: "notice" | "error", value: string) {
   const url = new URL("/admin", request.url);
   url.searchParams.set("tab", tab);
   url.searchParams.set(key, value);
-  return NextResponse.redirect(url, 303);
+  return formActionRedirect(request, url);
 }
 
 function validSteamId(value: string) {
@@ -24,7 +23,7 @@ const fallbackVipGroups = new Set(["ULTIMATE", "DIAMOND", "GOLD", "SILVER", "STA
 
 export async function POST(request: Request) {
   const session = await getSession();
-  if (!session) return NextResponse.redirect(new URL("/api/auth/steam", request.url), 303);
+  if (!session) return formActionRedirect(request, "/api/auth/steam");
 
   const formData = await request.formData();
   const action = String(formData.get("action") ?? "");

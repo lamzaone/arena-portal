@@ -9,6 +9,7 @@ import { PlayerSearchField } from "@/components/player-search-field";
 import { SignInRequired } from "@/components/sign-in-required";
 import { StaffSubmenu } from "@/components/staff-submenu";
 import { PortalToast } from "@/components/success-toast";
+import { AdminPageHeader } from "@/components/ui/admin-page-header";
 import { PortalShell } from "@/components/ui/portal-shell";
 import { LinkPagination } from "@/components/ui/link-pagination";
 import { SectionNav } from "@/components/ui/section-nav";
@@ -102,13 +103,14 @@ export default async function VipPerkAdminPage({ searchParams }: { searchParams:
 
   return (
     <PortalShell authenticated className={`staff-page ${styles.page}`}>
-      <section className="staff-hero">
-        <div><p className="tapped-kicker"><Sparkles aria-hidden="true" /> VIP feature control</p><h1>Individual<br /><span>perks.</span></h1><p>Define VIPCore features once and grant them to custom groups or individual players without manufacturing a VIP membership.</p></div>
-        <aside className="staff-access-card"><span>RUNTIME CONTRACT</span><strong>{snapshot.perks.filter((perk) => perk.enabled).length} PERKS</strong><small>Portal grants · VIPCore feature keys · audited mutations</small></aside>
-      </section>
+      <AdminPageHeader
+        id="vip-perk-management-title"
+        title="VIP perks"
+        description="Define VIPCore features once and grant them to custom groups or individual players without manufacturing a VIP membership."
+        access={access}
+      />
       <StaffSubmenu access={access} active="groups" />
       <GroupAdminNav activeKey="perks" />
-      <div className={styles.subsectionHeading}><Sparkles aria-hidden="true" /><div><span>VIP perks</span><strong>Choose a management page</strong></div></div>
       <SectionNav
         activeKey={activeView}
         ariaLabel="VIP perk management sections"

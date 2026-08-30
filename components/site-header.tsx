@@ -22,7 +22,6 @@ export async function SiteHeader({
   const steamProfile = session ? (await getSteamProfiles([session.steamId])).get(session.steamId) : null;
   const staffAccess = session ? await getAdminAccess(session.steamId) : null;
   const displayName = steamProfile?.name ?? "Steam account";
-  const profileHref = session ? `/players/${session.steamId}` : "/api/auth/steam";
   const effectiveThemeKey =
     themeKey === undefined ? session?.profileThemeKey : themeKey;
   const { theme: globalTheme } = resolvePortalThemeSurface(
@@ -65,11 +64,11 @@ export async function SiteHeader({
             </form>
           </>
         ) : (
-          <Link className="button button-primary" href="/api/auth/steam"><LogIn aria-hidden="true" /> Steam login</Link>
+          <a className="button button-primary" href="/api/auth/steam"><LogIn aria-hidden="true" /> Steam login</a>
         )}
       </header>
       {session ? (
-        <AccountNav profileHref={profileHref} themeKey={globalTheme.key} />
+        <AccountNav profileHref={`/players/${session.steamId}`} themeKey={globalTheme.key} />
       ) : null}
     </>
   );

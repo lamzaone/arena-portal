@@ -1,5 +1,3 @@
-import { NextResponse } from "next/server";
-
 import { getAdminAccess } from "@/lib/admin/access";
 import { getSession, verifyAdminActionToken } from "@/lib/auth/session";
 import {
@@ -8,6 +6,7 @@ import {
   updateIdentityGroupListing,
   type GroupListingActor,
 } from "@/lib/data/identity-group-listings";
+import { formActionRedirect } from "@/lib/form-action-response";
 
 function value(formData: FormData, name: string) {
   return String(formData.get(name) ?? "").trim();
@@ -47,13 +46,13 @@ function redirect(
     url.searchParams.set("listing", String(listingId));
     url.hash = `listing-${listingId}`;
   }
-  return NextResponse.redirect(url, 303);
+  return formActionRedirect(request, url);
 }
 
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session) {
-    return NextResponse.redirect(new URL("/api/auth/steam", request.url), 303);
+    return formActionRedirect(request, "/api/auth/steam");
   }
 
   const formData = await request.formData();

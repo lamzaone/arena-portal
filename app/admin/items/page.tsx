@@ -8,7 +8,6 @@ import {
   LockKeyhole,
   PackageSearch,
   PackagePlus,
-  ShieldCheck,
   ShoppingBag,
   SlidersHorizontal,
 } from "lucide-react";
@@ -28,6 +27,7 @@ import { StaffSubmenu } from "@/components/staff-submenu";
 import { PortalToast } from "@/components/success-toast";
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
 import { DiscountRuleAdmin } from "@/components/economy/discount-rule-admin";
+import { AdminPageHeader } from "@/components/ui/admin-page-header";
 import { PortalShell } from "@/components/ui/portal-shell";
 import { SectionNav } from "@/components/ui/section-nav";
 import {
@@ -416,21 +416,12 @@ export default async function AdminItemsPage({
 
   return (
     <PortalShell authenticated className="staff-page economy-admin-page">
-        <section className="page-heading">
-          <div>
-            <p className="eyebrow">
-              <ShieldCheck aria-hidden="true" /> Staff economy
-            </p>
-            <h1>Item management</h1>
-            <p>
-              Maintain Marketplace products and custom crate pools in separate,
-              focused workspaces.
-            </p>
-          </div>
-          <Link className="button button-secondary" href="/admin">
-            Back to staff panel
-          </Link>
-        </section>
+        <AdminPageHeader
+          id="item-management-title"
+          title="Item management"
+          description="Maintain Marketplace products and custom crate pools in separate, focused workspaces."
+          access={access}
+        />
         <StaffSubmenu access={access} active="items" />
         {notice ? <PortalToast message={notice} /> : null}
         {error ? <PortalToast variant="danger" message={error} /> : null}
