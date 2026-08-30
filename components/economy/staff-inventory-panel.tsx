@@ -4,9 +4,7 @@ import {
   Archive,
   ArrowLeftRight,
   Coins,
-  Filter,
   PackagePlus,
-  Search,
   SlidersHorizontal,
   Tag,
   WalletCards,
@@ -17,6 +15,8 @@ import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-pr
 import { PlayerSearchField } from "@/components/player-search-field";
 import { PlayerIdentity } from "@/components/player-identity";
 import { LinkPagination } from "@/components/ui/link-pagination";
+import { SearchNavigationForm } from "@/components/ui/search-field";
+import { ServerSearchField } from "@/components/ui/server-search-field";
 import {
   StaffGrantItemForm,
   type GrantCatalogueItem,
@@ -406,14 +406,25 @@ export function StaffInventoryPanel({
           </div>
           {hasInventoryFilters ? <Link className="staff-inventory-clear" href={inventoryFilters.clearHref}><X aria-hidden="true" /> Clear filters</Link> : null}
         </div>
-        <form className="staff-inventory-filters" action="/admin/inventories" method="get">
+        <SearchNavigationForm
+          className="staff-inventory-filters"
+          action="/admin/inventories"
+          instant
+          resetFields={["inventoryPage"]}
+        >
           {directory.query ? <input type="hidden" name="q" value={directory.query} /> : null}
           {directory.page > 1 ? <input type="hidden" name="page" value={directory.page} /> : null}
           <input type="hidden" name="steamId" value={account.steamId} />
-          <label className="staff-inventory-query">
-            Search inventory
-            <span><Search aria-hidden="true" /><input name="inventoryQ" defaultValue={inventoryFilters.query} maxLength={120} placeholder="Item name, tag or instance ID" /></span>
-          </label>
+          <ServerSearchField
+            id="staff-inventory-query"
+            rootClassName="staff-inventory-query"
+            name="inventoryQ"
+            label="Search inventory"
+            defaultValue={inventoryFilters.query}
+            maxLength={120}
+            placeholder="Item name, tag, type, or instance ID"
+            autoComplete="off"
+          />
           <label>
             Item type
             <select name="inventoryType" defaultValue={inventoryFilters.itemType ?? ""}>
@@ -428,8 +439,7 @@ export function StaffInventoryPanel({
               {inventoryStates.map((state) => <option key={state.value} value={state.value}>{state.label}</option>)}
             </select>
           </label>
-          <button className="button button-secondary" type="submit"><Filter aria-hidden="true" /> Apply</button>
-        </form>
+        </SearchNavigationForm>
         {account.inventory.items.length ? (
           <div className="economy-admin-item-grid">
             {account.inventory.items.map((item) => <ItemEditor key={item.id} item={item} steamId={account.steamId} csrf={csrf} canManage={canManage} action={mutationAction} />)}

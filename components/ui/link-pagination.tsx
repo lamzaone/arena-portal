@@ -44,7 +44,7 @@ export function LinkPagination({
   const controlClassName = "pagination-link";
 
   return (
-    <nav className={classNames("pagination", className)} aria-label={label}>
+    <nav data-ui="pagination" className={classNames("pagination", className)} aria-label={label}>
       {hasPrevious ? (
         <Link
           className={controlClassName}

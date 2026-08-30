@@ -651,6 +651,7 @@ function OwnedCrateInlineOpener({
   return (
     <section
       id={openerId}
+      data-ui="item-modal"
       className={`panel crate-inline-modal ${openingHere ? "is-opening" : ""} ${showDrops && !openingHere && !reward ? "has-drop-odds" : ""} ${displayedRarity === null ? "" : `is-reward ${rarityRankClass(displayedRarity)}`}`}
       aria-label={`Open ${crate.displayName}`}
     >
@@ -774,6 +775,7 @@ function BulkCrateOpeningRows({
           return (
             <article
               key={row.crate.id}
+              data-ui="item-modal"
               className={`panel crate-inline-modal crate-bulk-opening-row ${row.opening ? "is-opening" : ""} ${rarity === null ? "" : `is-reward ${rarityRankClass(rarity)}`}`}
               aria-label={`${row.crate.displayName}, opening ${index + 1} of ${rows.length}`}
             >
@@ -858,7 +860,7 @@ function MarketCrateInlineOpener({
   const dropCount = dropState.status === "ready" ? dropState.drops.length : null;
   const dropsId = `crate-market-drops-${crate.catalogueId ?? crate.id}`;
 
-  return <section id={`crate-market-opening-${crate.catalogueId ?? crate.id}`} className={`panel crate-inline-modal crate-market-inline-modal ${showDrops ? "has-drop-odds" : ""}`} aria-label={`Buy ${crate.displayName}`}>
+  return <section data-ui="item-modal" id={`crate-market-opening-${crate.catalogueId ?? crate.id}`} className={`panel crate-inline-modal crate-market-inline-modal ${showDrops ? "has-drop-odds" : ""}`} aria-label={`Buy ${crate.displayName}`}>
     <header className="crate-inline-modal-header">
       <div>
         <p className="eyebrow"><ShoppingBag aria-hidden="true" /> Container market</p>

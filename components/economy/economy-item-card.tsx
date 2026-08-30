@@ -102,13 +102,13 @@ export function EconomyItemCard({
 
   if (onSelect) {
     return (
-      <button type="button" className={`panel economy-item-card ${selected ? "is-selected" : ""} ${className}`.trim()} aria-pressed={selected} aria-expanded={selectionControls ? selected : undefined} aria-controls={selected ? selectionControls : undefined} onClick={onSelect} aria-label={selectionLabel ?? `Select ${displayName}`} disabled={disabled}>
+      <button data-ui="item-card" type="button" className={`panel economy-item-card ${selected ? "is-selected" : ""} ${className}`.trim()} aria-pressed={selected} aria-expanded={selectionControls ? selected : undefined} aria-controls={selected ? selectionControls : undefined} onClick={onSelect} aria-label={selectionLabel ?? `Select ${displayName}`} disabled={disabled}>
         {content}
       </button>
     );
   }
 
-  return <Panel as="article" className={`economy-item-card ${className}`.trim()}>{content}</Panel>;
+  return <Panel as="article" data-ui="item-card" className={`economy-item-card ${className}`.trim()}>{content}</Panel>;
 }
 
 export function EconomyEmptyState({ title, description, icon = <Box aria-hidden="true" /> }: { title: string; description: string; icon?: ReactNode }) {

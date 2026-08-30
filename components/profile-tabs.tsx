@@ -4,6 +4,8 @@ import { Package, Settings2, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type KeyboardEvent, type ReactNode, useId, useState } from "react";
 
+import sectionStyles from "@/components/ui/section-nav.module.css";
+
 type ProfileTab = "overview" | "inventory" | "settings";
 
 type ProfileTabsProps = {
@@ -82,9 +84,11 @@ export function ProfileTabs({
 
   return (
     <>
-      <nav className="profile-content-tabs" aria-label="Player profile sections">
-        <div role="tablist" aria-orientation="horizontal">
+      <nav data-ui="section-nav" className={`${sectionStyles.nav} profile-content-tabs`} aria-label="Player profile sections">
+        <div className={sectionStyles.track} data-part="track" role="tablist" aria-orientation="horizontal">
           <button
+            className={sectionStyles.item}
+            data-part="item"
             type="button"
             id={overviewTabId}
             role="tab"
@@ -95,9 +99,11 @@ export function ProfileTabs({
             onKeyDown={(event) => selectWithKeyboard(event, "overview")}
           >
             <UserRound aria-hidden="true" />
-            Overview
+            <span className={sectionStyles.label}>Overview</span>
           </button>
           <button
+            className={sectionStyles.item}
+            data-part="item"
             type="button"
             id={inventoryTabId}
             role="tab"
@@ -108,16 +114,17 @@ export function ProfileTabs({
             onKeyDown={(event) => selectWithKeyboard(event, "inventory")}
           >
             <Package aria-hidden="true" />
-            Inventory
-            <span>{inventoryCount.toLocaleString("en-US")}</span>
+            <span className={sectionStyles.label}>Inventory</span>
+            <span className={sectionStyles.badge}>{inventoryCount.toLocaleString("en-US")}</span>
           </button>
           {settingsAvailable ? (
             <button
-              className="profile-content-settings-toggle"
+              className={`${sectionStyles.item} ${sectionStyles.settings} profile-content-settings-toggle`}
+              data-part="item"
               type="button"
               id={settingsTabId}
               role="tab"
-              aria-label={settingsOpen ? "Close profile settings" : "Open profile settings"}
+              aria-label={settingsOpen ? "Close Customize profile settings" : "Customize profile"}
               aria-selected={selectedTab === "settings"}
               aria-controls={settingsPanelId}
               tabIndex={selectedTab === "settings" ? 0 : -1}
@@ -126,6 +133,7 @@ export function ProfileTabs({
               onKeyDown={(event) => selectWithKeyboard(event, "settings")}
             >
               <Settings2 aria-hidden="true" />
+              <span className={sectionStyles.label}>Customize</span>
             </button>
           ) : null}
         </div>

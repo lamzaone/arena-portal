@@ -217,6 +217,7 @@ export function AdaptivePlayerHoverCard({
       <span ref={markerRef} hidden aria-hidden="true" />
       {portalReady ? createPortal(
         <span
+          data-ui="player-hover-layer"
           className={`player-profile-preview-layer ${themeClassName}`}
           data-theme={themeKey}
           data-theme-surface="small-profile"
@@ -225,6 +226,7 @@ export function AdaptivePlayerHoverCard({
         >
           <span
             ref={cardRef}
+            data-ui="player-hover-card"
             className={className}
             role="group"
             aria-label={ariaLabel}

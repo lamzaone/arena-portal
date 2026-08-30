@@ -322,10 +322,10 @@ UPDATE portal_identity_chat_tags SET tag_text = '✦ FOUNDER ✦'
 WHERE tag_key = 'admin.founder' AND tag_text = 'FOUNDER';
 
 INSERT IGNORE INTO portal_identity_group_chat_tags (group_id, tag_id, sort_order, assigned_by_steam_id)
-SELECT groups.id, tags.id, 0, 'system'
-FROM portal_identity_groups AS groups
+SELECT identity_group.id, tags.id, 0, 'system'
+FROM portal_identity_groups AS identity_group
 INNER JOIN portal_identity_chat_tags AS tags
-  ON tags.tag_key = CASE groups.group_key
+  ON tags.tag_key = CASE identity_group.group_key
     WHEN 'admins_core.trial_staff' THEN 'admin.trial_staff'
     WHEN 'admins_core.guardian' THEN 'admin.guardian'
     WHEN 'admins_core.enforcer' THEN 'admin.enforcer'

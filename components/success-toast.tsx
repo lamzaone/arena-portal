@@ -42,6 +42,7 @@ export function PortalToast({
 
   return (
     <aside
+      data-ui="toast"
       className={`portal-toast is-${variant}`}
       role={liveRole}
       aria-live={variant === "danger" ? "assertive" : "polite"}

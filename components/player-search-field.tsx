@@ -340,6 +340,7 @@ export function PlayerSearchField({
   return (
     <div
       ref={rootRef}
+      data-ui="player-search"
       className={[styles.root, className].filter(Boolean).join(" ")}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) {
@@ -350,7 +351,7 @@ export function PlayerSearchField({
     >
       <div className={styles.label}>
         <label className={styles.labelText} htmlFor={inputId}>{label}</label>
-        <span className={styles.combobox} data-invalid={validationMessage ? "true" : "false"}>
+        <span className={styles.combobox} data-part="control" data-invalid={validationMessage ? "true" : "false"}>
           <Search className={styles.searchIcon} aria-hidden="true" />
           <input
             ref={inputRef}
@@ -411,7 +412,7 @@ export function PlayerSearchField({
                 : "Enter at least two characters to search for a player."}
       </span>
       {showResults ? (
-        <div className={styles.results} id={listboxId} role="listbox" aria-label="Matching players">
+        <div data-part="results" className={styles.results} id={listboxId} role="listbox" aria-label="Matching players">
           {searchState === "loading" ? Array.from({ length: 3 }, (_, index) => (
             <span className={styles.skeleton} key={index} aria-hidden="true">
               <i className={styles.skeletonAvatar} />

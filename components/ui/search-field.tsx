@@ -4,10 +4,13 @@ import { LoaderCircle, Search, X } from "lucide-react";
 import {
   createContext,
   type ButtonHTMLAttributes,
+  type ChangeEvent,
   type FormEvent,
   type FormHTMLAttributes,
   type InputHTMLAttributes,
+  type InputEvent,
   type Ref,
+  useEffect,
   useContext,
   useRef,
   useTransition,
@@ -16,6 +19,8 @@ import { useRouter } from "next/navigation";
 
 import styles from "@/components/ui/search-field.module.css";
 
+export const DEFAULT_SEARCH_DEBOUNCE_MS = 280;
+
 const SearchNavigationPendingContext = createContext(false);
 
 type SearchNavigationFormProps = Omit<
@@ -23,6 +28,14 @@ type SearchNavigationFormProps = Omit<
   "action" | "method" | "onSubmit"
 > & {
   action: string;
+  /**
+   * Debounces text entry and navigates immediately when a select, checkbox,
+   * or radio changes. Enter still submits immediately.
+   */
+  instant?: boolean;
+  debounceMs?: number;
+  /** Query-string fields that should be removed whenever filters change. */
+  resetFields?: readonly string[];
   replace?: boolean;
 };
 
@@ -33,26 +46,81 @@ type SearchNavigationFormProps = Omit<
  */
 export function SearchNavigationForm({
   action,
+  instant = false,
+  debounceMs = DEFAULT_SEARCH_DEBOUNCE_MS,
+  resetFields = [],
   replace = true,
   children,
+  onChange,
+  onInput,
   ...formProps
 }: SearchNavigationFormProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const timerRef = useRef<number | null>(null);
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
+  useEffect(() => () => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+  }, []);
+
+  function navigate(form: HTMLFormElement) {
+    const formData = new FormData(form);
     const target = new URL(action, window.location.href);
     target.search = "";
     for (const [name, value] of formData.entries()) {
       if (typeof value === "string" && value) target.searchParams.append(name, value);
     }
+    for (const field of resetFields) target.searchParams.delete(field);
     const href = `${target.pathname}${target.search}${target.hash}`;
     startTransition(() => {
       if (replace) router.replace(href, { scroll: false });
       else router.push(href, { scroll: false });
     });
+  }
+
+  function schedule(form: HTMLFormElement, delay: number) {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    if (delay <= 0) {
+      timerRef.current = null;
+      navigate(form);
+      return;
+    }
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null;
+      navigate(form);
+    }, delay);
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    timerRef.current = null;
+    navigate(event.currentTarget);
+  }
+
+  function input(event: InputEvent<HTMLFormElement>) {
+    onInput?.(event);
+    if (!instant) return;
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (target.type !== "search" && target.type !== "text") return;
+    schedule(event.currentTarget, debounceMs);
+  }
+
+  function change(event: ChangeEvent<HTMLFormElement>) {
+    onChange?.(event);
+    if (!instant) return;
+    const target = event.target;
+    if (target instanceof HTMLSelectElement) {
+      schedule(event.currentTarget, 0);
+      return;
+    }
+    if (
+      target instanceof HTMLInputElement &&
+      (target.type === "checkbox" || target.type === "radio")
+    ) {
+      schedule(event.currentTarget, 0);
+    }
   }
 
   return (
@@ -63,6 +131,9 @@ export function SearchNavigationForm({
         method="get"
         role={formProps.role ?? "search"}
         aria-busy={pending || undefined}
+        data-instant-search={instant ? "true" : undefined}
+        onChange={change}
+        onInput={input}
         onSubmit={submit}
       >
         {children}
@@ -107,13 +178,19 @@ export function SearchField({
   function clear() {
     if (onClear) onClear();
     else onValueChange("");
-    window.requestAnimationFrame(() => localInputRef.current?.focus());
+    window.requestAnimationFrame(() => {
+      const input = localInputRef.current;
+      input?.focus();
+      // Controlled input changes do not emit a native input event. Dispatch
+      // one so an enclosing instant SearchNavigationForm refreshes on clear.
+      input?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
   }
 
   return (
-    <div className={[styles.root, rootClassName].filter(Boolean).join(" ")}>
+    <div data-ui="search-field" className={[styles.root, rootClassName].filter(Boolean).join(" ")}>
       <label className={styles.labelText} htmlFor={id}>{label}</label>
-      <span className={styles.control}>
+      <span className={styles.control} data-part="control">
         <Search className={styles.icon} aria-hidden="true" />
         <input
           {...inputProps}

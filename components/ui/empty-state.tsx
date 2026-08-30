@@ -26,6 +26,7 @@ export function EmptyState({
 
   return (
     <section
+      data-ui="empty-state"
       className={`panel ui-empty-state ui-empty-state-${size} ui-empty-state-${tone} ${className}`.trim()}
     >
       <div className="icon-box">{icon}</div>

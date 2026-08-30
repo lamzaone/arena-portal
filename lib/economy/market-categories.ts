@@ -21,7 +21,7 @@ export const marketplaceCategories: readonly MarketplaceCategory[] = [
   { value: "keychain", label: "Charms", itemTypes: ["keychain"] },
   {
     value: "vip_membership",
-    label: "VIP Memberships",
+    label: "Group Memberships",
     itemTypes: ["vip_membership"],
   },
   {

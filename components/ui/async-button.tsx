@@ -34,6 +34,7 @@ export function AsyncButton({
   return (
     <button
       {...props}
+      data-ui="async-button"
       type={type}
       className={`ui-async-button ${className}`.trim()}
       disabled={disabled || pending}

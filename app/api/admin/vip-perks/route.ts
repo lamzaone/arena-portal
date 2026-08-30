@@ -34,8 +34,9 @@ function actionView(action: string) {
 }
 
 function redirect(request: Request, kind: "notice" | "error", message: string, view = "definitions") {
-  const url = new URL("/admin/groups/perks", request.url);
-  url.searchParams.set("view", view);
+  const offerView = view === "offers";
+  const url = new URL(offerView ? "/admin/groups/listings" : "/admin/groups/perks", request.url);
+  url.searchParams.set("view", offerView ? "perks" : view);
   url.searchParams.set(kind, message);
   return NextResponse.redirect(url, 303);
 }

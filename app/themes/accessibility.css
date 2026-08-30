@@ -1,35 +1,9 @@
 /* Imported after every theme so user accessibility preferences always win. */
 @media (prefers-reduced-motion: reduce) {
-  [data-theme="beta_tester"] *,
-  [data-theme="beta_tester"] *::before,
-  [data-theme="beta_tester"] *::after,
-  [data-theme="tap_god"] *,
-  [data-theme="tap_god"] *::before,
-  [data-theme="tap_god"] *::after,
-  .global-theme-beta-tester *,
-  .global-theme-beta-tester *::before,
-  .global-theme-beta-tester *::after,
-  .global-theme-tap-god *,
-  .global-theme-tap-god *::before,
-  .global-theme-tap-god *::after,
-  .small-profile-theme-beta-tester *,
-  .small-profile-theme-beta-tester *::before,
-  .small-profile-theme-beta-tester *::after,
-  .small-profile-theme-tap-god *,
-  .small-profile-theme-tap-god *::before,
-  .small-profile-theme-tap-god *::after,
-  .player-profile-page.profile-theme-beta-tester *,
-  .player-profile-page.profile-theme-beta-tester *::before,
-  .player-profile-page.profile-theme-beta-tester *::after,
-  .leaderboard-player-row.ranking-theme-beta-tester *,
-  .leaderboard-player-row.ranking-theme-beta-tester *::before,
-  .leaderboard-player-row.ranking-theme-beta-tester *::after,
-  .player-profile-page.profile-theme-tap-god *,
-  .player-profile-page.profile-theme-tap-god *::before,
-  .player-profile-page.profile-theme-tap-god *::after,
-  .leaderboard-player-row.ranking-theme-tap-god *,
-  .leaderboard-player-row.ranking-theme-tap-god *::before,
-  .leaderboard-player-row.ranking-theme-tap-god *::after {
+  :where([data-theme][data-theme-surface]),
+  :where([data-theme][data-theme-surface]) *,
+  :where([data-theme][data-theme-surface]) *::before,
+  :where([data-theme][data-theme-surface]) *::after {
     animation-duration: .01ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
@@ -49,24 +23,23 @@
 }
 
 @media (forced-colors: active) {
-  .tap-god-rain-background { display: none; }
-  .beta-tester-avatar-mark,
-  .tap-god-avatar-mark,
-  .beta-tester-theme-badge,
-  .tap-god-theme-badge,
+  [data-theme-background] { display: none; }
+
+  :where(html[data-theme][data-theme-surface]) body,
+  body:has(.player-profile-page[data-theme-owner="profile"]) {
+    color: CanvasText;
+    background: Canvas !important;
+  }
+
+  :where(html[data-theme][data-theme-surface]) body::before,
+  :where(html[data-theme][data-theme-surface]) .cursor-grid-background {
+    display: none !important;
+  }
+
+  .public-player-avatar-shell > span[aria-hidden="true"],
+  [data-profile-theme-badge],
   .leaderboard-theme-badge,
-  :is(
-    [data-theme="beta_tester"],
-    [data-theme="tap_god"],
-    .global-theme-beta-tester,
-    .global-theme-tap-god,
-    .player-profile-page.profile-theme-beta-tester,
-    .player-profile-page.profile-theme-tap-god,
-    .small-profile-theme-beta-tester,
-    .small-profile-theme-tap-god,
-    .leaderboard-player-row.ranking-theme-beta-tester,
-    .leaderboard-player-row.ranking-theme-tap-god
-  ) .identity-group-badge {
+  :where([data-theme][data-theme-surface]) .identity-group-badge {
     border: 2px solid ButtonText;
     color: ButtonText;
     background: Canvas;
@@ -77,33 +50,15 @@
     animation: none;
   }
 
-  :is(
-    [data-theme="beta_tester"],
-    [data-theme="tap_god"],
-    .global-theme-beta-tester,
-    .global-theme-tap-god,
-    .player-profile-page.profile-theme-beta-tester,
-    .player-profile-page.profile-theme-tap-god,
-    .small-profile-theme-beta-tester,
-    .small-profile-theme-tap-god,
-    .leaderboard-player-row.ranking-theme-beta-tester,
-    .leaderboard-player-row.ranking-theme-tap-god
-  ) .identity-group-badge::before,
-  :is(
-    [data-theme="beta_tester"],
-    [data-theme="tap_god"],
-    .global-theme-beta-tester,
-    .global-theme-tap-god,
-    .player-profile-page.profile-theme-beta-tester,
-    .player-profile-page.profile-theme-tap-god,
-    .small-profile-theme-beta-tester,
-    .small-profile-theme-tap-god,
-    .leaderboard-player-row.ranking-theme-beta-tester,
-    .leaderboard-player-row.ranking-theme-tap-god
-  ) .identity-group-badge::after { display: none; }
+  :where([data-theme][data-theme-surface]) .identity-group-badge::before,
+  :where([data-theme][data-theme-surface]) .identity-group-badge::after {
+    display: none;
+  }
 
-  :is([data-theme="beta_tester"], [data-theme="tap_god"], .global-theme-beta-tester, .global-theme-tap-god, .player-profile-page.profile-theme-beta-tester, .player-profile-page.profile-theme-tap-god) .account-nav,
-  :is([data-theme="beta_tester"], [data-theme="tap_god"], .global-theme-beta-tester, .global-theme-tap-god, .player-profile-page.profile-theme-beta-tester, .player-profile-page.profile-theme-tap-god) .account-nav a {
+  :where([data-theme][data-theme-surface]) .account-nav,
+  :where([data-theme][data-theme-surface]) .account-nav a,
+  :where([data-theme][data-theme-surface]) [data-ui="section-nav"] [data-part="track"],
+  :where([data-theme][data-theme-surface]) [data-ui="section-nav"] [data-part="item"] {
     border-color: CanvasText;
     color: LinkText;
     background: Canvas;
@@ -111,31 +66,70 @@
     text-shadow: none;
   }
 
-  :is([data-theme="beta_tester"], [data-theme="tap_god"], .global-theme-beta-tester, .global-theme-tap-god, .player-profile-page.profile-theme-beta-tester, .player-profile-page.profile-theme-tap-god) .account-nav a.active {
+  :where([data-theme][data-theme-surface]) .account-nav a.active,
+  :where([data-theme][data-theme-surface]) [data-ui="section-nav"] [data-part="item"]:is([data-active="true"], [aria-selected="true"]) {
     color: HighlightText;
     background: Highlight;
   }
 
-  .leaderboard-table tbody tr:is(.ranking-theme-beta-tester, .ranking-theme-tap-god) > td {
+  :where([data-theme][data-theme-surface="small-profile"]) > td,
+  :where([data-theme][data-theme-surface]) [data-ui="data-table"] :is(th, td) {
     border-color: CanvasText;
     color: CanvasText;
     background: Canvas;
     box-shadow: none;
   }
 
-  :is(.ranking-theme-beta-tester, .ranking-theme-tap-god) :where(.leaderboard-position, .leaderboard-player strong),
-  :is(.ranking-theme-beta-tester, .ranking-theme-tap-god) .points-cell,
+  :where([data-theme][data-theme-surface="small-profile"]) :where(.leaderboard-position, .leaderboard-player strong),
+  :where([data-theme][data-theme-surface="small-profile"]) .points-cell,
   .leaderboard-theme-badge > small {
     color: CanvasText !important;
     text-shadow: none;
   }
 
-  :is(.ranking-theme-beta-tester, .ranking-theme-tap-god) .leaderboard-player img,
-  :is(.ranking-theme-beta-tester, .ranking-theme-tap-god) .player-avatar-fallback {
+  :where([data-theme][data-theme-surface="small-profile"]) .leaderboard-player img,
+  :where([data-theme][data-theme-surface="small-profile"]) .player-avatar-fallback {
     border-color: CanvasText;
     color: CanvasText;
     background: Canvas;
     box-shadow: none;
     clip-path: none;
+  }
+
+  :where([data-theme][data-theme-surface])
+    :is(
+      [data-ui="panel"],
+      [data-ui="item-card"],
+      [data-ui="item-modal"],
+      [data-ui="empty-state"],
+      [data-ui="toast"],
+      [data-ui="player-hover-card"],
+      [data-ui="search-field"] [data-part="control"],
+      [data-ui="player-search"] [data-part="control"],
+      [data-ui="player-search"] [data-part="results"],
+      [role="dialog"],
+      [aria-modal="true"]
+    ) {
+    border-color: CanvasText;
+    color: CanvasText;
+    background: Canvas;
+    box-shadow: none;
+    text-shadow: none;
+  }
+
+  :where([data-theme][data-theme-surface])
+    [data-ui="pagination"] :is(a, button, .market-page-number),
+  :where([data-theme][data-theme-surface])
+    [data-ui="route-loading"] .ui-skeleton {
+    border-color: CanvasText;
+    color: LinkText;
+    background: Canvas;
+    box-shadow: none;
+  }
+
+  :where([data-theme][data-theme-surface])
+    [data-ui="pagination"] :is([aria-current="page"], .is-current) {
+    color: HighlightText;
+    background: Highlight;
   }
 }

@@ -381,13 +381,13 @@ const effectiveSourcesSql = `
       WHEN memberships.expires_at IS NULL THEN grants.expires_at
       ELSE LEAST(grants.expires_at, memberships.expires_at)
     END AS effective_expires_at,
-    CONVERT(CONCAT('Group: ', groups.display_name) USING utf8mb4) COLLATE utf8mb4_unicode_ci AS source_label,
-    1000000 + groups.profile_priority AS source_priority,
+    CONVERT(CONCAT('Group: ', identity_group.display_name) USING utf8mb4) COLLATE utf8mb4_unicode_ci AS source_label,
+    1000000 + identity_group.profile_priority AS source_priority,
     grants.id AS grant_id
   FROM portal_vip_perk_group_grants grants
   INNER JOIN portal_vip_perks perks ON perks.id = grants.perk_id AND perks.enabled = TRUE
-  INNER JOIN portal_identity_groups groups ON groups.id = grants.group_id AND groups.enabled = TRUE AND groups.source_type = 'custom'
-  INNER JOIN portal_identity_group_memberships memberships ON memberships.group_id = groups.id
+  INNER JOIN portal_identity_groups identity_group ON identity_group.id = grants.group_id AND identity_group.enabled = TRUE AND identity_group.source_type = 'custom'
+  INNER JOIN portal_identity_group_memberships memberships ON memberships.group_id = identity_group.id
     AND memberships.revoked_at IS NULL
     AND memberships.starts_at <= CURRENT_TIMESTAMP
     AND (memberships.expires_at IS NULL OR memberships.expires_at > CURRENT_TIMESTAMP)
@@ -472,6 +472,7 @@ export async function getEffectiveVipPerkPage(pageValue = 1, pageSizeValue = 25)
 }
 
 export async function getVipPerkAdminSnapshot(input: {
+  includeOffers?: boolean;
   includeGrants?: boolean;
   grantPage?: number;
   grantPageSize?: number;
@@ -480,12 +481,14 @@ export async function getVipPerkAdminSnapshot(input: {
   const requestedPage = integer(input.grantPage ?? 1, "Grant page", 1, 100000);
   const grantPageSize = integer(input.grantPageSize ?? 50, "Grant page size", 1, 100);
   if (!database) return { perks: [], offers: [], customGroups: [], playerGrants: [], groupGrants: [], grantTotal: 0, grantPage: requestedPage, grantPageSize };
-  const [perks, offerResult, groupResult] = await Promise.all([
+  const [perks, offers, groupResult] = await Promise.all([
     readPerks(database),
-    database.query<OfferRow[]>(
-      offerSelect + "ORDER BY offers.enabled DESC, perks.display_name ASC, offers.duration_minutes ASC, offers.id ASC",
-      [runtimeServerId()],
-    ),
+    input.includeOffers
+      ? database.query<OfferRow[]>(
+          offerSelect + "ORDER BY offers.enabled DESC, perks.display_name ASC, offers.duration_minutes ASC, offers.id ASC",
+          [runtimeServerId()],
+        ).then(([rows]) => rows)
+      : Promise.resolve([] as OfferRow[]),
     database.query<GroupRow[]>("SELECT id, group_key, display_name, enabled FROM portal_identity_groups WHERE source_type = 'custom' ORDER BY enabled DESC, display_name ASC, id ASC"),
   ]);
   let grantRows: GrantRow[] = [];
@@ -506,8 +509,8 @@ export async function getVipPerkAdminSnapshot(input: {
       "FROM portal_vip_perk_player_grants grants INNER JOIN portal_vip_perks perks ON perks.id = grants.perk_id " +
       "WHERE grants.revoked_at IS NULL AND grants.starts_at <= CURRENT_TIMESTAMP AND (grants.expires_at IS NULL OR grants.expires_at > CURRENT_TIMESTAMP) " +
       "UNION ALL " +
-      "SELECT grants.id, grants.perk_id, perks.perk_key, perks.display_name AS perk_name, NULL AS steam_id, grants.group_id, groups.display_name AS group_name, CONVERT('group' USING utf8mb4) COLLATE utf8mb4_unicode_ci AS source_type, grants.starts_at, grants.expires_at, grants.grant_reason, grants.created_at " +
-      "FROM portal_vip_perk_group_grants grants INNER JOIN portal_vip_perks perks ON perks.id = grants.perk_id INNER JOIN portal_identity_groups groups ON groups.id = grants.group_id " +
+      "SELECT grants.id, grants.perk_id, perks.perk_key, perks.display_name AS perk_name, NULL AS steam_id, grants.group_id, identity_group.display_name AS group_name, CONVERT('group' USING utf8mb4) COLLATE utf8mb4_unicode_ci AS source_type, grants.starts_at, grants.expires_at, grants.grant_reason, grants.created_at " +
+      "FROM portal_vip_perk_group_grants grants INNER JOIN portal_vip_perks perks ON perks.id = grants.perk_id INNER JOIN portal_identity_groups identity_group ON identity_group.id = grants.group_id " +
       "WHERE grants.revoked_at IS NULL AND grants.starts_at <= CURRENT_TIMESTAMP AND (grants.expires_at IS NULL OR grants.expires_at > CURRENT_TIMESTAMP)" +
       ") active_grants ORDER BY active_grants.created_at DESC, active_grants.id DESC LIMIT ? OFFSET ?",
       [grantPageSize, (grantPage - 1) * grantPageSize],
@@ -516,7 +519,7 @@ export async function getVipPerkAdminSnapshot(input: {
   }
   return {
     perks,
-    offers: offerResult[0].map(toOffer),
+    offers: offers.map(toOffer),
     customGroups: groupResult[0].map((row) => ({ id: integer(row.id, "Group ID"), key: row.group_key, displayName: row.display_name, enabled: bool(row.enabled) })),
     playerGrants: grantRows.filter((row) => row.source_type !== "group").map(toGrant),
     groupGrants: grantRows.filter((row) => row.source_type === "group").map(toGrant),
@@ -928,8 +931,8 @@ export async function purchaseVipPerkOffer(input: {
     const [groupGrantRows] = await connection.query<(RowDataPacket & { grant_expires_at: Date | string | null; membership_expires_at: Date | string | null })[]>(
       "SELECT grants.expires_at AS grant_expires_at, memberships.expires_at AS membership_expires_at " +
       "FROM portal_vip_perk_group_grants grants " +
-      "INNER JOIN portal_identity_groups groups ON groups.id = grants.group_id AND groups.enabled = TRUE AND groups.source_type = 'custom' " +
-      "INNER JOIN portal_identity_group_memberships memberships ON memberships.group_id = groups.id AND memberships.steam_id = ? " +
+      "INNER JOIN portal_identity_groups identity_group ON identity_group.id = grants.group_id AND identity_group.enabled = TRUE AND identity_group.source_type = 'custom' " +
+      "INNER JOIN portal_identity_group_memberships memberships ON memberships.group_id = identity_group.id AND memberships.steam_id = ? " +
       "WHERE grants.perk_id = ? AND grants.revoked_at IS NULL AND grants.starts_at <= CURRENT_TIMESTAMP AND (grants.expires_at IS NULL OR grants.expires_at > CURRENT_TIMESTAMP) " +
       "AND memberships.revoked_at IS NULL AND memberships.starts_at <= CURRENT_TIMESTAMP AND (memberships.expires_at IS NULL OR memberships.expires_at > CURRENT_TIMESTAMP) FOR UPDATE",
       [buyerSteamId, parsedOffer.perkId],

@@ -15,14 +15,14 @@ import {
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
 import { PortalToast } from "@/components/success-toast";
 import { AsyncButton } from "@/components/ui/async-button";
 import {
+  DEFAULT_SEARCH_DEBOUNCE_MS,
   SearchField,
-  SearchSubmitButton,
 } from "@/components/ui/search-field";
 import type {
   EconomyCatalogueItem,
@@ -201,35 +201,60 @@ export function RedeemCodeAdmin({
     }
   }
 
-  async function searchCatalogue(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (searching) return;
-    setSearching(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams();
-      if (pickerQuery.trim()) params.set("q", pickerQuery.trim());
-      const response = await fetch(
-        `/api/admin/redeem-codes${params.size ? `?${params.toString()}` : ""}`,
-        { credentials: "same-origin", headers: { accept: "application/json" } },
-      );
-      const result = (await response.json().catch(() => null)) as
-        | { ok?: boolean; message?: string; items?: EconomyCatalogueItem[] }
-        | null;
-      if (!response.ok || !result?.ok || !Array.isArray(result.items))
-        throw new Error(result?.message ?? "The catalogue search could not be completed.");
-      setPickerItems(result.items);
-      setKnownCatalogueItems((current) => {
-        const next = new Map(current);
-        for (const item of result.items ?? []) next.set(item.id, item);
-        return next;
-      });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The catalogue search could not be completed.");
-    } finally {
+  useEffect(() => {
+    const normalizedQuery = pickerQuery.trim();
+    if (!normalizedQuery) {
       setSearching(false);
+      setError(null);
+      setPickerItems(catalogue);
+      return;
     }
-  }
+
+    const controller = new AbortController();
+    setSearching(true);
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams({ q: normalizedQuery });
+      void fetch(
+        `/api/admin/redeem-codes?${params.toString()}`,
+        {
+          credentials: "same-origin",
+          headers: { accept: "application/json" },
+          signal: controller.signal,
+        },
+      )
+        .then(async (response) => {
+          const result = (await response.json().catch(() => null)) as
+            | { ok?: boolean; message?: string; items?: EconomyCatalogueItem[] }
+            | null;
+          if (!response.ok || !result?.ok || !Array.isArray(result.items))
+            throw new Error(result?.message ?? "The catalogue search could not be completed.");
+          return result.items;
+        })
+        .then((items) => {
+          if (controller.signal.aborted) return;
+          setError(null);
+          setPickerItems(items);
+          setKnownCatalogueItems((current) => {
+            const next = new Map(current);
+            for (const item of items) next.set(item.id, item);
+            return next;
+          });
+        })
+        .catch((cause: unknown) => {
+          if (controller.signal.aborted) return;
+          setPickerItems([]);
+          setError(cause instanceof Error ? cause.message : "The catalogue search could not be completed.");
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setSearching(false);
+        });
+    }, DEFAULT_SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [catalogue, pickerQuery]);
 
   async function toggleCode(item: EconomyRedeemCode) {
     if (activeCodeId !== null) return;
@@ -398,7 +423,7 @@ export function RedeemCodeAdmin({
               <p>{pickerQuery.trim() ? `Results for “${pickerQuery.trim()}”` : "Search below for a specific item."}</p>
             </div>
           </div>
-          <form className="redeem-catalogue-search" onSubmit={searchCatalogue}>
+          <form className="redeem-catalogue-search" onSubmit={(event) => event.preventDefault()}>
             <SearchField
               id="redeem-catalogue-search"
               label="Search catalogue"
@@ -409,14 +434,6 @@ export function RedeemCodeAdmin({
               autoComplete="off"
               pending={searching}
             />
-            <SearchSubmitButton
-              alignWithLabel
-              variant="secondary"
-              pending={searching}
-              pendingLabel="Searching"
-            >
-              Search
-            </SearchSubmitButton>
           </form>
           <div className="redeem-picker-list">
             {pickerItems.length ? pickerItems.map((item) => {

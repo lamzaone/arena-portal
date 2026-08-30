@@ -1196,6 +1196,33 @@ async function removeStaleExternalDefinitions(
   );
 }
 
+async function disableUndeliverableExternalListings(connection: PoolConnection) {
+  try {
+    await connection.execute(
+      "UPDATE portal_identity_group_listings AS listing " +
+        "INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = listing.group_id " +
+        "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id AND external_definition.source_type = identity_group.source_type AND external_definition.external_key = identity_group.external_key " +
+        "SET listing.enabled = FALSE, listing.vip_page_enabled = FALSE, listing.market_enabled = FALSE, listing.updated_by_steam_id = 'system' " +
+        "WHERE identity_group.source_type IN ('admins_core', 'vipcore') AND (external_definition.group_id IS NULL OR (identity_group.source_type = 'admins_core' AND LOWER(TRIM(COALESCE(identity_group.external_key, ''))) = 'founder'))",
+    );
+    await connection.execute(
+      "UPDATE portal_economy_catalogue AS catalogue " +
+        "INNER JOIN portal_identity_group_listings AS listing ON listing.catalogue_id = catalogue.id " +
+        "INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = listing.group_id " +
+        "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id AND external_definition.source_type = identity_group.source_type AND external_definition.external_key = identity_group.external_key " +
+        "SET catalogue.metadata = JSON_SET(catalogue.metadata, '$.marketEnabled', JSON_EXTRACT('false', '$'), '$.donationEnabled', JSON_EXTRACT('false', '$')) " +
+        "WHERE identity_group.source_type IN ('admins_core', 'vipcore') AND (external_definition.group_id IS NULL OR (identity_group.source_type = 'admins_core' AND LOWER(TRIM(COALESCE(identity_group.external_key, ''))) = 'founder'))",
+    );
+  } catch (error) {
+    const candidate = error as { code?: unknown; errno?: unknown };
+    // External catalogue sync predates migration 020. Keep the existing sync
+    // usable during a rolling deploy; once listing storage exists, every stale
+    // external listing is failed closed in this same transaction.
+    if (candidate.code === "ER_NO_SUCH_TABLE" || candidate.errno === 1146) return;
+    throw error;
+  }
+}
+
 async function storePermission(
   connection: PoolConnection,
   permission: DiscoveredPermission,
@@ -1323,6 +1350,7 @@ export async function syncIdentityCatalogue(
           .map((group) => group.externalKey),
       );
     }
+    await disableUndeliverableExternalListings(connection);
     for (const permission of inputs.permissions) {
       await storePermission(connection, permission);
     }

@@ -125,6 +125,7 @@ export function PlayerIdentity({
 
   return (
     <Frame
+      data-ui="player-identity"
       className={frameClassName}
       data-player-identity-variant={variant}
       data-presence={player.presence}

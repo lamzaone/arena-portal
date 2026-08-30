@@ -38,7 +38,10 @@ import {
 import { TokenBalance } from "@/components/economy/token-balance";
 import { PortalToast } from "@/components/success-toast";
 import { AsyncButton } from "@/components/ui/async-button";
-import { SearchField } from "@/components/ui/search-field";
+import {
+  DEFAULT_SEARCH_DEBOUNCE_MS,
+  SearchField,
+} from "@/components/ui/search-field";
 import { economyItemTypeLabel } from "@/lib/economy/item-taxonomy";
 import { economyItemDisplayName } from "@/lib/economy/item-display-name";
 import type { PlayerIdentityData } from "@/lib/player-identities";
@@ -367,7 +370,7 @@ export function TradeManager({
                 : "That inventory could not be loaded.",
           });
         });
-    }, partnerQuery.trim() ? 250 : 0);
+    }, partnerQuery.trim() ? DEFAULT_SEARCH_DEBOUNCE_MS : 0);
 
     return () => {
       window.clearTimeout(timer);

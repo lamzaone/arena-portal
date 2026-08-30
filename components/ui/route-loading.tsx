@@ -289,6 +289,7 @@ export function RouteLoading({
 }: RouteLoadingProps) {
   return (
     <main
+      data-ui="route-loading"
       className={`tapped-page portal-route-loading${staff ? " staff-page" : ""}`}
       aria-busy="true"
     >

@@ -16,7 +16,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type FormEvent,
 } from "react";
 
 import {
@@ -34,8 +33,8 @@ import {
 import { TokenBalance } from "@/components/economy/token-balance";
 import { PortalToast } from "@/components/success-toast";
 import {
+  SearchNavigationForm,
   SearchField,
-  SearchSubmitButton,
 } from "@/components/ui/search-field";
 import {
   marketplaceCategories,
@@ -119,27 +118,6 @@ function parseFloatInput(value: string): ParsedFloat {
 
 function validItemType(value: string) {
   return normalizeMarketplaceCategory(value);
-}
-
-function validRarity(value: string) {
-  const normalized = value.trim();
-  if (!normalized) return "";
-  const parsed = Number(normalized);
-  return Number.isSafeInteger(parsed) &&
-    (ECONOMY_RARITY_RANKS as readonly number[]).includes(parsed)
-    ? String(parsed)
-    : "";
-}
-
-function normalizeFilters(filters: MarketplaceFilters) {
-  return {
-    error: null,
-    filters: {
-      query: filters.query.replace(/\s+/g, " ").trim().slice(0, 120),
-      itemType: validItemType(filters.itemType),
-      rarity: validRarity(filters.rarity),
-    } satisfies MarketplaceFilters,
-  };
 }
 
 function isFloatSelectable(item: EconomyItemView) {
@@ -727,17 +705,6 @@ export function MarketplaceBrowser({
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
-  function submitFilters(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const normalized = normalizeFilters(draft);
-    if (!normalized.filters) {
-      setNotice({ type: "error", text: normalized.error ?? "Invalid filters." });
-      return;
-    }
-    setNotice(null);
-    router.push(marketHref(normalized.filters, 1), { scroll: false });
-  }
-
   async function purchase(
     item: EconomyItemView,
     options: MarketplacePurchaseOptions,
@@ -806,11 +773,11 @@ export function MarketplaceBrowser({
         />
       ) : null}
 
-      <form
+      <SearchNavigationForm
         className="panel form-panel market-filters"
         action="/market"
-        method="get"
-        onSubmit={submitFilters}
+        instant
+        resetFields={["page"]}
       >
         <div className="market-filter-heading">
           <div>
@@ -869,9 +836,6 @@ export function MarketplaceBrowser({
             </select>
           </label>
           <div className="market-filter-actions">
-            <SearchSubmitButton variant="secondary">
-              Search catalogue
-            </SearchSubmitButton>
             <Link className="button button-quiet" href="/market" scroll={false}>
               <X aria-hidden="true" /> Clear filters
             </Link>
@@ -883,7 +847,7 @@ export function MarketplaceBrowser({
             : "No matching items"}
           <span>{pagination.pageSize} per page</span>
         </p>
-      </form>
+      </SearchNavigationForm>
 
       {items.length ? (
         <div className="feature-grid market-item-grid">

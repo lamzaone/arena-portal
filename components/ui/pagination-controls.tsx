@@ -40,7 +40,7 @@ export function PaginationControls({
   const currentPage = Math.min(Math.max(1, page), totalPages);
 
   return (
-    <nav className="market-pagination" aria-label={label}>
+    <nav data-ui="pagination" className="market-pagination" aria-label={label}>
       <button
         type="button"
         className="button button-secondary market-page-button"

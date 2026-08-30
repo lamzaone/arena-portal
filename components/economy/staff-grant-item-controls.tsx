@@ -11,7 +11,6 @@ import {
   PackageOpen,
   Palette,
   Plus,
-  Search,
   ShieldOff,
   Sparkles,
   Trash2,
@@ -19,7 +18,12 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { FormEvent } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+import {
+  DEFAULT_SEARCH_DEBOUNCE_MS,
+  SearchField,
+} from "@/components/ui/search-field";
 
 import type {
   EconomyCatalogueItem,
@@ -297,11 +301,12 @@ export function StaffGrantItemControls({
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [submitMessage, setSubmitMessage] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState(initialIdempotencyKey);
+  const searchRequestRef = useRef<AbortController | null>(null);
 
   const visibleCatalogue = useMemo(() => {
-    if (searchResults) return searchResults;
+    if (query.trim()) return searchResults ?? [];
     return catalogue.filter((item) => matchesFilter(item, filter)).slice(0, 40);
-  }, [catalogue, filter, searchResults]);
+  }, [catalogue, filter, query, searchResults]);
   const selectedCatalogueCounts = useMemo(() => {
     const counts = new Map<number, number>();
     for (const line of lines) {
@@ -357,42 +362,86 @@ export function StaffGrantItemControls({
     setSubmitMessage(`${displayName} added to the selected list.`);
   }
 
-  async function searchCatalogue() {
-    const normalized = query.trim();
-    if (!normalized || searchState === "loading") return;
+  function restoreCatalogueShortcut() {
+    searchRequestRef.current?.abort();
+    setQuery("");
+    setSearchResults(null);
+    setSearchState("idle");
+    setSearchMessage("");
+  }
+
+  function updateCatalogueQuery(value: string) {
+    searchRequestRef.current?.abort();
+    setQuery(value);
+    if (!value.trim()) {
+      setSearchResults(null);
+      setSearchState("idle");
+      setSearchMessage("");
+      return;
+    }
+    setSearchResults([]);
     setSearchState("loading");
     setSearchMessage("");
-    try {
-      const response = await fetch(
-        `/api/admin/economy/catalogue-search?q=${encodeURIComponent(normalized)}`,
-        {
-          cache: "no-store",
-          credentials: "same-origin",
-          headers: { accept: "application/json" },
-        },
-      );
-      const body = (await response.json().catch(() => null)) as
-        | CatalogueSearchResponse
-        | null;
-      if (!response.ok || body?.ok !== true)
-        throw new Error(body?.message || "Catalogue search is unavailable.");
-      const items = parseSearchItems(body.items);
-      setSearchResults(items);
-      setSearchState("ready");
-      const total = Number(body.total ?? items.length);
-      setSearchMessage(
-        items.length
-          ? `${Number.isFinite(total) ? total.toLocaleString() : items.length} matching catalogue item${total === 1 ? "" : "s"}.`
-          : "No catalogue items matched that search.",
-      );
-    } catch (cause) {
-      setSearchResults([]);
-      setSearchState("error");
-      setSearchMessage(
-        cause instanceof Error ? cause.message : "Catalogue search is unavailable.",
-      );
-    }
   }
+
+  function selectCatalogueFilter(nextFilter: CatalogueFilter) {
+    setFilter(nextFilter);
+    restoreCatalogueShortcut();
+  }
+
+  useEffect(() => {
+    const normalized = query.trim();
+    if (mode !== "catalogue" || !normalized) return;
+
+    const controller = new AbortController();
+    searchRequestRef.current = controller;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const response = await fetch(
+            `/api/admin/economy/catalogue-search?q=${encodeURIComponent(normalized)}`,
+            {
+              cache: "no-store",
+              credentials: "same-origin",
+              headers: { accept: "application/json" },
+              signal: controller.signal,
+            },
+          );
+          const body = (await response.json().catch(() => null)) as
+            | CatalogueSearchResponse
+            | null;
+          if (!response.ok || body?.ok !== true)
+            throw new Error(body?.message || "Catalogue search is unavailable.");
+          if (controller.signal.aborted) return;
+
+          const items = parseSearchItems(body.items);
+          const total = Number(body.total ?? items.length);
+          setSearchResults(items);
+          setSearchState("ready");
+          setSearchMessage(
+            items.length
+              ? `${Number.isFinite(total) ? total.toLocaleString() : items.length} matching catalogue item${total === 1 ? "" : "s"}.`
+              : "No catalogue items matched that search.",
+          );
+        } catch (cause) {
+          if (controller.signal.aborted) return;
+          setSearchResults([]);
+          setSearchState("error");
+          setSearchMessage(
+            cause instanceof Error
+              ? cause.message
+              : "Catalogue search is unavailable.",
+          );
+        }
+      })();
+    }, DEFAULT_SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+      if (searchRequestRef.current === controller) searchRequestRef.current = null;
+    };
+  }, [mode, query]);
 
   function buildPayload() {
     const errors: Record<string, string> = {};
@@ -628,37 +677,21 @@ export function StaffGrantItemControls({
             </small>
           </div>
           <div className="staff-grant-search-row">
-            <label>
-              Search catalogue
-              <span className="staff-grant-search-input">
-                <Search aria-hidden="true" />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.currentTarget.value)}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter") return;
-                    event.preventDefault();
-                    void searchCatalogue();
-                  }}
-                  maxLength={120}
-                  placeholder="Name, type or catalogue ID"
-                  autoComplete="off"
-                />
-              </span>
-            </label>
-            <button
-              className="button button-secondary"
-              type="button"
-              disabled={!query.trim() || searchState === "loading"}
-              onClick={() => void searchCatalogue()}
-            >
-              {searchState === "loading" ? (
-                <LoaderCircle className="staff-grant-spinner" aria-hidden="true" />
-              ) : (
-                <Search aria-hidden="true" />
-              )}
-              {searchState === "loading" ? "Searching" : "Search"}
-            </button>
+            <SearchField
+              id="staff-grant-catalogue-search"
+              label="Search catalogue"
+              value={query}
+              onValueChange={updateCatalogueQuery}
+              onClear={restoreCatalogueShortcut}
+              pending={searchState === "loading"}
+              maxLength={120}
+              placeholder="Name, type or catalogue ID"
+              autoComplete="off"
+              aria-describedby="staff-grant-search-status"
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.preventDefault();
+              }}
+            />
           </div>
           <div className="staff-grant-filters" aria-label="Catalogue shortcuts">
             {catalogueFilters.map((item) => (
@@ -666,15 +699,10 @@ export function StaffGrantItemControls({
                 key={item.value}
                 type="button"
                 className={
-                  filter === item.value && searchResults === null ? "is-active" : ""
+                  filter === item.value && !query.trim() ? "is-active" : ""
                 }
-                aria-pressed={filter === item.value && searchResults === null}
-                onClick={() => {
-                  setFilter(item.value);
-                  setSearchResults(null);
-                  setSearchState("idle");
-                  setSearchMessage("");
-                }}
+                aria-pressed={filter === item.value && !query.trim()}
+                onClick={() => selectCatalogueFilter(item.value)}
               >
                 {item.label}
               </button>
@@ -722,12 +750,21 @@ export function StaffGrantItemControls({
               })
             ) : (
               <p className="empty-copy">
-                No catalogue items matched. Try another name, type or ID.
+                {searchState === "loading"
+                  ? "Searching the catalogue..."
+                  : query.trim()
+                    ? "No catalogue items matched. Try another name, type or ID."
+                    : "No catalogue items are available in this shortcut."}
               </p>
             )}
           </div>
-          <span className="staff-grant-search-status" role="status" aria-live="polite">
-            {searchMessage}
+          <span
+            className="staff-grant-search-status"
+            id="staff-grant-search-status"
+            role="status"
+            aria-live="polite"
+          >
+            {searchState === "loading" ? "Searching the catalogue." : searchMessage}
           </span>
         </section>
       ) : (

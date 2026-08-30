@@ -122,19 +122,64 @@ function identityMembershipLabel(
   group: EffectiveIdentityGroup,
   profile: SharedProfile,
 ) {
-  if (group.sourceType === "admins_core") return "Synced from Admins.Core";
+  const groupNames = new Set(
+    [group.externalKey, group.displayName]
+      .filter((value): value is string => Boolean(value))
+      .map((value) => value.trim().toLocaleLowerCase("en-US")),
+  );
+  const matchesGroup = (candidate: { name: string; externalKey?: string }) =>
+    [candidate.externalKey, candidate.name]
+      .filter((value): value is string => Boolean(value))
+      .some((value) =>
+        groupNames.has(value.trim().toLocaleLowerCase("en-US")),
+      );
+  const nativeVipMembership = group.sourceType === "vipcore"
+    ? profile.vipGroups.find(matchesGroup) ?? null
+    : null;
+  const nativeAdminMembership = group.sourceType === "admins_core"
+    ? profile.adminGroups.find(matchesGroup) ?? null
+    : null;
+  const portalPermanent =
+    group.hasPortalMembership && group.membershipExpiresAt === null;
+  const portalExpiry = group.hasPortalMembership && group.membershipExpiresAt
+    ? Math.floor(new Date(group.membershipExpiresAt).getTime() / 1_000)
+    : null;
+
+  if (group.sourceType === "admins_core") {
+    const source = nativeAdminMembership && group.hasPortalMembership
+      ? "Admins.Core + portal membership"
+      : nativeAdminMembership
+        ? "Admins.Core"
+        : "Portal membership";
+    if (nativeAdminMembership || portalPermanent) {
+      return `Permanent staff access · ${source}`;
+    }
+    if (portalExpiry) return `Expires ${formatDate(portalExpiry)} · ${source}`;
+    return "Synced from Admins.Core";
+  }
+
   if (group.sourceType === "vipcore") {
-    const membership = profile.vipGroups.find(
-      (candidate) =>
-        (candidate.externalKey ?? candidate.name).toLocaleLowerCase() ===
-        (group.externalKey ?? group.displayName).toLocaleLowerCase(),
-    );
-    if (membership?.expiresAt === 0) return "Permanent VIP access";
-    if (membership?.expiresAt) return `Expires ${formatDate(membership.expiresAt)}`;
+    const source = nativeVipMembership && group.hasPortalMembership
+      ? "VIPCore + portal membership"
+      : nativeVipMembership
+        ? "VIPCore"
+        : "Portal membership";
+    if (nativeVipMembership?.expiresAt === 0 || portalPermanent) {
+      return `Permanent VIP access · ${source}`;
+    }
+    const nativeExpiry = nativeVipMembership?.expiresAt
+      ? nativeVipMembership.expiresAt
+      : null;
+    const effectiveExpiry = Math.max(nativeExpiry ?? 0, portalExpiry ?? 0);
+    if (effectiveExpiry > 0) {
+      return `Expires ${formatDate(effectiveExpiry)} · ${source}`;
+    }
     return "Synced from VIPCore";
   }
-  if (group.membershipExpiresAt) {
-    return `Expires ${formatDate(Math.floor(new Date(group.membershipExpiresAt).getTime() / 1_000))}`;
+
+  if (portalPermanent) return "Permanent group access · Portal membership";
+  if (portalExpiry) {
+    return `Expires ${formatDate(portalExpiry)} · Portal membership`;
   }
   return "Custom portal group";
 }

@@ -17,8 +17,8 @@ import type {
   EconomyItemType,
 } from "@/lib/data/portal-repository";
 import {
+  DEFAULT_SEARCH_DEBOUNCE_MS,
   SearchField,
-  SearchSubmitButton,
 } from "@/components/ui/search-field";
 import {
   ECONOMY_ITEM_TYPES,
@@ -253,6 +253,7 @@ export function DiscountRuleAdmin({
   >("idle");
   const [searchMessage, setSearchMessage] = useState("");
   const requestRef = useRef<AbortController | null>(null);
+  const searchTimerRef = useRef<number | null>(null);
   const catalogueById = useMemo(
     () => new Map(knownCatalogue.map((item) => [item.id, item])),
     [knownCatalogue],
@@ -319,10 +320,34 @@ export function DiscountRuleAdmin({
   }
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
+    requestRef.current?.abort();
+    if (searchTimerRef.current !== null) {
+      window.clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = null;
+    }
+
+    if (!query.trim()) {
+      setMatches(catalogue);
+      setResultTotal(initialTotal);
+      setSearchState("idle");
+      setSearchMessage("");
+      return;
+    }
+
+    setSearchState("loading");
+    setSearchMessage("");
+    searchTimerRef.current = window.setTimeout(() => {
+      searchTimerRef.current = null;
       void searchCatalogue(query);
-    }, 300);
-    return () => window.clearTimeout(timer);
+    }, DEFAULT_SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      if (searchTimerRef.current !== null) {
+        window.clearTimeout(searchTimerRef.current);
+        searchTimerRef.current = null;
+      }
+      requestRef.current?.abort();
+    };
     // Search only when the user changes the lookup value. The initial
     // catalogue prop is stable for this mounted editor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -330,6 +355,10 @@ export function DiscountRuleAdmin({
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (searchTimerRef.current !== null) {
+      window.clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = null;
+    }
     void searchCatalogue(query);
   }
 
@@ -384,9 +413,6 @@ export function DiscountRuleAdmin({
             placeholder="Find an item to target or exclude…"
             autoComplete="off"
           />
-          <SearchSubmitButton pending={searchState === "loading"}>
-            Search catalogue
-          </SearchSubmitButton>
         </form>
         <p
           className={`${styles.lookupStatus} ${searchState === "error" ? styles.lookupError : ""}`}

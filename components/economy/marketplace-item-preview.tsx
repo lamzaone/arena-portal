@@ -251,6 +251,7 @@ export function MarketplaceItemPreview({
   return (
     <div
       ref={containerRef}
+      data-ui="item-artwork"
       className={`economy-item-preview ${rarityRankClass(item.rarityRank)}`}
       aria-busy={loading}
     >

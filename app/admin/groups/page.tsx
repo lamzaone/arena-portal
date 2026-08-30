@@ -8,11 +8,11 @@ import {
   LockKeyhole,
   RefreshCw,
   ShieldCheck,
-  Sparkles,
   Tags,
   UsersRound,
 } from "lucide-react";
 
+import { GroupAdminNav } from "@/components/group-admin-nav";
 import {
   IdentityGroupBadge,
   identityGroupBadgeIconOptions,
@@ -62,28 +62,20 @@ type GroupsPageProps = {
 };
 
 const groupAdminTabs = [
-  { id: "connected", label: "Connected groups", icon: Database },
-  { id: "create", label: "Create group", icon: ShieldCheck },
-  { id: "membership", label: "Membership", icon: UsersRound },
-  { id: "tags", label: "Chat tags", icon: Tags },
-  { id: "permissions", label: "Permissions", icon: KeyRound },
-  { id: "awards", label: "Direct awards", icon: Gift },
+  "connected",
+  "create",
+  "membership",
+  "tags",
+  "permissions",
+  "awards",
 ] as const;
 
-type GroupAdminTab = (typeof groupAdminTabs)[number]["id"];
+type GroupAdminTab = (typeof groupAdminTabs)[number];
 
 function groupAdminTab(value: string | undefined): GroupAdminTab {
-  return groupAdminTabs.some((tab) => tab.id === value)
+  return groupAdminTabs.some((tab) => tab === value)
     ? (value as GroupAdminTab)
     : "connected";
-}
-
-function groupTabHref(tab: GroupAdminTab, selectedGroupId: number | null) {
-  const search = new URLSearchParams({ tab });
-  if (tab === "connected" && selectedGroupId !== null) {
-    search.set("group", String(selectedGroupId));
-  }
-  return `/admin/groups?${search.toString()}`;
 }
 
 const chatColors = [
@@ -609,12 +601,21 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
           .trim()
           .toLocaleLowerCase("en-US")}`;
         const steamIds = memberships.get(lookupKey) ?? [];
-        group.memberships = steamIds.map((steamId) => ({
-          steamId,
-          startsAt: new Date(0).toISOString(),
-          expiresAt: null,
-          grantReason: `Authoritative ${sourceLabel(group)} membership`,
-        }));
+        const combined = new Map(
+          group.memberships.map((membership) => [membership.steamId, membership]),
+        );
+        for (const steamId of steamIds) {
+          if (combined.has(steamId)) continue;
+          combined.set(steamId, {
+            steamId,
+            startsAt: new Date(0).toISOString(),
+            expiresAt: null,
+            grantReason: `Authoritative ${sourceLabel(group)} membership`,
+          });
+        }
+        group.memberships = [...combined.values()].sort((left, right) =>
+          left.steamId.localeCompare(right.steamId),
+        );
         group.memberCount = group.memberships.length;
       }
     } catch {
@@ -662,28 +663,10 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
           </aside>
         </section>
         <StaffSubmenu access={access} active="groups" />
-        <nav className={styles.sectionNav} aria-label="Group management sections">
-          {groupAdminTabs.map((tab) => {
-            const Icon = tab.icon;
-            const active = tab.id === activeTab;
-            return (
-              <Link
-                key={tab.id}
-                href={groupTabHref(tab.id, selectedGroupId)}
-                aria-label={tab.label}
-                aria-current={active ? "page" : undefined}
-                data-active={active ? "true" : "false"}
-              >
-                <Icon aria-hidden="true" />
-                <span>{tab.label}</span>
-              </Link>
-            );
-          })}
-          <Link href="/admin/groups/perks" aria-label="VIP perks">
-            <Sparkles aria-hidden="true" />
-            <span>VIP perks</span>
-          </Link>
-        </nav>
+        <GroupAdminNav
+          activeKey={activeTab}
+          selectedGroupId={selectedGroupId}
+        />
         {notice ? <PortalToast message={notice} /> : null}
         {error ? <PortalToast variant="danger" message={error} /> : null}
         {storageError ? <PortalToast variant="danger" message="Identity storage is unavailable. Apply portal migrations through db/014_external_identity_catalogue.sql." /> : null}

@@ -1,13 +1,24 @@
-import Link from "next/link";
+import {
+  Archive,
+  BadgeCheck,
+  Ban,
+  Boxes,
+  Crown,
+  KeyRound,
+  ShieldCheck,
+  Ticket,
+  UsersRound,
+} from "lucide-react";
 
+import { SectionNav, type SectionNavItem } from "@/components/ui/section-nav";
 import type { AdminAccess } from "@/lib/admin/access";
 
 export const staffModerationSections = [
-  { id: "bans", label: "Bans" },
-  { id: "admins", label: "Admins" },
-  { id: "vips", label: "VIPs" },
-  { id: "appeals", label: "Appeals" },
-  { id: "tickets", label: "Tickets" },
+  { id: "bans", label: "Bans", icon: Ban },
+  { id: "admins", label: "Admins", icon: ShieldCheck },
+  { id: "vips", label: "VIPs", icon: Crown },
+  { id: "appeals", label: "Appeals", icon: BadgeCheck },
+  { id: "tickets", label: "Tickets", icon: Ticket },
 ] as const;
 
 export type StaffModerationSection =
@@ -31,59 +42,33 @@ export function StaffSubmenu({
   access: StaffSubmenuAccess;
   active: StaffSection;
 }) {
-  const linkClass = (section: StaffSection) =>
-    active === section ? "active" : undefined;
+  const items: SectionNavItem[] = staffModerationSections
+    .filter((section) => section.id !== "appeals" || access.canUnban)
+    .map((section) => ({
+      key: section.id,
+      href: `/admin?tab=${section.id}&page=1`,
+      label: section.label,
+      icon: section.icon,
+    }));
+
+  if (access.canManageGroups) {
+    items.push({ key: "groups", href: "/admin/groups", label: "Groups", icon: UsersRound });
+  }
+  if (access.canViewEconomy) {
+    items.push({ key: "items", href: "/admin/items", label: "Items", icon: Boxes });
+    items.push({ key: "inventories", href: "/admin/inventories", label: "Inventories", icon: Archive });
+  }
+  if (access.canManageEconomy) {
+    items.push({ key: "redeem", href: "/admin/redeem", label: "Redeem codes", icon: KeyRound });
+  }
 
   return (
-    <nav className="staff-tabs" aria-label="Staff panel sections">
-      {staffModerationSections
-        .filter((section) => section.id !== "appeals" || access.canUnban)
-        .map((section) => (
-          <Link
-            key={section.id}
-            className={linkClass(section.id)}
-            href={`/admin?tab=${section.id}&page=1`}
-            aria-current={active === section.id ? "page" : undefined}
-          >
-            {section.label}
-          </Link>
-        ))}
-      {access.canManageGroups ? (
-        <Link
-          className={linkClass("groups")}
-          href="/admin/groups"
-          aria-current={active === "groups" ? "page" : undefined}
-        >
-          Groups
-        </Link>
-      ) : null}
-      {access.canViewEconomy ? (
-        <Link
-          className={linkClass("items")}
-          href="/admin/items"
-          aria-current={active === "items" ? "page" : undefined}
-        >
-          Items
-        </Link>
-      ) : null}
-      {access.canViewEconomy ? (
-        <Link
-          className={linkClass("inventories")}
-          href="/admin/inventories"
-          aria-current={active === "inventories" ? "page" : undefined}
-        >
-          Inventories
-        </Link>
-      ) : null}
-      {access.canManageEconomy ? (
-        <Link
-          className={linkClass("redeem")}
-          href="/admin/redeem"
-          aria-current={active === "redeem" ? "page" : undefined}
-        >
-          Redeem codes
-        </Link>
-      ) : null}
-    </nav>
+    <SectionNav
+      activeKey={active}
+      ariaLabel="Staff panel sections"
+      className="staff-section-menu"
+      dense
+      items={items}
+    />
   );
 }

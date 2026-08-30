@@ -235,7 +235,7 @@ export async function POST(request: Request) {
       balance: result.wallet.balance,
       message:
         isEconomyVipMembership(catalogue)
-          ? "VIP membership added to your inventory. Activate it whenever you are ready."
+          ? "Group membership added to your inventory. Activate it whenever you are ready."
           : isEconomyProfileTheme(catalogue)
             ? "Profile theme added to your inventory. Equip it from the item details."
           : quantity === 1

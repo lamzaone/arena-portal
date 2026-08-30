@@ -28,6 +28,7 @@ export function ThemedPlayerTableRow({
   return (
     <tr
       {...rowProps}
+      data-ui="player-table-row"
       className={classNames(
         "leaderboard-player-row",
         surface.className,

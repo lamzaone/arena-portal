@@ -31,7 +31,14 @@ export function Panel<Element extends ElementType = "section">({
   ...props
 }: PanelProps<Element>) {
   const Component = as ?? "section";
-  return <Component {...props} className={classNames("panel", className)} />;
+  const dataUi = (props as { "data-ui"?: string })["data-ui"] ?? "panel";
+  return (
+    <Component
+      {...props}
+      data-ui={dataUi}
+      className={classNames("panel", className)}
+    />
+  );
 }
 
 /** Composable heading row for content inside a Panel. */
@@ -44,6 +51,7 @@ export function PanelHeader<Element extends ElementType = "header">({
   return (
     <Component
       {...props}
+      data-part="heading"
       className={classNames("panel-heading", className)}
     />
   );
@@ -60,6 +68,7 @@ export function SectionHeader<Element extends ElementType = "header">({
   return (
     <Component
       {...props}
+      data-ui="section-heading"
       className={classNames("section-heading", compact && "compact", className)}
     />
   );

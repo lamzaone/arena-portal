@@ -34,7 +34,7 @@ const marketDiscountCategoryLabels: Record<string, string> = {
   sticker: "All stickers",
   agent: "All agents",
   keychain: "All keychains",
-  vip_membership: "All VIP memberships",
+  vip_membership: "All group memberships",
   profile_theme: "All profile themes",
 };
 
@@ -139,7 +139,7 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
         <PageHeading
           eyebrow={<><ShoppingBag aria-hidden="true" /> Player economy</>}
           title="Marketplace"
-          description="Buy a specific cosmetic, case, or VIP membership item directly with Tokens."
+          description="Buy a specific cosmetic, case, or group membership item directly with Tokens."
         />
         <MarketDiscountAnnouncement discounts={discountAnnouncements} />
         <MarketplaceBrowser

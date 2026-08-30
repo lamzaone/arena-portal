@@ -120,6 +120,7 @@ export type IdentityGroup = {
 };
 
 export type EffectiveIdentityGroup = IdentityGroup & {
+  hasPortalMembership: boolean;
   membershipExpiresAt: string | null;
 };
 
@@ -188,6 +189,7 @@ type IdentityGroupRow = RowDataPacket & {
   profile_priority: number | string;
   enabled: number | boolean;
   member_count?: number | string;
+  has_portal_membership?: number | boolean;
   membership_expires_at?: Date | string | null;
 };
 
@@ -664,6 +666,32 @@ async function requireEnabledDefinition(
   if (!rows[0]) identityError("definition_not_found", `That ${label} is unavailable.`);
 }
 
+async function disableIdentityGroupListings(
+  connection: PoolConnection,
+  input: { groupId: number; actorSteamId: string },
+) {
+  try {
+    const [result] = await connection.execute<ResultSetHeader>(
+      "UPDATE portal_identity_group_listings AS listings " +
+        "INNER JOIN portal_economy_catalogue AS catalogue ON catalogue.id = listings.catalogue_id " +
+        "SET listings.enabled = FALSE, listings.updated_by_steam_id = ?, " +
+        "catalogue.metadata = JSON_SET(catalogue.metadata, '$.marketEnabled', JSON_EXTRACT('false', '$'), '$.donationEnabled', JSON_EXTRACT('false', '$')) " +
+        "WHERE listings.group_id = ? AND listings.enabled = TRUE",
+      [input.actorSteamId, input.groupId],
+    );
+    return result.affectedRows;
+  } catch (error) {
+    const candidate = error as { code?: unknown; errno?: unknown };
+    // Identity groups predate migration 020. Disabling a group must remain
+    // usable during the narrow deployment window before listing storage is
+    // installed; any other database error still aborts the transaction.
+    if (candidate.code === "ER_NO_SUCH_TABLE" || candidate.errno === 1146) {
+      return 0;
+    }
+    throw error;
+  }
+}
+
 const identityGroupSelect =
   "SELECT g.id, g.group_key, g.display_name, g.source_type, g.external_key, g.description, g.badge_label, g.badge_icon_key, g.badge_color, g.badge_soft_color, g.profile_priority, g.enabled";
 
@@ -962,7 +990,7 @@ export async function getEffectiveIdentityGroupBadgesForPlayers(
     const steamIds = [...consolidated.keys()];
     if (!steamIds.length) return groupsBySteamId;
     const steamPlaceholders = steamIds.map(() => "?").join(", ");
-    const [[externalRows], [customRows]] = await Promise.all([
+    const [[externalRows], [membershipRows]] = await Promise.all([
       pool.query<IdentityGroupRow[]>(
         identityGroupSelect +
           " FROM portal_identity_groups AS g WHERE g.enabled = TRUE AND g.source_type IN ('admins_core', 'vipcore') ORDER BY g.profile_priority DESC, g.display_name, g.id",
@@ -971,7 +999,7 @@ export async function getEffectiveIdentityGroupBadgesForPlayers(
         identityGroupSelect +
           ", membership.steam_id FROM portal_identity_groups AS g " +
           "INNER JOIN portal_identity_group_memberships AS membership ON membership.group_id = g.id " +
-          "WHERE g.enabled = TRUE AND g.source_type = 'custom' AND membership.steam_id IN (" +
+          "WHERE g.enabled = TRUE AND membership.steam_id IN (" +
           steamPlaceholders +
           ") AND membership.revoked_at IS NULL AND membership.starts_at <= CURRENT_TIMESTAMP " +
           "AND (membership.expires_at IS NULL OR membership.expires_at > CURRENT_TIMESTAMP) " +
@@ -986,7 +1014,11 @@ export async function getEffectiveIdentityGroupBadgesForPlayers(
       groups.push(toIdentityGroupBadgeData(row));
     };
 
-    for (const row of customRows) addGroup(String(row.steam_id), row);
+    // Portal-purchased memberships use this same timed entitlement table for
+    // custom, VIPCore, and Admins.Core groups. External plug-in membership
+    // names remain additive below and are still the only source of Founder
+    // authorization.
+    for (const row of membershipRows) addGroup(String(row.steam_id), row);
 
     const externalByKey = new Map<string, IdentityGroupRow>();
     for (const row of externalRows) {
@@ -1079,10 +1111,11 @@ async function getEffectiveGroupRows(
     : "";
   const [rows] = await executor.query<IdentityGroupRow[]>(
     identityGroupSelect +
-      ", CASE WHEN g.source_type = 'custom' THEN membership.expires_at ELSE NULL END AS membership_expires_at " +
+      ", membership.group_id IS NOT NULL AS has_portal_membership, membership.expires_at AS membership_expires_at " +
       "FROM portal_identity_groups AS g " +
       "LEFT JOIN portal_identity_group_memberships AS membership ON membership.group_id = g.id AND membership.steam_id = ? " +
-      "WHERE g.enabled = TRUE AND ((g.source_type = 'custom' AND membership.revoked_at IS NULL AND membership.starts_at <= CURRENT_TIMESTAMP AND (membership.expires_at IS NULL OR membership.expires_at > CURRENT_TIMESTAMP))" +
+      "AND membership.revoked_at IS NULL AND membership.starts_at <= CURRENT_TIMESTAMP AND (membership.expires_at IS NULL OR membership.expires_at > CURRENT_TIMESTAMP) " +
+      "WHERE g.enabled = TRUE AND (membership.group_id IS NOT NULL" +
       externalSql +
       ") ORDER BY g.profile_priority DESC, g.display_name, g.id" +
       (input.lock ? " FOR UPDATE" : ""),
@@ -1102,6 +1135,7 @@ async function getEffectiveIdentityUnsafe(input: {
   const groupRows = await getEffectiveGroupRows(pool, { ...input, steamId });
   const groups = groupRows.map((row) => ({
     ...emptyGroup(row),
+    hasPortalMembership: asBoolean(row.has_portal_membership),
     membershipExpiresAt: toIso(row.membership_expires_at),
   }));
   const groupIds = groups.map((group) => group.id);
@@ -1112,11 +1146,11 @@ async function getEffectiveIdentityUnsafe(input: {
       groupIds.length
         ? pool.query<IdentityTagRow[]>(
             "SELECT links.group_id, tags.id, tags.tag_key, tags.tag_text, tags.color_token, tags.name_color_token, tags.message_color_token, tags.enabled, preferences.hidden " +
-              "FROM portal_identity_group_chat_tags AS links INNER JOIN portal_identity_groups AS groups ON groups.id = links.group_id INNER JOIN portal_identity_chat_tags AS tags ON tags.id = links.tag_id AND tags.enabled = TRUE " +
+              "FROM portal_identity_group_chat_tags AS links INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = links.group_id INNER JOIN portal_identity_chat_tags AS tags ON tags.id = links.tag_id AND tags.enabled = TRUE " +
               "LEFT JOIN portal_identity_player_tag_preferences AS preferences ON preferences.steam_id = ? AND preferences.tag_id = tags.id " +
               "WHERE links.group_id IN (" +
               groupPlaceholders +
-              ") ORDER BY groups.profile_priority DESC, links.sort_order, tags.id",
+              ") ORDER BY identity_group.profile_priority DESC, links.sort_order, tags.id",
             [steamId, ...groupIds],
           )
         : Promise.resolve([[], []] as unknown as [IdentityTagRow[], unknown]),
@@ -1303,14 +1337,20 @@ export async function updateIdentityGroup(input: {
         groupId,
       ],
     );
-    const revokedItemIds =
-      asBoolean(previous.enabled) && !input.enabled
-        ? await revokeAccountBoundRewardsForGroup(connection, {
-            groupId,
-            actorSteamId,
-            reason: "group-disabled",
-          })
-        : [];
+    const disabling = asBoolean(previous.enabled) && !input.enabled;
+    const revokedItemIds = disabling
+      ? await revokeAccountBoundRewardsForGroup(connection, {
+          groupId,
+          actorSteamId,
+          reason: "group-disabled",
+        })
+      : [];
+    const disabledListings = !input.enabled
+      ? await disableIdentityGroupListings(connection, {
+          groupId,
+          actorSteamId,
+        })
+      : 0;
     await writeIdentityAudit(connection, {
       requestKey: `${requestKey}:group-update`,
       actorSteamId,
@@ -1324,6 +1364,7 @@ export async function updateIdentityGroup(input: {
         },
         next: { displayName, enabled: input.enabled },
         revokedItemIds,
+        disabledListings,
       },
     });
     return { groupId, revokedItemIds };
@@ -1359,13 +1400,17 @@ export async function archiveIdentityGroup(input: {
       actorSteamId,
       reason: "group-archived",
     });
+    const disabledListings = await disableIdentityGroupListings(connection, {
+      groupId,
+      actorSteamId,
+    });
     await writeIdentityAudit(connection, {
       requestKey: `${requestKey}:group-archive`,
       actorSteamId,
       action: "identity.group.archived",
       targetType: "identity-group",
       targetId: String(groupId),
-      metadata: { key: group.group_key, revokedItemIds },
+      metadata: { key: group.group_key, revokedItemIds, disabledListings },
     });
     return { groupId, revokedItemIds };
   });
@@ -1398,23 +1443,12 @@ export async function assignIdentityGroup(input: {
         "ON DUPLICATE KEY UPDATE starts_at = CURRENT_TIMESTAMP, expires_at = VALUES(expires_at), granted_by_steam_id = VALUES(granted_by_steam_id), grant_reason = VALUES(grant_reason), revoked_at = NULL, revoked_by_steam_id = NULL",
       [groupId, steamId, expiresAt, actorSteamId, reason],
     );
-    const rewardResult = await awardRewardsForGroup(connection, {
-      groupId,
-      steamId,
-      actorSteamId,
-    });
-    // Re-assigning the group restores only account-bound instances whose
-    // reward definition is still active. Retired rewards must stay revoked.
-    const reactivated = await reactivateAccountBoundRewardsForGroup(connection, {
+    const rewardResult = await applyIdentityGroupMembershipRewards(connection, {
       groupId,
       steamId,
       actorSteamId,
       reason: "group-membership-assigned",
     });
-    const restoredItemIds = uniqueStrings([
-      ...rewardResult.restoredItemIds,
-      ...reactivated.restoredItemIds,
-    ]);
     await writeIdentityAudit(connection, {
       requestKey: `${requestKey}:membership-assign`,
       actorSteamId,
@@ -1426,15 +1460,15 @@ export async function assignIdentityGroup(input: {
         expiresAt: expiresAt?.toISOString() ?? null,
         reason,
         awardedItemIds: rewardResult.awardedItemIds,
-        restoredItemIds,
-        reactivatedItemIds: reactivated.reactivatedItemIds,
+        restoredItemIds: rewardResult.restoredItemIds,
+        reactivatedItemIds: rewardResult.reactivatedItemIds,
       },
     });
     return {
       groupId,
       steamId,
       awardedItemIds: rewardResult.awardedItemIds,
-      restoredItemIds,
+      restoredItemIds: rewardResult.restoredItemIds,
     };
   });
 }
@@ -2016,10 +2050,10 @@ async function loadAccountBoundRewardAwards(
     Array<IdentityRewardAwardRow & { source_type: IdentityGroupSource }>
   >(
     "SELECT awards.reward_id, rewards.group_id, awards.steam_id, awards.ordinal, awards.item_id, awards.entitlement_active, awards.item_revoked_by_entitlement, " +
-      "items.state AS item_state, items.item_type, items.tradable, groups.enabled AS group_enabled, rewards.enabled AS reward_enabled, groups.source_type " +
+      "items.state AS item_state, items.item_type, items.tradable, identity_group.enabled AS group_enabled, rewards.enabled AS reward_enabled, identity_group.source_type " +
       "FROM portal_identity_group_reward_awards AS awards " +
       "INNER JOIN portal_identity_group_rewards AS rewards ON rewards.id = awards.reward_id " +
-      "INNER JOIN portal_identity_groups AS groups ON groups.id = rewards.group_id " +
+      "INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = rewards.group_id " +
       "INNER JOIN portal_inventory_items AS items ON items.id = awards.item_id " +
       `WHERE ${where.join(" AND ")} ORDER BY awards.steam_id, awards.reward_id, awards.ordinal FOR UPDATE`,
     values,
@@ -2549,6 +2583,49 @@ async function awardRewardsForGroup(
     itemIds: result.restoredItemIds,
   });
   return result;
+}
+
+/**
+ * Applies the inventory side effects of an effective group-membership grant
+ * inside the caller's existing portal transaction. Both Founder assignments
+ * and player-activated shop items use this path, so configured rewards remain
+ * idempotent by (reward, player, ordinal) and account-bound items are restored
+ * only while their reward definition is still active.
+ */
+export async function applyIdentityGroupMembershipRewards(
+  connection: PoolConnection,
+  input: {
+    groupId: number;
+    steamId: string;
+    actorSteamId: string | null;
+    reason: string;
+  },
+) {
+  const groupId = identityId(input.groupId, "Group ID");
+  const steamId = identitySteamId(input.steamId, "Player SteamID64");
+  const actorSteamId = input.actorSteamId === null
+    ? null
+    : identitySteamId(input.actorSteamId, "Reward actor SteamID64");
+  const reason = identityText(input.reason, "Reward activation reason", 180);
+  const awarded = await awardRewardsForGroup(connection, {
+    groupId,
+    steamId,
+    actorSteamId,
+  });
+  const reactivated = await reactivateAccountBoundRewardsForGroup(connection, {
+    groupId,
+    steamId,
+    actorSteamId,
+    reason,
+  });
+  return {
+    awardedItemIds: awarded.awardedItemIds,
+    restoredItemIds: uniqueStrings([
+      ...awarded.restoredItemIds,
+      ...reactivated.restoredItemIds,
+    ]),
+    reactivatedItemIds: reactivated.reactivatedItemIds,
+  };
 }
 
 export async function addIdentityGroupReward(input: {

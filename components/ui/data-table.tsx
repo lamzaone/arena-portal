@@ -32,9 +32,10 @@ export function DataTable({
   ...tableProps
 }: DataTableProps) {
   return (
-    <div className={classNames("leaderboard-scroll", className)}>
+    <div data-ui="data-table" className={classNames("leaderboard-scroll", className)}>
       <table
         {...tableProps}
+        data-part="table"
         className={classNames("leaderboard-table", tableClassName)}
       >
         {caption !== undefined && caption !== null ? (

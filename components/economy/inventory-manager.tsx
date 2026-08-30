@@ -826,6 +826,7 @@ export function InventoryManager({
           {!selectionMode && inventoryModalHost && selected ? createPortal(
           <section
             id={`inventory-item-modal-${selected.id}`}
+            data-ui="item-modal"
             className="panel crate-inline-modal inventory-inline-modal"
             aria-label="Selected item controls"
           >
@@ -844,7 +845,7 @@ export function InventoryManager({
                   <MarketplaceItemPreview item={selected} enableMarketPreview />
                   <div className="inventory-detail-heading">
                     <p>
-                      {selected.rarity} · {selectedVipMembership ? "VIP membership" : humanize(selected.itemType)}
+                      {selected.rarity} · {selectedVipMembership ? "Group membership" : humanize(selected.itemType)}
                     </p>
                     {selected.description ? (
                       <p className="inventory-detail-description">{selected.description}</p>
@@ -861,11 +862,11 @@ export function InventoryManager({
                 <div className="inventory-management-loadout">
                 {selectedVipMembership ? (
                   <fieldset className="form-panel inventory-vip-activation">
-                    <legend>Use VIP membership</legend>
+                    <legend>Use group membership</legend>
                     <p className="empty-copy">
                       Activate this item when you are ready. It will be consumed
-                      and extend the matching VIP tier immediately. Until then,
-                      it remains a normal item that you can trade or sell.
+                      and extend its connected group immediately. Until then, it
+                      remains a normal item that you can trade or sell.
                     </p>
                     <button
                       type="button"
@@ -880,7 +881,7 @@ export function InventoryManager({
                       }
                     >
                       <ShieldCheck aria-hidden="true" />{" "}
-                      {pending ? "Activating…" : "Activate VIP membership"}
+                      {pending ? "Activating…" : "Activate membership"}
                     </button>
                   </fieldset>
                 ) : null}

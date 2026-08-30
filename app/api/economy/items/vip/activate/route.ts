@@ -13,7 +13,7 @@ export async function POST(request: Request) {
   if (isEconomyError(context)) return context;
   const itemId = textField(context.body.itemId, 128);
   if (!itemId)
-    return economyJsonError("Choose an owned VIP membership item.", 400);
+    return economyJsonError("Choose an owned group membership item.", 400);
 
   try {
     const result = await activateVipMembershipItem({
@@ -23,7 +23,9 @@ export async function POST(request: Request) {
     });
     return economyJsonSuccess({
       ...result,
-      message: `${result.tier} VIP is active until ${new Date(result.expiresAt * 1_000).toLocaleString()}.`,
+      message: result.expiresAt
+        ? `${result.groupName} membership is active until ${new Date(result.expiresAt).toLocaleString()}.`
+        : `${result.groupName} membership is now permanent.`,
     });
   } catch (error) {
     return economyMutationFailure(error);

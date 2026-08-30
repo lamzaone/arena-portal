@@ -21,6 +21,7 @@ export function PageHeading({
 
   return (
     <section
+      data-ui="page-heading"
       className={`page-heading ${className}`.trim()}
       aria-labelledby={titleId}
     >

@@ -2,7 +2,10 @@
 
 import { useEffect, useId, useState } from "react";
 
-import { SearchField } from "@/components/ui/search-field";
+import {
+  DEFAULT_SEARCH_DEBOUNCE_MS,
+  SearchField,
+} from "@/components/ui/search-field";
 import { economyItemTypeLabel } from "@/lib/economy/item-taxonomy";
 
 type CatalogueSearchItem = {
@@ -62,7 +65,7 @@ export function CatalogueSearchField({
   useEffect(() => {
     const normalized = query.trim();
     setSelectedId("");
-    if (disabled || normalized.length < 2) {
+    if (disabled || !normalized) {
       setItems([]);
       setState("idle");
       setMessage("");
@@ -113,7 +116,7 @@ export function CatalogueSearchField({
               : "Catalogue search is unavailable.",
           );
         });
-    }, 300);
+    }, DEFAULT_SEARCH_DEBOUNCE_MS);
 
     return () => {
       window.clearTimeout(timer);

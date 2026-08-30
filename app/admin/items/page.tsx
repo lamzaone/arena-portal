@@ -29,9 +29,9 @@ import { PortalToast } from "@/components/success-toast";
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
 import { DiscountRuleAdmin } from "@/components/economy/discount-rule-admin";
 import { PortalShell } from "@/components/ui/portal-shell";
+import { SectionNav } from "@/components/ui/section-nav";
 import {
   SearchNavigationForm,
-  SearchSubmitButton,
 } from "@/components/ui/search-field";
 import { ServerSearchField } from "@/components/ui/server-search-field";
 import {
@@ -156,7 +156,11 @@ function isVipMembership(itemType: EconomyItemType) {
 }
 
 function isMarketEnabled(metadata: Record<string, unknown>) {
-  return metadata.marketEnabled !== false;
+  return ![false, 0, "false"].includes(metadata.marketEnabled as never);
+}
+
+function isMembershipListingManaged(metadata: Record<string, unknown>) {
+  return [true, 1, "true"].includes(metadata.membershipListingManaged as never);
 }
 
 function noticeText(value: string | undefined) {
@@ -409,14 +413,6 @@ export default async function AdminItemsPage({
   const marketplaceTabHref = itemsHref("marketplace", tabContext);
   const cratesTabHref = itemsHref("crates", tabContext);
   const discountTabHref = itemsHref("discount", tabContext);
-  const marketplaceClearHref = itemsHref("marketplace", {
-    ...tabContext,
-    marketplaceQuery: undefined,
-  });
-  const cratesClearHref = itemsHref("crates", {
-    ...tabContext,
-    crateQuery: undefined,
-  });
 
   return (
     <PortalShell authenticated className="staff-page economy-admin-page">
@@ -438,44 +434,16 @@ export default async function AdminItemsPage({
         <StaffSubmenu access={access} active="items" />
         {notice ? <PortalToast message={notice} /> : null}
         {error ? <PortalToast variant="danger" message={error} /> : null}
-        <nav className={styles.itemTabs} aria-label="Item management sections">
-          <Link
-            className={activeTab === "marketplace" ? styles.activeTab : undefined}
-            href={marketplaceTabHref}
-            aria-current={activeTab === "marketplace" ? "page" : undefined}
-            scroll={false}
-          >
-            <ShoppingBag aria-hidden="true" />
-            <span>
-              <strong>Marketplace</strong>
-              <small>Catalogue, pricing, artwork, and availability</small>
-            </span>
-          </Link>
-          <Link
-            className={activeTab === "crates" ? styles.activeTab : undefined}
-            href={cratesTabHref}
-            aria-current={activeTab === "crates" ? "page" : undefined}
-            scroll={false}
-          >
-            <Archive aria-hidden="true" />
-            <span>
-              <strong>Crates</strong>
-              <small>Containers, rewards, odds, and release status</small>
-            </span>
-          </Link>
-          <Link
-            className={activeTab === "discount" ? styles.activeTab : undefined}
-            href={discountTabHref}
-            aria-current={activeTab === "discount" ? "page" : undefined}
-            scroll={false}
-          >
-            <BadgePercent aria-hidden="true" />
-            <span>
-              <strong>Discount</strong>
-              <small>Item and category promotion rules</small>
-            </span>
-          </Link>
-        </nav>
+        <SectionNav
+          activeKey={activeTab}
+          ariaLabel="Item management sections"
+          dense
+          items={[
+            { key: "marketplace", href: marketplaceTabHref, label: "Marketplace", icon: ShoppingBag },
+            { key: "crates", href: cratesTabHref, label: "Crates", icon: Archive },
+            { key: "discount", href: discountTabHref, label: "Discounts", icon: BadgePercent },
+          ]}
+        />
 
         {activeTab === "marketplace" ? (
           <section className={`${styles.lookupPanel} panel`} aria-labelledby="marketplace-lookup-title">
@@ -486,7 +454,7 @@ export default async function AdminItemsPage({
                 <h2 id="marketplace-lookup-title">Find a catalogue product</h2>
               </div>
             </div>
-            <SearchNavigationForm action="/admin/items" role="search">
+            <SearchNavigationForm action="/admin/items" role="search" instant>
               <input type="hidden" name="tab" value="marketplace" />
               {crateQuery ? <input type="hidden" name="crateQ" value={crateQuery} /> : null}
               {discountQuery ? <input type="hidden" name="discountQ" value={discountQuery} /> : null}
@@ -503,14 +471,6 @@ export default async function AdminItemsPage({
                 placeholder="Skins, VIP products, crates…"
                 autoComplete="off"
               />
-              <SearchSubmitButton>
-                Search Marketplace
-              </SearchSubmitButton>
-              {marketplaceQuery ? (
-                <Link className="button button-secondary" href={marketplaceClearHref} scroll={false}>
-                  Clear
-                </Link>
-              ) : null}
             </SearchNavigationForm>
             <p className={styles.lookupSummary} aria-live="polite">
               {marketplaceQuery
@@ -527,7 +487,7 @@ export default async function AdminItemsPage({
                 <h2 id="crate-lookup-title">Find a managed container</h2>
               </div>
             </div>
-            <SearchNavigationForm action="/admin/items" role="search">
+            <SearchNavigationForm action="/admin/items" role="search" instant>
               <input type="hidden" name="tab" value="crates" />
               {marketplaceQuery ? <input type="hidden" name="marketplaceQ" value={marketplaceQuery} /> : null}
               {discountQuery ? <input type="hidden" name="discountQ" value={discountQuery} /> : null}
@@ -544,14 +504,6 @@ export default async function AdminItemsPage({
                 placeholder="Managed crate name or ID…"
                 autoComplete="off"
               />
-              <SearchSubmitButton>
-                Search crates
-              </SearchSubmitButton>
-              {crateQuery ? (
-                <Link className="button button-secondary" href={cratesClearHref} scroll={false}>
-                  Clear
-                </Link>
-              ) : null}
             </SearchNavigationForm>
             <p className={styles.lookupSummary} aria-live="polite">
               {crateQuery
@@ -856,6 +808,7 @@ export default async function AdminItemsPage({
                   <SearchNavigationForm
                     className="economy-crate-reward-search"
                     action="/admin/items"
+                    instant
                   >
                     <input type="hidden" name="crate" value={customCrate.crate.id} />
                     <input type="hidden" name="tab" value="crates" />
@@ -891,9 +844,6 @@ export default async function AdminItemsPage({
                         ))}
                       </select>
                     </label>
-                    <SearchSubmitButton variant="secondary">
-                      Find items
-                    </SearchSubmitButton>
                   </SearchNavigationForm>
                   <p className="economy-crate-reward-results" aria-live="polite">
                     {crateRewardQuery || crateRewardType
@@ -1111,6 +1061,8 @@ export default async function AdminItemsPage({
               <div className={styles.marketplaceGrid}>
                 {catalogue.items.map((item) => {
                   const vipMembership = isVipMembership(item.itemType);
+                  const managedMembershipListing =
+                    vipMembership && isMembershipListingManaged(item.metadata);
                   const customProduct = isCustomProductItemType(item.itemType);
                   const specialRarity =
                     item.rarityRank === ECONOMY_SPECIAL_RARITY_RANK;
@@ -1122,13 +1074,17 @@ export default async function AdminItemsPage({
                     !disabledByType &&
                     isMarketEnabled(item.metadata);
                   const tier =
-                    typeof item.metadata.vipTier === "string"
-                      ? item.metadata.vipTier
-                      : null;
+                    typeof item.metadata.membershipGroupName === "string"
+                      ? item.metadata.membershipGroupName
+                      : typeof item.metadata.vipTier === "string"
+                        ? item.metadata.vipTier
+                        : null;
                   const duration =
-                    typeof item.metadata.vipDurationMinutes === "number"
-                      ? item.metadata.vipDurationMinutes
-                      : null;
+                    typeof item.metadata.membershipDurationMinutes === "number"
+                      ? item.metadata.membershipDurationMinutes
+                      : typeof item.metadata.vipDurationMinutes === "number"
+                        ? item.metadata.vipDurationMinutes
+                        : null;
 
                   return (
                     <article
@@ -1175,8 +1131,12 @@ export default async function AdminItemsPage({
                       </p>
                       {vipMembership ? (
                         <small>
-                          {tier ?? "VIP"}
-                          {duration ? ` · ${duration.toLocaleString()} minutes` : ""}
+                          {tier ?? "Connected group"}
+                          {duration === 0
+                            ? " · permanent"
+                            : duration
+                              ? ` · ${duration.toLocaleString()} minutes`
+                              : ""}
                           {" · activates through Inventory"}
                         </small>
                       ) : null}
@@ -1281,6 +1241,23 @@ export default async function AdminItemsPage({
                         </button>
                         </form>
                       ) : null}
+                      {managedMembershipListing ? (
+                        <div className="form-panel">
+                          <strong>Central listing</strong>
+                          <small>
+                            Price and availability are controlled by the group
+                            listing so the VIP page and Market cannot drift.
+                          </small>
+                          {access.canManageGroups ? (
+                            <Link
+                              className="staff-unban-button"
+                              href="/admin/groups/listings?view=memberships"
+                            >
+                              Manage listing
+                            </Link>
+                          ) : null}
+                        </div>
+                      ) : (
                       <form action="/api/admin/economy" method="post">
                         <ActionFields csrf={csrf} action="price-set" />
                         <input
@@ -1302,7 +1279,8 @@ export default async function AdminItemsPage({
                           {customProduct ? "Save direct price" : "Save Token price"}
                         </button>
                       </form>
-                      {disabledByType ? (
+                      )}
+                      {managedMembershipListing ? null : disabledByType ? (
                         <small className="economy-market-disabled-copy">
                           This item type is disabled from Marketplace purchases.
                         </small>

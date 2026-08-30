@@ -70,7 +70,7 @@ export function economyRarityRankClass(value: number) {
 }
 
 export function economyItemTypeLabel(itemType: EconomyItemType | string) {
-  if (itemType === "vip_membership") return "VIP Membership";
+  if (itemType === "vip_membership") return "Group Membership";
   if (itemType === "profile_theme") return "Profile Theme";
   if (itemType === "keychain") return "Charm";
   return itemType
@@ -94,7 +94,7 @@ export function economyItemTypePluralLabel(
     keychain: "Charms",
     patch: "Patches",
     graffiti: "Graffiti",
-    vip_membership: "VIP Memberships",
+    vip_membership: "Group Memberships",
     profile_theme: "Profile Themes",
   };
   return labels[itemType as EconomyItemType] ?? economyItemTypeLabel(itemType);

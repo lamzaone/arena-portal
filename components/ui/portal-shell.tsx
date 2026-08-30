@@ -20,7 +20,7 @@ export function PortalShell({
     .join(" ");
 
   return (
-    <main className={rootClassName} data-page-shell="portal">
+    <main className={rootClassName} data-page-shell="portal" data-ui="portal-page">
       <div className="shell">
         <SiteHeader authenticated={authenticated} />
         {children}
