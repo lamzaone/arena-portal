@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { CursorGridBackground } from "@/components/cursor-grid-background";
 import {
   GlobalThemeBackground,
   GlobalThemeDocumentEffects,
 } from "@/components/profile-theme-slots";
 import { ProgressiveFormRuntime } from "@/components/ui/progressive-form-runtime";
+import { NavigationProgress } from "@/components/ui/navigation-progress";
 import { getSession } from "@/lib/auth/session";
 import { resolvePortalThemeSurface } from "@/lib/themes/registry";
 import "./globals.css";
@@ -15,6 +17,7 @@ import "./themes/tap-god.css";
 import "./themes/player-containers.css";
 import "./themes/accessibility.css";
 import "./form-runtime.css";
+import "./navigation-progress.css";
 
 export const metadata: Metadata = {
   title: "TAPPED.RO — ARENA.TAPPED.RO",
@@ -41,6 +44,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <GlobalThemeDocumentEffects themeKey={session?.profileThemeKey} />
         <CursorGridBackground />
         <ProgressiveFormRuntime />
+        <Suspense fallback={null}>
+          <NavigationProgress />
+        </Suspense>
         <div id="main-content" className="portal-content" tabIndex={-1}>
           {children}
         </div>

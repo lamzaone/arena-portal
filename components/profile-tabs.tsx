@@ -4,6 +4,7 @@ import { Package, Settings2, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type KeyboardEvent, type ReactNode, useId, useState } from "react";
 
+import { announceNavigationStart } from "@/components/ui/navigation-progress";
 import sectionStyles from "@/components/ui/section-nav.module.css";
 
 type ProfileTab = "overview" | "inventory" | "settings";
@@ -48,15 +49,20 @@ export function ProfileTabs({
       if (!profileHref) return;
       if (settingsOpen) {
         setActiveTab("overview");
+        announceNavigationStart();
         router.push(profileHref, { scroll: false });
       } else {
+        announceNavigationStart();
         router.push(`${profileHref}?settings=1`, { scroll: false });
       }
       return;
     }
 
     setActiveTab(next);
-    if (settingsOpen && profileHref) router.push(profileHref, { scroll: false });
+    if (settingsOpen && profileHref) {
+      announceNavigationStart();
+      router.push(profileHref, { scroll: false });
+    }
   }
 
   function selectWithKeyboard(

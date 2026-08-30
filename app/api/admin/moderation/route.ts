@@ -4,7 +4,7 @@ import { enqueueStaffBan, enqueueStaffUnban, writeStaffModerationAudit } from "@
 import { formActionRedirect } from "@/lib/form-action-response";
 
 function redirect(request: Request, key: "notice" | "error", value: string) {
-  const url = new URL("/admin", request.url);
+  const url = new URL("/admin/bans", request.url);
   url.searchParams.set(key, value);
   return formActionRedirect(request, url);
 }

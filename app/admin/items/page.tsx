@@ -285,7 +285,7 @@ export default async function AdminItemsPage({
           <p>
             Your staff group does not have a TAPPED Token economy permission.
           </p>
-          <Link className="button button-secondary" href="/admin">
+          <Link className="button button-secondary" href="/admin/bans">
             Back to staff panel
           </Link>
         </section>

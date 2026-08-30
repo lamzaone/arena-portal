@@ -525,7 +525,7 @@ function GroupCard({
                 <ThemedPlayerContainer containerKind="management" ownerSteamId={membership.steamId} profileThemeKey={playerIdentities[membership.steamId]?.profileThemeKey} className={styles.memberRow} key={membership.steamId}>
                   <PlayerIdentity player={playerIdentities[membership.steamId] ?? { steamId: membership.steamId, displayName: membership.steamId, avatarUrl: null, presence: "unknown", profileThemeKey: null, identityGroups: [] }} variant="compact" />
                   <span>Active in {sourceLabel(group)}</span>
-                  <Link className={styles.memberSourceLink} href={`/admin?tab=${group.sourceType === "vipcore" ? "vips" : "admins"}&page=1`}>
+                  <Link className={styles.memberSourceLink} href={`/admin/${group.sourceType === "vipcore" ? "vips" : "admins"}`}>
                     Manage
                   </Link>
                 </ThemedPlayerContainer>

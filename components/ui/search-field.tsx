@@ -17,6 +17,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 
+import { announceNavigationStart } from "@/components/ui/navigation-progress";
 import styles from "@/components/ui/search-field.module.css";
 
 export const DEFAULT_SEARCH_DEBOUNCE_MS = 280;
@@ -72,6 +73,8 @@ export function SearchNavigationForm({
     }
     for (const field of resetFields) target.searchParams.delete(field);
     const href = `${target.pathname}${target.search}${target.hash}`;
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (href !== current) announceNavigationStart();
     startTransition(() => {
       if (replace) router.replace(href, { scroll: false });
       else router.push(href, { scroll: false });

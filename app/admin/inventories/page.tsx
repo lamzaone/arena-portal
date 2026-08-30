@@ -179,7 +179,7 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
 
   const access = await getAdminAccess(session.steamId);
   if (!access.isAdmin || !access.canViewEconomy) {
-    return <PortalShell authenticated><section className="staff-denied"><LockKeyhole aria-hidden="true" /><p className="tapped-kicker">Restricted area</p><h1>Economy staff access required.</h1><p>Your staff group does not have a TAPPED Token economy permission.</p><Link className="button button-secondary" href="/admin">Back to staff panel</Link></section></PortalShell>;
+    return <PortalShell authenticated><section className="staff-denied"><LockKeyhole aria-hidden="true" /><p className="tapped-kicker">Restricted area</p><h1>Economy staff access required.</h1><p>Your staff group does not have a TAPPED Token economy permission.</p><Link className="button button-secondary" href="/admin/bans">Back to staff panel</Link></section></PortalShell>;
   }
 
   const query = (params.q ?? "").trim().slice(0, 64);

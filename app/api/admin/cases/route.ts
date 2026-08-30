@@ -7,8 +7,7 @@ const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const maxScreenshotBytes = 5 * 1024 * 1024;
 
 function redirect(request: Request, tab: "appeals" | "tickets", key: "notice" | "error", value: string) {
-  const url = new URL("/admin", request.url);
-  url.searchParams.set("tab", tab);
+  const url = new URL(`/admin/${tab}`, request.url);
   url.searchParams.set(key, value);
   return formActionRedirect(request, url);
 }

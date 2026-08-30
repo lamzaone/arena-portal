@@ -58,7 +58,7 @@ export async function SiteHeader({
               className="header-account"
               secondary={session.steamId}
             />
-            {staffAccess?.isAdmin ? <Link className="button button-quiet header-staff-link" href="/admin" aria-label="Open staff panel"><ShieldCheck aria-hidden="true" /><span>Staff panel</span></Link> : null}
+            {staffAccess?.isAdmin ? <Link className="button button-quiet header-staff-link" href="/admin/bans" aria-label="Open staff panel"><ShieldCheck aria-hidden="true" /><span>Staff panel</span></Link> : null}
             <form action="/api/auth/logout" method="post">
               <button className="button button-quiet" type="submit"><LogOut aria-hidden="true" /> Sign out</button>
             </form>

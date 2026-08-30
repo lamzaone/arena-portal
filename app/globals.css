@@ -3533,6 +3533,7 @@ main.staff-page {
   --admin-control-height: 44px;
   --admin-compact-control-height: 34px;
   --admin-content-gutter: clamp(14px, 1.4vw, 22px);
+  --admin-panel-inset: clamp(16px, 2vw, 28px);
   --admin-section-gap: clamp(28px, 3vw, 42px);
 }
 
@@ -3550,7 +3551,10 @@ main.staff-page :is(.admin-page-header, .staff-hero) {
   min-width: 0;
   min-height: 0;
   margin-top: 18px;
-  padding: clamp(32px, 4vw, 52px) 0 clamp(28px, 3vw, 40px);
+  padding:
+    clamp(32px, 4vw, 52px)
+    var(--admin-panel-inset)
+    clamp(28px, 3vw, 40px);
   align-items: center;
   gap: clamp(24px, 4vw, 58px);
   border-bottom-color: var(--theme-border, rgba(255, 105, 121, .2));
@@ -3657,11 +3661,11 @@ main.staff-page nav[data-ui="section-nav"].group-admin-menu {
   margin-top: 7px;
 }
 
-/* One horizontal content edge for moderation, groups, economy, inventory,
-   and redeem-code routes. The staff shell supplies the shared inner gutter. */
+/* The shell owns the page gutter; themed panels own a second, smaller inset so
+   borders and animated surfaces never sit directly against titles or tools. */
 main.staff-page :is(.staff-record-section, .staff-tools) {
-  padding-right: 0;
-  padding-left: 0;
+  padding-right: var(--admin-panel-inset);
+  padding-left: var(--admin-panel-inset);
 }
 
 main.staff-page :is(.staff-ban-form, .staff-permission-note) {

@@ -4,6 +4,8 @@ import { startTransition, useCallback, useEffect, useRef, useState } from "react
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 
+import { announceNavigationStart } from "@/components/ui/navigation-progress";
+
 type SubmissionNotice = {
   id: number;
   kind: "error" | "status";
@@ -262,6 +264,7 @@ export function ProgressiveFormRuntime() {
       }
       const href = `${url.pathname}${url.search}${url.hash}`;
       const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      if (href !== current) announceNavigationStart();
       startTransition(() => {
         if (href === current) router.refresh();
         else if (replace) router.replace(href, { scroll });

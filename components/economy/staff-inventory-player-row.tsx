@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
 import { useTransition } from "react";
 
+import { announceNavigationStart } from "@/components/ui/navigation-progress";
 import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
 
 type StaffInventoryPlayerRowProps = {
@@ -45,6 +46,7 @@ export function StaffInventoryPlayerRow({
 
   function navigate() {
     if (selected || pending) return;
+    announceNavigationStart();
     startTransition(() => router.push(href, { scroll: false }));
   }
 

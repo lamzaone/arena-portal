@@ -1,0 +1,70 @@
+.navigation-progress {
+  position: fixed;
+  z-index: 10070;
+  inset: 0 0 auto;
+  height: 3px;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  color: var(--theme-accent-strong, var(--accent-bright, #ff7185));
+  background: color-mix(in srgb, var(--theme-surface-raised, #120709) 72%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, currentColor 20%, transparent);
+}
+
+.navigation-progress > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(0);
+  transform-origin: left;
+  background: linear-gradient(
+    90deg,
+    var(--theme-accent, var(--accent, #e11d48)),
+    currentColor
+  );
+  box-shadow: 0 0 14px currentColor;
+}
+
+.navigation-progress[data-active="true"] {
+  animation: navigation-progress-appear 1ms linear 140ms forwards;
+}
+
+.navigation-progress[data-active="true"] > span {
+  animation: navigation-progress-run 1.35s ease-in-out 140ms infinite;
+}
+
+@keyframes navigation-progress-appear {
+  to { opacity: 1; }
+}
+
+@keyframes navigation-progress-run {
+  0% { transform: scaleX(0); transform-origin: left; }
+  48% { transform: scaleX(.72); transform-origin: left; }
+  100% { transform: scaleX(1); transform-origin: right; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navigation-progress[data-active="true"] {
+    opacity: 1;
+    animation: none;
+  }
+
+  .navigation-progress[data-active="true"] > span {
+    transform: scaleX(1);
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .navigation-progress {
+    color: Highlight;
+    background: Canvas;
+    border-bottom: 1px solid Highlight;
+    box-shadow: none;
+  }
+
+  .navigation-progress > span {
+    background: Highlight;
+    box-shadow: none;
+  }
+}
