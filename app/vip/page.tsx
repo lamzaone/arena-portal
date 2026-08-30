@@ -14,7 +14,6 @@ import { PortalShell } from "@/components/ui/portal-shell";
 import { ThemedPlayerTableRow } from "@/components/ui/themed-player-table-row";
 import { VipSectionNav } from "@/components/vip-section-nav";
 import { getSession } from "@/lib/auth/session";
-import { getVipTiers } from "@/lib/content/game-catalogue";
 import { identityExternalBadgeLookupKey } from "@/lib/content/identity-group-badges";
 import {
   getEffectiveIdentity,
@@ -28,6 +27,7 @@ import {
   type IdentityGroupListing,
 } from "@/lib/data/identity-group-listings";
 import { getPlayerDashboard, getVipRoster } from "@/lib/data/portal-repository";
+import { getVipTiers } from "@/lib/data/vip-tier-catalogue";
 import {
   formatIdentityGroupListingDuration as duration,
   formatIdentityGroupListingPrice as price,
@@ -187,7 +187,7 @@ export default async function VipPage({ searchParams }: VipPageProps) {
                   <div className={styles.cardTitle}><IdentityGroupBadge group={listing.group} compact /><h2>{listing.listingName}</h2></div>
                   <p className="vip-price">{price(listing.euroPriceCents)}<small>{duration(listing.durationMinutes)} access item</small></p>
                   <p className={styles.description}>{listing.description ?? listing.group.description ?? `Activates ${listing.group.displayName} membership when used from your inventory.`}</p>
-                  {tier ? <details className={styles.benefits}><summary>{tier.benefits.length} included VIPCore benefits</summary><ul className="vip-benefit-list">{tier.benefits.map((benefit) => <li key={benefit.name}><Check aria-hidden="true" /><span><strong>{benefit.name}</strong><small>{benefit.detail}</small></span></li>)}</ul></details> : <div className={styles.delivery}><Clock3 aria-hidden="true" /><span><strong>{duration(listing.durationMinutes)}</strong><small>Connected {sourceName(listing)} access</small></span></div>}
+                  {tier?.benefits.length ? <details className={styles.benefits}><summary>{tier.benefits.length} currently enabled VIPCore benefits</summary><ul className="vip-benefit-list">{tier.benefits.map((benefit) => <li key={benefit.name}><Check aria-hidden="true" /><span><strong>{benefit.name}</strong><small>{benefit.detail}</small></span></li>)}</ul></details> : <div className={styles.delivery}><Clock3 aria-hidden="true" /><span><strong>{duration(listing.durationMinutes)}</strong><small>Connected {sourceName(listing)} access</small></span></div>}
                   <div className="vip-actions">
                     {!session ? <Link className="purchase-button" href="/api/auth/steam"><LockKeyhole aria-hidden="true" /> Login to request</Link> : permanentOwned ? <button className="purchase-button is-disabled" disabled>{action}</button> : <Link className="purchase-button" href={requestUrl(listing)}><PackageCheck aria-hidden="true" /> {action}</Link>}
                   </div>

@@ -487,7 +487,7 @@ export async function getIdentityGroupListingAdminSnapshot(): Promise<IdentityGr
       groupSelect +
         "FROM portal_identity_groups AS identity_group " +
         "LEFT JOIN portal_identity_external_group_definitions AS external_definition " +
-        "ON external_definition.group_id = identity_group.id AND external_definition.source_type = identity_group.source_type AND external_definition.external_key = identity_group.external_key " +
+        "ON external_definition.group_id = identity_group.id AND external_definition.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci " +
         "WHERE (identity_group.source_type = 'custom' OR external_definition.group_id IS NOT NULL) " +
         "AND NOT (identity_group.source_type = 'admins_core' AND LOWER(TRIM(COALESCE(identity_group.external_key, ''))) = 'founder') " +
         "ORDER BY identity_group.enabled DESC, identity_group.source_type, identity_group.profile_priority DESC, identity_group.display_name, identity_group.id",
@@ -507,7 +507,7 @@ export async function getVipPageIdentityGroupListings(): Promise<IdentityGroupLi
   const [rows] = await pool.query<ListingRow[]>(
     listingSelect +
     "FROM portal_identity_group_listings AS listings INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = listings.group_id " +
-    "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id AND external_definition.source_type = identity_group.source_type AND external_definition.external_key = identity_group.external_key " +
+    "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id AND external_definition.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci " +
     "WHERE listings.enabled = TRUE AND listings.vip_page_enabled = TRUE AND identity_group.enabled = TRUE " +
     "AND (identity_group.source_type = 'custom' OR external_definition.group_id IS NOT NULL) " +
     "AND NOT (identity_group.source_type = 'admins_core' AND LOWER(TRIM(COALESCE(identity_group.external_key, ''))) = 'founder') " +
@@ -523,7 +523,7 @@ export async function getIdentityGroupListing(listingIdValue: number) {
   const [rows] = await pool.query<ListingRow[]>(
     listingSelect +
     "FROM portal_identity_group_listings AS listings INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = listings.group_id " +
-    "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id AND external_definition.source_type = identity_group.source_type AND external_definition.external_key = identity_group.external_key " +
+    "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id AND external_definition.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci " +
     "WHERE listings.id = ? AND (identity_group.source_type = 'custom' OR external_definition.group_id IS NOT NULL) " +
     "AND NOT (identity_group.source_type = 'admins_core' AND LOWER(TRIM(COALESCE(identity_group.external_key, ''))) = 'founder') LIMIT 1",
     [listingId],

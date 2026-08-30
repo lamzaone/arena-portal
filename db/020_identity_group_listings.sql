@@ -5,6 +5,11 @@
 -- donation page and in the Token marketplace. The purchased inventory row
 -- snapshots this metadata, so later listing edits never rewrite an owned
 -- entitlement.
+--
+-- Some databases created by an early identity migration retained the schema's
+-- utf8mb4_general_ci default on portal_identity_groups, while the external
+-- definition catalogue uses utf8mb4_unicode_ci. Keep every cross-table key
+-- comparison explicit so this migration remains safe on both layouts.
 
 CREATE TABLE IF NOT EXISTS portal_identity_group_listings (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -87,8 +92,8 @@ INNER JOIN portal_identity_groups AS identity_group
  AND UPPER(identity_group.external_key) = UPPER(JSON_UNQUOTE(JSON_EXTRACT(catalogue.metadata, '$.vipTier')))
 LEFT JOIN portal_identity_external_group_definitions AS definitions
   ON definitions.group_id = identity_group.id
- AND definitions.source_type = identity_group.source_type
- AND definitions.external_key = identity_group.external_key
+ AND definitions.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci
+ AND definitions.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci
 LEFT JOIN portal_economy_catalogue_prices AS prices
   ON prices.catalogue_id = catalogue.id
  AND prices.is_current = TRUE
@@ -139,8 +144,8 @@ SELECT
 FROM portal_identity_groups AS identity_group
 INNER JOIN portal_identity_external_group_definitions AS definitions
   ON definitions.group_id = identity_group.id
- AND definitions.source_type = identity_group.source_type
- AND definitions.external_key = identity_group.external_key
+ AND definitions.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci
+ AND definitions.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci
 WHERE identity_group.source_type = 'vipcore'
   AND identity_group.enabled = TRUE
   AND NOT EXISTS (
@@ -199,8 +204,8 @@ INNER JOIN portal_economy_catalogue AS catalogue
   ON catalogue.catalogue_key = CONCAT('tappd:special:group-membership:', identity_group.id, ':monthly')
 INNER JOIN portal_identity_external_group_definitions AS definitions
   ON definitions.group_id = identity_group.id
- AND definitions.source_type = identity_group.source_type
- AND definitions.external_key = identity_group.external_key
+ AND definitions.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci
+ AND definitions.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci
 WHERE identity_group.source_type = 'vipcore';
 
 -- Keep the legacy 24-hour and 7-day Token products, but bring them under the
@@ -248,8 +253,8 @@ SELECT
 FROM portal_identity_groups AS identity_group
 INNER JOIN portal_identity_external_group_definitions AS definitions
   ON definitions.group_id = identity_group.id
- AND definitions.source_type = identity_group.source_type
- AND definitions.external_key = identity_group.external_key
+ AND definitions.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci
+ AND definitions.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci
 CROSS JOIN (
   SELECT '24h' AS duration_code, '24 Hours' AS duration_label, 1440 AS duration_minutes
   UNION ALL
@@ -318,8 +323,8 @@ INNER JOIN portal_economy_catalogue AS catalogue
   ON catalogue.catalogue_key = CONCAT('tappd:special:group-membership:', identity_group.id, ':', variants.duration_code)
 INNER JOIN portal_identity_external_group_definitions AS definitions
   ON definitions.group_id = identity_group.id
- AND definitions.source_type = identity_group.source_type
- AND definitions.external_key = identity_group.external_key
+ AND definitions.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci
+ AND definitions.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci
 WHERE identity_group.source_type = 'vipcore';
 
 -- Permanent donation products are first-class inventory items too. They are
@@ -364,8 +369,8 @@ SELECT
 FROM portal_identity_groups AS identity_group
 INNER JOIN portal_identity_external_group_definitions AS definitions
   ON definitions.group_id = identity_group.id
- AND definitions.source_type = identity_group.source_type
- AND definitions.external_key = identity_group.external_key
+ AND definitions.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci
+ AND definitions.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci
 WHERE identity_group.source_type = 'vipcore'
   AND identity_group.enabled = TRUE
   AND NOT EXISTS (
@@ -424,8 +429,8 @@ INNER JOIN portal_economy_catalogue AS catalogue
   ON catalogue.catalogue_key = CONCAT('tappd:special:group-membership:', identity_group.id, ':permanent')
 INNER JOIN portal_identity_external_group_definitions AS definitions
   ON definitions.group_id = identity_group.id
- AND definitions.source_type = identity_group.source_type
- AND definitions.external_key = identity_group.external_key
+ AND definitions.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci
+ AND definitions.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci
 WHERE identity_group.source_type = 'vipcore';
 
 -- Add a current catalogue price only when a listing-managed item does not
@@ -499,8 +504,8 @@ UPDATE portal_identity_group_listings AS listings
 INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = listings.group_id
 LEFT JOIN portal_identity_external_group_definitions AS external_definition
   ON external_definition.group_id = identity_group.id
- AND external_definition.source_type = identity_group.source_type
- AND external_definition.external_key = identity_group.external_key
+ AND external_definition.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci
+ AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci
 SET listings.enabled = FALSE,
     listings.vip_page_enabled = FALSE,
     listings.market_enabled = FALSE,
@@ -513,8 +518,8 @@ INNER JOIN portal_identity_group_listings AS listings ON listings.catalogue_id =
 INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = listings.group_id
 LEFT JOIN portal_identity_external_group_definitions AS external_definition
   ON external_definition.group_id = identity_group.id
- AND external_definition.source_type = identity_group.source_type
- AND external_definition.external_key = identity_group.external_key
+ AND external_definition.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci
+ AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci
 SET catalogue.metadata = JSON_SET(
       catalogue.metadata,
       '$.marketEnabled', JSON_EXTRACT('false', '$'),

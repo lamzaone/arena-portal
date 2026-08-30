@@ -2068,8 +2068,8 @@ async function readCompactPortalVipRoster() {
         "INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = membership.group_id " +
         "INNER JOIN portal_identity_external_group_definitions AS external_definition " +
         "ON external_definition.group_id = identity_group.id " +
-        "AND external_definition.source_type = identity_group.source_type " +
-        "AND external_definition.external_key = identity_group.external_key " +
+        "AND external_definition.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci " +
+        "AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci " +
         "WHERE identity_group.enabled = TRUE AND identity_group.source_type = 'vipcore' " +
         "AND identity_group.external_key IS NOT NULL " +
         "AND membership.revoked_at IS NULL AND membership.starts_at <= CURRENT_TIMESTAMP " +
@@ -6607,7 +6607,7 @@ export async function getEconomyCatalogue(
       "(NOT EXISTS (SELECT 1 FROM portal_identity_group_listings AS any_group_listing WHERE any_group_listing.catalogue_id = c.id) " +
         "OR EXISTS (SELECT 1 FROM portal_identity_group_listings AS published_group_listing " +
         "INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = published_group_listing.group_id " +
-        "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id AND external_definition.source_type = identity_group.source_type AND external_definition.external_key = identity_group.external_key " +
+        "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id AND external_definition.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci " +
         "WHERE published_group_listing.catalogue_id = c.id AND published_group_listing.enabled = TRUE AND published_group_listing.market_enabled = TRUE AND identity_group.enabled = TRUE " +
         "AND (identity_group.source_type = 'custom' OR external_definition.group_id IS NOT NULL) " +
         "AND NOT (identity_group.source_type = 'admins_core' AND LOWER(TRIM(COALESCE(identity_group.external_key, ''))) = 'founder')))",
@@ -10219,7 +10219,7 @@ export async function purchaseEconomyItem(
         >(
           "SELECT listings.token_price FROM portal_identity_group_listings AS listings " +
             "INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = listings.group_id " +
-            "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id AND external_definition.source_type = identity_group.source_type AND external_definition.external_key = identity_group.external_key " +
+            "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id AND external_definition.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci " +
             "WHERE listings.catalogue_id = ? AND listings.enabled = TRUE AND listings.market_enabled = TRUE AND identity_group.enabled = TRUE " +
             "AND (identity_group.source_type = 'custom' OR external_definition.group_id IS NOT NULL) " +
             "AND NOT (identity_group.source_type = 'admins_core' AND LOWER(TRIM(COALESCE(identity_group.external_key, ''))) = 'founder') LIMIT 1 FOR UPDATE",
@@ -10615,7 +10615,7 @@ export async function activateVipMembershipItem(
       >(
         "SELECT identity_group.id, identity_group.group_key, identity_group.display_name, identity_group.source_type, identity_group.external_key, identity_group.enabled, external_definition.group_id AS external_definition_group_id " +
           "FROM portal_identity_groups AS identity_group " +
-          "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id AND external_definition.source_type = identity_group.source_type AND external_definition.external_key = identity_group.external_key " +
+          "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id AND external_definition.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci " +
           "WHERE " + groupWhere + " LIMIT 1 FOR UPDATE",
         groupValues,
       );
