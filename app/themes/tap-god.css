@@ -5,6 +5,7 @@
   .global-theme-tap-god,
   .player-profile-page.profile-theme-tap-god,
   .small-profile-theme-tap-god,
+  .player-container-theme-tap-god,
   .leaderboard-player-row.ranking-theme-tap-god
 ) {
   --tap-bg: #010001;
@@ -91,6 +92,22 @@
   --player-identity-accent: var(--tap-red);
   --player-identity-hover: var(--tap-rose);
   --player-identity-card: var(--tap-surface-strong);
+}
+
+:is(
+  .player-container-theme-tap-god,
+  [data-theme="tap_god"][data-theme-surface="player-container"]
+) {
+  --player-container-accent: var(--tap-red);
+  --player-container-bg:
+    radial-gradient(circle at 8% 0%, rgba(255, 23, 68, .2), transparent 44%),
+    linear-gradient(125deg, rgba(82, 0, 18, .62), rgba(2, 0, 1, .98) 68%);
+  --player-container-hover:
+    radial-gradient(circle at 12% 0%, rgba(255, 92, 117, .25), transparent 46%),
+    linear-gradient(125deg, rgba(112, 0, 26, .72), rgba(8, 0, 2, .99) 70%);
+  --player-container-selected: linear-gradient(105deg, rgba(255, 23, 68, .32), rgba(15, 0, 4, .99));
+  --player-container-shadow: inset 3px 0 0 var(--tap-red), inset 0 0 20px rgba(255, 23, 68, .08), 0 0 14px rgba(255, 23, 68, .12);
+  --player-container-hover-shadow: inset 3px 0 0 var(--tap-hot), inset 0 0 28px rgba(255, 23, 68, .12), 0 0 25px rgba(255, 23, 68, .26);
 }
 
 :is(

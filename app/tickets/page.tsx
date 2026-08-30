@@ -6,6 +6,7 @@ import { SignInRequired } from "@/components/sign-in-required";
 import { PortalToast } from "@/components/success-toast";
 import { PageHeading } from "@/components/ui/page-heading";
 import { PortalShell } from "@/components/ui/portal-shell";
+import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
 import { getSession } from "@/lib/auth/session";
 import { getIdentityGroupListing, type IdentityGroupListing } from "@/lib/data/identity-group-listings";
 import { getTickets, portalStorageConfigured, type PortalTicket } from "@/lib/data/portal-repository";
@@ -54,14 +55,15 @@ function TicketReplyForm({ ticket }: { ticket: PortalTicket }) {
 }
 
 function TicketCase({ ticket, playerIdentities, viewerSteamId }: { ticket: PortalTicket; playerIdentities: Readonly<Record<string, PlayerIdentityData>>; viewerSteamId: string }) {
-  return <article className="case-card">
+  const owner = playerIdentities[viewerSteamId];
+  return <ThemedPlayerContainer as="article" className="case-card" containerKind="case" ownerSteamId={viewerSteamId} profileThemeKey={owner?.profileThemeKey}>
     <header className="case-card-header">
       <div><span className="case-card-category">{ticket.category.replace(/-/g, " ")}</span><h3>{ticket.subject}</h3></div>
       <CaseStatusTag status={ticket.status} />
     </header>
     <CaseConversation openingBody={ticket.body} openingAt={ticket.createdAt} openingAuthorId={viewerSteamId} messages={ticket.messages} viewerSteamId={viewerSteamId} playerIdentities={playerIdentities} />
     {canReply(ticket) ? <TicketReplyForm ticket={ticket} /> : <p className="case-closed-copy">This ticket is closed. Open a new ticket if you need further help.</p>}
-  </article>;
+  </ThemedPlayerContainer>;
 }
 
 export default async function TicketsPage({ searchParams }: TicketsPageProps) {

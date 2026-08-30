@@ -4,9 +4,13 @@ import { useRouter } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
 import { useTransition } from "react";
 
+import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
+
 type StaffInventoryPlayerRowProps = {
   href: string;
   label: string;
+  ownerSteamId: string;
+  profileThemeKey?: string | null;
   selected: boolean;
   children: ReactNode;
 };
@@ -31,6 +35,8 @@ const interactiveSelector = [
 export function StaffInventoryPlayerRow({
   href,
   label,
+  ownerSteamId,
+  profileThemeKey,
   selected,
   children,
 }: StaffInventoryPlayerRowProps) {
@@ -53,8 +59,11 @@ export function StaffInventoryPlayerRow({
   }
 
   return (
-    <div
+    <ThemedPlayerContainer
       className={`staff-player-result-row${selected ? " is-selected" : ""}${pending ? " is-loading" : ""}`}
+      containerKind="selection"
+      ownerSteamId={ownerSteamId}
+      profileThemeKey={profileThemeKey}
       role="link"
       tabIndex={0}
       aria-label={label}
@@ -70,6 +79,6 @@ export function StaffInventoryPlayerRow({
       onPointerEnter={() => router.prefetch(href)}
     >
       {children}
-    </div>
+    </ThemedPlayerContainer>
   );
 }

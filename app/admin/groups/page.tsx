@@ -19,6 +19,7 @@ import {
 } from "@/components/identity-group-badge";
 import { PlayerSearchField } from "@/components/player-search-field";
 import { PlayerIdentity } from "@/components/player-identity";
+import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
 import { CatalogueSearchField } from "@/components/economy/catalogue-search-field";
 import { SignInRequired } from "@/components/sign-in-required";
 import { StaffSubmenu } from "@/components/staff-submenu";
@@ -511,22 +512,22 @@ function GroupCard({
             </div>
             <div className={styles.managementBody}>
               {group.memberships.map((membership) => group.sourceType === "custom" ? (
-                <form className={styles.memberRow} action="/api/admin/groups" method="post" key={membership.steamId}>
+                <ThemedPlayerContainer as="form" containerKind="management" ownerSteamId={membership.steamId} profileThemeKey={playerIdentities[membership.steamId]?.profileThemeKey} className={styles.memberRow} action="/api/admin/groups" method="post" key={membership.steamId}>
                   <MutationFields csrf={csrf} action="membership-remove" />
                   <input type="hidden" name="groupId" value={group.id} />
                   <input type="hidden" name="steamId" value={membership.steamId} />
                   <PlayerIdentity player={playerIdentities[membership.steamId] ?? { steamId: membership.steamId, displayName: membership.steamId, avatarUrl: null, presence: "unknown", profileThemeKey: null, identityGroups: [] }} variant="compact" />
                   <span>{membership.expiresAt ? `Until ${new Date(membership.expiresAt).toLocaleDateString()}` : "Permanent"}</span>
                   <button className="staff-danger-button" type="submit">Remove</button>
-                </form>
+                </ThemedPlayerContainer>
               ) : (
-                <div className={styles.memberRow} key={membership.steamId}>
+                <ThemedPlayerContainer containerKind="management" ownerSteamId={membership.steamId} profileThemeKey={playerIdentities[membership.steamId]?.profileThemeKey} className={styles.memberRow} key={membership.steamId}>
                   <PlayerIdentity player={playerIdentities[membership.steamId] ?? { steamId: membership.steamId, displayName: membership.steamId, avatarUrl: null, presence: "unknown", profileThemeKey: null, identityGroups: [] }} variant="compact" />
                   <span>Active in {sourceLabel(group)}</span>
                   <Link className={styles.memberSourceLink} href={`/admin?tab=${group.sourceType === "vipcore" ? "vips" : "admins"}&page=1`}>
                     Manage
                   </Link>
-                </div>
+                </ThemedPlayerContainer>
               ))}
               {!group.memberships.length ? (
                 <p className={styles.relationshipSummary}>
@@ -867,7 +868,7 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
           </div>
           <div className="staff-group-list">
             {snapshot.directTagGrants.map((grant) => (
-              <form className="staff-admin-edit" action="/api/admin/groups" method="post" key={`${grant.steamId}:${grant.tag.id}`}>
+              <ThemedPlayerContainer as="form" containerKind="management" ownerSteamId={grant.steamId} profileThemeKey={playerIdentities[grant.steamId]?.profileThemeKey} className="staff-admin-edit" action="/api/admin/groups" method="post" key={`${grant.steamId}:${grant.tag.id}`}>
                 <MutationFields csrf={csrf} action="player-tag-revoke" />
                 <input type="hidden" name="steamId" value={grant.steamId} />
                 <input type="hidden" name="tagId" value={grant.tag.id} />
@@ -875,10 +876,10 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
                 <strong>{grant.tag.text}</strong>
                 <span>{grant.expiresAt ? `Until ${new Date(grant.expiresAt).toLocaleDateString()}` : "Permanent"}</span>
                 <button className="staff-danger-button" type="submit">Revoke tag</button>
-              </form>
+              </ThemedPlayerContainer>
             ))}
             {snapshot.directPrivilegeGrants.map((grant) => (
-              <form className="staff-admin-edit" action="/api/admin/groups" method="post" key={`${grant.steamId}:${grant.privilege.id}`}>
+              <ThemedPlayerContainer as="form" containerKind="management" ownerSteamId={grant.steamId} profileThemeKey={playerIdentities[grant.steamId]?.profileThemeKey} className="staff-admin-edit" action="/api/admin/groups" method="post" key={`${grant.steamId}:${grant.privilege.id}`}>
                 <MutationFields csrf={csrf} action="player-privilege-revoke" />
                 <input type="hidden" name="steamId" value={grant.steamId} />
                 <input type="hidden" name="privilegeId" value={grant.privilege.id} />
@@ -886,7 +887,7 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
                 <strong>{grant.privilege.displayName}</strong>
                 <span>{grant.expiresAt ? `Until ${new Date(grant.expiresAt).toLocaleDateString()}` : "Permanent"}</span>
                 <button className="staff-danger-button" type="submit">Revoke privilege</button>
-              </form>
+              </ThemedPlayerContainer>
             ))}
             {!snapshot.directTagGrants.length && !snapshot.directPrivilegeGrants.length ? (
               <p className="empty-copy">No active direct player tags or privileges.</p>

@@ -32,5 +32,8 @@ export const betaTesterTheme = {
         label: "BETA TESTER",
       },
     },
+    playerContainer: {
+      className: "player-container-theme-beta-tester ranking-theme-beta-tester",
+    },
   },
 } satisfies PortalThemeDefinition;

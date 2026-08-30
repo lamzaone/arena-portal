@@ -22,7 +22,7 @@ export function ThemedPlayerTableRow({
 }: ThemedPlayerTableRowProps) {
   const { surface, theme } = resolvePortalThemeSurface(
     profileThemeKey,
-    "smallProfile",
+    "playerContainer",
   );
 
   return (
@@ -35,7 +35,8 @@ export function ThemedPlayerTableRow({
         className,
       )}
       data-theme={theme.key}
-      data-theme-surface="small-profile"
+      data-theme-owner="player"
+      data-theme-surface="player-container"
     />
   );
 }

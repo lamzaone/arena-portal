@@ -11,6 +11,7 @@ import "./themes/default.css";
 import "./themes/shared.css";
 import "./themes/beta-tester.css";
 import "./themes/tap-god.css";
+import "./themes/player-containers.css";
 import "./themes/accessibility.css";
 
 export const metadata: Metadata = {

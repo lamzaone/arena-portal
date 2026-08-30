@@ -11,11 +11,12 @@ import type {
   PortalThemeSurfaceDefinition,
 } from "@/lib/themes/types";
 
-/** @deprecated Prefer the canonical global/profile/smallProfile surface names. */
+/** @deprecated Prefer the canonical registry surface names. */
 export type ProfileThemeSurface =
   | "global"
   | "profile"
   | "smallProfile"
+  | "playerContainer"
   | "rankingEntry";
 
 export type ProfileThemeSurfacePresentation = PortalThemeSurfaceDefinition;
@@ -25,6 +26,7 @@ export type TrustedProfileTheme = Omit<PortalThemeDefinition, "surfaces"> & {
     global?: ProfileThemeSurfacePresentation;
     profile: ProfileThemeSurfacePresentation;
     smallProfile?: ProfileThemeSurfacePresentation;
+    playerContainer?: ProfileThemeSurfacePresentation;
     /** @deprecated Compatibility alias for smallProfile. */
     rankingEntry?: ProfileThemeSurfacePresentation;
   };
@@ -55,6 +57,8 @@ export function getTrustedProfileTheme(
   const global = getPortalThemeSurface(value, "global") ?? undefined;
   const smallProfile =
     getPortalThemeSurface(value, "smallProfile") ?? undefined;
+  const playerContainer =
+    getPortalThemeSurface(value, "playerContainer") ?? undefined;
 
   return {
     key: theme.key,
@@ -64,6 +68,7 @@ export function getTrustedProfileTheme(
       ...(global ? { global } : {}),
       profile,
       ...(smallProfile ? { smallProfile, rankingEntry: smallProfile } : {}),
+      ...(playerContainer ? { playerContainer } : {}),
     },
   };
 }

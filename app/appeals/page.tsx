@@ -8,6 +8,7 @@ import { SignInRequired } from "@/components/sign-in-required";
 import { PortalToast } from "@/components/success-toast";
 import { PageHeading } from "@/components/ui/page-heading";
 import { PortalShell } from "@/components/ui/portal-shell";
+import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
 import { getSession } from "@/lib/auth/session";
 import { getAppealEligibility, getAppeals, getPlayerDashboard, portalStorageConfigured, type AppealBan, type BanAppeal } from "@/lib/data/portal-repository";
 import {
@@ -48,7 +49,8 @@ function AppealBanContext({ ban, playerIdentities }: { ban: AppealBan | null; pl
 }
 
 function AppealCase({ appeal, playerIdentities, viewerSteamId }: { appeal: BanAppeal; playerIdentities: Readonly<Record<string, PlayerIdentityData>>; viewerSteamId: string }) {
-  return <article className="case-card">
+  const owner = playerIdentities[viewerSteamId];
+  return <ThemedPlayerContainer as="article" className="case-card" containerKind="case" ownerSteamId={viewerSteamId} profileThemeKey={owner?.profileThemeKey}>
     <header className="case-card-header">
       <div><span className="case-card-category">Ban appeal</span><h3>Appeal #{appeal.id}</h3></div>
       <CaseStatusTag status={appeal.status} />
@@ -56,7 +58,7 @@ function AppealCase({ appeal, playerIdentities, viewerSteamId }: { appeal: BanAp
     <AppealBanContext ban={appeal.ban} playerIdentities={playerIdentities} />
     <CaseConversation openingBody={appeal.body} openingAt={appeal.createdAt} openingAuthorId={viewerSteamId} messages={appeal.messages} viewerSteamId={viewerSteamId} playerIdentities={playerIdentities} />
     {canReply(appeal) ? <AppealReplyForm appeal={appeal} /> : <p className="case-closed-copy">This appeal has been closed by staff.</p>}
-  </article>;
+  </ThemedPlayerContainer>;
 }
 
 export default async function AppealsPage({ searchParams }: AppealsPageProps) {

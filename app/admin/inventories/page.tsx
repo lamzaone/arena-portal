@@ -284,6 +284,8 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
                   key={player.steamId}
                   href={inventoryHref}
                   label={`${selected ? "Selected inventory for" : "Open inventory for"} ${identity.displayName}`}
+                  ownerSteamId={identity.steamId}
+                  profileThemeKey={identity.profileThemeKey}
                   selected={selected}
                 >
                   <PlayerIdentity player={identity} variant="compact" profileLink="hover-card" />

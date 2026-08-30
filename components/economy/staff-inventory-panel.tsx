@@ -17,6 +17,7 @@ import { PlayerIdentity } from "@/components/player-identity";
 import { LinkPagination } from "@/components/ui/link-pagination";
 import { SearchNavigationForm } from "@/components/ui/search-field";
 import { ServerSearchField } from "@/components/ui/server-search-field";
+import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
 import {
   StaffGrantItemForm,
   type GrantCatalogueItem,
@@ -368,7 +369,14 @@ export function StaffInventoryPanel({
     identityGroups: [],
   };
   return (
-    <section className="staff-inventory-detail" aria-label={`${account.displayName} inventory`}>
+    <ThemedPlayerContainer
+      as="section"
+      className="staff-inventory-detail"
+      containerKind="selection"
+      ownerSteamId={account.steamId}
+      profileThemeKey={resolvedPlayerIdentity.profileThemeKey}
+      aria-label={`${account.displayName} inventory`}
+    >
       <header className="staff-inventory-detail-heading">
         <div>
           <p className="eyebrow"><Archive aria-hidden="true" /> Player inventory</p>
@@ -508,6 +516,6 @@ export function StaffInventoryPanel({
           </div>
         </section>
       ) : null}
-    </section>
+    </ThemedPlayerContainer>
   );
 }

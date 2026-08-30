@@ -4,6 +4,7 @@ import { LockKeyhole, PackagePlus, Settings2, ShieldCheck, Sparkles, UsersRound 
 
 import { GroupAdminNav } from "@/components/group-admin-nav";
 import { PlayerIdentity } from "@/components/player-identity";
+import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
 import { PlayerSearchField } from "@/components/player-search-field";
 import { SignInRequired } from "@/components/sign-in-required";
 import { StaffSubmenu } from "@/components/staff-submenu";
@@ -159,9 +160,9 @@ export default async function VipPerkAdminPage({ searchParams }: { searchParams:
             const player = <PlayerIdentity player={identities[grant.steamId ?? ""] ?? { steamId: grant.steamId ?? "", displayName: grant.steamId ?? "Unknown", avatarUrl: null, presence: "unknown", profileThemeKey: null, identityGroups: [] }} variant="compact" />;
             const description = <div><strong>{grant.perkName}</strong><span>{grant.sourceType === "shop" ? "Token shop" : "Staff grant"} · {expiry(grant.expiresAt)}</span></div>;
             if (grant.sourceType === "shop") {
-              return <div className={styles.grantRow} key={`player:${grant.id}`}>{player}{description}<span className={styles.protectedGrant} title="Token-shop grants require an audited refund workflow before they can be revoked"><LockKeyhole aria-hidden="true" /> Protected purchase</span></div>;
+              return <ThemedPlayerContainer containerKind="management" ownerSteamId={grant.steamId} profileThemeKey={identities[grant.steamId ?? ""]?.profileThemeKey} className={styles.grantRow} key={`player:${grant.id}`}>{player}{description}<span className={styles.protectedGrant} title="Token-shop grants require an audited refund workflow before they can be revoked"><LockKeyhole aria-hidden="true" /> Protected purchase</span></ThemedPlayerContainer>;
             }
-            return <form className={styles.grantRow} action="/api/admin/vip-perks" method="post" key={`player:${grant.id}`}><Fields csrf={csrf} action="grant-revoke" /><input type="hidden" name="grantType" value="player" /><input type="hidden" name="grantId" value={grant.id} />{player}{description}<ConfirmSubmitButton className="staff-danger-button" confirmation={`Revoke ${grant.perkName} from ${grant.steamId}?`}>Revoke</ConfirmSubmitButton></form>;
+            return <ThemedPlayerContainer as="form" containerKind="management" ownerSteamId={grant.steamId} profileThemeKey={identities[grant.steamId ?? ""]?.profileThemeKey} className={styles.grantRow} action="/api/admin/vip-perks" method="post" key={`player:${grant.id}`}><Fields csrf={csrf} action="grant-revoke" /><input type="hidden" name="grantType" value="player" /><input type="hidden" name="grantId" value={grant.id} />{player}{description}<ConfirmSubmitButton className="staff-danger-button" confirmation={`Revoke ${grant.perkName} from ${grant.steamId}?`}>Revoke</ConfirmSubmitButton></ThemedPlayerContainer>;
           })}
           {snapshot.groupGrants.map((grant) => <form className={styles.grantRow} action="/api/admin/vip-perks" method="post" key={`group:${grant.id}`}><Fields csrf={csrf} action="grant-revoke" /><input type="hidden" name="grantType" value="group" /><input type="hidden" name="grantId" value={grant.id} /><span className={styles.groupIdentity}><ShieldCheck aria-hidden="true" /><span><strong>{grant.groupName}</strong><small>Custom group</small></span></span><div><strong>{grant.perkName}</strong><span>Group grant · {expiry(grant.expiresAt)}</span></div><ConfirmSubmitButton className="staff-danger-button" confirmation={`Revoke ${grant.perkName} from ${grant.groupName ?? "this custom group"}?`}>Revoke</ConfirmSubmitButton></form>)}
           {!snapshot.playerGrants.length && !snapshot.groupGrants.length ? <p className="empty-copy">No active standalone perk grants.</p> : null}

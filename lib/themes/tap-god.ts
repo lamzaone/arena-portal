@@ -35,5 +35,8 @@ export const tapGodTheme = {
         label: "TAP GOD",
       },
     },
+    playerContainer: {
+      className: "player-container-theme-tap-god ranking-theme-tap-god",
+    },
   },
 } satisfies PortalThemeDefinition;

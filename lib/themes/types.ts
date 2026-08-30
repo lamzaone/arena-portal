@@ -1,4 +1,8 @@
-export type PortalThemeSurface = "global" | "profile" | "smallProfile";
+export type PortalThemeSurface =
+  | "global"
+  | "profile"
+  | "smallProfile"
+  | "playerContainer";
 
 /**
  * Source-controlled renderer keys. Theme manifests stay plain serializable
@@ -41,11 +45,13 @@ export type PortalThemeProfileSurface = PortalThemeSurfaceBase & {
 };
 
 export type PortalThemeSmallProfileSurface = PortalThemeSurfaceBase;
+export type PortalThemePlayerContainerSurface = PortalThemeSurfaceBase;
 
 export type PortalThemeSurfaceMap = {
   global: PortalThemeGlobalSurface;
   profile: PortalThemeProfileSurface;
   smallProfile: PortalThemeSmallProfileSurface;
+  playerContainer: PortalThemePlayerContainerSurface;
 };
 
 export type PortalThemeDefinition = {
@@ -60,4 +66,5 @@ export type PortalThemeDefinition = {
 export type PortalThemeSurfaceDefinition =
   | PortalThemeGlobalSurface
   | PortalThemeProfileSurface
-  | PortalThemeSmallProfileSurface;
+  | PortalThemeSmallProfileSurface
+  | PortalThemePlayerContainerSurface;

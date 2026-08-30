@@ -6,6 +6,7 @@
   .global-theme-beta-tester,
   .player-profile-page.profile-theme-beta-tester,
   .small-profile-theme-beta-tester,
+  .player-container-theme-beta-tester,
   .leaderboard-player-row.ranking-theme-beta-tester
 ) {
   --beta-bg: #04111c;
@@ -89,6 +90,22 @@
   --player-identity-accent: var(--beta-blue);
   --player-identity-hover: var(--beta-yellow);
   --player-identity-card: var(--beta-surface-strong);
+}
+
+:is(
+  .player-container-theme-beta-tester,
+  [data-theme="beta_tester"][data-theme-surface="player-container"]
+) {
+  --player-container-accent: var(--beta-yellow);
+  --player-container-bg:
+    linear-gradient(90deg, rgba(250, 204, 21, .08), transparent 28%),
+    linear-gradient(135deg, rgba(56, 189, 248, .11), rgba(4, 17, 28, .96) 64%);
+  --player-container-hover:
+    linear-gradient(90deg, rgba(250, 204, 21, .13), transparent 34%),
+    linear-gradient(135deg, rgba(56, 189, 248, .18), rgba(7, 24, 39, .98) 66%);
+  --player-container-selected: linear-gradient(105deg, rgba(56, 189, 248, .26), rgba(7, 24, 39, .98));
+  --player-container-shadow: inset 3px 0 0 var(--beta-yellow), 0 0 12px rgba(56, 189, 248, .1);
+  --player-container-hover-shadow: inset 3px 0 0 var(--beta-yellow), 0 0 22px rgba(56, 189, 248, .24);
 }
 
 :is(

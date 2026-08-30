@@ -243,6 +243,9 @@ export function ProfileSettingsForm({
               configuredTheme.surfaces.smallProfile
                 ? "profile mentions"
                 : null,
+              configuredTheme.surfaces.playerContainer
+                ? "player-owned containers"
+                : null,
             ].filter(Boolean);
 
             return (

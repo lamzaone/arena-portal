@@ -21,6 +21,7 @@ const surfaceClassNames: Record<
   profile: "is-profile",
   rankingEntry: "is-ranking-entry",
   smallProfile: "is-small-profile",
+  playerContainer: "is-player-container",
 };
 
 export function ProfileThemeSurfaceBadge({
@@ -41,6 +42,8 @@ export function ProfileThemeSurfaceBadge({
       data-theme-surface={
         canonicalSurface === "smallProfile"
           ? "small-profile"
+          : canonicalSurface === "playerContainer"
+            ? "player-container"
           : canonicalSurface
       }
     >

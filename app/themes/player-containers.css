@@ -1,0 +1,94 @@
+/*
+ * Player ownership is the final theme cascade boundary. This file is loaded
+ * after every visual theme so a viewer's global theme cannot repaint a row,
+ * search result, case, message or workspace that belongs to another player.
+ */
+html body [data-theme-surface="player-container"][data-ui="player-owned-container"] {
+  border-color: var(--theme-border);
+  border-radius: var(--theme-radius);
+  color: var(--theme-text);
+  background: var(--player-container-bg, var(--theme-surface-muted));
+  box-shadow: var(--player-container-shadow, inset 3px 0 0 var(--theme-accent));
+}
+
+html body [data-theme-surface="player-container"][data-ui="player-owned-container"]:is(
+    [data-player-container-kind="record"],
+    [data-player-container-kind="management"],
+    [data-player-container-kind="search-result"],
+    [data-player-container-kind="selection"][role]
+  ):is(:hover, :focus-visible) {
+  border-color: var(--theme-border-strong);
+  color: var(--theme-text);
+  background: var(--player-container-hover, var(--theme-control-hover));
+  box-shadow: var(--player-container-hover-shadow, inset 3px 0 0 var(--theme-accent-strong));
+}
+
+html body [data-theme-surface="player-container"][data-ui="player-owned-container"]:is(
+    [data-active="true"],
+    .is-selected
+  ) {
+  border-color: var(--theme-accent-strong);
+  background: var(--player-container-selected, var(--theme-control-hover));
+  box-shadow: var(--player-container-selected-shadow, inset 3px 0 0 var(--theme-accent-strong));
+}
+
+html body [data-theme-surface="player-container"][data-ui="player-owned-container"]
+  :is(
+    [data-ui="panel"],
+    [data-ui="item-card"],
+    .panel,
+    .case-player-reply,
+    .economy-admin-section,
+    .trade-side-panel
+  ) {
+  border-color: var(--theme-border);
+  border-radius: var(--theme-radius);
+  color: var(--theme-text);
+  background: color-mix(in srgb, var(--theme-surface) 88%, transparent);
+  box-shadow: var(--theme-shadow);
+}
+
+html body [data-theme-surface="player-container"][data-ui="player-owned-container"]
+  :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  border-color: var(--theme-border);
+  border-radius: var(--theme-control-radius);
+  color: var(--theme-text);
+  background: var(--theme-control-bg);
+}
+
+html body [data-theme-surface="player-container"][data-ui="player-owned-container"]
+  :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea):is(:hover, :focus) {
+  border-color: var(--theme-border-strong);
+  background: var(--theme-control-hover);
+}
+
+html body [data-theme-surface="player-container"][data-ui="player-owned-container"]
+  :is(h2, h3, strong, b) {
+  color: var(--theme-text);
+}
+
+html body [data-theme-surface="player-container"][data-ui="player-owned-container"]
+  :is(p, small, time, .empty-copy, .staff-player-result-meta) {
+  color: var(--theme-text-muted);
+}
+
+html body [data-theme-surface="player-container"][data-ui="player-owned-container"]
+  :is(a, .case-card-category) {
+  color: var(--theme-accent-soft);
+}
+
+html body tr[data-theme-surface="player-container"][data-ui="player-table-row"] > td {
+  border-color: var(--theme-border);
+  color: var(--theme-text-muted);
+  background: var(--player-container-bg, var(--theme-table-row));
+}
+
+html body tr[data-theme-surface="player-container"][data-ui="player-table-row"] > td:first-child {
+  box-shadow: inset 3px 0 0 var(--player-container-accent, var(--theme-accent));
+}
+
+html body tr[data-theme-surface="player-container"][data-ui="player-table-row"]:hover > td {
+  border-color: var(--theme-border-strong);
+  color: var(--theme-text);
+  background: var(--player-container-hover, var(--theme-table-hover));
+}

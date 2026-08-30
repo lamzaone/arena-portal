@@ -320,7 +320,7 @@ body:has(.player-profile-page[data-theme-owner="profile"])
 }
 
 /* The same table contract drives ranking, VIP and staff data grids. Player
-   rows still own their small-profile variables and therefore outrank the
+   rows own their player-container variables and therefore outrank the
    surrounding global theme naturally through inheritance. */
 :where([data-theme][data-theme-surface]) [data-ui="data-table"] {
   border-color: var(--theme-border);
@@ -349,15 +349,84 @@ body:has(.player-profile-page[data-theme-owner="profile"])
   background: var(--theme-table-hover);
 }
 
-:where([data-theme][data-theme-surface="small-profile"])[data-ui="player-table-row"] > td {
+:where([data-theme][data-theme-surface="player-container"])[data-ui="player-table-row"] > td {
   border-color: var(--theme-border);
   color: var(--theme-text-muted);
-  background: var(--theme-table-row);
+  background: var(--player-container-bg, var(--theme-table-row));
 }
 
-:where([data-theme][data-theme-surface="small-profile"])[data-ui="player-table-row"]:hover > td {
+:where([data-theme][data-theme-surface="player-container"])[data-ui="player-table-row"] > td:first-child {
+  box-shadow: inset 3px 0 0 var(--player-container-accent, var(--theme-accent));
+}
+
+:where([data-theme][data-theme-surface="player-container"])[data-ui="player-table-row"]:hover > td {
   color: var(--theme-text);
-  background: var(--theme-table-hover);
+  background: var(--player-container-hover, var(--theme-table-hover));
+}
+
+/* A player-owned container is a nested theme boundary. The surrounding page
+   may belong to the viewer, but a result, case, message or management record
+   always consumes the represented player's theme variables. */
+:where([data-theme][data-theme-surface="player-container"])[data-ui="player-owned-container"] {
+  --player-container-accent: var(--theme-accent);
+  position: relative;
+  border-color: var(--theme-border);
+  border-radius: var(--theme-radius);
+  color: var(--theme-text);
+  background: var(--player-container-bg, var(--theme-surface-muted));
+  box-shadow: var(
+    --player-container-shadow,
+    inset 3px 0 0 var(--player-container-accent)
+  );
+  transition:
+    border-color .18s ease,
+    background-color .18s ease,
+    box-shadow .18s ease;
+}
+
+:where([data-theme][data-theme-surface="player-container"])[data-ui="player-owned-container"]:is(
+    [data-player-container-kind="record"],
+    [data-player-container-kind="management"],
+    [data-player-container-kind="search-result"],
+    [data-player-container-kind="selection"][role]
+  ):is(:hover, :focus-visible) {
+  border-color: var(--theme-border-strong);
+  background: var(--player-container-hover, var(--theme-control-hover));
+  box-shadow: var(
+    --player-container-hover-shadow,
+    inset 3px 0 0 var(--theme-accent-strong),
+    0 0 18px color-mix(in srgb, var(--theme-accent) 14%, transparent)
+  );
+}
+
+:where([data-theme][data-theme-surface="player-container"])[data-ui="player-owned-container"]
+  :is(h2, h3, strong, b, .case-message-header time) {
+  color: var(--theme-text);
+}
+
+:where([data-theme][data-theme-surface="player-container"])[data-ui="player-owned-container"]
+  :is(p, small, time, .empty-copy, .staff-player-result-meta) {
+  color: var(--theme-text-muted);
+}
+
+:where([data-theme][data-theme-surface="player-container"])[data-ui="player-owned-container"]
+  :is(a, .case-card-category) {
+  color: var(--theme-accent-soft);
+}
+
+:where([data-theme][data-theme-surface="player-container"])[data-ui="player-owned-container"][data-player-container-kind="message"] {
+  border-left-color: var(--player-container-accent);
+}
+
+:where([data-theme][data-theme-surface="player-container"])[data-ui="player-owned-container"][data-player-container-kind="search-result"][data-active="true"],
+:where([data-theme][data-theme-surface="player-container"])[data-ui="player-owned-container"].is-selected {
+  border-color: var(--theme-accent-strong);
+  background: var(--player-container-selected, var(--theme-control-hover));
+  box-shadow: var(
+    --player-container-selected-shadow,
+    inset 3px 0 0 var(--theme-accent-strong),
+    0 0 18px color-mix(in srgb, var(--theme-accent) 18%, transparent)
+  );
 }
 
 :where([data-theme][data-theme-surface="small-profile"])

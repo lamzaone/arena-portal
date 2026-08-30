@@ -4,6 +4,7 @@ import type { SteamProfile } from "@/lib/steam/profiles";
 
 import { formatPortalDate } from "@/components/formatters";
 import { PlayerIdentity } from "@/components/player-identity";
+import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
 
 type CaseConversationProps = {
   openingBody: string;
@@ -44,7 +45,13 @@ function MessageCard({ authorId, authorType, body, createdAt, attachments, steam
     identityGroups: [],
   } satisfies PlayerIdentityData;
 
-  return <article className={`case-message case-conversation-message ${authorType}${opening ? " opening" : ""}`}>
+  return <ThemedPlayerContainer
+    as="article"
+    className={`case-message case-conversation-message ${authorType}${opening ? " opening" : ""}`}
+    containerKind="message"
+    ownerSteamId={player.steamId}
+    profileThemeKey={player.profileThemeKey}
+  >
     <header className="case-message-header">
       <PlayerIdentity
         player={player}
@@ -56,7 +63,7 @@ function MessageCard({ authorId, authorType, body, createdAt, attachments, steam
     </header>
     <p>{body}</p>
     {attachments.length ? <div className="case-message-attachments">{attachments.map((attachment) => <a key={attachment.id} href={`/api/case-attachments/${attachment.id}`} target="_blank" rel="noreferrer">View screenshot: {attachment.fileName}</a>)}</div> : null}
-  </article>;
+  </ThemedPlayerContainer>;
 }
 
 export function CaseConversation({ openingBody, openingAt, openingAuthorId, messages, steamProfiles, viewerSteamId, playerIdentities }: CaseConversationProps) {

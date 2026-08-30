@@ -31,6 +31,7 @@ import {
   type EconomyTradeView,
 } from "@/components/economy/economy-view-model";
 import { PlayerIdentity } from "@/components/player-identity";
+import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
 import {
   PlayerSearchField,
   type PlayerSearchResult,
@@ -589,7 +590,12 @@ export function TradeManager({
             <p>Search by a player&apos;s current name or exact SteamID64.</p>
           </div>
           {selectedPlayer ? (
-            <div className="trade-selected-player">
+            <ThemedPlayerContainer
+              className="trade-selected-player"
+              containerKind="selection"
+              ownerSteamId={selectedPlayer.steamId}
+              profileThemeKey={selectedPlayer.profileThemeKey}
+            >
               <PlayerIdentity
                 player={{
                   steamId: selectedPlayer.steamId,
@@ -609,7 +615,7 @@ export function TradeManager({
               >
                 <X aria-hidden="true" />
               </button>
-            </div>
+            </ThemedPlayerContainer>
           ) : null}
         </div>
 
@@ -674,7 +680,14 @@ export function TradeManager({
             </div>
           </fieldset>
 
-          <fieldset className="trade-side-panel trade-partner-panel">
+          <ThemedPlayerContainer
+            as="fieldset"
+            className="trade-side-panel trade-partner-panel"
+            containerKind="selection"
+            enabled={Boolean(selectedPlayer)}
+            ownerSteamId={selectedPlayer?.steamId}
+            profileThemeKey={selectedPlayer?.profileThemeKey}
+          >
             <legend>
               <span>You request</span>
               <small>{requestedItemIds.length} / 12 selected</small>
@@ -791,7 +804,7 @@ export function TradeManager({
                 </nav>
               ) : null}
             </div>
-          </fieldset>
+          </ThemedPlayerContainer>
         </div>
 
         <div className="trade-terms-grid">
@@ -845,7 +858,14 @@ export function TradeManager({
         {tradeList.length ? (
           <div className="history-grid">
             {tradeList.map((trade) => (
-              <article key={trade.id} className="panel trade-history-card">
+              <ThemedPlayerContainer
+                as="article"
+                key={trade.id}
+                className="panel trade-history-card"
+                containerKind="record"
+                ownerSteamId={trade.counterpartySteamId}
+                profileThemeKey={counterpartyIdentities[trade.counterpartySteamId]?.profileThemeKey}
+              >
                 <div className="panel-heading">
                   <div>
                     <span className="badge">{humanize(trade.status)}</span>
@@ -948,7 +968,7 @@ export function TradeManager({
                     </AsyncButton>
                   </div>
                 ) : null}
-              </article>
+              </ThemedPlayerContainer>
             ))}
           </div>
         ) : (

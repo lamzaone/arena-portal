@@ -14,6 +14,8 @@ export const defaultTheme = {
     smallProfile: {
       className: "small-profile-theme-default",
     },
+    playerContainer: {
+      className: "player-container-theme-default",
+    },
   },
 } satisfies PortalThemeDefinition;
-

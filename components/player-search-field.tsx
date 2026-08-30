@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { PlayerIdentity } from "@/components/player-identity";
+import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
 import type { PlayerIdentityData } from "@/lib/player-identities";
 import styles from "@/components/player-search-field.module.css";
 
@@ -419,10 +420,13 @@ export function PlayerSearchField({
               <span className={styles.skeletonCopy}><i className={styles.skeletonLine} /><i className={styles.skeletonLine} /></span>
             </span>
           )) : searchState === "ready" && results.length ? results.map((player, index) => (
-            <div
+            <ThemedPlayerContainer
               className={`${styles.result}${showInventoryVisibility ? ` ${styles.resultWithMeta}` : ""}`}
+              containerKind="search-result"
               id={`${inputId}-option-${index}`}
               key={player.steamId}
+              ownerSteamId={player.steamId}
+              profileThemeKey={player.profileThemeKey}
               role="option"
               tabIndex={0}
               aria-label={`Select ${player.displayName}`}
@@ -452,7 +456,7 @@ export function PlayerSearchField({
                   {player.inventoryVisibility === "public" ? "Public" : <><LockKeyhole aria-hidden="true" /> Private</>}
                 </span>
               ) : null}
-            </div>
+            </ThemedPlayerContainer>
           )) : (
             <p className={styles.empty}>
               {searchState === "error"
