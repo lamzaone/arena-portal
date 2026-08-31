@@ -17,8 +17,9 @@ own the shop.
 - Direct staff grants have configuration priority over Token-shop grants;
   direct grants have priority over custom-group grants.
 - A custom-group perk is effective only while both its perk grant and the
-  player's `portal_identity_group_memberships` row are active. Its effective
-  expiration is the earlier of those two expirations.
+  player's Arena-authoritative `arena_group_memberships` row are active. The
+  perk definition remains Portal-owned, and its effective expiration is the
+  earlier of the grant and membership expirations.
 - Multiple sources are additive for time. A permanent active source makes the
   effective perk permanent. Buying the same perk extends its latest effective
   expiration, including active custom-group coverage.

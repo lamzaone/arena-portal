@@ -18,11 +18,15 @@ import {
   identityExternalBadgeLookupKey,
   isIdentityGroupBadgeIconKey,
 } from "@/lib/content/identity-group-badges";
-import { getPortalDatabasePool } from "@/lib/data/database-pools";
+import {
+  getGameDatabasePool,
+  getPortalDatabasePool,
+} from "@/lib/data/database-pools";
 import {
   acquireIdentityCatalogueMutationLock,
   releaseIdentityCatalogueMutationLock,
 } from "@/lib/data/identity-catalogue-lock";
+import { configuredGameServerGuid } from "@/lib/admin/server-scope";
 
 export type IdentityGroupSource = "custom" | "admins_core" | "vipcore";
 export type IdentityPrivilegeScope = "portal" | "game";
@@ -84,6 +88,13 @@ export type IdentityGroupMembership = {
   startsAt: string;
   expiresAt: string | null;
   grantReason: string | null;
+  membershipUuid?: string | null;
+  arenaGroupId?: number | null;
+  scopeId?: number | null;
+  scopeKey?: string | null;
+  scopeName?: string | null;
+  scopeType?: "global" | "server" | null;
+  rowVersion?: number | null;
 };
 
 export type IdentityPlayerTagGrant = {
@@ -198,10 +209,6 @@ type IdentityGroupRow = RowDataPacket & {
   membership_expires_at?: Date | string | null;
 };
 
-type IdentityGroupMembershipBadgeRow = IdentityGroupRow & {
-  steam_id: string;
-};
-
 type IdentityTagRow = RowDataPacket & {
   id: number | string;
   tag_key: string;
@@ -268,6 +275,46 @@ type IdentityMembershipRow = RowDataPacket & {
   starts_at: Date | string;
   expires_at: Date | string | null;
   grant_reason: string | null;
+  membership_uuid?: string | null;
+  arena_group_id?: number | string | null;
+  scope_id?: number | string | null;
+  scope_key?: string | null;
+  scope_name?: string | null;
+  scope_type?: "global" | "server" | null;
+  row_version?: number | string | null;
+};
+
+type ArenaIdentityGroupTargetRow = RowDataPacket & {
+  arena_group_id: number | string;
+  group_uuid: string;
+  legacy_portal_group_id: number | string | null;
+  group_key: string;
+  group_type: "admin" | "vip" | "custom";
+  external_key: string | null;
+  enabled: number | boolean;
+  row_version: number | string;
+  definition?: unknown;
+  baseline_permissions?: unknown;
+  capability_keys?: unknown;
+  scope_id?: number | string;
+  scope_uuid?: string;
+  scope_key?: string;
+  scope_name?: string;
+  scope_type?: "global" | "server";
+  scope_enabled?: number | boolean;
+};
+
+type ArenaIdentityMembershipMutationRow = RowDataPacket & {
+  membership_uuid: string;
+  group_id: number | string;
+  scope_id: number | string;
+  steam_id: string;
+  starts_at: Date | string;
+  expires_at: Date | string | null;
+  status: "active" | "revoked" | "superseded" | "conflict";
+  provenance_type: string;
+  source_inventory_item_id: string | null;
+  row_version: number | string;
 };
 
 type IdentityPlayerTagGrantRow = IdentityTagRow & {
@@ -322,7 +369,10 @@ function getIdentityPool() {
 }
 
 export function identityGroupStorageConfigured() {
-  return Boolean(process.env.PORTAL_DATABASE_URL);
+  return Boolean(
+    process.env.PORTAL_DATABASE_URL?.trim() &&
+      process.env.GAME_DATABASE_URL?.trim(),
+  );
 }
 
 function identityError(code: string, message: string): never {
@@ -644,6 +694,435 @@ async function withIdentityTransaction<T>(
   }
 }
 
+function arenaIdentityStorageMissing(error: unknown) {
+  const candidate = error as { code?: unknown; errno?: unknown };
+  return candidate.code === "ER_NO_SUCH_TABLE" ||
+    candidate.errno === 1146 ||
+    candidate.code === "ER_BAD_FIELD_ERROR" ||
+    candidate.errno === 1054;
+}
+
+async function withArenaIdentityTransaction<T>(
+  work: (connection: PoolConnection) => Promise<T>,
+) {
+  const pool = getGameDatabasePool();
+  if (!pool) {
+    identityError(
+      "storage_unavailable",
+      "The Arena group-authority database is not configured.",
+    );
+  }
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const result = await work(connection);
+    await connection.commit();
+    return result;
+  } catch (error) {
+    try {
+      await connection.rollback();
+    } catch {
+      // Keep the original failure.
+    }
+    if (arenaIdentityStorageMissing(error)) {
+      identityError(
+        "storage_unavailable",
+        "Apply the Arena group-authority migration before changing groups.",
+      );
+    }
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+function arenaGroupType(sourceType: IdentityGroupSource) {
+  if (sourceType === "admins_core") return "admin" as const;
+  if (sourceType === "vipcore") return "vip" as const;
+  return "custom" as const;
+}
+
+async function readPortalGroupProjection(groupId: number) {
+  const pool = getIdentityPool();
+  if (!pool) {
+    identityError(
+      "storage_unavailable",
+      "The portal presentation database is not configured.",
+    );
+  }
+  const [rows] = await pool.query<IdentityGroupRow[]>(
+    "SELECT id, group_key, display_name, source_type, external_key, description, " +
+      "badge_label, badge_icon_key, badge_color, badge_soft_color, profile_priority, enabled " +
+      "FROM portal_identity_groups WHERE id = ? LIMIT 1",
+    [groupId],
+  );
+  if (!rows[0]) identityError("group_not_found", "That identity group does not exist.");
+  return rows[0];
+}
+
+async function lockArenaGlobalScope(connection: PoolConnection) {
+  const [rows] = await connection.query<Array<RowDataPacket & {
+    scope_id: number | string;
+    scope_uuid: string;
+    scope_key: string;
+    display_name: string;
+    enabled: number | boolean;
+  }>>(
+    "SELECT id AS scope_id, scope_uuid, scope_key, display_name, enabled " +
+      "FROM arena_scopes WHERE scope_type = 'global' AND scope_key = 'global' " +
+      "ORDER BY id LIMIT 1 FOR UPDATE",
+  );
+  const scope = rows[0];
+  if (!scope || !asBoolean(scope.enabled)) {
+    identityError(
+      "storage_unavailable",
+      "The Arena global group scope is unavailable.",
+    );
+  }
+  return {
+    scopeId: Number(scope.scope_id),
+    scopeUuid: String(scope.scope_uuid),
+    scopeKey: String(scope.scope_key),
+    scopeName: String(scope.display_name),
+  };
+}
+
+async function lockArenaGroupForProjection(
+  connection: PoolConnection,
+  projection: Pick<IdentityGroupRow, "id" | "group_key" | "source_type">,
+) {
+  const expectedType = arenaGroupType(projection.source_type);
+  const [rows] = await connection.query<ArenaIdentityGroupTargetRow[]>(
+    "SELECT id AS arena_group_id, group_uuid, legacy_portal_group_id, group_key, " +
+      "group_type, external_key, enabled, row_version, definition, " +
+      "baseline_permissions, capability_keys FROM arena_groups " +
+      "WHERE legacy_portal_group_id = ? OR group_key = ? " +
+      "ORDER BY CASE WHEN legacy_portal_group_id = ? THEN 0 ELSE 1 END, id " +
+      "LIMIT 1 FOR UPDATE",
+    [Number(projection.id), String(projection.group_key), Number(projection.id)],
+  );
+  const group = rows[0];
+  if (!group || group.group_type !== expectedType) {
+    identityError(
+      "group_not_found",
+      "That portal projection is not connected to an Arena group.",
+    );
+  }
+  const linkedPortalId = group.legacy_portal_group_id === null
+    ? null
+    : Number(group.legacy_portal_group_id);
+  if (linkedPortalId !== null && linkedPortalId !== Number(projection.id)) {
+    identityError(
+      "group_not_found",
+      "That Arena group is connected to a different portal projection.",
+    );
+  }
+  if (linkedPortalId === null) {
+    await connection.execute(
+      "UPDATE arena_groups SET legacy_portal_group_id = ?, row_version = row_version + 1 " +
+        "WHERE id = ? AND legacy_portal_group_id IS NULL",
+      [Number(projection.id), Number(group.arena_group_id)],
+    );
+    group.legacy_portal_group_id = Number(projection.id);
+    group.row_version = Number(group.row_version) + 1;
+  }
+  return group;
+}
+
+async function lockArenaGlobalGroupTarget(
+  connection: PoolConnection,
+  projection: Pick<IdentityGroupRow, "id" | "group_key" | "source_type">,
+  options: { requireEnabled?: boolean; requireCustom?: boolean } = {},
+) {
+  const group = await lockArenaGroupForProjection(connection, projection);
+  if (options.requireCustom && group.group_type !== "custom") {
+    identityError(
+      "custom_group_required",
+      "Use the exact Admin or VIP assignment workflow for connected plug-in groups.",
+    );
+  }
+  const [scopeRows] = await connection.query<ArenaIdentityGroupTargetRow[]>(
+    "SELECT arena_group.id AS arena_group_id, arena_group.group_uuid, " +
+      "arena_group.legacy_portal_group_id, arena_group.group_key, arena_group.group_type, " +
+      "arena_group.external_key, arena_group.enabled, arena_group.row_version, " +
+      "scope.id AS scope_id, scope.scope_uuid, scope.scope_key, " +
+      "scope.display_name AS scope_name, scope.scope_type, " +
+      "group_scope.enabled AS scope_enabled " +
+      "FROM arena_groups AS arena_group " +
+      "INNER JOIN arena_group_scopes AS group_scope ON group_scope.group_id = arena_group.id " +
+      "INNER JOIN arena_scopes AS scope ON scope.id = group_scope.scope_id " +
+      "WHERE arena_group.id = ? AND scope.scope_type = 'global' AND scope.scope_key = 'global' " +
+      "ORDER BY scope.id LIMIT 1 FOR UPDATE",
+    [Number(group.arena_group_id)],
+  );
+  const target = scopeRows[0];
+  if (!target) {
+    identityError(
+      "group_not_found",
+      "That Arena group is not enabled in the global scope.",
+    );
+  }
+  if (
+    options.requireEnabled &&
+    (!asBoolean(target.enabled) || !asBoolean(target.scope_enabled))
+  ) {
+    identityError("group_disabled", "Only an enabled Arena group can receive members.");
+  }
+  return target;
+}
+
+function exactArenaMembershipReference(input: {
+  membershipUuid?: string | null;
+  scopeId?: number | null;
+  rowVersion?: number | null;
+}) {
+  const membershipUuid = String(input.membershipUuid ?? "").trim().toLowerCase();
+  const scopeId = Number(input.scopeId ?? 0);
+  const rowVersion = Number(input.rowVersion ?? 0);
+  if (!membershipUuid && !scopeId && !rowVersion) return null;
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+      membershipUuid,
+    ) ||
+    !Number.isSafeInteger(scopeId) ||
+    scopeId < 1 ||
+    !Number.isSafeInteger(rowVersion) ||
+    rowVersion < 1
+  ) {
+    identityError("invalid_input", "The exact Arena membership reference is invalid.");
+  }
+  return { membershipUuid, scopeId, rowVersion };
+}
+
+async function lockArenaCustomMembership(
+  connection: PoolConnection,
+  input: {
+    target: ArenaIdentityGroupTargetRow;
+    steamId: string;
+    reference: ReturnType<typeof exactArenaMembershipReference>;
+  },
+) {
+  const groupId = Number(input.target.arena_group_id);
+  const scopeId = Number(input.target.scope_id);
+  if (input.reference && input.reference.scopeId !== scopeId) {
+    identityError("membership_not_found", "That membership belongs to another Arena scope.");
+  }
+  const [rows] = await connection.query<ArenaIdentityMembershipMutationRow[]>(
+    input.reference
+      ? "SELECT membership_uuid, group_id, scope_id, steam_id, starts_at, expires_at, " +
+          "status, provenance_type, source_inventory_item_id, row_version " +
+          "FROM arena_group_memberships WHERE membership_uuid = ? AND group_id = ? " +
+          "AND scope_id = ? AND steam_id = ? LIMIT 1 FOR UPDATE"
+      : "SELECT membership_uuid, group_id, scope_id, steam_id, starts_at, expires_at, " +
+          "status, provenance_type, source_inventory_item_id, row_version " +
+          "FROM arena_group_memberships WHERE group_id = ? AND scope_id = ? " +
+          "AND steam_id = ? LIMIT 1 FOR UPDATE",
+    input.reference
+      ? [input.reference.membershipUuid, groupId, scopeId, input.steamId]
+      : [groupId, scopeId, input.steamId],
+  );
+  const membership = rows[0] ?? null;
+  if (
+    membership &&
+    input.reference &&
+    Number(membership.row_version) !== input.reference.rowVersion
+  ) {
+    identityError(
+      "membership_not_found",
+      "That Arena membership changed. Refresh before trying again.",
+    );
+  }
+  return membership;
+}
+
+async function writeArenaCustomMembershipOutbox(
+  connection: PoolConnection,
+  input: {
+    action: "assigned" | "extended" | "revoked";
+    membershipUuid: string;
+    groupId: number;
+    portalGroupId: number;
+    scopeId: number;
+    steamId: string;
+    startsAt: Date | string;
+    expiresAt: Date | string | null;
+    status: "active" | "revoked";
+    rowVersion: number;
+    actorSteamId: string;
+    reason: string | null;
+  },
+) {
+  const deduplicationKey =
+    `custom-membership:${input.membershipUuid}:${input.rowVersion}:${input.action}`;
+  await connection.execute(
+    "INSERT INTO arena_membership_outbox " +
+      "(event_uuid, deduplication_key, event_type, aggregate_type, aggregate_key, " +
+      "membership_uuid, steam_id, group_id, scope_id, payload) " +
+      "VALUES (?, ?, ?, 'arena_group_membership', ?, ?, ?, ?, ?, ?)",
+    [
+      randomUUID().toLowerCase(),
+      deduplicationKey,
+      `identity.group_membership.${input.action}`,
+      input.membershipUuid,
+      input.membershipUuid,
+      input.steamId,
+      input.groupId,
+      input.scopeId,
+      JSON.stringify({
+        schemaVersion: 1,
+        action: input.action,
+        groupType: "custom",
+        membershipUuid: input.membershipUuid,
+        legacyPortalGroupId: input.portalGroupId,
+        steamId: input.steamId,
+        arenaGroupId: input.groupId,
+        scopeId: input.scopeId,
+        startsAt: toIso(input.startsAt),
+        expiresAt: toIso(input.expiresAt),
+        status: input.status,
+        rowVersion: input.rowVersion,
+        actorSteamId: input.actorSteamId,
+        reason: input.reason,
+      }),
+    ],
+  );
+}
+
+async function reconcileCustomMembershipRewardsFailSoft(
+  steamId: string,
+  requestKey: string,
+) {
+  try {
+    return await reconcileIdentityGroupRewards({
+      steamId,
+      requestKey: `${requestKey.slice(0, 100)}:arena`,
+    });
+  } catch (error) {
+    console.error(
+      "Arena custom membership committed; portal reward reconciliation is pending",
+      error,
+    );
+    return null;
+  }
+}
+
+async function updateArenaGroupPresentationProjection(input: {
+  projection: Pick<IdentityGroupRow, "id" | "group_key" | "source_type">;
+  displayName: string;
+  description: string | null;
+  badgeLabel: string;
+  badgeIconKey: string;
+  badgeColor: string;
+  badgeSoftColor: string;
+  profilePriority: number;
+  enabled: boolean;
+  actorSteamId: string;
+}) {
+  return withArenaIdentityTransaction(async (connection) => {
+    const group = await lockArenaGroupForProjection(connection, input.projection);
+    const [result] = await connection.execute<ResultSetHeader>(
+      "UPDATE arena_groups SET display_name = ?, description = ?, badge_label = ?, " +
+        "badge_icon_key = ?, badge_color = ?, badge_soft_color = ?, profile_priority = ?, " +
+        "rank_weight = CASE WHEN group_type = 'custom' THEN ? ELSE rank_weight END, " +
+        "enabled = ?, updated_by_actor = ?, row_version = row_version + 1 " +
+        "WHERE id = ? AND row_version = ?",
+      [
+        input.displayName,
+        input.description,
+        input.badgeLabel,
+        input.badgeIconKey,
+        input.badgeColor,
+        input.badgeSoftColor,
+        input.profilePriority,
+        input.profilePriority,
+        input.enabled,
+        input.actorSteamId,
+        Number(group.arena_group_id),
+        Number(group.row_version),
+      ],
+    );
+    if (result.affectedRows !== 1) {
+      identityError(
+        "group_not_found",
+        "That Arena group changed. Refresh before saving its presentation.",
+      );
+    }
+    return { arenaGroupId: Number(group.arena_group_id) };
+  });
+}
+
+async function synchronizeArenaGroupPrivileges(
+  groupId: number,
+  actorSteamId: string,
+) {
+  const projection = await readPortalGroupProjection(groupId);
+  const pool = getIdentityPool();
+  if (!pool) {
+    identityError(
+      "storage_unavailable",
+      "The portal privilege projection is unavailable.",
+    );
+  }
+  const [rows] = await pool.query<
+    Array<RowDataPacket & { privilege_key: string; scope: IdentityPrivilegeScope }>
+  >(
+    "SELECT privilege.privilege_key, privilege.scope " +
+      "FROM portal_identity_group_privileges AS link " +
+      "INNER JOIN portal_identity_privileges AS privilege ON privilege.id = link.privilege_id " +
+      "WHERE link.group_id = ? AND privilege.enabled = TRUE " +
+      "ORDER BY privilege.scope, privilege.privilege_key, privilege.id",
+    [groupId],
+  );
+  const capabilityKeys = uniqueStrings(
+    rows.map((row) => String(row.privilege_key)),
+  );
+  const baselinePermissions = uniqueStrings(
+    rows
+      .filter((row) => row.scope === "game")
+      .map((row) => String(row.privilege_key)),
+  );
+  await withArenaIdentityTransaction(async (connection) => {
+    const group = await lockArenaGroupForProjection(connection, projection);
+    const definition = asRecord(group.definition);
+    const runtimeBaseline = group.group_type === "admin"
+      ? asStringArray(definition.permissions)
+      : [];
+    const runtimeCapabilities = group.group_type === "admin"
+      ? runtimeBaseline
+      : group.group_type === "vip"
+        ? Object.keys(definition).filter(
+            (key) => key !== "migrationSource" && key !== "portalPrivileges",
+          )
+        : [];
+    const nextDefinition = {
+      ...definition,
+      portalPrivileges: rows.map((row) => ({
+        key: String(row.privilege_key),
+        scope: row.scope,
+      })),
+    };
+    const [updated] = await connection.execute<ResultSetHeader>(
+      "UPDATE arena_groups SET definition = ?, baseline_permissions = ?, capability_keys = ?, " +
+        "updated_by_actor = ?, row_version = row_version + 1 " +
+        "WHERE id = ? AND row_version = ?",
+      [
+        JSON.stringify(nextDefinition),
+        JSON.stringify(uniqueStrings([...runtimeBaseline, ...baselinePermissions])),
+        JSON.stringify(uniqueStrings([...runtimeCapabilities, ...capabilityKeys])),
+        actorSteamId,
+        Number(group.arena_group_id),
+        Number(group.row_version),
+      ],
+    );
+    if (updated.affectedRows !== 1) {
+      identityError(
+        "group_not_found",
+        "That Arena group changed while its privileges were being synchronized.",
+      );
+    }
+  });
+}
+
 async function writeIdentityAudit(
   connection: PoolConnection,
   input: {
@@ -728,6 +1207,94 @@ async function disableIdentityGroupListings(
 const identityGroupSelect =
   "SELECT g.id, g.group_key, g.display_name, g.source_type, g.external_key, g.description, g.badge_label, g.badge_icon_key, g.badge_color, g.badge_soft_color, g.profile_priority, g.enabled";
 
+async function readArenaIdentityAdminMemberships(): Promise<{
+  available: boolean;
+  rows: IdentityMembershipRow[];
+}> {
+  const pool = getGameDatabasePool();
+  if (!pool) return { available: false, rows: [] };
+  try {
+    const [rows] = await pool.query<IdentityMembershipRow[]>(
+      "SELECT arena_group.legacy_portal_group_id AS group_id, membership.steam_id, " +
+        "membership.starts_at, " +
+        "CASE WHEN arena_group.group_type = 'vip' THEN vip_subscription.expires_at " +
+        "ELSE membership.expires_at END AS expires_at, membership.grant_reason, " +
+        "membership.membership_uuid, arena_group.id AS arena_group_id, " +
+        "membership.scope_id, scope.scope_key, scope.display_name AS scope_name, " +
+        "scope.scope_type, membership.row_version " +
+        "FROM arena_group_memberships AS membership " +
+        "INNER JOIN arena_groups AS arena_group ON arena_group.id = membership.group_id " +
+        "INNER JOIN arena_group_scopes AS group_scope ON group_scope.group_id = membership.group_id " +
+        "AND group_scope.scope_id = membership.scope_id " +
+        "INNER JOIN arena_scopes AS scope ON scope.id = membership.scope_id " +
+        "LEFT JOIN arena_vip_subscriptions AS vip_subscription " +
+        "ON vip_subscription.steam_id = membership.steam_id " +
+        "AND vip_subscription.scope_id = membership.scope_id " +
+        "AND vip_subscription.vip_family_key = arena_group.vip_family_key " +
+        "AND vip_subscription.group_id = membership.group_id " +
+        "AND vip_subscription.membership_uuid = membership.membership_uuid " +
+        "AND vip_subscription.status = 'active' " +
+        "AND vip_subscription.starts_at <= CURRENT_TIMESTAMP(6) " +
+        "AND (vip_subscription.expires_at IS NULL OR vip_subscription.expires_at > CURRENT_TIMESTAMP(6)) " +
+        "WHERE arena_group.legacy_portal_group_id IS NOT NULL " +
+        "AND membership.status = 'active' " +
+        "AND membership.starts_at <= CURRENT_TIMESTAMP(6) " +
+        "AND (membership.expires_at IS NULL OR membership.expires_at > CURRENT_TIMESTAMP(6)) " +
+        "AND (arena_group.group_type <> 'vip' OR vip_subscription.steam_id IS NOT NULL) " +
+        "ORDER BY arena_group.legacy_portal_group_id, membership.starts_at DESC, " +
+        "membership.steam_id, membership.scope_id, membership.membership_uuid",
+    );
+    return { available: true, rows };
+  } catch (error) {
+    if (arenaIdentityStorageMissing(error)) return { available: false, rows: [] };
+    throw error;
+  }
+}
+
+async function readArenaActiveGroupMemberSteamIds(groupId: number): Promise<{
+  available: boolean;
+  steamIds: string[];
+}> {
+  const pool = getGameDatabasePool();
+  if (!pool) return { available: false, steamIds: [] };
+  try {
+    const [rows] = await pool.query<Array<RowDataPacket & { steam_id: string }>>(
+      "SELECT DISTINCT membership.steam_id " +
+        "FROM arena_group_memberships AS membership " +
+        "INNER JOIN arena_groups AS arena_group ON arena_group.id = membership.group_id " +
+        "INNER JOIN arena_group_scopes AS group_scope ON group_scope.group_id = membership.group_id " +
+        "AND group_scope.scope_id = membership.scope_id " +
+        "INNER JOIN arena_scopes AS scope ON scope.id = membership.scope_id " +
+        "LEFT JOIN arena_vip_subscriptions AS vip_subscription " +
+        "ON vip_subscription.steam_id = membership.steam_id " +
+        "AND vip_subscription.scope_id = membership.scope_id " +
+        "AND vip_subscription.vip_family_key = arena_group.vip_family_key " +
+        "AND vip_subscription.group_id = membership.group_id " +
+        "AND vip_subscription.membership_uuid = membership.membership_uuid " +
+        "AND vip_subscription.status = 'active' " +
+        "AND vip_subscription.starts_at <= CURRENT_TIMESTAMP(6) " +
+        "AND (vip_subscription.expires_at IS NULL OR vip_subscription.expires_at > CURRENT_TIMESTAMP(6)) " +
+        "WHERE arena_group.legacy_portal_group_id = ? " +
+        "AND arena_group.enabled = TRUE AND group_scope.enabled = TRUE AND scope.enabled = TRUE " +
+        "AND membership.status = 'active' " +
+        "AND membership.starts_at <= CURRENT_TIMESTAMP(6) " +
+        "AND (membership.expires_at IS NULL OR membership.expires_at > CURRENT_TIMESTAMP(6)) " +
+        "AND (arena_group.group_type <> 'vip' OR vip_subscription.steam_id IS NOT NULL) " +
+        "ORDER BY membership.steam_id",
+      [groupId],
+    );
+    return {
+      available: true,
+      steamIds: rows.map((row) => String(row.steam_id)),
+    };
+  } catch (error) {
+    if (arenaIdentityStorageMissing(error)) {
+      return { available: false, steamIds: [] };
+    }
+    throw error;
+  }
+}
+
 export async function getIdentityAdminSnapshot(): Promise<IdentityAdminSnapshot> {
   const pool = getIdentityPool();
   if (!pool) {
@@ -758,11 +1325,13 @@ export async function getIdentityAdminSnapshot(): Promise<IdentityAdminSnapshot>
     );
   }
 
+  const arenaMemberships = await readArenaIdentityAdminMemberships();
+
   const [groupRows, tagRows, privilegeRows, groupTagRows, groupPrivilegeRows, rewardRows, membershipRows, directTagRows, directPrivilegeRows, externalDefinitionRows, privilegeSourceRows, catalogueStatus] =
     await Promise.all([
       pool.query<IdentityGroupRow[]>(
         identityGroupSelect +
-          ", (SELECT COUNT(*) FROM portal_identity_group_memberships AS m WHERE m.group_id = g.id AND m.revoked_at IS NULL AND m.starts_at <= CURRENT_TIMESTAMP AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)) AS member_count " +
+          ", 0 AS member_count " +
           "FROM portal_identity_groups AS g ORDER BY g.profile_priority DESC, g.display_name, g.id",
       ),
       pool.query<IdentityTagRow[]>(
@@ -780,9 +1349,9 @@ export async function getIdentityAdminSnapshot(): Promise<IdentityAdminSnapshot>
       pool.query<IdentityRewardRow[]>(
         "SELECT rewards.id, rewards.group_id, rewards.catalogue_id, catalogue.display_name, rewards.quantity, rewards.trade_policy, rewards.enabled FROM portal_identity_group_rewards AS rewards INNER JOIN portal_economy_catalogue AS catalogue ON catalogue.id = rewards.catalogue_id ORDER BY rewards.group_id, rewards.enabled DESC, catalogue.display_name, rewards.id",
       ),
-      pool.query<IdentityMembershipRow[]>(
-        "SELECT group_id, steam_id, starts_at, expires_at, grant_reason FROM portal_identity_group_memberships WHERE revoked_at IS NULL AND starts_at <= CURRENT_TIMESTAMP AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP) ORDER BY group_id, starts_at DESC, steam_id",
-      ),
+      Promise.resolve([
+        arenaMemberships.available ? arenaMemberships.rows : [],
+      ] as [IdentityMembershipRow[]]),
       pool.query<IdentityPlayerTagGrantRow[]>(
         "SELECT assigned.steam_id, assigned.starts_at, assigned.expires_at, assigned.grant_reason, tags.id, tags.tag_key, tags.tag_text, tags.color_token, tags.name_color_token, tags.message_color_token, tags.enabled FROM portal_identity_player_chat_tags AS assigned INNER JOIN portal_identity_chat_tags AS tags ON tags.id = assigned.tag_id WHERE assigned.revoked_at IS NULL AND assigned.starts_at <= CURRENT_TIMESTAMP AND (assigned.expires_at IS NULL OR assigned.expires_at > CURRENT_TIMESTAMP) ORDER BY assigned.starts_at DESC, assigned.steam_id, tags.id",
       ),
@@ -848,12 +1417,28 @@ export async function getIdentityAdminSnapshot(): Promise<IdentityAdminSnapshot>
     });
   }
   for (const row of membershipRows[0]) {
-    groupsById.get(Number(row.group_id))?.memberships.push({
+    const group = groupsById.get(Number(row.group_id));
+    if (!group) continue;
+    group.memberships.push({
       steamId: String(row.steam_id),
       startsAt: toIso(row.starts_at) ?? new Date(0).toISOString(),
       expiresAt: toIso(row.expires_at),
       grantReason: row.grant_reason ? String(row.grant_reason) : null,
+      membershipUuid: row.membership_uuid ? String(row.membership_uuid) : null,
+      arenaGroupId: row.arena_group_id === null || row.arena_group_id === undefined
+        ? null
+        : Number(row.arena_group_id),
+      scopeId: row.scope_id === null || row.scope_id === undefined
+        ? null
+        : Number(row.scope_id),
+      scopeKey: row.scope_key ? String(row.scope_key) : null,
+      scopeName: row.scope_name ? String(row.scope_name) : null,
+      scopeType: row.scope_type ?? null,
+      rowVersion: row.row_version === null || row.row_version === undefined
+        ? null
+        : Number(row.row_version),
     });
+    group.memberCount += 1;
   }
 
   return {
@@ -1033,36 +1618,213 @@ type NativeVipSuppressionRow = RowDataPacket & {
   steam_id: string;
 };
 
-function isMissingNativeVipSuppressionStorage(error: unknown) {
-  const candidate = error as { code?: unknown; errno?: unknown };
-  return candidate.code === "ER_NO_SUCH_TABLE" ||
-    candidate.errno === 1146 ||
-    candidate.code === "ER_BAD_FIELD_ERROR" ||
-    candidate.errno === 1054;
+type ArenaAuthorityMembershipRow = RowDataPacket & {
+  steam_id: string;
+  legacy_portal_group_id: number | string | null;
+  group_type: "admin" | "vip" | "custom";
+  vip_family_key: string | null;
+  arena_group_id: number | string;
+  scope_id: number | string;
+  scope_type: "global" | "server";
+  effective_rank: number | string;
+  membership_uuid: string;
+  expires_at: Date | string | null;
+};
+
+type ArenaAuthorityMembership = {
+  portalGroupId: number;
+  expiresAt: Date | string | null;
+};
+
+type ArenaAuthorityMembershipSnapshot = {
+  available: boolean;
+  membershipsBySteamId: Map<string, Map<number, ArenaAuthorityMembership>>;
+  suppressedLegacyVipSteamIds: Set<string>;
+};
+
+const arenaMembershipReadBatchSize = 500;
+
+function configuredVipServerId() {
+  const configured = Number.parseInt(process.env.GAME_VIP_SERVER_ID ?? "1", 10);
+  return Number.isSafeInteger(configured) && configured >= 0 ? configured : 1;
 }
 
-async function getActiveNativeVipSuppressions(
-  executor: Pick<Pool, "query"> | Pick<PoolConnection, "query">,
-  steamIds: string[],
-  options: { lock?: boolean } = {},
+function unavailableArenaAuthorityMembershipSnapshot(): ArenaAuthorityMembershipSnapshot {
+  return {
+    available: false,
+    membershipsBySteamId: new Map(),
+    suppressedLegacyVipSteamIds: new Set(),
+  };
+}
+
+function laterArenaMembershipExpiry(
+  current: ArenaAuthorityMembership,
+  candidate: ArenaAuthorityMembership,
 ) {
-  if (!steamIds.length) return new Set<string>();
-  try {
-    const [rows] = await executor.query<NativeVipSuppressionRow[]>(
-      "SELECT steam_id FROM portal_vip_membership_conversion_state " +
-        `WHERE steam_id IN (${steamIds.map(() => "?").join(", ")}) ` +
-        "AND (native_suppressed_permanently = TRUE OR native_suppressed_until > CURRENT_TIMESTAMP) " +
-        "ORDER BY steam_id" +
-        (options.lock ? " FOR UPDATE" : ""),
-      steamIds,
-    );
-    return new Set(rows.map((row) => String(row.steam_id)));
-  } catch (error) {
-    // Identity pages remain compatible while migration 022 is being staged.
-    // Activation itself still fails closed until the migration is installed.
-    if (isMissingNativeVipSuppressionStorage(error)) return new Set<string>();
-    throw error;
+  if (current.expiresAt === null || candidate.expiresAt === null) {
+    return current.expiresAt === null ? current : candidate;
   }
+  return new Date(candidate.expiresAt).getTime() >
+    new Date(current.expiresAt).getTime()
+    ? candidate
+    : current;
+}
+
+function preferArenaVipMembership(
+  candidate: ArenaAuthorityMembershipRow,
+  current: ArenaAuthorityMembershipRow,
+) {
+  const candidateRank = Number(candidate.effective_rank);
+  const currentRank = Number(current.effective_rank);
+  if (candidateRank !== currentRank) return candidateRank > currentRank;
+  const candidateServerScope = candidate.scope_type === "server";
+  const currentServerScope = current.scope_type === "server";
+  if (candidateServerScope !== currentServerScope) return candidateServerScope;
+  const candidateGroupId = Number(candidate.arena_group_id);
+  const currentGroupId = Number(current.arena_group_id);
+  if (candidateGroupId !== currentGroupId) return candidateGroupId < currentGroupId;
+  const candidateScopeId = Number(candidate.scope_id);
+  const currentScopeId = Number(current.scope_id);
+  if (candidateScopeId !== currentScopeId) return candidateScopeId < currentScopeId;
+  return candidate.membership_uuid.localeCompare(current.membership_uuid) < 0;
+}
+
+/**
+ * Reads the arena authority in batches, then returns portal IDs only after the
+ * game-host query has completed. No query crosses the physical DB boundary.
+ * A successful empty read is authoritative; only an unavailable pool or a
+ * failed arena query permits the caller to use legacy portal memberships.
+ */
+async function getArenaAuthorityMembershipsForPlayers(
+  requestedSteamIds: string[],
+): Promise<ArenaAuthorityMembershipSnapshot> {
+  const steamIds = [...new Set(requestedSteamIds.map((steamId) =>
+    identitySteamId(steamId),
+  ))];
+  if (!steamIds.length) {
+    return {
+      available: true,
+      membershipsBySteamId: new Map(),
+      suppressedLegacyVipSteamIds: new Set(),
+    };
+  }
+  const pool = getGameDatabasePool();
+  if (!pool) return unavailableArenaAuthorityMembershipSnapshot();
+
+  const membershipRows: ArenaAuthorityMembershipRow[] = [];
+  const suppressedLegacyVipSteamIds = new Set<string>();
+  const serverGuid = configuredGameServerGuid();
+  const vipServerId = configuredVipServerId();
+  try {
+    for (
+      let offset = 0;
+      offset < steamIds.length;
+      offset += arenaMembershipReadBatchSize
+    ) {
+      const batch = steamIds.slice(offset, offset + arenaMembershipReadBatchSize);
+      const placeholders = batch.map(() => "?").join(", ");
+      const scopePredicate =
+        "(scope.scope_type = 'global' OR (scope.scope_type = 'server' AND " +
+        "(LOWER(scope.admin_server_guid) = LOWER(?) OR scope.vip_server_id = ?)))";
+      const [[activeRows], [suppressionRows]] = await Promise.all([
+        pool.query<ArenaAuthorityMembershipRow[]>(
+          "SELECT membership.steam_id, arena_group.legacy_portal_group_id, " +
+            "arena_group.group_type, arena_group.vip_family_key, arena_group.id AS arena_group_id, " +
+            "membership.scope_id, scope.scope_type, " +
+            "COALESCE(group_scope.rank_weight_override, arena_group.rank_weight) AS effective_rank, " +
+            "membership.membership_uuid, " +
+            "CASE WHEN arena_group.group_type = 'vip' THEN vip_subscription.expires_at ELSE membership.expires_at END AS expires_at " +
+            "FROM arena_group_memberships AS membership " +
+            "INNER JOIN arena_groups AS arena_group ON arena_group.id = membership.group_id AND arena_group.enabled = TRUE " +
+            "INNER JOIN arena_group_scopes AS group_scope ON group_scope.group_id = membership.group_id " +
+            "AND group_scope.scope_id = membership.scope_id AND group_scope.enabled = TRUE " +
+            "INNER JOIN arena_scopes AS scope ON scope.id = membership.scope_id AND scope.enabled = TRUE " +
+            "LEFT JOIN arena_vip_subscriptions AS vip_subscription ON vip_subscription.steam_id = membership.steam_id " +
+            "AND vip_subscription.scope_id = membership.scope_id " +
+            "AND vip_subscription.vip_family_key = arena_group.vip_family_key " +
+            "AND vip_subscription.group_id = membership.group_id " +
+            "AND vip_subscription.membership_uuid = membership.membership_uuid " +
+            "AND vip_subscription.status = 'active' " +
+            "AND vip_subscription.starts_at <= CURRENT_TIMESTAMP(6) " +
+            "AND (vip_subscription.expires_at IS NULL OR vip_subscription.expires_at > CURRENT_TIMESTAMP(6)) " +
+            `WHERE membership.steam_id IN (${placeholders}) ` +
+            "AND membership.status = 'active' " +
+            "AND membership.starts_at <= CURRENT_TIMESTAMP(6) " +
+            "AND (membership.expires_at IS NULL OR membership.expires_at > CURRENT_TIMESTAMP(6)) " +
+            `AND ${scopePredicate} ` +
+            "AND (arena_group.group_type <> 'vip' OR vip_subscription.steam_id IS NOT NULL) " +
+            "AND NOT (arena_group.group_type = 'admin' AND LOWER(TRIM(COALESCE(arena_group.external_key, ''))) = 'founder') " +
+            "ORDER BY membership.steam_id, arena_group.group_type, arena_group.vip_family_key, " +
+            "effective_rank DESC, scope.scope_type DESC, arena_group.id, membership.scope_id",
+          [...batch, serverGuid, vipServerId],
+        ),
+        pool.query<NativeVipSuppressionRow[]>(
+          "SELECT DISTINCT vip_subscription.steam_id " +
+            "FROM arena_vip_subscriptions AS vip_subscription " +
+            "INNER JOIN arena_scopes AS scope ON scope.id = vip_subscription.scope_id AND scope.enabled = TRUE " +
+            `WHERE vip_subscription.steam_id IN (${placeholders}) ` +
+            "AND (vip_subscription.legacy_suppressed_permanently = TRUE " +
+            "OR vip_subscription.legacy_suppressed_until > CURRENT_TIMESTAMP(6)) " +
+            `AND ${scopePredicate} ORDER BY vip_subscription.steam_id`,
+          [...batch, serverGuid, vipServerId],
+        ),
+      ]);
+      membershipRows.push(...activeRows);
+      for (const row of suppressionRows) {
+        suppressedLegacyVipSteamIds.add(String(row.steam_id));
+      }
+    }
+  } catch {
+    return unavailableArenaAuthorityMembershipSnapshot();
+  }
+
+  const membershipsBySteamId = new Map<
+    string,
+    Map<number, ArenaAuthorityMembership>
+  >();
+  const selectedVipByPlayerFamily = new Map<
+    string,
+    ArenaAuthorityMembershipRow
+  >();
+  const addMembership = (row: ArenaAuthorityMembershipRow) => {
+    const portalGroupId = Number(row.legacy_portal_group_id);
+    if (!Number.isSafeInteger(portalGroupId) || portalGroupId < 1) return;
+    const steamId = String(row.steam_id);
+    const memberships = membershipsBySteamId.get(steamId) ?? new Map();
+    const candidate = {
+      portalGroupId,
+      expiresAt: row.expires_at,
+    } satisfies ArenaAuthorityMembership;
+    const current = memberships.get(portalGroupId);
+    memberships.set(
+      portalGroupId,
+      current ? laterArenaMembershipExpiry(current, candidate) : candidate,
+    );
+    membershipsBySteamId.set(steamId, memberships);
+  };
+
+  for (const row of membershipRows) {
+    const steamId = String(row.steam_id);
+    if (row.group_type !== "vip") {
+      addMembership(row);
+      continue;
+    }
+    suppressedLegacyVipSteamIds.add(steamId);
+    const family = String(row.vip_family_key ?? "").trim();
+    if (!family) continue;
+    const key = `${steamId}\0${family}`;
+    const current = selectedVipByPlayerFamily.get(key);
+    if (!current || preferArenaVipMembership(row, current)) {
+      selectedVipByPlayerFamily.set(key, row);
+    }
+  }
+  for (const row of selectedVipByPlayerFamily.values()) addMembership(row);
+
+  return {
+    available: true,
+    membershipsBySteamId,
+    suppressedLegacyVipSteamIds,
+  };
 }
 
 function toIdentityGroupBadgeData(
@@ -1124,37 +1886,40 @@ export async function getEffectiveIdentityGroupBadgesForPlayers(
     const steamIds = [...consolidated.keys()];
     if (!steamIds.length) return groupsBySteamId;
     const steamPlaceholders = steamIds.map(() => "?").join(", ");
-    const [[externalRows], [membershipRows], suppressedNativeVipSteamIds] = await Promise.all([
-      pool.query<IdentityGroupRow[]>(
-        identityGroupSelect +
-          " FROM portal_identity_groups AS g " +
-          "INNER JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = g.id " +
-          "WHERE g.enabled = TRUE AND g.source_type IN ('admins_core', 'vipcore') " +
-          "ORDER BY g.profile_priority DESC, g.display_name, g.id",
+    const arenaMemberships =
+      await getArenaAuthorityMembershipsForPlayers(steamIds);
+    const arenaPortalGroupIds = [
+      ...new Set(
+        [...arenaMemberships.membershipsBySteamId.values()].flatMap(
+          (memberships) => [...memberships.keys()],
+        ),
       ),
-      pool.query<IdentityGroupMembershipBadgeRow[]>(
-        identityGroupSelect +
-          ", membership.steam_id FROM portal_identity_groups AS g " +
-          "INNER JOIN portal_identity_group_memberships AS membership ON membership.group_id = g.id " +
-          "LEFT JOIN portal_vip_membership_conversion_state AS vip_conversion_state " +
-          "ON vip_conversion_state.steam_id COLLATE utf8mb4_unicode_ci = membership.steam_id COLLATE utf8mb4_unicode_ci AND vip_conversion_state.group_id = membership.group_id " +
-          "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = g.id " +
-          "WHERE g.enabled = TRUE AND (g.source_type = 'custom' OR external_definition.group_id IS NOT NULL) AND membership.steam_id IN (" +
-          steamPlaceholders +
-          ") AND membership.revoked_at IS NULL AND membership.starts_at <= CURRENT_TIMESTAMP " +
-          "AND NOT (g.source_type = 'admins_core' AND LOWER(TRIM(COALESCE(g.external_key, ''))) = 'founder') " +
-          "AND (membership.expires_at IS NULL OR membership.expires_at > CURRENT_TIMESTAMP) " +
-          "AND (g.source_type <> 'vipcore' OR (" +
-          "vip_conversion_state.steam_id IS NOT NULL " +
-          "AND (vip_conversion_state.entitlement_expires_at IS NULL OR vip_conversion_state.entitlement_expires_at > CURRENT_TIMESTAMP) " +
-          "AND ((vip_conversion_state.entitlement_expires_at IS NULL AND membership.expires_at IS NULL) " +
-          "OR (vip_conversion_state.entitlement_expires_at IS NOT NULL AND membership.expires_at IS NOT NULL " +
-          "AND ABS(TIMESTAMPDIFF(SECOND, vip_conversion_state.entitlement_expires_at, membership.expires_at)) <= 1)))) " +
-          "ORDER BY g.profile_priority DESC, g.display_name, g.id",
-        steamIds,
-      ),
-      getActiveNativeVipSuppressions(pool, steamIds),
-    ]);
+    ];
+    const [externalRows, arenaGroupRows, suppressedNativeVipSteamIds] =
+      await Promise.all([
+        pool.query<IdentityGroupRow[]>(
+          identityGroupSelect +
+            " FROM portal_identity_groups AS g " +
+            "INNER JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = g.id " +
+            "WHERE g.enabled = TRUE AND g.source_type IN ('admins_core', 'vipcore') " +
+            "ORDER BY g.profile_priority DESC, g.display_name, g.id",
+        ).then(([rows]) => rows),
+        arenaMemberships.available && arenaPortalGroupIds.length
+          ? pool.query<IdentityGroupRow[]>(
+              identityGroupSelect +
+                " FROM portal_identity_groups AS g " +
+                `WHERE g.enabled = TRUE AND g.id IN (${arenaPortalGroupIds.map(() => "?").join(", ")}) ` +
+                "AND NOT (g.source_type = 'admins_core' AND LOWER(TRIM(COALESCE(g.external_key, ''))) = 'founder') " +
+                "ORDER BY g.profile_priority DESC, g.display_name, g.id",
+              arenaPortalGroupIds,
+            ).then(([rows]) => rows)
+          : Promise.resolve([] as IdentityGroupRow[]),
+        Promise.resolve(
+          arenaMemberships.available
+            ? arenaMemberships.suppressedLegacyVipSteamIds
+            : new Set<string>(),
+        ),
+      ]);
 
     const addGroup = (steamId: string, row: IdentityGroupRow) => {
       const groups = groupsBySteamId.get(steamId);
@@ -1162,11 +1927,17 @@ export async function getEffectiveIdentityGroupBadgesForPlayers(
       groups.push(toIdentityGroupBadgeData(row));
     };
 
-    // Portal-purchased memberships use this same timed entitlement table for
-    // custom, VIPCore, and Admins.Core groups. External plug-in membership
-    // names remain additive below and are still the only source of Founder
-    // authorization.
-    for (const row of membershipRows) addGroup(String(row.steam_id), row);
+    if (arenaMemberships.available) {
+      const arenaGroupsByPortalId = new Map(
+        arenaGroupRows.map((row) => [Number(row.id), row]),
+      );
+      for (const [steamId, memberships] of arenaMemberships.membershipsBySteamId) {
+        for (const groupId of memberships.keys()) {
+          const row = arenaGroupsByPortalId.get(groupId);
+          if (row) addGroup(steamId, row);
+        }
+      }
+    }
 
     const externalByKey = new Map<string, IdentityGroupRow>();
     for (const row of externalRows) {
@@ -1236,72 +2007,76 @@ async function getEffectiveGroupRows(
   },
 ) {
   const steamId = identitySteamId(input.steamId);
-  const suppressedNativeVipSteamIds = input.vipGroupNames?.length
-    ? await getActiveNativeVipSuppressions(executor, [steamId])
-    : new Set<string>();
-  const vipNames = suppressedNativeVipSteamIds.has(steamId)
-    ? []
-    : normalizeExternalNames(input.vipGroupNames);
-  const adminNames = normalizeExternalNames(input.adminGroupNames);
-  const externalClauses: string[] = [];
-  const externalValues: unknown[] = [];
-  if (vipNames.length) {
-    externalClauses.push(
-      "(g.source_type = 'vipcore' AND g.external_key IN (" +
-        vipNames.map(() => "?").join(", ") +
-        "))",
-    );
-    externalValues.push(...vipNames);
-  }
-  if (adminNames.length) {
-    externalClauses.push(
-      "(g.source_type = 'admins_core' AND g.external_key IN (" +
-        adminNames.map(() => "?").join(", ") +
-        "))",
-    );
-    externalValues.push(...adminNames);
-  }
-  const externalSql = externalClauses.length
-    ? " OR " + externalClauses.join(" OR ")
-    : "";
-  const [rows] = await executor.query<IdentityGroupRow[]>(
-    identityGroupSelect +
-      ", membership.group_id IS NOT NULL AS has_portal_membership, membership.expires_at AS membership_expires_at " +
-      "FROM portal_identity_groups AS g " +
-      "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = g.id " +
-      "LEFT JOIN portal_identity_group_memberships AS membership ON membership.group_id = g.id AND membership.steam_id = ? " +
-      "AND membership.revoked_at IS NULL AND membership.starts_at <= CURRENT_TIMESTAMP AND (membership.expires_at IS NULL OR membership.expires_at > CURRENT_TIMESTAMP) " +
-      "LEFT JOIN portal_vip_membership_conversion_state AS vip_conversion_state " +
-      "ON vip_conversion_state.steam_id COLLATE utf8mb4_unicode_ci = membership.steam_id COLLATE utf8mb4_unicode_ci AND vip_conversion_state.group_id = membership.group_id " +
-      "WHERE g.enabled = TRUE AND (g.source_type = 'custom' OR external_definition.group_id IS NOT NULL) " +
-      "AND ((membership.group_id IS NOT NULL " +
-      "AND NOT (g.source_type = 'admins_core' AND LOWER(TRIM(COALESCE(g.external_key, ''))) = 'founder') " +
-      "AND (g.source_type <> 'vipcore' OR (" +
-      "vip_conversion_state.steam_id IS NOT NULL " +
-      "AND (vip_conversion_state.entitlement_expires_at IS NULL OR vip_conversion_state.entitlement_expires_at > CURRENT_TIMESTAMP) " +
-      "AND ((vip_conversion_state.entitlement_expires_at IS NULL AND membership.expires_at IS NULL) " +
-      "OR (vip_conversion_state.entitlement_expires_at IS NOT NULL AND membership.expires_at IS NOT NULL " +
-      "AND ABS(TIMESTAMPDIFF(SECOND, vip_conversion_state.entitlement_expires_at, membership.expires_at)) <= 1)))))" +
-      externalSql +
-      ") ORDER BY g.profile_priority DESC, g.display_name, g.id" +
-      (input.lock ? " FOR UPDATE" : ""),
-    [steamId, ...externalValues],
-  );
-  if (!input.lock || !vipNames.length) return rows;
+  const arenaMemberships =
+    await getArenaAuthorityMembershipsForPlayers([steamId]);
+  if (arenaMemberships.available) {
+    const memberships =
+      arenaMemberships.membershipsBySteamId.get(steamId) ?? new Map();
+    const vipNames = arenaMemberships.suppressedLegacyVipSteamIds.has(steamId)
+      ? []
+      : normalizeExternalNames(input.vipGroupNames);
+    const adminNames = normalizeExternalNames(input.adminGroupNames);
+    const selectionClauses: string[] = [];
+    const selectionValues: unknown[] = [];
+    if (memberships.size) {
+      selectionClauses.push(
+        `g.id IN (${[...memberships.keys()].map(() => "?").join(", ")})`,
+      );
+      selectionValues.push(...memberships.keys());
+    }
+    const externalClauses: string[] = [];
+    if (vipNames.length) {
+      externalClauses.push(
+        "(g.source_type = 'vipcore' AND g.external_key IN (" +
+          vipNames.map(() => "?").join(", ") +
+          "))",
+      );
+      selectionValues.push(...vipNames);
+    }
+    if (adminNames.length) {
+      externalClauses.push(
+        "(g.source_type = 'admins_core' AND g.external_key IN (" +
+          adminNames.map(() => "?").join(", ") +
+          "))",
+      );
+      selectionValues.push(...adminNames);
+    }
+    if (externalClauses.length) {
+      selectionClauses.push(
+        "(external_definition.group_id IS NOT NULL AND (" +
+          externalClauses.join(" OR ") +
+          "))",
+      );
+    }
+    if (!selectionClauses.length) return [] as IdentityGroupRow[];
 
-  // Activation locks VIP group rows before its conversion-state row. Recheck
-  // suppression with a current locking read only after taking the same group
-  // locks, so a concurrent first conversion cannot leave this transaction
-  // using the stale pre-conversion snapshot without inverting lock order.
-  const currentSuppressedNativeVipSteamIds =
-    await getActiveNativeVipSuppressions(executor, [steamId], { lock: true });
-  if (!currentSuppressedNativeVipSteamIds.has(steamId)) return rows;
+    const [rows] = await executor.query<IdentityGroupRow[]>(
+      identityGroupSelect +
+        ", FALSE AS has_portal_membership, NULL AS membership_expires_at " +
+        "FROM portal_identity_groups AS g " +
+        "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = g.id " +
+        "WHERE g.enabled = TRUE AND (" +
+        selectionClauses.join(" OR ") +
+        ") ORDER BY g.profile_priority DESC, g.display_name, g.id" +
+        (input.lock ? " FOR UPDATE" : ""),
+      selectionValues,
+    );
+    return rows.map((row) => {
+      const membership = memberships.get(Number(row.id));
+      return membership
+        ? {
+            ...row,
+            has_portal_membership: true,
+            membership_expires_at: membership.expiresAt,
+          }
+        : row;
+    });
+  }
 
-  // Suppression applies only to raw VIPCore names. A portal membership remains
-  // authoritative even when it targets the same VIPCore identity group.
-  return rows.filter(
-    (row) => row.source_type !== "vipcore" || asBoolean(row.has_portal_membership),
-  );
+  // Arena is the only live membership authority. An unavailable or
+  // incomplete Arena schema must remove group-derived access from this read,
+  // never resurrect the rollback-only Portal snapshot.
+  return [] as IdentityGroupRow[];
 }
 
 async function getEffectiveIdentityUnsafe(input: {
@@ -1439,8 +2214,129 @@ export async function createIdentityGroup(input: {
     -32_768,
     32_767,
   );
+  const portalPool = getIdentityPool();
+  if (!portalPool) {
+    identityError(
+      "storage_unavailable",
+      "The portal presentation database is not configured.",
+    );
+  }
+  const [existingProjectionRows] = await portalPool.query<IdentityGroupRow[]>(
+    "SELECT id, group_key, display_name, source_type, external_key, description, " +
+      "badge_label, badge_icon_key, badge_color, badge_soft_color, profile_priority, enabled " +
+      "FROM portal_identity_groups WHERE group_key = ? LIMIT 1",
+    [key],
+  );
+  const existingProjection = existingProjectionRows[0] ?? null;
+  if (existingProjection && existingProjection.source_type !== "custom") {
+    identityError("group_exists", "A connected group already uses that stable key.");
+  }
 
-  return withIdentityTransaction(async (connection) => {
+  const arenaGroup = await withArenaIdentityTransaction(async (connection) => {
+    const [existingRows] = await connection.query<ArenaIdentityGroupTargetRow[]>(
+      "SELECT id AS arena_group_id, group_uuid, legacy_portal_group_id, group_key, " +
+        "group_type, external_key, enabled, row_version FROM arena_groups " +
+        "WHERE group_key = ? LIMIT 1 FOR UPDATE",
+      [key],
+    );
+    const scope = await lockArenaGlobalScope(connection);
+    if (existingRows[0]) {
+      const existing = existingRows[0];
+      if (
+        existing.group_type !== "custom" ||
+        existing.legacy_portal_group_id !== null
+      ) {
+        identityError("group_exists", "An Arena group already uses that stable key.");
+      }
+      await connection.execute(
+        "UPDATE arena_groups SET legacy_portal_group_id = ?, display_name = ?, " +
+          "description = ?, badge_label = ?, badge_icon_key = ?, badge_color = ?, " +
+          "badge_soft_color = ?, profile_priority = ?, rank_weight = ?, enabled = TRUE, " +
+          "updated_by_actor = ?, row_version = row_version + 1 WHERE id = ?",
+        [
+          existingProjection ? Number(existingProjection.id) : null,
+          displayName,
+          description,
+          badgeLabel,
+          badgeIconKey,
+          badgeColor,
+          badgeSoftColor,
+          profilePriority,
+          profilePriority,
+          actorSteamId,
+          Number(existing.arena_group_id),
+        ],
+      );
+      await connection.execute(
+        "INSERT INTO arena_group_scopes " +
+          "(group_id, scope_id, definition_override, rank_weight_override, immunity_override, " +
+          "enabled, row_version, created_by_actor, updated_by_actor) " +
+          "VALUES (?, ?, NULL, NULL, NULL, TRUE, 1, ?, ?) " +
+          "ON DUPLICATE KEY UPDATE enabled = TRUE, updated_by_actor = VALUES(updated_by_actor), " +
+          "row_version = row_version + 1",
+        [Number(existing.arena_group_id), scope.scopeId, actorSteamId, actorSteamId],
+      );
+      return {
+        arenaGroupId: Number(existing.arena_group_id),
+        groupUuid: String(existing.group_uuid),
+        projectionGroupId: existingProjection
+          ? Number(existingProjection.id)
+          : null,
+      };
+    }
+    const groupUuid = randomUUID().toLowerCase();
+    const [result] = await connection.execute<ResultSetHeader>(
+      "INSERT INTO arena_groups " +
+        "(group_uuid, legacy_portal_group_id, group_key, group_type, external_key, " +
+        "vip_family_key, display_name, description, badge_label, badge_icon_key, " +
+        "badge_color, badge_soft_color, profile_priority, rank_weight, immunity, " +
+        "definition, baseline_permissions, capability_keys, enabled, row_version, " +
+        "created_by_actor, updated_by_actor) " +
+        "VALUES (?, ?, ?, 'custom', NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, TRUE, 1, ?, ?)",
+      [
+        groupUuid,
+        existingProjection ? Number(existingProjection.id) : null,
+        key,
+        displayName,
+        description,
+        badgeLabel,
+        badgeIconKey,
+        badgeColor,
+        badgeSoftColor,
+        profilePriority,
+        profilePriority,
+        JSON.stringify({ source: "arena", kind: "custom" }),
+        JSON.stringify([]),
+        JSON.stringify([]),
+        actorSteamId,
+        actorSteamId,
+      ],
+    );
+    const arenaGroupId = Number(result.insertId);
+    await connection.execute(
+      "INSERT INTO arena_group_scopes " +
+        "(group_id, scope_id, definition_override, rank_weight_override, immunity_override, " +
+        "enabled, row_version, created_by_actor, updated_by_actor) " +
+        "VALUES (?, ?, NULL, NULL, NULL, TRUE, 1, ?, ?)",
+      [arenaGroupId, scope.scopeId, actorSteamId, actorSteamId],
+    );
+    return {
+      arenaGroupId,
+      groupUuid,
+      projectionGroupId: existingProjection
+        ? Number(existingProjection.id)
+        : null,
+    };
+  });
+
+  // A prior attempt may have committed both local halves but lost the final
+  // response between them. Re-linking above makes the same stable key
+  // recoverable without creating a second authority row.
+  if (arenaGroup.projectionGroupId !== null) {
+    return { groupId: arenaGroup.projectionGroupId };
+  }
+
+  const projection = await withIdentityTransaction(async (connection) => {
     const [result] = await connection.execute<ResultSetHeader>(
       "INSERT INTO portal_identity_groups (group_key, display_name, source_type, external_key, description, badge_label, badge_icon_key, badge_color, badge_soft_color, profile_priority, enabled, created_by_steam_id) VALUES (?, ?, 'custom', NULL, ?, ?, ?, ?, ?, ?, TRUE, ?)",
       [
@@ -1462,10 +2358,36 @@ export async function createIdentityGroup(input: {
       action: "identity.group.created",
       targetType: "identity-group",
       targetId: String(groupId),
-      metadata: { key, displayName },
+      metadata: {
+        key,
+        displayName,
+        arenaGroupId: arenaGroup.arenaGroupId,
+        arenaGroupUuid: arenaGroup.groupUuid,
+      },
     });
     return { groupId };
   });
+
+  await withArenaIdentityTransaction(async (connection) => {
+    const [result] = await connection.execute<ResultSetHeader>(
+      "UPDATE arena_groups SET legacy_portal_group_id = ?, updated_by_actor = ?, " +
+        "row_version = row_version + 1 WHERE id = ? AND group_uuid = ? " +
+        "AND legacy_portal_group_id IS NULL",
+      [
+        projection.groupId,
+        actorSteamId,
+        arenaGroup.arenaGroupId,
+        arenaGroup.groupUuid,
+      ],
+    );
+    if (result.affectedRows !== 1) {
+      identityError(
+        "group_not_found",
+        "The new Arena group could not be linked to its portal presentation.",
+      );
+    }
+  });
+  return projection;
 }
 
 export async function updateIdentityGroup(input: {
@@ -1506,8 +2428,25 @@ export async function updateIdentityGroup(input: {
     -32_768,
     32_767,
   );
+  const arenaPresentationInput = {
+    projection: await readPortalGroupProjection(groupId),
+    displayName,
+    description,
+    badgeLabel,
+    badgeIconKey,
+    badgeColor,
+    badgeSoftColor,
+    profilePriority,
+    enabled: input.enabled,
+    actorSteamId,
+  };
+  // Custom groups have no second runtime definition; update their Arena row
+  // before refreshing the portal-owned presentation projection.
+  if (arenaPresentationInput.projection.source_type === "custom") {
+    await updateArenaGroupPresentationProjection(arenaPresentationInput);
+  }
 
-  return withIdentityTransaction(async (connection) => {
+  const result = await withIdentityTransaction(async (connection) => {
     const previous = await lockGroup(connection, groupId);
     const isFounderAdapter =
       previous.source_type === "admins_core" &&
@@ -1584,6 +2523,10 @@ export async function updateIdentityGroup(input: {
     });
     return { groupId, revokedItemIds };
   });
+  if (arenaPresentationInput.projection.source_type !== "custom") {
+    await updateArenaGroupPresentationProjection(arenaPresentationInput);
+  }
+  return result;
 }
 
 export async function archiveIdentityGroup(input: {
@@ -1594,7 +2537,74 @@ export async function archiveIdentityGroup(input: {
   const actorSteamId = requireFounder(input.actor);
   const requestKey = identityRequestKey(input.requestKey);
   const groupId = identityId(input.groupId, "Group ID");
-  return withIdentityTransaction(async (connection) => {
+  const projection = await readPortalGroupProjection(groupId);
+  if (projection.source_type !== "custom") {
+    identityError(
+      "external_group",
+      "External Admins.Core and VIPCore adapters cannot be archived.",
+    );
+  }
+  const arenaResult = await withArenaIdentityTransaction(async (connection) => {
+    const target = await lockArenaGlobalGroupTarget(connection, projection, {
+      requireCustom: true,
+    });
+    const arenaGroupId = Number(target.arena_group_id);
+    const [memberships] = await connection.query<
+      ArenaIdentityMembershipMutationRow[]
+    >(
+      "SELECT membership_uuid, group_id, scope_id, steam_id, starts_at, expires_at, " +
+        "status, provenance_type, source_inventory_item_id, row_version " +
+        "FROM arena_group_memberships WHERE group_id = ? " +
+        "ORDER BY membership_uuid FOR UPDATE",
+      [arenaGroupId],
+    );
+    await connection.execute(
+      "UPDATE arena_groups SET enabled = FALSE, updated_by_actor = ?, " +
+        "row_version = row_version + 1 WHERE id = ?",
+      [actorSteamId, arenaGroupId],
+    );
+    await connection.execute(
+      "UPDATE arena_group_scopes SET enabled = FALSE, updated_by_actor = ?, " +
+        "row_version = row_version + 1 WHERE group_id = ? AND enabled = TRUE",
+      [actorSteamId, arenaGroupId],
+    );
+    const revokedSteamIds = new Set<string>();
+    for (const membership of memberships) {
+      if (membership.status !== "active") continue;
+      const nextVersion = Number(membership.row_version) + 1;
+      const [updated] = await connection.execute<ResultSetHeader>(
+        "UPDATE arena_group_memberships SET status = 'revoked', " +
+          "revoked_at = CURRENT_TIMESTAMP(6), revoked_by_actor = ?, " +
+          "revoke_reason = 'group-archived', row_version = row_version + 1 " +
+          "WHERE membership_uuid = ? AND row_version = ? AND status = 'active'",
+        [actorSteamId, membership.membership_uuid, Number(membership.row_version)],
+      );
+      if (updated.affectedRows !== 1) {
+        identityError(
+          "membership_not_found",
+          "A group membership changed while the group was being archived.",
+        );
+      }
+      revokedSteamIds.add(String(membership.steam_id));
+      await writeArenaCustomMembershipOutbox(connection, {
+        action: "revoked",
+        membershipUuid: String(membership.membership_uuid),
+        groupId: arenaGroupId,
+        portalGroupId: groupId,
+        scopeId: Number(membership.scope_id),
+        steamId: String(membership.steam_id),
+        startsAt: membership.starts_at,
+        expiresAt: membership.expires_at,
+        status: "revoked",
+        rowVersion: nextVersion,
+        actorSteamId,
+        reason: "group-archived",
+      });
+    }
+    return { revokedSteamIds: [...revokedSteamIds] };
+  });
+
+  const result = await withIdentityTransaction(async (connection) => {
     const group = await lockGroup(connection, groupId);
     if (group.source_type !== "custom") {
       identityError(
@@ -1605,10 +2615,6 @@ export async function archiveIdentityGroup(input: {
     await connection.execute(
       "UPDATE portal_identity_groups SET enabled = FALSE WHERE id = ?",
       [groupId],
-    );
-    await connection.execute(
-      "UPDATE portal_identity_group_memberships SET revoked_at = COALESCE(revoked_at, CURRENT_TIMESTAMP), revoked_by_steam_id = COALESCE(revoked_by_steam_id, ?) WHERE group_id = ? AND revoked_at IS NULL",
-      [actorSteamId, groupId],
     );
     const revokedItemIds = await revokeAccountBoundRewardsForGroup(connection, {
       groupId,
@@ -1625,10 +2631,16 @@ export async function archiveIdentityGroup(input: {
       action: "identity.group.archived",
       targetType: "identity-group",
       targetId: String(groupId),
-      metadata: { key: group.group_key, revokedItemIds, disabledListings },
+      metadata: {
+        key: group.group_key,
+        arenaMembershipsRevoked: arenaResult.revokedSteamIds.length,
+        revokedItemIds,
+        disabledListings,
+      },
     });
     return { groupId, revokedItemIds };
   });
+  return result;
 }
 
 export async function assignIdentityGroup(input: {
@@ -1645,63 +2657,105 @@ export async function assignIdentityGroup(input: {
   const steamId = identitySteamId(input.steamId, "Player SteamID64");
   const expiresAt = identityExpiry(input.durationMinutes ?? 0);
   const reason = identityOptionalText(input.reason, "Grant reason", 180);
-  return withIdentityTransaction(async (connection) => {
-    const group = await lockGroup(connection, groupId);
-    if (!asBoolean(group.enabled)) {
-      identityError(
-        "group_disabled",
-        "Only an enabled group can receive portal-managed members.",
-      );
-    }
-    const externalKey = String(group.external_key ?? "").trim();
-    if (
-      group.source_type === "admins_core" &&
-      externalKey.toLocaleLowerCase("en-US") === "founder"
-    ) {
-      identityError(
-        "founder_invariant",
-        "Founder authority cannot be assigned through a portal membership.",
-      );
-    }
-    if (group.source_type === "vipcore") {
-      identityError(
-        "vip_conversion_required",
-        "VIP memberships must use the source-aware non-stackable VIP workflow.",
-      );
-    }
-    await connection.execute(
-      "INSERT INTO portal_identity_group_memberships (group_id, steam_id, starts_at, expires_at, granted_by_steam_id, grant_reason, revoked_at, revoked_by_steam_id) VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?, ?, NULL, NULL) " +
-        "ON DUPLICATE KEY UPDATE starts_at = CURRENT_TIMESTAMP, expires_at = VALUES(expires_at), granted_by_steam_id = VALUES(granted_by_steam_id), grant_reason = VALUES(grant_reason), revoked_at = NULL, revoked_by_steam_id = NULL",
-      [groupId, steamId, expiresAt, actorSteamId, reason],
-    );
-    const rewardResult = await applyIdentityGroupMembershipRewards(connection, {
-      groupId,
-      steamId,
-      actorSteamId,
-      reason: "group-membership-assigned",
+  const projection = await readPortalGroupProjection(groupId);
+  const authority = await withArenaIdentityTransaction(async (connection) => {
+    const target = await lockArenaGlobalGroupTarget(connection, projection, {
+      requireCustom: true,
+      requireEnabled: true,
     });
-    await writeIdentityAudit(connection, {
-      requestKey: `${requestKey}:membership-assign`,
+    const existing = await lockArenaCustomMembership(connection, {
+      target,
+      steamId,
+      reference: null,
+    });
+    if (existing && existing.status !== "active" && existing.status !== "revoked") {
+      identityError(
+        "membership_not_found",
+        "That Arena membership is in a state that must be resolved before reassignment.",
+      );
+    }
+    const now = new Date();
+    const membershipUuid = existing
+      ? String(existing.membership_uuid)
+      : randomUUID().toLowerCase();
+    let rowVersion = 1;
+    if (existing) {
+      rowVersion = Number(existing.row_version) + 1;
+      const [updated] = await connection.execute<ResultSetHeader>(
+        "UPDATE arena_group_memberships SET starts_at = ?, expires_at = ?, status = 'active', " +
+          "provenance_type = CASE WHEN source_inventory_item_id IS NULL THEN 'staff' ELSE provenance_type END, " +
+          "provenance_reference = CASE WHEN source_inventory_item_id IS NULL THEN ? ELSE provenance_reference END, " +
+          "origin_command_uuid = CASE WHEN source_inventory_item_id IS NULL THEN NULL ELSE origin_command_uuid END, " +
+          "granted_by_actor = ?, grant_reason = ?, revoked_at = NULL, revoked_by_actor = NULL, " +
+          "revoke_reason = NULL, row_version = row_version + 1 " +
+          "WHERE membership_uuid = ? AND row_version = ?",
+        [
+          now,
+          expiresAt,
+          `staff-custom:${groupId}`,
+          actorSteamId,
+          reason,
+          membershipUuid,
+          Number(existing.row_version),
+        ],
+      );
+      if (updated.affectedRows !== 1) {
+        identityError(
+          "membership_not_found",
+          "That Arena membership changed. Refresh before assigning it.",
+        );
+      }
+    } else {
+      await connection.execute(
+        "INSERT INTO arena_group_memberships " +
+          "(membership_uuid, group_id, scope_id, steam_id, starts_at, expires_at, status, " +
+          "provenance_type, provenance_reference, granted_by_actor, grant_reason, row_version) " +
+          "VALUES (?, ?, ?, ?, ?, ?, 'active', 'staff', ?, ?, ?, 1)",
+        [
+          membershipUuid,
+          Number(target.arena_group_id),
+          Number(target.scope_id),
+          steamId,
+          now,
+          expiresAt,
+          `staff-custom:${groupId}`,
+          actorSteamId,
+          reason,
+        ],
+      );
+    }
+    await writeArenaCustomMembershipOutbox(connection, {
+      action: "assigned",
+      membershipUuid,
+      groupId: Number(target.arena_group_id),
+      portalGroupId: groupId,
+      scopeId: Number(target.scope_id),
+      steamId,
+      startsAt: now,
+      expiresAt,
+      status: "active",
+      rowVersion,
       actorSteamId,
-      action: "identity.membership.assigned",
-      targetType: "steam-player",
-      targetId: steamId,
-      metadata: {
-        groupId,
-        expiresAt: expiresAt?.toISOString() ?? null,
-        reason,
-        awardedItemIds: rewardResult.awardedItemIds,
-        restoredItemIds: rewardResult.restoredItemIds,
-        reactivatedItemIds: rewardResult.reactivatedItemIds,
-      },
+      reason,
     });
     return {
       groupId,
       steamId,
-      awardedItemIds: rewardResult.awardedItemIds,
-      restoredItemIds: rewardResult.restoredItemIds,
+      membershipUuid,
+      scopeId: Number(target.scope_id),
+      rowVersion,
     };
   });
+  const rewards = await reconcileCustomMembershipRewardsFailSoft(
+    steamId,
+    `${requestKey}:membership-assign`,
+  );
+  return {
+    ...authority,
+    awardedItemIds: rewards?.awardedItemIds ?? [],
+    restoredItemIds: rewards?.restoredItemIds ?? [],
+    rewardSyncPending: rewards === null,
+  };
 }
 
 export async function removeIdentityGroupMembership(input: {
@@ -1709,60 +2763,73 @@ export async function removeIdentityGroupMembership(input: {
   requestKey: string;
   groupId: number;
   steamId: string;
+  membershipUuid?: string | null;
+  scopeId?: number | null;
+  rowVersion?: number | null;
 }) {
   const actorSteamId = requireFounder(input.actor);
   const requestKey = identityRequestKey(input.requestKey);
   const groupId = identityId(input.groupId, "Group ID");
   const steamId = identitySteamId(input.steamId, "Player SteamID64");
-  return withIdentityTransaction(async (connection) => {
-    const group = await lockGroup(connection, groupId);
-    if (
-      group.source_type === "admins_core" &&
-      String(group.external_key ?? "").trim().toLocaleLowerCase("en-US") === "founder"
-    ) {
-      identityError(
-        "founder_invariant",
-        "Founder authority cannot be removed through a portal membership.",
-      );
+  const reference = exactArenaMembershipReference(input);
+  const projection = await readPortalGroupProjection(groupId);
+  const authority = await withArenaIdentityTransaction(async (connection) => {
+    const target = await lockArenaGlobalGroupTarget(connection, projection, {
+      requireCustom: true,
+    });
+    const membership = await lockArenaCustomMembership(connection, {
+      target,
+      steamId,
+      reference,
+    });
+    if (!membership || membership.status !== "active") {
+      identityError("membership_not_found", "That Arena membership is no longer active.");
     }
-    if (group.source_type === "vipcore") {
-      identityError(
-        "vip_conversion_required",
-        "VIP memberships must use the source-aware non-stackable VIP workflow.",
-      );
-    }
-    const [result] = await connection.execute<ResultSetHeader>(
-      "UPDATE portal_identity_group_memberships SET revoked_at = CURRENT_TIMESTAMP, revoked_by_steam_id = ? WHERE group_id = ? AND steam_id = ? AND revoked_at IS NULL",
-      [actorSteamId, groupId, steamId],
+    const rowVersion = Number(membership.row_version) + 1;
+    const [updated] = await connection.execute<ResultSetHeader>(
+      "UPDATE arena_group_memberships SET status = 'revoked', revoked_at = CURRENT_TIMESTAMP(6), " +
+        "revoked_by_actor = ?, revoke_reason = 'staff-removed', row_version = row_version + 1 " +
+        "WHERE membership_uuid = ? AND row_version = ? AND status = 'active'",
+      [actorSteamId, membership.membership_uuid, Number(membership.row_version)],
     );
-    const revokedItemIds =
-      result.affectedRows > 0
-        ? await revokeAccountBoundRewardsForGroup(connection, {
-            groupId,
-            steamId,
-            actorSteamId,
-            reason: "group-membership-revoked",
-          })
-        : [];
-    await writeIdentityAudit(connection, {
-      requestKey: `${requestKey}:membership-remove`,
+    if (updated.affectedRows !== 1) {
+      identityError(
+        "membership_not_found",
+        "That Arena membership changed. Refresh before removing it.",
+      );
+    }
+    await writeArenaCustomMembershipOutbox(connection, {
+      action: "revoked",
+      membershipUuid: String(membership.membership_uuid),
+      groupId: Number(target.arena_group_id),
+      portalGroupId: groupId,
+      scopeId: Number(target.scope_id),
+      steamId,
+      startsAt: membership.starts_at,
+      expiresAt: membership.expires_at,
+      status: "revoked",
+      rowVersion,
       actorSteamId,
-      action: "identity.membership.revoked",
-      targetType: "steam-player",
-      targetId: steamId,
-      metadata: {
-        groupId,
-        changed: result.affectedRows > 0,
-        revokedItemIds,
-      },
+      reason: "staff-removed",
     });
     return {
       groupId,
       steamId,
-      changed: result.affectedRows > 0,
-      revokedItemIds,
+      changed: true,
+      membershipUuid: String(membership.membership_uuid),
+      scopeId: Number(target.scope_id),
+      rowVersion,
     };
   });
+  const rewards = await reconcileCustomMembershipRewardsFailSoft(
+    steamId,
+    `${requestKey}:membership-remove`,
+  );
+  return {
+    ...authority,
+    revokedItemIds: rewards?.revokedItemIds ?? [],
+    rewardSyncPending: rewards === null,
+  };
 }
 
 export async function extendIdentityGroupMembership(input: {
@@ -1771,6 +2838,9 @@ export async function extendIdentityGroupMembership(input: {
   groupId: number;
   steamId: string;
   durationMinutes: number;
+  membershipUuid?: string | null;
+  scopeId?: number | null;
+  rowVersion?: number | null;
 }) {
   const actorSteamId = requireFounder(input.actor);
   const requestKey = identityRequestKey(input.requestKey);
@@ -1782,59 +2852,78 @@ export async function extendIdentityGroupMembership(input: {
     1,
     525_600,
   );
-  return withIdentityTransaction(async (connection) => {
-    const group = await lockGroup(connection, groupId);
-    if (
-      group.source_type === "admins_core" &&
-      String(group.external_key ?? "").trim().toLocaleLowerCase("en-US") === "founder"
-    ) {
-      identityError(
-        "founder_invariant",
-        "Founder authority cannot be changed through a portal membership.",
-      );
-    }
-    if (group.source_type === "vipcore") {
-      identityError(
-        "vip_conversion_required",
-        "VIP membership time must be changed through the source-aware non-stackable workflow.",
-      );
-    }
-    const [rows] = await connection.query<Array<RowDataPacket & {
-      expires_at: Date | string | null;
-      revoked_at: Date | string | null;
-    }>>(
-      "SELECT expires_at, revoked_at FROM portal_identity_group_memberships WHERE group_id = ? AND steam_id = ? LIMIT 1 FOR UPDATE",
-      [groupId, steamId],
-    );
-    const membership = rows[0];
-    if (!membership || membership.revoked_at) {
-      identityError("membership_not_found", "That portal membership is no longer active.");
+  const reference = exactArenaMembershipReference(input);
+  const projection = await readPortalGroupProjection(groupId);
+  const authority = await withArenaIdentityTransaction(async (connection) => {
+    const target = await lockArenaGlobalGroupTarget(connection, projection, {
+      requireCustom: true,
+      requireEnabled: true,
+    });
+    const membership = await lockArenaCustomMembership(connection, {
+      target,
+      steamId,
+      reference,
+    });
+    if (!membership || membership.status !== "active") {
+      identityError("membership_not_found", "That Arena membership is no longer active.");
     }
     if (membership.expires_at === null) {
       identityError("membership_permanent", "Permanent memberships do not need an extension.");
     }
     const currentExpiry = new Date(membership.expires_at).getTime();
-    const base = Math.max(Date.now(), Number.isFinite(currentExpiry) ? currentExpiry : 0);
-    const nextExpiry = new Date(base + durationMinutes * 60_000);
-    await connection.execute(
-      "UPDATE portal_identity_group_memberships SET starts_at = LEAST(starts_at, CURRENT_TIMESTAMP), expires_at = ?, revoked_at = NULL, revoked_by_steam_id = NULL, granted_by_steam_id = ? WHERE group_id = ? AND steam_id = ?",
-      [nextExpiry, actorSteamId, groupId, steamId],
+    if (!Number.isFinite(currentExpiry)) {
+      identityError("membership_not_found", "That Arena membership expiry is invalid.");
+    }
+    const nextExpiry = new Date(
+      Math.max(Date.now(), currentExpiry) + durationMinutes * 60_000,
     );
-    await writeIdentityAudit(connection, {
-      requestKey: `${requestKey}:membership-extend`,
+    const rowVersion = Number(membership.row_version) + 1;
+    const [updated] = await connection.execute<ResultSetHeader>(
+      "UPDATE arena_group_memberships SET starts_at = LEAST(starts_at, CURRENT_TIMESTAMP(6)), " +
+        "expires_at = ?, granted_by_actor = ?, row_version = row_version + 1 " +
+        "WHERE membership_uuid = ? AND row_version = ? AND status = 'active'",
+      [
+        nextExpiry,
+        actorSteamId,
+        membership.membership_uuid,
+        Number(membership.row_version),
+      ],
+    );
+    if (updated.affectedRows !== 1) {
+      identityError(
+        "membership_not_found",
+        "That Arena membership changed. Refresh before extending it.",
+      );
+    }
+    await writeArenaCustomMembershipOutbox(connection, {
+      action: "extended",
+      membershipUuid: String(membership.membership_uuid),
+      groupId: Number(target.arena_group_id),
+      portalGroupId: groupId,
+      scopeId: Number(target.scope_id),
+      steamId,
+      startsAt: membership.starts_at,
+      expiresAt: nextExpiry,
+      status: "active",
+      rowVersion,
       actorSteamId,
-      action: "identity.membership.extended",
-      targetType: "steam-player",
-      targetId: steamId,
-      metadata: {
-        groupId,
-        durationMinutes,
-        previousExpiresAt: new Date(currentExpiry).toISOString(),
-        expiresAt: nextExpiry.toISOString(),
-      },
+      reason: `staff-extension:${durationMinutes}`,
     });
-    return { groupId, steamId, expiresAt: nextExpiry.toISOString() };
+    return {
+      groupId,
+      steamId,
+      membershipUuid: String(membership.membership_uuid),
+      scopeId: Number(target.scope_id),
+      rowVersion,
+      previousExpiresAt: new Date(currentExpiry).toISOString(),
+      expiresAt: nextExpiry.toISOString(),
+    };
   });
+  const rewards = await reconcileCustomMembershipRewardsFailSoft(
+    steamId,
+    `${requestKey}:membership-extend`,
+  );
+  return { ...authority, rewardSyncPending: rewards === null };
 }
 
 export async function createIdentityChatTag(input: {
@@ -2119,7 +3208,14 @@ export async function updateIdentityPrivilege(input: {
     "Privilege description",
     255,
   );
-  return withIdentityTransaction(async (connection) => {
+  const result = await withIdentityTransaction(async (connection) => {
+    const [groupRows] = await connection.query<
+      Array<RowDataPacket & { group_id: number | string }>
+    >(
+      "SELECT group_id FROM portal_identity_group_privileges " +
+        "WHERE privilege_id = ? ORDER BY group_id FOR UPDATE",
+      [privilegeId],
+    );
     const [result] = await connection.execute<ResultSetHeader>(
       "UPDATE portal_identity_privileges SET display_name = ?, description = ?, is_sensitive = ?, enabled = ? WHERE id = ?",
       [displayName, description, input.sensitive, input.enabled, privilegeId],
@@ -2135,8 +3231,15 @@ export async function updateIdentityPrivilege(input: {
       targetId: String(privilegeId),
       metadata: { displayName, sensitive: input.sensitive, enabled: input.enabled },
     });
-    return { privilegeId };
+    return {
+      privilegeId,
+      groupIds: groupRows.map((row) => Number(row.group_id)),
+    };
   });
+  for (const groupId of result.groupIds) {
+    await synchronizeArenaGroupPrivileges(groupId, actorSteamId);
+  }
+  return { privilegeId: result.privilegeId };
 }
 
 export async function attachIdentityGroupPrivilege(input: {
@@ -2149,7 +3252,7 @@ export async function attachIdentityGroupPrivilege(input: {
   const requestKey = identityRequestKey(input.requestKey);
   const groupId = identityId(input.groupId, "Group ID");
   const privilegeId = identityId(input.privilegeId, "Privilege ID");
-  return withIdentityTransaction(async (connection) => {
+  const result = await withIdentityTransaction(async (connection) => {
     await lockGroup(connection, groupId);
     await requireEnabledDefinition(
       connection,
@@ -2171,6 +3274,8 @@ export async function attachIdentityGroupPrivilege(input: {
     });
     return { groupId, privilegeId };
   });
+  await synchronizeArenaGroupPrivileges(groupId, actorSteamId);
+  return result;
 }
 
 export async function detachIdentityGroupPrivilege(input: {
@@ -2183,7 +3288,7 @@ export async function detachIdentityGroupPrivilege(input: {
   const requestKey = identityRequestKey(input.requestKey);
   const groupId = identityId(input.groupId, "Group ID");
   const privilegeId = identityId(input.privilegeId, "Privilege ID");
-  return withIdentityTransaction(async (connection) => {
+  const result = await withIdentityTransaction(async (connection) => {
     await lockGroup(connection, groupId);
     await connection.execute(
       "DELETE FROM portal_identity_group_privileges WHERE group_id = ? AND privilege_id = ?",
@@ -2199,6 +3304,8 @@ export async function detachIdentityGroupPrivilege(input: {
     });
     return { groupId, privilegeId };
   });
+  await synchronizeArenaGroupPrivileges(groupId, actorSteamId);
+  return result;
 }
 
 export async function grantIdentityPlayerPrivilege(input: {
@@ -3026,6 +4133,13 @@ export async function addIdentityGroupReward(input: {
       ),
     ),
   ];
+  const arenaMemberSnapshot = await readArenaActiveGroupMemberSteamIds(groupId);
+  if (!arenaMemberSnapshot.available) {
+    identityError(
+      "membership_authority_unavailable",
+      "Arena group membership could not be verified. No reward was added.",
+    );
+  }
   return withIdentityTransaction(async (connection) => {
     const group = await lockGroup(connection, groupId);
     if (!asBoolean(group.enabled)) {
@@ -3060,12 +4174,9 @@ export async function addIdentityGroupReward(input: {
       [groupId, catalogueId, quantity, tradePolicy, actorSteamId],
     );
     const rewardId = Number(result.insertId);
-    const [memberRows] = await connection.query<
-      Array<RowDataPacket & { steam_id: string }>
-    >(
-      "SELECT steam_id FROM portal_identity_group_memberships WHERE group_id = ? AND revoked_at IS NULL AND starts_at <= CURRENT_TIMESTAMP AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP) ORDER BY steam_id FOR UPDATE",
-      [groupId],
-    );
+    const memberRows = arenaMemberSnapshot.steamIds.map((steamId) => ({
+      steam_id: steamId,
+    }));
     const memberSteamIds = new Set([
       ...memberRows.map((member) => String(member.steam_id)),
       ...trustedExternalMemberSteamIds,

@@ -142,7 +142,14 @@ function exactReferenceAvailable(record: StaffAdminMembershipRecord) {
   if (record.source === "portal") {
     return record.groupId !== null &&
       Number.isSafeInteger(record.groupId) &&
-      record.groupId > 0;
+      record.groupId > 0 &&
+      Boolean(record.membershipUuid) &&
+      record.scopeId !== null &&
+      Number.isSafeInteger(record.scopeId) &&
+      record.scopeId > 0 &&
+      record.rowVersion !== null &&
+      Number.isSafeInteger(record.rowVersion) &&
+      record.rowVersion > 0;
   }
   return record.adminId !== null &&
     Number.isSafeInteger(record.adminId) &&
@@ -152,9 +159,9 @@ function exactReferenceAvailable(record: StaffAdminMembershipRecord) {
 
 function exactReferenceLabel(record: StaffAdminMembershipRecord) {
   if (record.source === "portal") {
-    return record.groupId === null
-      ? "Portal group reference unavailable"
-      : `Portal group #${record.groupId}`;
+    return record.groupId === null || !record.membershipUuid || record.scopeId === null
+      ? "Arena membership reference unavailable"
+      : `Arena membership ${record.membershipUuid} · scope #${record.scopeId}`;
   }
   return record.adminId === null
     ? "Native admin row reference unavailable"
@@ -166,7 +173,9 @@ function Scope({ record }: { record: StaffAdminMembershipRecord }) {
     return (
       <span className={styles.portalScope}>
         <Globe2 aria-hidden="true" size={15} />
-        Portal-wide
+        {record.scopeName ?? (record.scopeType === "global"
+          ? "Global Arena scope"
+          : `Arena scope #${record.scopeId ?? "?"}`)}
       </span>
     );
   }
@@ -209,7 +218,12 @@ function ExactMembershipFields({
           />
         </>
       ) : (
-        <input type="hidden" name="groupId" value={record.groupId ?? ""} />
+        <>
+          <input type="hidden" name="groupId" value={record.groupId ?? ""} />
+          <input type="hidden" name="membershipUuid" value={record.membershipUuid ?? ""} />
+          <input type="hidden" name="scopeId" value={record.scopeId ?? ""} />
+          <input type="hidden" name="rowVersion" value={record.rowVersion ?? ""} />
+        </>
       )}
     </>
   );

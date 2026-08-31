@@ -44,6 +44,29 @@ export type VipTimedConversionResult = {
   timeDeductedSeconds: bigint;
 };
 
+export type VipEntitlementPrecedence = {
+  groupId: number;
+  rankWeight: number;
+  permanent: boolean;
+};
+
+/**
+ * Orders already-owned VIP entitlements using the same invariant as item
+ * activation: a permanent entitlement cannot be displaced by a timed item;
+ * within the same permanence class, the higher tier wins. The group ID is a
+ * deterministic final tie-breaker for legacy data that predates rank checks.
+ */
+export function compareVipEntitlementPrecedence(
+  left: VipEntitlementPrecedence,
+  right: VipEntitlementPrecedence,
+) {
+  if (left.permanent !== right.permanent) return left.permanent ? -1 : 1;
+  if (left.rankWeight !== right.rankWeight) {
+    return right.rankWeight - left.rankWeight;
+  }
+  return left.groupId - right.groupId;
+}
+
 export class VipMembershipConversionError extends Error {
   readonly code:
     | "invalid-value"

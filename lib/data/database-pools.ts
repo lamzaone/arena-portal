@@ -2,6 +2,11 @@ import "server-only";
 
 import mysql, { type Pool } from "mysql2/promise";
 
+import {
+  installMysqlUtcSessionInitializer,
+  MYSQL_UTC_CLIENT_TIMEZONE,
+} from "./mysql-utc-session";
+
 type ArenaDatabasePoolRegistry = {
   pools: Map<string, Pool>;
 };
@@ -30,11 +35,19 @@ function getPool(connectionUrl: string | undefined) {
     connectionLimit: connectionLimit(),
     enableKeepAlive: true,
     namedPlaceholders: false,
+    // Portal TIMESTAMP columns and Arena DATETIME(6) columns both represent
+    // UTC instants. Keep mysql2's Date encoding/decoding independent of the
+    // host process's local timezone.
+    timezone: MYSQL_UTC_CLIENT_TIMEZONE,
     // SteamID64 values exceed JavaScript's safe integer range. Returning
     // BIGINT columns as strings prevents mysql2 from rounding player IDs.
     supportBigNumbers: true,
     bigNumberStrings: true,
   });
+  // The promise pool relays raw core connections through its event emitter.
+  // Register on the core pool so the callback-style SET command is guaranteed
+  // to be queued before the connection reaches application code.
+  installMysqlUtcSessionInitializer(pool.pool);
   registry.pools.set(connectionUrl, pool);
   return pool;
 }

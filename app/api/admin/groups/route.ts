@@ -53,6 +53,10 @@ function redirect(
   if (["connected", "create", "membership", "tags", "permissions", "awards"].includes(tab)) {
     url.searchParams.set("tab", tab);
   }
+  if (tab === "membership") {
+    url.searchParams.set("assignment", "custom");
+    url.hash = "custom-assignments";
+  }
   if (groupId && /^\d+$/.test(groupId)) {
     url.searchParams.set("group", groupId);
     if (tab === "connected") url.hash = `group-${groupId}`;
@@ -66,6 +70,11 @@ function text(formData: FormData, key: string) {
 
 function number(formData: FormData, key: string) {
   return Number.parseInt(text(formData, key), 10);
+}
+
+function optionalNumber(formData: FormData, key: string) {
+  const value = text(formData, key);
+  return value && /^\d+$/.test(value) ? Number(value) : value ? Number.NaN : null;
 }
 
 function bool(formData: FormData, key: string) {
@@ -291,6 +300,9 @@ export async function POST(request: Request) {
           requestKey,
           groupId: number(formData, "groupId"),
           steamId: text(formData, "steamId"),
+          membershipUuid: text(formData, "membershipUuid") || null,
+          scopeId: optionalNumber(formData, "scopeId"),
+          rowVersion: optionalNumber(formData, "rowVersion"),
         });
         return redirectResult("notice", "membership-removed");
 
@@ -301,6 +313,9 @@ export async function POST(request: Request) {
           groupId: number(formData, "groupId"),
           steamId: text(formData, "steamId"),
           durationMinutes: number(formData, "durationMinutes"),
+          membershipUuid: text(formData, "membershipUuid") || null,
+          scopeId: optionalNumber(formData, "scopeId"),
+          rowVersion: optionalNumber(formData, "rowVersion"),
         });
         return redirectResult("notice", "membership-extended");
 

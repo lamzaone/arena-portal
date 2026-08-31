@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
+
 import {
   type PoolConnection,
   type ResultSetHeader,
@@ -7,22 +9,17 @@ import {
 } from "mysql2/promise";
 
 import {
+  configuredGameServerGuid,
   isAssignedToConfiguredGameServer,
 } from "@/lib/admin/server-scope";
+import { getGameDatabasePool } from "@/lib/data/database-pools";
 import {
-  getGameDatabasePool,
-  getPortalDatabasePool,
-} from "@/lib/data/database-pools";
-import {
-  acquireIdentityCatalogueMutationLock,
-  releaseIdentityCatalogueMutationLock,
-} from "@/lib/data/identity-catalogue-lock";
-import {
-  reconcileIdentityGroupMembershipRewardsInTransaction,
   reconcileIdentityGroupRewards,
 } from "@/lib/data/identity-groups";
 
 const maximumTimestampSeconds = 2_147_483_000;
+const arenaUuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export type StaffAdminMembershipSource = "native" | "portal";
 export type StaffAdminMembershipStatus =
@@ -40,6 +37,12 @@ export type StaffAdminMembershipRecord = {
   groupId: number | null;
   adminId: number | null;
   storedGroup: string | null;
+  membershipUuid: string | null;
+  scopeId: number | null;
+  scopeKey: string | null;
+  scopeName: string | null;
+  scopeType: "global" | "server" | null;
+  rowVersion: number | null;
   serverGuids: string[];
   startsAt: string | null;
   expiresAt: string | null;
@@ -73,6 +76,9 @@ export type StaffAdminPortalMembershipReference = {
   source: "portal";
   steamId: string;
   groupId: number;
+  membershipUuid: string;
+  scopeId: number;
+  rowVersion: number;
 };
 
 export type StaffAdminMembershipReference =
@@ -125,18 +131,28 @@ type PortalAdminMembershipRow = RowDataPacket & {
   external_key: string | null;
   group_enabled: string | number | boolean;
   rank_weight: string | number | null;
+  membership_uuid?: string;
+  arena_group_id?: string | number;
+  scope_id?: string | number;
+  scope_uuid?: string;
+  scope_key?: string;
+  scope_name?: string;
+  scope_type?: "global" | "server";
+  admin_server_guid?: string | null;
+  membership_status?: "active" | "revoked" | "superseded" | "conflict";
+  row_version?: string | number;
 };
 
-type PortalAdminDefinitionRow = RowDataPacket & {
+type ArenaAdminDefinitionRow = RowDataPacket & {
   id: string | number;
+  arena_group_id: string | number;
+  group_uuid: string;
+  scope_id: string | number;
+  scope_uuid: string;
+  scope_type: "global" | "server";
   external_key: string;
   enabled: string | number | boolean;
   rank_weight: string | number;
-};
-
-type EffectivePortalGroupRow = RowDataPacket & {
-  id: string | number;
-  external_key: string;
 };
 
 function adminMembershipError(
@@ -251,6 +267,35 @@ function asBoolean(value: unknown) {
   return value === true || value === 1 || value === "1";
 }
 
+function arenaAuthorityMissing(error: unknown) {
+  const candidate = error as { code?: unknown; errno?: unknown };
+  return candidate.code === "ER_NO_SUCH_TABLE" ||
+    candidate.errno === 1146 ||
+    candidate.code === "ER_BAD_FIELD_ERROR" ||
+    candidate.errno === 1054;
+}
+
+function deterministicArenaUuid(seed: string) {
+  const hex = createHash("sha256")
+    .update(`arena-admin-membership:${seed}`)
+    .digest("hex");
+  const bytes = hex.slice(0, 32).split("");
+  bytes[12] = "5";
+  bytes[16] = ((Number.parseInt(bytes[16], 16) & 0x3) | 0x8).toString(16);
+  const value = bytes.join("");
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
+}
+
+function preferArenaDefinitionScope(
+  candidate: Pick<PortalAdminMembershipRow, "scope_type" | "scope_id">,
+  current: Pick<PortalAdminMembershipRow, "scope_type" | "scope_id">,
+) {
+  const candidateServer = candidate.scope_type === "server";
+  const currentServer = current.scope_type === "server";
+  if (candidateServer !== currentServer) return candidateServer;
+  return Number(candidate.scope_id) < Number(current.scope_id);
+}
+
 function asDate(value: Date | string | null | undefined) {
   if (value === null || value === undefined) return null;
   const date = value instanceof Date ? value : new Date(value);
@@ -271,7 +316,12 @@ function portalStatus(
   row: PortalAdminMembershipRow,
   now = new Date(),
 ): StaffAdminMembershipStatus {
-  if (row.revoked_at !== null) return "revoked";
+  if (
+    row.revoked_at !== null ||
+    (row.membership_status !== undefined && row.membership_status !== "active")
+  ) {
+    return "revoked";
+  }
   const startsAt = asDate(row.starts_at)!;
   const expiresAt = asDate(row.expires_at);
   if (startsAt.getTime() > now.getTime()) return "scheduled";
@@ -289,32 +339,62 @@ async function readNativeAdminRows() {
   return rows;
 }
 
-async function readPortalAdminRows() {
-  const pool = getPortalDatabasePool();
-  if (!pool) return [] as PortalAdminMembershipRow[];
-  const [rows] = await pool.query<PortalAdminMembershipRow[]>(
-    "SELECT membership.group_id, membership.steam_id, membership.starts_at, membership.expires_at, " +
-      "membership.revoked_at, membership.updated_at, identity_group.display_name, identity_group.external_key, " +
-      "identity_group.enabled AS group_enabled, external_definition.rank_weight " +
-      "FROM portal_identity_group_memberships AS membership " +
-      "INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = membership.group_id " +
-      "LEFT JOIN portal_identity_external_group_definitions AS external_definition " +
-      "ON external_definition.group_id = identity_group.id " +
-      "AND external_definition.source_type COLLATE utf8mb4_unicode_ci = 'admins_core' " +
-      "AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci " +
-      "WHERE identity_group.source_type = 'admins_core' " +
-      "ORDER BY membership.steam_id, membership.group_id",
-  );
-  return rows;
+async function readArenaAdminRows(): Promise<{
+  available: boolean;
+  rows: PortalAdminMembershipRow[];
+}> {
+  const pool = getGameDatabasePool();
+  if (!pool) {
+    adminMembershipError(
+      "admin-game-storage",
+      "The arena group authority database is not configured.",
+    );
+  }
+  try {
+    const [rows] = await pool.query<PortalAdminMembershipRow[]>(
+      "SELECT membership.membership_uuid, membership.steam_id, " +
+        "membership.starts_at, membership.expires_at, membership.revoked_at, " +
+        "membership.updated_at, membership.status AS membership_status, membership.row_version, " +
+        "arena_group.id AS arena_group_id, arena_group.legacy_portal_group_id AS group_id, " +
+        "arena_group.display_name, arena_group.external_key, " +
+        "(arena_group.enabled AND group_scope.enabled AND scope.enabled) AS group_enabled, " +
+        "COALESCE(group_scope.immunity_override, arena_group.immunity) AS rank_weight, " +
+        "scope.id AS scope_id, scope.scope_uuid, scope.scope_key, " +
+        "scope.display_name AS scope_name, scope.scope_type, scope.admin_server_guid " +
+        "FROM arena_group_memberships AS membership " +
+        "INNER JOIN arena_groups AS arena_group ON arena_group.id = membership.group_id " +
+        "INNER JOIN arena_group_scopes AS group_scope ON group_scope.group_id = membership.group_id " +
+        "AND group_scope.scope_id = membership.scope_id " +
+        "INNER JOIN arena_scopes AS scope ON scope.id = membership.scope_id " +
+        "WHERE arena_group.group_type = 'admin' " +
+        "AND arena_group.legacy_portal_group_id IS NOT NULL " +
+        "AND membership.provenance_type <> 'legacy_admins' " +
+        "AND (scope.scope_type = 'global' OR (scope.scope_type = 'server' " +
+        "AND LOWER(scope.admin_server_guid) = LOWER(?))) " +
+        "ORDER BY membership.steam_id, arena_group.legacy_portal_group_id, " +
+        "scope.scope_type DESC, scope.id",
+      [configuredGameServerGuid()],
+    );
+    // Do not collapse by legacy group ID: the same group can be held in both
+    // global and server scopes, and each row must remain independently mutable.
+    return { available: true, rows };
+  } catch (error) {
+    if (arenaAuthorityMissing(error)) return { available: false, rows: [] };
+    throw error;
+  }
 }
 
 export async function getStaffAdminMembershipSnapshot(): Promise<
   StaffAdminMembershipSnapshot
 > {
-  const [nativeRows, portalRows] = await Promise.all([
+  const [nativeRows, arenaRows] = await Promise.all([
     readNativeAdminRows(),
-    readPortalAdminRows(),
+    readArenaAdminRows(),
   ]);
+  // `source: "portal"` and the portal-shaped group ID remain an API/UI
+  // compatibility contract. Arena is the only live membership authority;
+  // an unavailable rolling-upgrade schema fails closed to no managed rows.
+  const portalRows = arenaRows.available ? arenaRows.rows : [];
   const nativeNames = new Map<string, string>();
   const nativeRecords: StaffAdminMembershipRecord[] = [];
   for (const row of nativeRows) {
@@ -339,6 +419,12 @@ export async function getStaffAdminMembershipSnapshot(): Promise<
         groupId: null,
         adminId,
         storedGroup,
+        membershipUuid: null,
+        scopeId: null,
+        scopeKey: null,
+        scopeName: null,
+        scopeType: null,
+        rowVersion: null,
         serverGuids,
         startsAt: null,
         expiresAt: null,
@@ -367,8 +453,36 @@ export async function getStaffAdminMembershipSnapshot(): Promise<
         "A portal Admin group immunity is invalid.",
       );
     }
+    let membershipUuid: string | null = null;
+    let scopeId: number | null = null;
+    let scopeKey: string | null = null;
+    let scopeName: string | null = null;
+    let scopeType: "global" | "server" | null = null;
+    let rowVersion: number | null = null;
+    let serverGuids: string[] = [];
+    if (arenaRows.available) {
+      const identity = requireArenaMembershipIdentity(row);
+      membershipUuid = identity.membershipUuid;
+      scopeId = identity.scopeId;
+      rowVersion = identity.rowVersion;
+      scopeKey = String(row.scope_key ?? "").trim();
+      scopeName = String(row.scope_name ?? "").trim();
+      scopeType = row.scope_type === "global" || row.scope_type === "server"
+        ? row.scope_type
+        : null;
+      const serverGuid = String(row.admin_server_guid ?? "").trim();
+      if (!scopeKey || !scopeName || scopeType === null) {
+        adminMembershipError(
+          "admin-membership-stale",
+          "An arena Admin membership scope is invalid.",
+        );
+      }
+      serverGuids = serverGuid ? [serverGuid] : [];
+    }
     return {
-      recordKey: `portal:${steamId}:${groupId}`,
+      recordKey: membershipUuid
+        ? `portal:${membershipUuid}`
+        : `portal-fallback:${steamId}:${groupId}`,
       source: "portal",
       steamId,
       name: nativeNames.get(steamId) ?? `Steam ${steamId}`,
@@ -376,7 +490,13 @@ export async function getStaffAdminMembershipSnapshot(): Promise<
       groupId,
       adminId: null,
       storedGroup: null,
-      serverGuids: [],
+      membershipUuid,
+      scopeId,
+      scopeKey,
+      scopeName,
+      scopeType,
+      rowVersion,
+      serverGuids,
       startsAt: toIso(row.starts_at),
       expiresAt: toIso(row.expires_at),
       updatedAt: toIso(row.updated_at),
@@ -445,62 +565,6 @@ async function withGameTransaction<T>(
   }
 }
 
-async function withPortalTransaction<T>(
-  targetSteamId: string,
-  work: (connection: PoolConnection) => Promise<T>,
-) {
-  const pool = getPortalDatabasePool();
-  if (!pool) {
-    adminMembershipError(
-      "admin-portal-storage",
-      "The portal identity database is not configured.",
-    );
-  }
-  const connection = await pool.getConnection();
-  let catalogueLockAcquired = false;
-  try {
-    catalogueLockAcquired =
-      await acquireIdentityCatalogueMutationLock(connection);
-    if (!catalogueLockAcquired) {
-      adminMembershipError(
-        "admin-portal-storage",
-        "The connected-group catalogue is busy. Retry this action shortly.",
-      );
-    }
-    await connection.beginTransaction();
-    await connection.execute(
-      "INSERT INTO portal_token_accounts (steam_id) VALUES (?) " +
-        "ON DUPLICATE KEY UPDATE steam_id = VALUES(steam_id)",
-      [targetSteamId],
-    );
-    await connection.query(
-      "SELECT steam_id FROM portal_token_accounts WHERE steam_id = ? FOR UPDATE",
-      [targetSteamId],
-    );
-    const result = await work(connection);
-    await connection.commit();
-    return result;
-  } catch (error) {
-    try {
-      await connection.rollback();
-    } catch {
-      // Preserve the original mutation error.
-    }
-    throw error;
-  } finally {
-    let connectionDiscarded = false;
-    if (catalogueLockAcquired) {
-      try {
-        await releaseIdentityCatalogueMutationLock(connection);
-      } catch {
-        connection.destroy();
-        connectionDiscarded = true;
-      }
-    }
-    if (!connectionDiscarded) connection.release();
-  }
-}
-
 async function lockScopedNativeAdminContext(
   connection: PoolConnection,
   steamIdInput: string,
@@ -547,40 +611,67 @@ async function lockScopedNativeAdminContext(
   };
 }
 
-async function lockPortalAdminContext(
+async function lockArenaAdminContext(
   connection: PoolConnection,
   steamId: string,
 ) {
-  const [definitions] = await connection.query<PortalAdminDefinitionRow[]>(
-    "SELECT identity_group.id, identity_group.external_key, identity_group.enabled, " +
-      "external_definition.rank_weight " +
-      "FROM portal_identity_groups AS identity_group " +
-      "INNER JOIN portal_identity_external_group_definitions AS external_definition " +
-      "ON external_definition.group_id = identity_group.id " +
-      "AND external_definition.source_type COLLATE utf8mb4_unicode_ci = 'admins_core' " +
-      "AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci " +
-      "WHERE identity_group.source_type = 'admins_core' " +
-      "ORDER BY identity_group.id FOR UPDATE",
+  const serverGuid = configuredGameServerGuid();
+  const [definitionRows] = await connection.query<ArenaAdminDefinitionRow[]>(
+    "SELECT arena_group.legacy_portal_group_id AS id, " +
+      "arena_group.id AS arena_group_id, arena_group.group_uuid, " +
+      "arena_group.external_key, TRUE AS enabled, " +
+      "COALESCE(group_scope.immunity_override, arena_group.immunity) AS rank_weight, " +
+      "scope.id AS scope_id, scope.scope_uuid, scope.scope_key, " +
+      "scope.display_name AS scope_name, scope.scope_type, scope.admin_server_guid " +
+      "FROM arena_groups AS arena_group " +
+      "INNER JOIN arena_group_scopes AS group_scope ON group_scope.group_id = arena_group.id " +
+      "INNER JOIN arena_scopes AS scope ON scope.id = group_scope.scope_id " +
+      "WHERE arena_group.group_type = 'admin' " +
+      "AND arena_group.legacy_portal_group_id IS NOT NULL " +
+      "AND arena_group.enabled = TRUE AND group_scope.enabled = TRUE AND scope.enabled = TRUE " +
+      "AND (scope.scope_type = 'global' OR (scope.scope_type = 'server' " +
+      "AND LOWER(scope.admin_server_guid) = LOWER(?))) " +
+      "ORDER BY arena_group.legacy_portal_group_id, scope.scope_type DESC, scope.id " +
+      "FOR UPDATE",
+    [serverGuid],
   );
   const [memberships] = await connection.query<PortalAdminMembershipRow[]>(
-    "SELECT membership.group_id, membership.steam_id, membership.starts_at, membership.expires_at, " +
-      "membership.revoked_at, membership.updated_at, identity_group.display_name, identity_group.external_key, " +
-      "identity_group.enabled AS group_enabled, external_definition.rank_weight " +
-      "FROM portal_identity_group_memberships AS membership " +
-      "INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = membership.group_id " +
-      "LEFT JOIN portal_identity_external_group_definitions AS external_definition " +
-      "ON external_definition.group_id = identity_group.id " +
-      "AND external_definition.source_type COLLATE utf8mb4_unicode_ci = 'admins_core' " +
-      "AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci " +
-      "WHERE membership.steam_id = ? AND identity_group.source_type = 'admins_core' " +
-      "ORDER BY membership.group_id FOR UPDATE",
-    [steamId],
+    "SELECT membership.membership_uuid, membership.steam_id, membership.starts_at, " +
+      "membership.expires_at, membership.revoked_at, membership.updated_at, " +
+      "membership.status AS membership_status, membership.row_version, " +
+      "arena_group.legacy_portal_group_id AS group_id, arena_group.id AS arena_group_id, " +
+      "arena_group.display_name, arena_group.external_key, " +
+      "(arena_group.enabled AND group_scope.enabled AND scope.enabled) AS group_enabled, " +
+      "COALESCE(group_scope.immunity_override, arena_group.immunity) AS rank_weight, " +
+      "scope.id AS scope_id, scope.scope_uuid, scope.scope_type " +
+      "FROM arena_group_memberships AS membership " +
+      "INNER JOIN arena_groups AS arena_group ON arena_group.id = membership.group_id " +
+      "INNER JOIN arena_group_scopes AS group_scope ON group_scope.group_id = membership.group_id " +
+      "AND group_scope.scope_id = membership.scope_id " +
+      "INNER JOIN arena_scopes AS scope ON scope.id = membership.scope_id " +
+      "WHERE membership.steam_id = ? AND arena_group.group_type = 'admin' " +
+      "AND arena_group.legacy_portal_group_id IS NOT NULL " +
+      "AND membership.provenance_type <> 'legacy_admins' " +
+      "AND (scope.scope_type = 'global' OR (scope.scope_type = 'server' " +
+      "AND LOWER(scope.admin_server_guid) = LOWER(?))) " +
+      "ORDER BY arena_group.legacy_portal_group_id, scope.scope_type DESC, scope.id " +
+      "FOR UPDATE",
+    [steamId, serverGuid],
   );
+  const definitionsByPortalId = new Map<number, ArenaAdminDefinitionRow>();
+  for (const definition of definitionRows) {
+    const portalGroupId = Number(definition.id);
+    const current = definitionsByPortalId.get(portalGroupId);
+    if (!current || preferArenaDefinitionScope(definition, current)) {
+      definitionsByPortalId.set(portalGroupId, definition);
+    }
+  }
+  const definitions = [...definitionsByPortalId.values()];
   return { definitions, memberships };
 }
 
 function requireEnabledDefinition(
-  definitions: PortalAdminDefinitionRow[],
+  definitions: ArenaAdminDefinitionRow[],
   groupId: number,
 ) {
   const definition = definitions.find((row) => Number(row.id) === groupId);
@@ -599,11 +690,18 @@ function requireEnabledDefinition(
   return definition;
 }
 
-function requireMutablePortalMembership(
+function requireMutableArenaMembership(
   memberships: PortalAdminMembershipRow[],
-  groupId: number,
+  reference: Pick<
+    StaffAdminPortalMembershipReference,
+    "groupId" | "membershipUuid" | "scopeId" | "rowVersion"
+  >,
 ) {
-  const membership = memberships.find((row) => Number(row.group_id) === groupId);
+  const membership = memberships.find((row) =>
+    String(row.membership_uuid ?? "") === reference.membershipUuid &&
+    Number(row.scope_id) === reference.scopeId &&
+    Number(row.group_id) === reference.groupId
+  );
   if (!membership) {
     adminMembershipError(
       "admin-membership-not-found",
@@ -614,6 +712,13 @@ function requireMutablePortalMembership(
     adminMembershipError(
       "admin-membership-founder",
       "Founder authority cannot be assigned, extended, or removed through a portal membership.",
+    );
+  }
+  const identity = requireArenaMembershipIdentity(membership);
+  if (identity.rowVersion !== reference.rowVersion) {
+    adminMembershipError(
+      "admin-membership-stale",
+      "That arena Admin membership changed before it could be managed. Refresh before retrying.",
     );
   }
   return membership;
@@ -637,7 +742,7 @@ function requireRankWithinActor(rankValue: unknown, actorImmunity: number) {
 }
 
 function requireLiveRuntimeDefinition(
-  portalDefinition: Pick<PortalAdminDefinitionRow, "external_key">,
+  portalDefinition: { external_key: string | null },
   runtimeDefinitions: RuntimeAdminGroupRow[],
 ) {
   const identity = groupIdentity(portalDefinition.external_key);
@@ -663,13 +768,10 @@ function requireLiveRuntimeDefinition(
 }
 
 function requirePortalTargetWithinActor(
-  context: Awaited<ReturnType<typeof lockPortalAdminContext>>,
+  context: Awaited<ReturnType<typeof lockArenaAdminContext>>,
   runtimeDefinitions: RuntimeAdminGroupRow[],
   actorImmunity: number,
 ) {
-  const definitionsById = new Map(
-    context.definitions.map((definition) => [Number(definition.id), definition]),
-  );
   for (const membership of context.memberships) {
     if (portalStatus(membership) !== "active") continue;
     if (isFounderGroup(membership.external_key)) {
@@ -679,61 +781,115 @@ function requirePortalTargetWithinActor(
       );
     }
     if (!asBoolean(membership.group_enabled)) continue;
-    const definition = definitionsById.get(Number(membership.group_id));
-    if (!definition || !asBoolean(definition.enabled)) continue;
     const liveDefinition = requireLiveRuntimeDefinition(
-      definition,
+      membership,
       runtimeDefinitions,
     );
     requireRankWithinActor(liveDefinition.immunity, actorImmunity);
   }
 }
 
-async function reconcilePortalAdminRewards(
+function requireArenaDefinitionIdentity(definition: ArenaAdminDefinitionRow) {
+  const arenaGroupId = Number(definition.arena_group_id);
+  const scopeId = Number(definition.scope_id);
+  if (
+    !Number.isSafeInteger(arenaGroupId) ||
+    arenaGroupId < 1 ||
+    !Number.isSafeInteger(scopeId) ||
+    scopeId < 1 ||
+    !arenaUuidPattern.test(String(definition.group_uuid)) ||
+    !arenaUuidPattern.test(String(definition.scope_uuid))
+  ) {
+    adminMembershipError(
+      "admin-membership-stale",
+      "The connected arena Admin group mapping is invalid.",
+    );
+  }
+  return {
+    arenaGroupId,
+    scopeId,
+    groupUuid: String(definition.group_uuid),
+    scopeUuid: String(definition.scope_uuid),
+  };
+}
+
+function requireArenaMembershipIdentity(membership: PortalAdminMembershipRow) {
+  const membershipUuid = String(membership.membership_uuid ?? "");
+  const arenaGroupId = Number(membership.arena_group_id);
+  const scopeId = Number(membership.scope_id);
+  const rowVersion = Number(membership.row_version);
+  if (
+    !arenaUuidPattern.test(membershipUuid) ||
+    !Number.isSafeInteger(arenaGroupId) ||
+    arenaGroupId < 1 ||
+    !Number.isSafeInteger(scopeId) ||
+    scopeId < 1 ||
+    !Number.isSafeInteger(rowVersion) ||
+    rowVersion < 1
+  ) {
+    adminMembershipError(
+      "admin-membership-stale",
+      "The arena Admin membership identity is invalid.",
+    );
+  }
+  return { membershipUuid, arenaGroupId, scopeId, rowVersion };
+}
+
+async function writeArenaAdminMembershipOutbox(
   connection: PoolConnection,
   input: {
+    action: "assigned" | "extended" | "revoked";
+    membershipUuid: string;
+    arenaGroupId: number;
+    portalGroupId: number;
+    scopeId: number;
     steamId: string;
-    nativeGroupNames: string[];
-    definitions: PortalAdminDefinitionRow[];
+    startsAt: Date | string;
+    expiresAt: Date | string | null;
+    status: "active" | "revoked";
+    rowVersion: number;
     actorSteamId: string;
+    reason: string | null;
+    metadata?: Record<string, unknown>;
   },
 ) {
-  const [portalGroups] = await connection.query<EffectivePortalGroupRow[]>(
-    "SELECT identity_group.id, identity_group.external_key " +
-      "FROM portal_identity_group_memberships AS membership " +
-      "INNER JOIN portal_identity_groups AS identity_group " +
-      "ON identity_group.id = membership.group_id AND identity_group.enabled = TRUE " +
-      "INNER JOIN portal_identity_external_group_definitions AS external_definition " +
-      "ON external_definition.group_id = identity_group.id " +
-      "AND external_definition.source_type COLLATE utf8mb4_unicode_ci = 'admins_core' " +
-      "AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci " +
-      "WHERE membership.steam_id = ? AND identity_group.source_type = 'admins_core' " +
-      "AND membership.revoked_at IS NULL AND membership.starts_at <= CURRENT_TIMESTAMP " +
-      "AND (membership.expires_at IS NULL OR membership.expires_at > CURRENT_TIMESTAMP) " +
-      "ORDER BY identity_group.id FOR UPDATE",
-    [input.steamId],
+  const eventType = `identity.group_membership.${input.action}`;
+  const deduplicationKey =
+    `admin-membership:${input.membershipUuid}:${input.rowVersion}:${input.action}`;
+  const eventUuid = deterministicArenaUuid(`outbox:${deduplicationKey}`);
+  await connection.execute(
+    "INSERT INTO arena_membership_outbox " +
+      "(event_uuid, deduplication_key, event_type, aggregate_type, aggregate_key, " +
+      "membership_uuid, steam_id, group_id, scope_id, payload) " +
+      "VALUES (?, ?, ?, 'arena_group_membership', ?, ?, ?, ?, ?, ?)",
+    [
+      eventUuid,
+      deduplicationKey,
+      eventType,
+      input.membershipUuid,
+      input.membershipUuid,
+      input.steamId,
+      input.arenaGroupId,
+      input.scopeId,
+      JSON.stringify({
+        schemaVersion: 1,
+        action: input.action,
+        groupType: "admin",
+        membershipUuid: input.membershipUuid,
+        legacyPortalGroupId: input.portalGroupId,
+        steamId: input.steamId,
+        arenaGroupId: input.arenaGroupId,
+        scopeId: input.scopeId,
+        startsAt: toIso(input.startsAt),
+        expiresAt: toIso(input.expiresAt),
+        status: input.status,
+        rowVersion: input.rowVersion,
+        actorSteamId: input.actorSteamId,
+        reason: input.reason,
+        ...input.metadata,
+      }),
+    ],
   );
-  const effectiveIds = new Set(
-    portalGroups
-      .filter((group) => !isFounderGroup(group.external_key))
-      .map((group) => Number(group.id)),
-  );
-  const definitionsByName = new Map<string, PortalAdminDefinitionRow>();
-  for (const definition of input.definitions) {
-    if (!asBoolean(definition.enabled)) continue;
-    const key = groupIdentity(definition.external_key);
-    if (!definitionsByName.has(key)) definitionsByName.set(key, definition);
-  }
-  for (const nativeGroupName of input.nativeGroupNames) {
-    const definition = definitionsByName.get(groupIdentity(nativeGroupName));
-    if (definition) effectiveIds.add(Number(definition.id));
-  }
-  return reconcileIdentityGroupMembershipRewardsInTransaction(connection, {
-    steamId: input.steamId,
-    effectiveGroupIds: [...effectiveIds],
-    authoritativeSources: ["admins_core"],
-    actorSteamId: input.actorSteamId,
-  });
 }
 
 export async function assignStaffAdminMembership(input: {
@@ -750,70 +906,135 @@ export async function assignStaffAdminMembership(input: {
   const minutes = durationMinutes(input.durationMinutes);
   const actorImmunity = requireActorImmunity(input.actorImmunity);
   const reason = optionalReason(input.reason);
-  return withPortalTransaction(steamId, async (connection) =>
-    withGameTransaction(async (gameConnection) => {
-      const nativeContext = await lockScopedNativeAdminContext(gameConnection, steamId);
-      if (nativeContext.immunity > actorImmunity) {
-        adminMembershipError(
-          "admin-membership-immunity",
-          "The target administrator has greater immunity than the acting administrator.",
+  return withGameTransaction(async (connection) => {
+    const nativeContext = await lockScopedNativeAdminContext(connection, steamId);
+    if (nativeContext.immunity > actorImmunity) {
+      adminMembershipError(
+        "admin-membership-immunity",
+        "The target administrator has greater immunity than the acting administrator.",
+      );
+    }
+    const context = await lockArenaAdminContext(connection, steamId);
+    requirePortalTargetWithinActor(
+      context,
+      nativeContext.definitions,
+      actorImmunity,
+    );
+    const definition = requireEnabledDefinition(context.definitions, groupId);
+    const liveDefinition = requireLiveRuntimeDefinition(
+      definition,
+      nativeContext.definitions,
+    );
+    requireRankWithinActor(liveDefinition.immunity, actorImmunity);
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + minutes * 60_000);
+    if (expiresAt.getTime() > maximumTimestampSeconds * 1_000) {
+      adminMembershipError(
+        "admin-membership-invalid",
+        "The Admin membership expiry exceeds the supported date.",
+      );
+    }
+    const target = requireArenaDefinitionIdentity(definition);
+    const targetExisting = context.memberships.find(
+      (membership) =>
+        Number(membership.arena_group_id) === target.arenaGroupId &&
+        Number(membership.scope_id) === target.scopeId,
+    );
+    if (
+      targetExisting &&
+      targetExisting.membership_status === "active" &&
+      targetExisting.revoked_at === null &&
+      portalStatus(targetExisting) !== "expired"
+    ) {
+      adminMembershipError(
+        "admin-membership-conflict",
+        "That Admin membership already exists in the selected arena scope; extend it instead.",
+      );
+    }
+    const membershipUuid = targetExisting
+      ? requireArenaMembershipIdentity(targetExisting).membershipUuid
+      : deterministicArenaUuid(
+          `membership:${steamId}:${target.groupUuid}:${target.scopeUuid}`,
         );
-      }
-      const context = await lockPortalAdminContext(connection, steamId);
-      requirePortalTargetWithinActor(
-        context,
-        nativeContext.definitions,
-        actorImmunity,
-      );
-      const definition = requireEnabledDefinition(context.definitions, groupId);
-      const liveDefinition = requireLiveRuntimeDefinition(
-        definition,
-        nativeContext.definitions,
-      );
-      requireRankWithinActor(liveDefinition.immunity, actorImmunity);
-      const existing = context.memberships.find(
-        (membership) => Number(membership.group_id) === groupId,
-      );
+    let rowVersion = 1;
+    if (targetExisting) {
+      const identity = requireArenaMembershipIdentity(targetExisting);
       if (
-        existing &&
-        existing.revoked_at === null &&
-        portalStatus(existing) !== "expired"
+        targetExisting.membership_status !== "active" &&
+        targetExisting.membership_status !== "revoked"
       ) {
         adminMembershipError(
-          "admin-membership-conflict",
-          "That portal Admin membership already exists; extend it instead.",
+          "admin-membership-stale",
+          "That arena Admin membership is in a state that cannot be reassigned.",
         );
       }
-      const expiresAt = new Date(Date.now() + minutes * 60_000);
-      if (expiresAt.getTime() > maximumTimestampSeconds * 1_000) {
-        adminMembershipError(
-          "admin-membership-invalid",
-          "The Admin membership expiry exceeds the supported date.",
-        );
-      }
-      await connection.execute(
-        "INSERT INTO portal_identity_group_memberships " +
-          "(group_id, steam_id, starts_at, expires_at, granted_by_steam_id, grant_reason, revoked_at, revoked_by_steam_id) " +
-          "VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?, ?, NULL, NULL) " +
-          "ON DUPLICATE KEY UPDATE starts_at = CURRENT_TIMESTAMP, expires_at = VALUES(expires_at), " +
-          "granted_by_steam_id = VALUES(granted_by_steam_id), grant_reason = VALUES(grant_reason), " +
-          "revoked_at = NULL, revoked_by_steam_id = NULL",
-        [groupId, steamId, expiresAt, actorSteamId, reason],
+      rowVersion = identity.rowVersion + 1;
+      const [updated] = await connection.execute<ResultSetHeader>(
+        "UPDATE arena_group_memberships SET starts_at = ?, expires_at = ?, status = 'active', " +
+          "provenance_type = 'staff', provenance_reference = ?, source_inventory_item_id = NULL, " +
+          "origin_command_uuid = NULL, granted_by_actor = ?, grant_reason = ?, " +
+          "revoked_at = NULL, revoked_by_actor = NULL, revoke_reason = NULL, " +
+          "row_version = row_version + 1 " +
+          "WHERE membership_uuid = ? AND row_version = ?",
+        [
+          now,
+          expiresAt,
+          `staff-admin:${groupId}:${target.scopeUuid}`,
+          actorSteamId,
+          reason,
+          membershipUuid,
+          identity.rowVersion,
+        ],
       );
-      await reconcilePortalAdminRewards(connection, {
-        steamId,
-        nativeGroupNames: nativeContext.groupNames,
-        definitions: context.definitions,
-        actorSteamId,
-      });
-      return {
-        recordKey: `portal:${steamId}:${groupId}`,
-        groupId,
-        steamId,
-        expiresAt: expiresAt.toISOString(),
-      };
-    }),
-  );
+      if (updated.affectedRows !== 1) {
+        adminMembershipError(
+          "admin-membership-stale",
+          "That arena Admin membership changed before it could be assigned.",
+        );
+      }
+    } else {
+      await connection.execute(
+        "INSERT INTO arena_group_memberships " +
+          "(membership_uuid, group_id, scope_id, steam_id, starts_at, expires_at, status, " +
+          "provenance_type, provenance_reference, granted_by_actor, grant_reason, row_version) " +
+          "VALUES (?, ?, ?, ?, ?, ?, 'active', 'staff', ?, ?, ?, 1)",
+        [
+          membershipUuid,
+          target.arenaGroupId,
+          target.scopeId,
+          steamId,
+          now,
+          expiresAt,
+          `staff-admin:${groupId}:${target.scopeUuid}`,
+          actorSteamId,
+          reason,
+        ],
+      );
+    }
+    await writeArenaAdminMembershipOutbox(connection, {
+      action: "assigned",
+      membershipUuid,
+      arenaGroupId: target.arenaGroupId,
+      portalGroupId: groupId,
+      scopeId: target.scopeId,
+      steamId,
+      startsAt: now,
+      expiresAt,
+      status: "active",
+      rowVersion,
+      actorSteamId,
+      reason,
+    });
+    return {
+      recordKey: `portal:${membershipUuid}`,
+      membershipUuid,
+      scopeId: target.scopeId,
+      rowVersion,
+      groupId,
+      steamId,
+      expiresAt: expiresAt.toISOString(),
+    };
+  });
 }
 
 export async function extendStaffAdminMembership(input: {
@@ -823,42 +1044,47 @@ export async function extendStaffAdminMembership(input: {
   actorImmunity: number;
   expectedExpiresAt?: string | null;
 }) {
-  const steamId = requireSteamId(input.reference.steamId);
+  const reference = requirePortalReference(input.reference);
+  const steamId = reference.steamId;
   const actorSteamId = requireSteamId(input.actorSteamId);
-  const groupId = requirePositiveId(
-    input.reference.groupId,
-    "The portal Admin group ID",
-  );
+  const groupId = reference.groupId;
   const addedMinutes = durationMinutes(input.extensionMinutes);
   const actorImmunity = requireActorImmunity(input.actorImmunity);
-  return withPortalTransaction(steamId, async (connection) =>
-    withGameTransaction(async (gameConnection) => {
-    const nativeContext = await lockScopedNativeAdminContext(gameConnection, steamId);
+  return withGameTransaction(async (connection) => {
+    const nativeContext = await lockScopedNativeAdminContext(connection, steamId);
     if (nativeContext.immunity > actorImmunity) {
       adminMembershipError(
         "admin-membership-immunity",
         "The target administrator has greater immunity than the acting administrator.",
       );
     }
-    const context = await lockPortalAdminContext(connection, steamId);
+    const context = await lockArenaAdminContext(connection, steamId);
     requirePortalTargetWithinActor(
       context,
       nativeContext.definitions,
       actorImmunity,
     );
-    const membership = requireMutablePortalMembership(
+    const membership = requireMutableArenaMembership(
       context.memberships,
-      groupId,
+      reference,
     );
-    if (membership.revoked_at !== null) {
+    if (
+      membership.revoked_at !== null ||
+      membership.membership_status !== "active"
+    ) {
       adminMembershipError(
         "admin-membership-not-found",
         "That portal Admin membership has been revoked.",
       );
     }
-    const definition = requireEnabledDefinition(context.definitions, groupId);
+    if (!asBoolean(membership.group_enabled)) {
+      adminMembershipError(
+        "admin-membership-stale",
+        "That arena Admin group or scope is no longer enabled.",
+      );
+    }
     const liveDefinition = requireLiveRuntimeDefinition(
-      definition,
+      membership,
       nativeContext.definitions,
     );
     requireRankWithinActor(liveDefinition.immunity, actorImmunity);
@@ -888,15 +1114,23 @@ export async function extendStaffAdminMembership(input: {
         "The Admin membership expiry exceeds the supported date.",
       );
     }
+    const identity = requireArenaMembershipIdentity(membership);
+    const rowVersion = identity.rowVersion + 1;
     const [updated] = await connection.execute<ResultSetHeader>(
-      "UPDATE portal_identity_group_memberships " +
+      "UPDATE arena_group_memberships " +
         // Extending a future assignment must not activate it early. Keep its
         // scheduled start intact and move only the entitlement's end date.
         "SET expires_at = ?, " +
-        "granted_by_steam_id = ? " +
-        "WHERE group_id = ? AND steam_id = ? AND revoked_at IS NULL " +
+        "granted_by_actor = ?, row_version = row_version + 1 " +
+        "WHERE membership_uuid = ? AND row_version = ? AND status = 'active' " +
         "AND ABS(TIMESTAMPDIFF(SECOND, expires_at, ?)) <= 1",
-      [expiresAt, actorSteamId, groupId, steamId, expectedExpiry],
+      [
+        expiresAt,
+        actorSteamId,
+        identity.membershipUuid,
+        identity.rowVersion,
+        expectedExpiry,
+      ],
     );
     if (updated.affectedRows !== 1) {
       adminMembershipError(
@@ -904,20 +1138,34 @@ export async function extendStaffAdminMembership(input: {
         "That portal Admin membership changed before it could be extended.",
       );
     }
-    await reconcilePortalAdminRewards(connection, {
+    await writeArenaAdminMembershipOutbox(connection, {
+      action: "extended",
+      membershipUuid: identity.membershipUuid,
+      arenaGroupId: identity.arenaGroupId,
+      portalGroupId: groupId,
+      scopeId: identity.scopeId,
       steamId,
-      nativeGroupNames: nativeContext.groupNames,
-      definitions: context.definitions,
+      startsAt: membership.starts_at,
+      expiresAt,
+      status: "active",
+      rowVersion,
       actorSteamId,
+      reason: null,
+      metadata: {
+        previousExpiresAt: currentExpiry.toISOString(),
+        extensionMinutes: addedMinutes,
+      },
     });
     return {
-      recordKey: `portal:${steamId}:${groupId}`,
+      recordKey: `portal:${identity.membershipUuid}`,
+      membershipUuid: identity.membershipUuid,
+      scopeId: identity.scopeId,
+      rowVersion,
       groupId,
       steamId,
       expiresAt: expiresAt.toISOString(),
     };
-    }),
-  );
+  });
 }
 
 function requireNativeReference(reference: StaffAdminNativeMembershipReference) {
@@ -929,11 +1177,24 @@ function requireNativeReference(reference: StaffAdminNativeMembershipReference) 
 }
 
 function requirePortalReference(reference: StaffAdminPortalMembershipReference) {
+  const membershipUuid = String(reference.membershipUuid ?? "").trim();
+  if (!arenaUuidPattern.test(membershipUuid)) {
+    adminMembershipError(
+      "admin-membership-invalid",
+      "The arena Admin membership reference is invalid.",
+    );
+  }
   return {
     steamId: requireSteamId(reference.steamId),
     groupId: requirePositiveId(
       reference.groupId,
       "The portal Admin group ID",
+    ),
+    membershipUuid,
+    scopeId: requirePositiveId(reference.scopeId, "The arena scope ID"),
+    rowVersion: requirePositiveId(
+      reference.rowVersion,
+      "The arena membership row version",
     ),
   };
 }
@@ -964,16 +1225,13 @@ async function detachNativeAdminGroup(
   actorImmunity: number,
 ) {
   const reference = requireNativeReference(referenceInput);
-  const result = await withPortalTransaction(
-    reference.steamId,
-    async (portalConnection) =>
-    withGameTransaction(async (connection) => {
+  const result = await withGameTransaction(async (connection) => {
     const nativeContext = await lockScopedNativeAdminContext(
       connection,
       reference.steamId,
     );
-    const portalContext = await lockPortalAdminContext(
-      portalConnection,
+    const portalContext = await lockArenaAdminContext(
+      connection,
       reference.steamId,
     );
     requirePortalTargetWithinActor(
@@ -1054,8 +1312,7 @@ async function detachNativeAdminGroup(
         : [],
       immunity: storedImmunity,
     };
-    }),
-  );
+  });
   await reconcileIdentityGroupRewards({
     steamId: reference.steamId,
     adminGroupNames: result.scopedRemainingGroups,
@@ -1075,10 +1332,9 @@ export async function removeStaffAdminMembership(input: {
   }
 
   const reference = requirePortalReference(input.reference);
-  return withPortalTransaction(reference.steamId, async (connection) =>
-    withGameTransaction(async (gameConnection) => {
+  return withGameTransaction(async (connection) => {
     const nativeContext = await lockScopedNativeAdminContext(
-      gameConnection,
+      connection,
       reference.steamId,
     );
     if (nativeContext.immunity > actorImmunity) {
@@ -1087,36 +1343,44 @@ export async function removeStaffAdminMembership(input: {
         "The target administrator has greater immunity than the acting administrator.",
       );
     }
-    const context = await lockPortalAdminContext(connection, reference.steamId);
+    const context = await lockArenaAdminContext(connection, reference.steamId);
     requirePortalTargetWithinActor(
       context,
       nativeContext.definitions,
       actorImmunity,
     );
-    const membership = requireMutablePortalMembership(
+    const membership = requireMutableArenaMembership(
       context.memberships,
-      reference.groupId,
+      reference,
     );
-    if (membership.revoked_at !== null) {
+    if (
+      membership.revoked_at !== null ||
+      membership.membership_status !== "active"
+    ) {
       adminMembershipError(
         "admin-membership-not-found",
         "That portal Admin membership has already been revoked.",
       );
     }
-    const definition = context.definitions.find(
-      (row) => Number(row.id) === reference.groupId,
+    const liveDefinition = requireLiveRuntimeDefinition(
+      membership,
+      nativeContext.definitions,
     );
-    if (definition && asBoolean(definition.enabled)) {
-      const liveDefinition = requireLiveRuntimeDefinition(
-        definition,
-        nativeContext.definitions,
-      );
-      requireRankWithinActor(liveDefinition.immunity, actorImmunity);
-    }
+    requireRankWithinActor(liveDefinition.immunity, actorImmunity);
+    const identity = requireArenaMembershipIdentity(membership);
+    const rowVersion = identity.rowVersion + 1;
+    const revokedAt = new Date();
     const [updated] = await connection.execute<ResultSetHeader>(
-      "UPDATE portal_identity_group_memberships SET revoked_at = CURRENT_TIMESTAMP, " +
-        "revoked_by_steam_id = ? WHERE group_id = ? AND steam_id = ? AND revoked_at IS NULL",
-      [actorSteamId, reference.groupId, reference.steamId],
+      "UPDATE arena_group_memberships SET status = 'revoked', revoked_at = ?, " +
+        "revoked_by_actor = ?, revoke_reason = 'Removed by staff', " +
+        "row_version = row_version + 1 " +
+        "WHERE membership_uuid = ? AND row_version = ? AND status = 'active'",
+      [
+        revokedAt,
+        actorSteamId,
+        identity.membershipUuid,
+        identity.rowVersion,
+      ],
     );
     if (updated.affectedRows !== 1) {
       adminMembershipError(
@@ -1124,17 +1388,28 @@ export async function removeStaffAdminMembership(input: {
         "That portal Admin membership changed before it could be removed.",
       );
     }
-    await reconcilePortalAdminRewards(connection, {
+    await writeArenaAdminMembershipOutbox(connection, {
+      action: "revoked",
+      membershipUuid: identity.membershipUuid,
+      arenaGroupId: identity.arenaGroupId,
+      portalGroupId: reference.groupId,
+      scopeId: identity.scopeId,
       steamId: reference.steamId,
-      nativeGroupNames: nativeContext.groupNames,
-      definitions: context.definitions,
+      startsAt: membership.starts_at,
+      expiresAt: membership.expires_at,
+      status: "revoked",
+      rowVersion,
       actorSteamId,
+      reason: "Removed by staff",
+      metadata: { revokedAt: revokedAt.toISOString() },
     });
     return {
-      recordKey: `portal:${reference.steamId}:${reference.groupId}`,
+      recordKey: `portal:${identity.membershipUuid}`,
+      membershipUuid: identity.membershipUuid,
+      scopeId: identity.scopeId,
+      rowVersion,
       steamId: reference.steamId,
       groupId: reference.groupId,
     };
-    }),
-  );
+  });
 }

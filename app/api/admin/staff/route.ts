@@ -14,9 +14,11 @@ import {
 } from "@/lib/data/staff-admin-memberships";
 import {
   consolidateStaffVipMemberships,
+  editStaffVipMembership,
   extendStaffVipMembership,
   removeStaffVipMembership,
   StaffVipMembershipError,
+  type StaffVipMembershipExpiryMode,
   type StaffVipMembershipReference,
   type StaffVipMembershipSource,
   withSerializedNativeVipMutation,
@@ -84,6 +86,15 @@ function exactStoredVipGroup(value: FormDataEntryValue | null) {
     : null;
 }
 
+function vipMembershipExpiryMode(value: FormDataEntryValue | null) {
+  return value === "keep" ||
+      value === "extend" ||
+      value === "replace" ||
+      value === "permanent"
+    ? value satisfies StaffVipMembershipExpiryMode
+    : null;
+}
+
 function exactStoredAdminGroup(value: FormDataEntryValue | null) {
   const group = String(value ?? "");
   return group.length >= 1 &&
@@ -112,6 +123,13 @@ function positiveGroupId(value: FormDataEntryValue | null) {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function arenaMembershipUuid(value: FormDataEntryValue | null) {
+  const text = String(value ?? "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(text)
+    ? text
+    : null;
+}
+
 function vipMembershipReference(
   formData: FormData,
   steamId: string,
@@ -120,7 +138,12 @@ function vipMembershipReference(
   const source = vipMembershipSource(formData.get(sourceField));
   if (source === "portal") {
     const groupId = positiveGroupId(formData.get("groupId"));
-    return groupId === null ? null : { source, steamId, groupId };
+    const arenaGroupId = positiveGroupId(formData.get("arenaGroupId"));
+    const scopeId = positiveGroupId(formData.get("scopeId"));
+    const membershipUuid = arenaMembershipUuid(formData.get("membershipUuid"));
+    return groupId === null || arenaGroupId === null || scopeId === null || !membershipUuid
+      ? null
+      : { source, steamId, groupId, arenaGroupId, scopeId, membershipUuid };
   }
   if (source === "native") {
     const accountId = String(formData.get("accountId") ?? "").trim();
@@ -147,7 +170,12 @@ function adminMembershipReference(
   const source = adminMembershipSource(formData.get("membershipSource"));
   if (source === "portal") {
     const groupId = positiveGroupId(formData.get("groupId"));
-    return groupId === null ? null : { source, steamId, groupId };
+    const membershipUuid = arenaMembershipUuid(formData.get("membershipUuid"));
+    const scopeId = positiveGroupId(formData.get("scopeId"));
+    const rowVersion = positiveGroupId(formData.get("rowVersion"));
+    return groupId === null || membershipUuid === null || scopeId === null || rowVersion === null
+      ? null
+      : { source, steamId, groupId, membershipUuid, scopeId, rowVersion };
   }
   if (source === "native") {
     const adminId = positiveGroupId(formData.get("adminId"));
@@ -326,6 +354,45 @@ export async function POST(request: Request) {
         steamId,
       );
       return redirect(request, "vips", "notice", "vip-extended");
+    }
+
+    if (action === "vip-membership-edit") {
+      if (!actor.canManageVips) return redirect(request, "vips", "error", "vip-permission");
+      const reference = vipMembershipReference(formData, steamId, "membershipSource");
+      const newGroup = exactStoredVipGroup(formData.get("newGroup"));
+      const newServerId = optionalVipServerId(formData.get("newServerId"));
+      const expiryMode = vipMembershipExpiryMode(formData.get("expiryMode"));
+      const durationMinutes = Number.parseInt(
+        String(formData.get("durationMinutes") ?? "0"),
+        10,
+      );
+      if (
+        !reference ||
+        !newGroup ||
+        newServerId === null ||
+        newServerId === undefined ||
+        !expiryMode ||
+        !validDuration(durationMinutes) ||
+        ((expiryMode === "extend" || expiryMode === "replace") && durationMinutes === 0)
+      ) {
+        return redirect(request, "vips", "error", "vip-details");
+      }
+      await editStaffVipMembership({
+        reference,
+        actorSteamId: actor.steamId,
+        newGroup,
+        newServerId,
+        expiryMode,
+        durationMinutes,
+        expectedExpiresAt: String(formData.get("expectedExpiresAt") ?? ""),
+      });
+      await writeStaffActionAudit(
+        actor.steamId,
+        "staff.vip.membership.edited",
+        "steam-player",
+        steamId,
+      );
+      return redirect(request, "vips", "notice", "vip-saved");
     }
 
     if (action === "vip-membership-remove") {

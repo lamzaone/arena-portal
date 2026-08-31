@@ -10,6 +10,10 @@ import {
 } from "mysql2/promise";
 
 import { configuredGameServerGuid } from "@/lib/admin/server-scope";
+import {
+  synchronizeArenaRuntimeGroupAuthority,
+  synchronizePortalRuntimeGroupProjection,
+} from "@/lib/data/arena-group-definition-authority";
 import { getGameDatabasePool } from "@/lib/data/database-pools";
 
 export type ExternalIdentitySource = "admins_core" | "vipcore";
@@ -2089,8 +2093,17 @@ export async function syncIdentityCatalogue(
     auditKey?: string;
   } = {},
 ): Promise<IdentityCatalogueSyncResult> {
-  const initial = await readStatus(pool);
   const runtimeDatabaseConfigured = Boolean(process.env.GAME_DATABASE_URL?.trim());
+  if (runtimeDatabaseConfigured) {
+    // Native Admins.Core/VIPCore tables and the normalized Arena catalogue
+    // share one database, so synchronize them before taking the cross-host
+    // Portal projection snapshot. The operation is idempotent and updates row
+    // versions only when a definition or scope actually changed.
+    await synchronizeArenaRuntimeGroupAuthority({
+      actorSteamId: options.actorSteamId,
+    });
+  }
+  const initial = await readStatus(pool);
   const loadAdmins =
     Boolean(options.force) ||
     initial.adminsCoreDefinitions === 0 ||
@@ -2244,6 +2257,14 @@ export async function syncIdentityCatalogue(
 
   if (!result) {
     throw new Error("Identity catalogue synchronization did not produce a result.");
+  }
+  if (runtimeDatabaseConfigured) {
+    // Portal owns only presentation, marketplace, and inventory coordinates.
+    // Link those adapters after their local transaction commits; a retry is
+    // safe if either database becomes unavailable between the two commits.
+    await synchronizePortalRuntimeGroupProjection(pool, {
+      actorSteamId: options.actorSteamId,
+    });
   }
   if (undeliverableRewardOwners.length) {
     // Catalogue state is committed and the sync connection is released before

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  compareVipEntitlementPrecedence,
   compareVipTierRates,
   convertTimedVipMembership,
   convertVipDurationBetweenTierRates,
@@ -25,6 +26,16 @@ const diamondRate: VipTierRate = {
   durationSeconds: WEEK,
   priceTokens: 467n,
 };
+
+test("legacy entitlement precedence matches permanent activation policy", () => {
+  const timedDiamond = { groupId: 4, rankWeight: 80, permanent: false };
+  const permanentGold = { groupId: 3, rankWeight: 60, permanent: true };
+  const permanentDiamond = { ...timedDiamond, permanent: true };
+
+  assert.ok(compareVipEntitlementPrecedence(permanentGold, timedDiamond) < 0);
+  assert.ok(compareVipEntitlementPrecedence(permanentDiamond, permanentGold) < 0);
+  assert.ok(compareVipEntitlementPrecedence(timedDiamond, permanentGold) > 0);
+});
 
 test("activates and extends the same tier by the exact item duration", () => {
   const activated = convertTimedVipMembership({

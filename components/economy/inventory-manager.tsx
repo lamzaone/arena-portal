@@ -25,6 +25,7 @@ import {
 } from "@/components/economy/economy-item-card";
 import {
   createEconomyIdempotencyKey,
+  EconomyActionRequestError,
   postEconomyAction,
 } from "@/components/economy/economy-request";
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
@@ -180,6 +181,13 @@ export function InventoryManager({
   const inventoryGridRef = useRef<HTMLDivElement | null>(null);
   const bulkSaleRequestRef = useRef<{
     signature: string;
+    idempotencyKey: string;
+  } | null>(null);
+  // A VIP activation may have committed its Portal reservation before an
+  // Arena response was lost. Reuse the same key on UI retries so the durable
+  // job resumes instead of presenting a second command.
+  const vipActivationRequestRef = useRef<{
+    itemId: string;
     idempotencyKey: string;
   } | null>(null);
   const [inventoryGridColumns, setInventoryGridColumns] = useState(1);
@@ -588,13 +596,36 @@ export function InventoryManager({
     success: string,
   ) {
     if (!selected) return;
+    let requestId: string | undefined;
+    if (path === "/api/economy/items/vip/activate") {
+      if (vipActivationRequestRef.current?.itemId !== selected.id) {
+        vipActivationRequestRef.current = {
+          itemId: selected.id,
+          idempotencyKey: createEconomyIdempotencyKey(),
+        };
+      }
+      requestId = vipActivationRequestRef.current.idempotencyKey;
+    }
     setNotice(null);
     startTransition(async () => {
       try {
-        const result = await postEconomyAction(path, csrf, payload);
+        const result = await postEconomyAction(path, csrf, payload, requestId);
+        if (path === "/api/economy/items/vip/activate") {
+          vipActivationRequestRef.current = null;
+        }
         setNotice({ type: "success", text: result.message || success });
         router.refresh();
       } catch (error) {
+        if (
+          path === "/api/economy/items/vip/activate" &&
+          error instanceof EconomyActionRequestError &&
+          error.status < 500
+        ) {
+          // A deterministic rejection released the item, so the next click
+          // must prepare a fresh command and price snapshot. Server failures
+          // retain the key and resume the ambiguous command.
+          vipActivationRequestRef.current = null;
+        }
         setNotice({
           type: "error",
           text:

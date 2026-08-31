@@ -64,6 +64,7 @@ const inventoryStates = new Set<EconomyItemState>([
   "attached",
   "consumed",
   "revoked",
+  "activation_pending",
 ]);
 
 function validInventoryType(value: string | undefined): EconomyItemType | null {

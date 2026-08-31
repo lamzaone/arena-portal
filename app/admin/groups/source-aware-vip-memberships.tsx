@@ -300,7 +300,6 @@ function MembershipRecord({
   record: StaffVipMembershipRecord;
 }) {
   const exactReferenceAvailable = hasExactMutationReference(record);
-  const mutationScopeAvailable = record.source === "portal" || record.inConfiguredScope;
   const mutable = record.status !== "revoked";
   const states = recordStates(record, hasConflict);
 
@@ -365,12 +364,7 @@ function MembershipRecord({
 
       {(canExtend || canRemove) ? (
         <div className={styles.actions} aria-label={`Manage exact ${record.group} membership`}>
-          {!mutationScopeAvailable ? (
-            <p className={styles.actionWarning} role="status">
-              <ShieldAlert aria-hidden="true" size={17} />
-              This membership belongs to another VIP server scope and is read-only here.
-            </p>
-          ) : !exactReferenceAvailable ? (
+          {!exactReferenceAvailable ? (
             <p className={styles.actionWarning} role="status">
               <ShieldAlert aria-hidden="true" size={17} />
               Exact source reference missing; actions are unavailable.

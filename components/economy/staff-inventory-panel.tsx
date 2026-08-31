@@ -57,6 +57,7 @@ const inventoryStates: Array<{ value: EconomyItemState; label: string }> = [
   { value: "attached", label: "Attached" },
   { value: "consumed", label: "Consumed" },
   { value: "revoked", label: "Revoked" },
+  { value: "activation_pending", label: "VIP activation pending" },
 ];
 
 function formatTokens(value: number) {

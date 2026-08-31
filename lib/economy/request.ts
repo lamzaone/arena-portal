@@ -30,9 +30,9 @@ export function economyMutationFailure(error: unknown) {
   const candidate = isRecord(error) ? error : null;
   const code = typeof candidate?.code === "string" ? candidate.code : "";
   const message = error instanceof Error ? error.message : "The economy operation could not be completed.";
-  if (["invalid_input", "invalid_idempotency_key", "incompatible_item", "ownership_required", "not_a_crate", "item_not_found", "item_not_tradable", "unsupported_customization", "item_customized"].includes(code)) return economyJsonError(message, 400);
-  if (["insufficient_tokens", "token_limit", "idempotency_conflict", "operation_in_progress", "requested_item_unavailable", "inventory_private", "sticker_slot_occupied", "price_unavailable", "catalogue_not_found", "catalogue_unavailable", "loot_table_unavailable", "loot_table_empty", "redeem_code_exists", "redeem_code_not_found", "redeem_code_disabled", "redeem_code_exhausted", "redeem_already_claimed"].includes(code)) return economyJsonError(message, 409);
-  if (["storage_unavailable", "operation_unavailable", "wallet_unavailable"].includes(code)) return economyJsonError(message, 503);
+  if (["invalid_input", "invalid_idempotency_key", "incompatible_item", "ownership_required", "item_not_owned", "not_a_crate", "item_not_found", "item_not_tradable", "unsupported_customization", "item_customized", "conversion_too_small", "invalid_duration"].includes(code)) return economyJsonError(message, 400);
+  if (["insufficient_tokens", "token_limit", "idempotency_conflict", "operation_in_progress", "item_unavailable", "requested_item_unavailable", "inventory_private", "sticker_slot_occupied", "price_unavailable", "catalogue_not_found", "catalogue_unavailable", "loot_table_unavailable", "loot_table_empty", "redeem_code_exists", "redeem_code_not_found", "redeem_code_disabled", "redeem_code_exhausted", "redeem_already_claimed", "scope_unavailable", "group_unavailable", "stale_group_target", "rate_snapshot_expired", "stale_rate_schedule", "subscription_unavailable", "membership_conflict", "invalid_rate_snapshot"].includes(code)) return economyJsonError(message, 409);
+  if (["storage_unavailable", "operation_unavailable", "wallet_unavailable", "membership_authority_unavailable", "membership_authority_invalid"].includes(code)) return economyJsonError(message, 503);
   return economyJsonError("The economy operation could not be completed. Please try again shortly.", 500);
 }
 

@@ -9,7 +9,10 @@ import {
   type RowDataPacket,
 } from "mysql2/promise";
 
-import { getPortalDatabasePool } from "@/lib/data/database-pools";
+import {
+  getGameDatabasePool,
+  getPortalDatabasePool,
+} from "@/lib/data/database-pools";
 
 export type VipPerkActor = {
   steamId: string;
@@ -95,7 +98,7 @@ export class VipPerkError extends Error {
   }
 }
 
-type PerkRow = RowDataPacket & {
+type PerkData = {
   id: number | string;
   perk_key: string;
   display_name: string;
@@ -104,6 +107,8 @@ type PerkRow = RowDataPacket & {
   configuration: unknown;
   enabled: number | boolean;
 };
+
+type PerkRow = RowDataPacket & PerkData;
 
 type OfferRow = RowDataPacket & {
   id: number | string;
@@ -139,11 +144,41 @@ type GrantRow = RowDataPacket & {
   grant_reason: string | null;
 };
 
-type EffectiveRow = PerkRow & {
+type EffectiveSource = {
+  id: number | string;
+  perk_key: string;
+  display_name: string;
+  description: string | null;
+  category: string;
+  configuration: unknown;
+  enabled: number | boolean;
   steam_id: string;
   effective_expires_at: Date | string | null;
-  source_labels: string | null;
-  source_label?: string | null;
+  source_label: string | null;
+  source_priority: number | string;
+  grant_id: number | string;
+};
+
+type EffectiveRow = RowDataPacket & EffectiveSource;
+
+type ArenaCustomMembershipRow = RowDataPacket & {
+  steam_id: string;
+  legacy_portal_group_id: number | string;
+  expires_at: Date | string | null;
+};
+
+type ArenaCustomMembership = {
+  steamId: string;
+  portalGroupId: number;
+  expiresAt: Date | string | null;
+};
+
+type GroupPerkGrantRow = PerkRow & {
+  group_id: number | string;
+  group_name: string;
+  profile_priority: number | string;
+  grant_expires_at: Date | string | null;
+  grant_id: number | string;
 };
 
 type OperationRow = RowDataPacket & {
@@ -174,7 +209,7 @@ function runtimeServerId() {
 }
 
 export function vipPerkStorageConfigured() {
-  return Boolean(process.env.PORTAL_DATABASE_URL);
+  return Boolean(process.env.PORTAL_DATABASE_URL?.trim());
 }
 
 function fail(code: string, message: string): never {
@@ -261,7 +296,7 @@ function configuration(value: unknown) {
   return value;
 }
 
-function toPerk(row: PerkRow): VipPerkDefinition {
+function toPerk(row: PerkData): VipPerkDefinition {
   return {
     id: integer(row.id, "Perk ID"),
     key: row.perk_key,
@@ -347,78 +382,279 @@ export async function getVipPerkStorefront(steamIdValue?: string | null) {
   };
 }
 
-const effectiveSourcesSql = `
-  SELECT
-    CONVERT(grants.steam_id USING utf8mb4) COLLATE utf8mb4_unicode_ci AS steam_id,
-    perks.id,
-    perks.perk_key,
-    perks.display_name,
-    perks.description,
-    perks.category,
-    COALESCE(grants.configuration_override, perks.configuration) AS configuration,
-    perks.enabled,
-    grants.expires_at AS effective_expires_at,
-    CONVERT(CASE grants.source_type WHEN 'shop' THEN 'Token shop' ELSE 'Direct staff grant' END USING utf8mb4) COLLATE utf8mb4_unicode_ci AS source_label,
-    CASE grants.source_type WHEN 'staff' THEN 3000000 ELSE 2000000 END AS source_priority,
-    grants.id AS grant_id
-  FROM portal_vip_perk_player_grants grants
-  INNER JOIN portal_vip_perks perks ON perks.id = grants.perk_id AND perks.enabled = TRUE
-  WHERE grants.revoked_at IS NULL
-    AND grants.starts_at <= CURRENT_TIMESTAMP
-    AND (grants.expires_at IS NULL OR grants.expires_at > CURRENT_TIMESTAMP)
-  UNION ALL
-  SELECT
-    CONVERT(memberships.steam_id USING utf8mb4) COLLATE utf8mb4_unicode_ci AS steam_id,
-    perks.id,
-    perks.perk_key,
-    perks.display_name,
-    perks.description,
-    perks.category,
-    COALESCE(grants.configuration_override, perks.configuration) AS configuration,
-    perks.enabled,
-    CASE
-      WHEN grants.expires_at IS NULL THEN memberships.expires_at
-      WHEN memberships.expires_at IS NULL THEN grants.expires_at
-      ELSE LEAST(grants.expires_at, memberships.expires_at)
-    END AS effective_expires_at,
-    CONVERT(CONCAT('Group: ', identity_group.display_name) USING utf8mb4) COLLATE utf8mb4_unicode_ci AS source_label,
-    1000000 + identity_group.profile_priority AS source_priority,
-    grants.id AS grant_id
-  FROM portal_vip_perk_group_grants grants
-  INNER JOIN portal_vip_perks perks ON perks.id = grants.perk_id AND perks.enabled = TRUE
-  INNER JOIN portal_identity_groups identity_group ON identity_group.id = grants.group_id AND identity_group.enabled = TRUE AND identity_group.source_type = 'custom'
-  INNER JOIN portal_identity_group_memberships memberships ON memberships.group_id = identity_group.id
-    AND memberships.revoked_at IS NULL
-    AND memberships.starts_at <= CURRENT_TIMESTAMP
-    AND (memberships.expires_at IS NULL OR memberships.expires_at > CURRENT_TIMESTAMP)
-  WHERE grants.revoked_at IS NULL
-    AND grants.starts_at <= CURRENT_TIMESTAMP
-    AND (grants.expires_at IS NULL OR grants.expires_at > CURRENT_TIMESTAMP)
-`;
+function expiryMilliseconds(value: Date | string, source: string) {
+  const milliseconds = value instanceof Date ? value.valueOf() : new Date(value).valueOf();
+  if (!Number.isFinite(milliseconds)) {
+    fail("membership_authority_invalid", `${source} contains an invalid expiry.`);
+  }
+  return milliseconds;
+}
 
-export async function getEffectiveVipPerksForPlayer(steamIdValue: string): Promise<EffectiveVipPerk[]> {
-  const database = getPool();
-  if (!database) return [];
-  const parsedSteamId = steamId(steamIdValue);
+function laterEntitlementExpiry(
+  current: Date | string | null,
+  candidate: Date | string | null,
+) {
+  if (current === null || candidate === null) return null;
+  return expiryMilliseconds(candidate, "Arena membership") >
+    expiryMilliseconds(current, "Arena membership")
+    ? candidate
+    : current;
+}
+
+function intersectEntitlementExpiry(
+  grantExpiry: Date | string | null,
+  membershipExpiry: Date | string | null,
+) {
+  if (grantExpiry === null) return membershipExpiry;
+  if (membershipExpiry === null) return grantExpiry;
+  return expiryMilliseconds(grantExpiry, "VIP perk grant") <=
+    expiryMilliseconds(membershipExpiry, "Arena membership")
+    ? grantExpiry
+    : membershipExpiry;
+}
+
+async function readArenaCustomMemberships(
+  requestedSteamIds?: string[],
+): Promise<ArenaCustomMembership[]> {
+  const gameDatabase = getGameDatabasePool();
+  if (!gameDatabase) {
+    fail(
+      "membership_authority_unavailable",
+      "Arena group membership authority is not configured.",
+    );
+  }
+  const steamIds = requestedSteamIds
+    ? [...new Set(requestedSteamIds.map((value) => steamId(value)))]
+    : null;
+  if (steamIds && !steamIds.length) return [];
+  try {
+    const playerPredicate = steamIds
+      ? ` AND membership.steam_id IN (${steamIds.map(() => "?").join(", ")})`
+      : "";
+    const [rows] = await gameDatabase.query<ArenaCustomMembershipRow[]>(
+      "SELECT membership.steam_id, arena_group.legacy_portal_group_id, membership.expires_at " +
+        "FROM arena_group_memberships AS membership " +
+        "INNER JOIN arena_groups AS arena_group ON arena_group.id = membership.group_id " +
+        "AND arena_group.group_type = 'custom' AND arena_group.enabled = TRUE " +
+        "AND arena_group.legacy_portal_group_id IS NOT NULL " +
+        "INNER JOIN arena_group_scopes AS group_scope ON group_scope.group_id = membership.group_id " +
+        "AND group_scope.scope_id = membership.scope_id AND group_scope.enabled = TRUE " +
+        "INNER JOIN arena_scopes AS scope ON scope.id = membership.scope_id AND scope.enabled = TRUE " +
+        "WHERE membership.status = 'active' " +
+        "AND membership.starts_at <= CURRENT_TIMESTAMP(6) " +
+        "AND (membership.expires_at IS NULL OR membership.expires_at > CURRENT_TIMESTAMP(6)) " +
+        "AND (scope.scope_type = 'global' OR " +
+        "(scope.scope_type = 'server' AND scope.vip_server_id = ?))" +
+        playerPredicate +
+        " ORDER BY membership.steam_id, arena_group.legacy_portal_group_id, " +
+        "membership.scope_id, membership.membership_uuid",
+      [runtimeServerId(), ...(steamIds ?? [])],
+    );
+    const memberships = new Map<string, ArenaCustomMembership>();
+    for (const row of rows) {
+      const parsedSteamId = steamId(row.steam_id, "Stored Arena SteamID64");
+      const portalGroupId = integer(
+        row.legacy_portal_group_id,
+        "Arena portal group mapping",
+      );
+      const membershipKey = `${parsedSteamId}\0${portalGroupId}`;
+      const existing = memberships.get(membershipKey);
+      if (!existing) {
+        memberships.set(membershipKey, {
+          steamId: parsedSteamId,
+          portalGroupId,
+          expiresAt: row.expires_at,
+        });
+        continue;
+      }
+      existing.expiresAt = laterEntitlementExpiry(
+        existing.expiresAt,
+        row.expires_at,
+      );
+    }
+    return [...memberships.values()];
+  } catch (error) {
+    if (error instanceof VipPerkError) throw error;
+    fail(
+      "membership_authority_unavailable",
+      "Arena group memberships could not be verified.",
+    );
+  }
+}
+
+async function requireArenaCustomGroupScope(portalGroupId: number) {
+  const gameDatabase = getGameDatabasePool();
+  if (!gameDatabase) {
+    fail(
+      "membership_authority_unavailable",
+      "Arena group authority is not configured.",
+    );
+  }
+  try {
+    const [rows] = await gameDatabase.query<Array<RowDataPacket & { id: number | string }>>(
+      "SELECT arena_group.id FROM arena_groups AS arena_group " +
+        "INNER JOIN arena_group_scopes AS group_scope ON group_scope.group_id = arena_group.id " +
+        "AND group_scope.enabled = TRUE " +
+        "INNER JOIN arena_scopes AS scope ON scope.id = group_scope.scope_id AND scope.enabled = TRUE " +
+        "WHERE arena_group.legacy_portal_group_id = ? " +
+        "AND arena_group.group_type = 'custom' AND arena_group.enabled = TRUE " +
+        "AND (scope.scope_type = 'global' OR " +
+        "(scope.scope_type = 'server' AND scope.vip_server_id = ?)) " +
+        "ORDER BY scope.scope_type, scope.id LIMIT 1",
+      [portalGroupId, runtimeServerId()],
+    );
+    if (!rows[0]) {
+      fail(
+        "group_not_found",
+        "VIP perks can only be attached to an enabled Arena custom group in this scope.",
+      );
+    }
+  } catch (error) {
+    if (error instanceof VipPerkError) throw error;
+    fail(
+      "membership_authority_unavailable",
+      "The Arena custom group could not be verified.",
+    );
+  }
+}
+
+async function readArenaCustomMembershipsFailClosed(
+  requestedSteamIds?: string[],
+) {
+  try {
+    return await readArenaCustomMemberships(requestedSteamIds);
+  } catch (error) {
+    if (
+      error instanceof VipPerkError &&
+      (error.code === "membership_authority_unavailable" ||
+        error.code === "membership_authority_invalid")
+    ) {
+      // Direct player grants remain Portal-owned and safe to return. An Arena
+      // outage removes group-derived perks from this fresh result instead of
+      // falling back to legacy portal membership rows.
+      console.error("Arena group perks were omitted from the effective VIP perk read", error);
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function readDirectEffectiveSources(
+  database: Pool | PoolConnection,
+  targetSteamId?: string,
+) {
   const [rows] = await database.query<EffectiveRow[]>(
-    `SELECT sources.* FROM (${effectiveSourcesSql}) sources WHERE sources.steam_id = ? ORDER BY sources.perk_key ASC, sources.source_priority DESC, sources.grant_id DESC`,
-    [parsedSteamId],
+    "SELECT grants.steam_id, perks.id, perks.perk_key, perks.display_name, " +
+      "perks.description, perks.category, " +
+      "COALESCE(grants.configuration_override, perks.configuration) AS configuration, " +
+      "perks.enabled, grants.expires_at AS effective_expires_at, " +
+      "CASE grants.source_type WHEN 'shop' THEN 'Token shop' ELSE 'Direct staff grant' END AS source_label, " +
+      "CASE grants.source_type WHEN 'staff' THEN 3000000 ELSE 2000000 END AS source_priority, " +
+      "grants.id AS grant_id " +
+      "FROM portal_vip_perk_player_grants AS grants " +
+      "INNER JOIN portal_vip_perks AS perks ON perks.id = grants.perk_id AND perks.enabled = TRUE " +
+      "WHERE grants.revoked_at IS NULL AND grants.starts_at <= CURRENT_TIMESTAMP(6) " +
+      "AND (grants.expires_at IS NULL OR grants.expires_at > CURRENT_TIMESTAMP(6))" +
+      (targetSteamId ? " AND grants.steam_id = ?" : "") +
+      " ORDER BY grants.steam_id, perks.perk_key, source_priority DESC, grants.id DESC",
+    targetSteamId ? [targetSteamId] : [],
   );
-  const grouped = new Map<string, EffectiveVipPerk & { permanent: boolean }>();
-  for (const row of rows) {
-    const existing = grouped.get(row.perk_key);
+  return rows;
+}
+
+async function readGroupEffectiveSources(
+  database: Pool | PoolConnection,
+  memberships: ArenaCustomMembership[],
+  options: { perkId?: number; lock?: boolean } = {},
+) {
+  if (!memberships.length) return [] as EffectiveRow[];
+  const membershipsByGroupId = new Map<number, ArenaCustomMembership[]>();
+  for (const membership of memberships) {
+    const groupMemberships = membershipsByGroupId.get(membership.portalGroupId) ?? [];
+    groupMemberships.push(membership);
+    membershipsByGroupId.set(membership.portalGroupId, groupMemberships);
+  }
+  const groupIds = [...membershipsByGroupId.keys()].sort((left, right) => left - right);
+  const result: EffectiveSource[] = [];
+  const batchSize = 500;
+  for (let offset = 0; offset < groupIds.length; offset += batchSize) {
+    const batch = groupIds.slice(offset, offset + batchSize);
+    const [grantRows] = await database.query<GroupPerkGrantRow[]>(
+      "SELECT grants.group_id, grants.id AS grant_id, grants.expires_at AS grant_expires_at, " +
+        "perks.id, perks.perk_key, perks.display_name, perks.description, perks.category, " +
+        "COALESCE(grants.configuration_override, perks.configuration) AS configuration, " +
+        "perks.enabled, identity_group.display_name AS group_name, " +
+        "identity_group.profile_priority " +
+        "FROM portal_vip_perk_group_grants AS grants " +
+        "INNER JOIN portal_vip_perks AS perks ON perks.id = grants.perk_id AND perks.enabled = TRUE " +
+        "INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = grants.group_id " +
+        "AND identity_group.source_type = 'custom' " +
+        `WHERE grants.group_id IN (${batch.map(() => "?").join(", ")}) ` +
+        "AND grants.revoked_at IS NULL AND grants.starts_at <= CURRENT_TIMESTAMP(6) " +
+        "AND (grants.expires_at IS NULL OR grants.expires_at > CURRENT_TIMESTAMP(6))" +
+        (options.perkId ? " AND grants.perk_id = ?" : "") +
+        " ORDER BY grants.group_id, perks.perk_key, identity_group.profile_priority DESC, grants.id DESC" +
+        (options.lock ? " FOR UPDATE" : ""),
+      [...batch, ...(options.perkId ? [options.perkId] : [])],
+    );
+    for (const grant of grantRows) {
+      const groupId = integer(grant.group_id, "VIP perk group ID");
+      for (const membership of membershipsByGroupId.get(groupId) ?? []) {
+        result.push({
+          steam_id: membership.steamId,
+          id: grant.id,
+          perk_key: grant.perk_key,
+          display_name: grant.display_name,
+          description: grant.description,
+          category: grant.category,
+          configuration: grant.configuration,
+          enabled: grant.enabled,
+          effective_expires_at: intersectEntitlementExpiry(
+            grant.grant_expires_at,
+            membership.expiresAt,
+          ),
+          source_label: `Group: ${grant.group_name}`,
+          source_priority: 1_000_000 + Number(grant.profile_priority),
+          grant_id: grant.grant_id,
+        });
+      }
+    }
+  }
+  return result;
+}
+
+function mergeEffectiveSources(rows: EffectiveSource[]) {
+  const grouped = new Map<
+    string,
+    EffectiveVipPerk & { permanent: boolean; priority: number; grantId: number }
+  >();
+  const ordered = [...rows].sort((left, right) =>
+    left.steam_id.localeCompare(right.steam_id) ||
+    left.perk_key.localeCompare(right.perk_key) ||
+    Number(right.source_priority) - Number(left.source_priority) ||
+    Number(right.grant_id) - Number(left.grant_id));
+  for (const row of ordered) {
+    const groupedKey = `${row.steam_id}\0${row.perk_key}`;
+    const existing = grouped.get(groupedKey);
     const expiry = iso(row.effective_expires_at);
+    if (row.effective_expires_at !== null && expiry === null) {
+      fail("membership_authority_invalid", "An effective VIP perk expiry is invalid.");
+    }
     if (!existing) {
-      grouped.set(row.perk_key, {
-        steamId: parsedSteamId,
+      grouped.set(groupedKey, {
+        steamId: row.steam_id,
         perk: toPerk(row),
         expiresAt: expiry,
         sources: row.source_label ? [row.source_label] : [],
         permanent: expiry === null,
+        priority: Number(row.source_priority),
+        grantId: Number(row.grant_id),
       });
       continue;
     }
-    if (row.source_label && !existing.sources.includes(row.source_label)) existing.sources.push(row.source_label);
+    if (row.source_label && !existing.sources.includes(row.source_label)) {
+      existing.sources.push(row.source_label);
+    }
     if (expiry === null) {
       existing.permanent = true;
       existing.expiresAt = null;
@@ -426,7 +662,22 @@ export async function getEffectiveVipPerksForPlayer(steamIdValue: string): Promi
       existing.expiresAt = expiry;
     }
   }
-  return [...grouped.values()].map(({ permanent: _permanent, ...entry }) => entry);
+  return [...grouped.values()].map(
+    ({ permanent: _permanent, priority: _priority, grantId: _grantId, ...entry }) => entry,
+  );
+}
+
+export async function getEffectiveVipPerksForPlayer(steamIdValue: string): Promise<EffectiveVipPerk[]> {
+  const database = getPool();
+  if (!database) return [];
+  const parsedSteamId = steamId(steamIdValue);
+  const [directSources, memberships] = await Promise.all([
+    readDirectEffectiveSources(database, parsedSteamId),
+    readArenaCustomMembershipsFailClosed([parsedSteamId]),
+  ]);
+  const groupSources = await readGroupEffectiveSources(database, memberships);
+  return mergeEffectiveSources([...directSources, ...groupSources]).sort((left, right) =>
+    left.perk.key.localeCompare(right.perk.key));
 }
 
 export async function getEffectiveVipPerkPage(pageValue = 1, pageSizeValue = 25): Promise<EffectiveVipPerkPage> {
@@ -434,37 +685,24 @@ export async function getEffectiveVipPerkPage(pageValue = 1, pageSizeValue = 25)
   const page = integer(pageValue, "Page", 1, 100000);
   const pageSize = integer(pageSizeValue, "Page size", 1, 100);
   if (!database) return { entries: [], total: 0, page, pageSize };
-  const groupedSql = `
-    SELECT
-      sources.steam_id,
-      sources.id,
-      sources.perk_key,
-      sources.display_name,
-      sources.description,
-      sources.category,
-      JSON_OBJECT() AS configuration,
-      TRUE AS enabled,
-      CASE WHEN SUM(sources.effective_expires_at IS NULL) > 0 THEN NULL ELSE MAX(sources.effective_expires_at) END AS effective_expires_at,
-      GROUP_CONCAT(DISTINCT sources.source_label ORDER BY sources.source_label SEPARATOR '||') AS source_labels
-    FROM (${effectiveSourcesSql}) sources
-    GROUP BY sources.steam_id, sources.id, sources.perk_key, sources.display_name, sources.description, sources.category
-  `;
-  const [countRows] = await database.query<(RowDataPacket & { total: number | string })[]>(
-    `SELECT COUNT(*) AS total FROM (${groupedSql}) effective`,
+  const [directSources, memberships] = await Promise.all([
+    readDirectEffectiveSources(database),
+    readArenaCustomMembershipsFailClosed(),
+  ]);
+  const groupSources = await readGroupEffectiveSources(database, memberships);
+  const entries = mergeEffectiveSources([...directSources, ...groupSources]).sort(
+    (left, right) =>
+      left.perk.displayName.localeCompare(right.perk.displayName) ||
+      left.steamId.localeCompare(right.steamId) ||
+      left.perk.id - right.perk.id,
   );
-  const total = countRows[0] ? integer(countRows[0].total, "Perk roster total", 0) : 0;
+  const total = entries.length;
   const resolvedPage = Math.min(page, Math.max(1, Math.ceil(total / pageSize)));
-  const [rows] = await database.query<EffectiveRow[]>(
-    `${groupedSql} ORDER BY display_name ASC, steam_id ASC, id ASC LIMIT ? OFFSET ?`,
-    [pageSize, (resolvedPage - 1) * pageSize],
-  );
   return {
-    entries: rows.map((row) => ({
-      steamId: row.steam_id,
-      perk: toPerk(row),
-      expiresAt: iso(row.effective_expires_at),
-      sources: (row.source_labels ?? "").split("||").filter(Boolean),
-    })),
+    entries: entries.slice(
+      (resolvedPage - 1) * pageSize,
+      resolvedPage * pageSize,
+    ),
     total,
     page: resolvedPage,
     pageSize,
@@ -734,6 +972,7 @@ export async function grantVipPerkToGroup(input: {
     metadata: { perkId, durationMinutes },
     requestPayload: { perkId, groupId, durationMinutes, reason, override },
     mutate: async (connection, actorSteamId) => {
+      await requireArenaCustomGroupScope(groupId);
       const [perks] = await connection.query<PerkRow[]>("SELECT id FROM portal_vip_perks WHERE id = ? AND enabled = TRUE FOR UPDATE", [perkId]);
       if (!perks[0]) fail("perk_not_found", "Choose an enabled VIP perk.");
       const [groups] = await connection.query<GroupRow[]>("SELECT id FROM portal_identity_groups WHERE id = ? AND source_type = 'custom' AND enabled = TRUE FOR UPDATE", [groupId]);
@@ -928,22 +1167,16 @@ export async function purchaseVipPerkOffer(input: {
       "SELECT expires_at FROM portal_vip_perk_player_grants WHERE steam_id = ? AND perk_id = ? AND revoked_at IS NULL AND starts_at <= CURRENT_TIMESTAMP AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP) ORDER BY expires_at DESC, id DESC FOR UPDATE",
       [buyerSteamId, parsedOffer.perkId],
     );
-    const [groupGrantRows] = await connection.query<(RowDataPacket & { grant_expires_at: Date | string | null; membership_expires_at: Date | string | null })[]>(
-      "SELECT grants.expires_at AS grant_expires_at, memberships.expires_at AS membership_expires_at " +
-      "FROM portal_vip_perk_group_grants grants " +
-      "INNER JOIN portal_identity_groups identity_group ON identity_group.id = grants.group_id AND identity_group.enabled = TRUE AND identity_group.source_type = 'custom' " +
-      "INNER JOIN portal_identity_group_memberships memberships ON memberships.group_id = identity_group.id AND memberships.steam_id = ? " +
-      "WHERE grants.perk_id = ? AND grants.revoked_at IS NULL AND grants.starts_at <= CURRENT_TIMESTAMP AND (grants.expires_at IS NULL OR grants.expires_at > CURRENT_TIMESTAMP) " +
-      "AND memberships.revoked_at IS NULL AND memberships.starts_at <= CURRENT_TIMESTAMP AND (memberships.expires_at IS NULL OR memberships.expires_at > CURRENT_TIMESTAMP) FOR UPDATE",
-      [buyerSteamId, parsedOffer.perkId],
+    const arenaMemberships = await readArenaCustomMemberships([buyerSteamId]);
+    const groupSources = await readGroupEffectiveSources(
+      connection,
+      arenaMemberships,
+      { perkId: parsedOffer.perkId, lock: true },
     );
     const effectiveExpirations: Array<Date | string | null> = directGrantRows.map((row) => row.expires_at);
-    for (const row of groupGrantRows) {
-      if (row.grant_expires_at === null && row.membership_expires_at === null) effectiveExpirations.push(null);
-      else if (row.grant_expires_at === null) effectiveExpirations.push(row.membership_expires_at);
-      else if (row.membership_expires_at === null) effectiveExpirations.push(row.grant_expires_at);
-      else effectiveExpirations.push(new Date(Math.min(new Date(row.grant_expires_at).valueOf(), new Date(row.membership_expires_at).valueOf())));
-    }
+    effectiveExpirations.push(
+      ...groupSources.map((source) => source.effective_expires_at),
+    );
     if (effectiveExpirations.some((value) => value === null)) fail("invalid_input", "You already own this perk permanently.");
     const latestExpiry = effectiveExpirations.map(iso).filter((value): value is string => Boolean(value)).sort().at(-1);
     const startsAt = new Date();

@@ -6,6 +6,11 @@ import {
 } from "mysql2/promise";
 
 import { configuredGameServerGuid } from "@/lib/admin/server-scope";
+import {
+  ArenaGroupDefinitionAuthorityError,
+  synchronizeAdminsCoreGroupAuthorityInTransaction,
+  synchronizeVipCoreGroupAuthorityInTransaction,
+} from "@/lib/data/arena-group-definition-authority";
 import { getGameDatabasePool, getPortalDatabasePool } from "@/lib/data/database-pools";
 import {
   assertIdentityGroupExternalKeyAvailable,
@@ -81,6 +86,70 @@ type VipMembershipRow = RowDataPacket & {
 
 function fail(code: string, message: string): never {
   throw new ExternalGroupManagementError(code, message);
+}
+
+function rethrowAuthorityError(error: unknown): never {
+  if (error instanceof ArenaGroupDefinitionAuthorityError) {
+    fail(
+      error.code === "authority_storage"
+        ? "game_group_authority_storage"
+        : "game_group_authority_conflict",
+      error.message,
+    );
+  }
+  throw error;
+}
+
+async function synchronizeAdminsAuthority(
+  connection: PoolConnection,
+  input: {
+    actorSteamId: string;
+    previousName?: string;
+    name?: string;
+    rowId?: number;
+  },
+) {
+  try {
+    await synchronizeAdminsCoreGroupAuthorityInTransaction(connection, {
+      actorSteamId: input.actorSteamId,
+      renameHint: input.previousName && input.name && input.previousName !== input.name
+        ? {
+            sourceType: "admins_core",
+            previousExternalKey: input.previousName,
+            nextExternalKey: input.name,
+            adminRowId: input.rowId,
+          }
+        : undefined,
+    });
+  } catch (error) {
+    rethrowAuthorityError(error);
+  }
+}
+
+async function synchronizeVipAuthority(
+  connection: PoolConnection,
+  input: {
+    actorSteamId: string;
+    previousName?: string;
+    name?: string;
+    serverId: number;
+  },
+) {
+  try {
+    await synchronizeVipCoreGroupAuthorityInTransaction(connection, {
+      actorSteamId: input.actorSteamId,
+      renameHint: input.previousName && input.name && input.previousName !== input.name
+        ? {
+            sourceType: "vipcore",
+            previousExternalKey: input.previousName,
+            nextExternalKey: input.name,
+            vipServerId: input.serverId,
+          }
+        : undefined,
+    });
+  } catch (error) {
+    rethrowAuthorityError(error);
+  }
 }
 
 function gamePool() {
@@ -537,6 +606,9 @@ export async function createRuntimeAdminsCoreGroup(input: {
       "INSERT INTO `groups` (Name, Permissions, Servers, Immunity) VALUES (?, ?, ?, ?)",
       [name, JSON.stringify(permissions), JSON.stringify(serverGuids), immunity],
     );
+    await synchronizeAdminsAuthority(connection, {
+      actorSteamId: input.actorSteamId,
+    });
   });
   const catalogueSynced = await refreshPortalCatalogue(input);
   return { name, catalogueSynced };
@@ -605,6 +677,12 @@ export async function updateRuntimeAdminsCoreGroup(input: {
         [name, JSON.stringify(permissions), JSON.stringify(serverGuids), immunity, rowId],
       );
       await renameAdminAssignments(connection, String(existing.Name), name);
+      await synchronizeAdminsAuthority(connection, {
+        actorSteamId: input.actorSteamId,
+        previousName: String(existing.Name),
+        name,
+        rowId,
+      });
     });
   } catch (error) {
     await recoverFailedRenameOutcome(renameIntent, error, () =>
@@ -708,16 +786,21 @@ export async function createRuntimeVipCoreGroup(input: {
   await withGameTransaction(async (connection) => {
     const [duplicates] = await connection.query<VipGroupRow[]>(
       "SELECT server_id, name, weight, values_json, enabled FROM vip_group_definitions " +
-        "WHERE server_id = ? ORDER BY name FOR UPDATE",
-      [serverId],
+        "ORDER BY server_id, name FOR UPDATE",
     );
-    if (duplicates.some((row) => sameName(String(row.name), name))) {
+    if (duplicates.some(
+      (row) => Number(row.server_id) === serverId && sameName(String(row.name), name),
+    )) {
       fail("external_group_exists", "A VIPCore group already uses that name in this scope.");
     }
     await connection.execute(
       "INSERT INTO vip_group_definitions (server_id, name, weight, values_json, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
       [serverId, name, weight, JSON.stringify(values), enabled],
     );
+    await synchronizeVipAuthority(connection, {
+      actorSteamId: input.actorSteamId,
+      serverId,
+    });
   });
   const catalogueSynced = await refreshPortalCatalogue(input);
   return { name, catalogueSynced };
@@ -749,26 +832,57 @@ export async function updateRuntimeVipCoreGroup(input: {
     await withGameTransaction(async (connection) => {
       const [rows] = await connection.query<VipGroupRow[]>(
         "SELECT server_id, name, weight, values_json, enabled FROM vip_group_definitions " +
-          "WHERE server_id = ? ORDER BY name FOR UPDATE",
-        [serverId],
+          "ORDER BY server_id, name FOR UPDATE",
       );
       // Lock the whole delivery scope in one stable order. This matches the
       // source-aware VIP mutation path and prevents target/destination lock
       // inversion across concurrent renames.
-      const previousRows = rows.filter((row) => sameName(String(row.name), previousName));
+      const scopedRows = rows.filter((row) => Number(row.server_id) === serverId);
+      const previousRows = scopedRows.filter((row) => sameName(String(row.name), previousName));
       if (previousRows.length !== 1) {
         fail("external_group_not_found", "That VIPCore group changed. Refresh before saving.");
       }
       const storedName = String(previousRows[0].name);
-      const duplicates = rows.filter((row) => sameName(String(row.name), name));
+      const duplicates = scopedRows.filter((row) => sameName(String(row.name), name));
       if (duplicates.some((row) => !sameName(String(row.name), storedName))) {
         fail("external_group_exists", "A VIPCore group already uses that name in this scope.");
       }
-      await renameVipMembershipRows(connection, serverId, storedName, name);
+      const renaming = storedName !== name;
+      if (
+        renaming &&
+        rows.some(
+          (row) =>
+            !sameName(String(row.name), storedName) && sameName(String(row.name), name),
+        )
+      ) {
+        fail(
+          "external_group_exists",
+          "That VIPCore name already identifies another tier in a different scope. Edit that tier instead of merging two live identities.",
+        );
+      }
+      if (renaming) {
+        // A VIP name is the stable cross-scope tier identity in Arena. Rename
+        // every native definition and assignment carrying that identity in one
+        // transaction so a per-server edit cannot split one authority group
+        // into two groups with stranded memberships.
+        await renameVipMembershipRows(connection, 0, storedName, name);
+        await connection.execute(
+          "UPDATE vip_group_definitions SET name = ?, updated_at = CURRENT_TIMESTAMP " +
+            "WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))",
+          [name, storedName],
+        );
+      }
       await connection.execute(
-        "UPDATE vip_group_definitions SET name = ?, weight = ?, values_json = ?, enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE server_id = ? AND name = ?",
-        [name, weight, JSON.stringify(values), enabled, serverId, storedName],
+        "UPDATE vip_group_definitions SET weight = ?, values_json = ?, enabled = ?, updated_at = CURRENT_TIMESTAMP " +
+          "WHERE server_id = ? AND name = ?",
+        [weight, JSON.stringify(values), enabled, serverId, name],
       );
+      await synchronizeVipAuthority(connection, {
+        actorSteamId: input.actorSteamId,
+        previousName: storedName,
+        name,
+        serverId,
+      });
     });
   } catch (error) {
     await recoverFailedRenameOutcome(renameIntent, error, () =>

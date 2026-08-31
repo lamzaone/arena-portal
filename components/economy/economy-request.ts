@@ -29,6 +29,16 @@ export type EconomyActionResult = {
   perkName?: string;
 };
 
+export class EconomyActionRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = "EconomyActionRequestError";
+  }
+}
+
 export function createEconomyIdempotencyKey() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}-${Math.random().toString(36).slice(2, 14)}`;
@@ -55,7 +65,10 @@ export async function postEconomyAction(
   }
 
   if (!response.ok || !result?.ok) {
-    throw new Error(result?.message || "The economy request could not be completed. Please reload and try again.");
+    throw new EconomyActionRequestError(
+      result?.message || "The economy request could not be completed. Please reload and try again.",
+      response.status,
+    );
   }
   return result;
 }
