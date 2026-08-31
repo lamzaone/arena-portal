@@ -27,6 +27,26 @@ export function isVipActivationTerminalState(
 }
 
 /**
+ * An ended subscription may intentionally retain a legacy-suppression
+ * tombstone after staff revoke access. That tombstone prevents an old
+ * VIPCore row from resurfacing, but it must not stop the player from starting
+ * a new Arena-owned subscription with another inventory item.
+ *
+ * Suppression is suspicious only when a row still claims to be active while
+ * its referenced membership is no longer effective. Conflict rows are
+ * rejected separately before this check.
+ */
+export function vipSuppressionRequiresReconciliation(input: {
+  subscriptionStatus: "active" | "ended" | "conflict";
+  subscriptionActive: boolean;
+  suppressionActive: boolean;
+}) {
+  return input.subscriptionStatus === "active" &&
+    !input.subscriptionActive &&
+    input.suppressionActive;
+}
+
+/**
  * Keeps recovery decisions explicit. In particular, an ambiguous dispatch
  * never releases an inventory item: it remains pending and is dispatched
  * again with the same arena command UUID.

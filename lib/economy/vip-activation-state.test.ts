@@ -3,8 +3,10 @@ import test from "node:test";
 
 import {
   canonicalVipActivationJson,
+  vipSuppressionRequiresReconciliation,
   vipActivationResumeAction,
 } from "./vip-activation-state.ts";
+import { vipActivationMessage } from "./vip-activation-message.ts";
 
 test("canonical activation JSON is stable across object insertion order", () => {
   assert.equal(
@@ -45,4 +47,52 @@ test("only durable terminal outcomes return or reject", () => {
     vipActivationResumeAction({ state: "manual_review" }),
     "manual-review",
   );
+});
+
+test("an ended subscription suppression tombstone permits a new activation", () => {
+  assert.equal(
+    vipSuppressionRequiresReconciliation({
+      subscriptionStatus: "ended",
+      subscriptionActive: false,
+      suppressionActive: true,
+    }),
+    false,
+  );
+});
+
+test("an inconsistent active subscription suppression still requires staff reconciliation", () => {
+  assert.equal(
+    vipSuppressionRequiresReconciliation({
+      subscriptionStatus: "active",
+      subscriptionActive: false,
+      suppressionActive: true,
+    }),
+    true,
+  );
+  assert.equal(
+    vipSuppressionRequiresReconciliation({
+      subscriptionStatus: "active",
+      subscriptionActive: true,
+      suppressionActive: true,
+    }),
+    false,
+  );
+});
+
+test("upgrade messaging separates the full item duration from converted carry-over", () => {
+  const message = vipActivationMessage({
+    activationKind: "upgraded",
+    convertedDurationSeconds: 69_113,
+    durationMinutes: 43_200,
+    expiresAt: "2026-10-01T18:49:22.199Z",
+    groupName: "ULTIMATE",
+    itemGroupName: "ULTIMATE",
+    previousGroupName: "DIAMOND",
+    timeDeductedSeconds: 17_279,
+  });
+
+  assert.match(message, /full 30d ULTIMATE item/);
+  assert.match(message, /19h 11m 53s of carry-over/);
+  assert.match(message, /Total new ULTIMATE duration: 30d 19h 11m 53s/);
+  assert.match(message, /1 Oct 2026, 18:49 UTC/);
 });

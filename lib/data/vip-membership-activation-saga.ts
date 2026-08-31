@@ -20,6 +20,7 @@ import {
 } from "@/lib/economy/vip-membership-conversion";
 import {
   canonicalVipActivationJson,
+  vipSuppressionRequiresReconciliation,
   vipActivationResumeAction,
   type VipActivationJobState,
 } from "@/lib/economy/vip-activation-state";
@@ -1311,10 +1312,14 @@ async function applyArenaVipCommand(job: PortalActivationJobRow): Promise<ArenaR
       );
       const suppressionUntil = asDate(subscription.legacy_suppressed_until, "legacy VIP suppression expiry");
       const suppressionPermanent = asBoolean(subscription.legacy_suppressed_permanently);
-      if (
-        !subscriptionActive &&
-        (suppressionPermanent || (suppressionUntil && suppressionUntil.getTime() > now.getTime()))
-      ) {
+      if (vipSuppressionRequiresReconciliation({
+        subscriptionStatus: subscription.status,
+        subscriptionActive,
+        suppressionActive: Boolean(
+          suppressionPermanent ||
+          (suppressionUntil && suppressionUntil.getTime() > now.getTime()),
+        ),
+      })) {
         rejection("membership_conflict", "Legacy VIP suppression exists without a matching active subscription. Staff must reconcile it first.");
       }
       const currentGroupId = subscriptionActive
