@@ -96,12 +96,14 @@ type PortalBridgeTarget = {
   displayName: string;
   rankWeight: number;
   arenaGroupRowVersion: number;
+  arenaScopeUuids: string[];
 };
 
 type PortalCatalogueTargetRow = RowDataPacket & {
   catalogue_id: number | string;
   listing_id: number | string;
   duration_minutes: number | string;
+  arena_scope_uuid: string | null;
 };
 
 type DesiredScopeAssignment = {
@@ -1221,6 +1223,19 @@ async function linkPortalAdaptersInArena(
         displayName: String(group.display_name),
         rankWeight: integerValue(group.rank_weight),
         arenaGroupRowVersion: integerValue(group.row_version, 1),
+        arenaScopeUuids: state.groupScopes
+          .filter((groupScope) =>
+            integerValue(groupScope.group_id) === integerValue(group.id) &&
+            booleanValue(groupScope.enabled)
+          )
+          .flatMap((groupScope) => {
+            const scope = state.scopes.find(
+              (candidate) => integerValue(candidate.id) === integerValue(groupScope.scope_id),
+            );
+            return scope && booleanValue(scope.enabled)
+              ? [String(scope.scope_uuid).toLowerCase()]
+              : [];
+          }),
       });
     }
     await connection.commit();
@@ -1288,7 +1303,7 @@ export async function synchronizePortalRuntimeGroupProjection(
         ],
       );
       const [catalogueTargets] = await connection.query<PortalCatalogueTargetRow[]>(
-        "SELECT target.catalogue_id, target.listing_id, listing.duration_minutes " +
+        "SELECT target.catalogue_id, target.listing_id, listing.duration_minutes, listing.arena_scope_uuid " +
           "FROM portal_arena_group_catalogue_targets AS target " +
           "INNER JOIN portal_identity_group_listings AS listing ON listing.id = target.listing_id " +
           "WHERE listing.group_id = ? AND target.arena_group_uuid = ? " +
@@ -1297,13 +1312,22 @@ export async function synchronizePortalRuntimeGroupProjection(
       );
       for (const catalogueTarget of catalogueTargets) {
         const durationMinutes = integerValue(catalogueTarget.duration_minutes);
+        const arenaScopeUuid = catalogueTarget.arena_scope_uuid
+          ? String(catalogueTarget.arena_scope_uuid).toLowerCase()
+          : target.arenaScopeUuid;
+        if (!target.arenaScopeUuids.includes(arenaScopeUuid)) {
+          authorityError(
+            "authority_conflict",
+            `Portal listing ${catalogueTarget.listing_id} targets a scope where ${target.arenaGroupKey} is not enabled.`,
+          );
+        }
         const snapshot = {
           schemaVersion: 1,
           legacyPortalGroupId: target.portalGroupId,
           listingId: integerValue(catalogueTarget.listing_id),
           arenaGroupUuid: target.arenaGroupUuid,
           arenaGroupKey: target.arenaGroupKey,
-          arenaScopeUuid: target.arenaScopeUuid,
+          arenaScopeUuid,
           groupType: target.arenaGroupType,
           vipFamilyKey: target.vipFamilyKey,
           displayName: target.displayName,
@@ -1319,7 +1343,7 @@ export async function synchronizePortalRuntimeGroupProjection(
           [
             target.portalGroupId,
             target.arenaGroupKey,
-            target.arenaScopeUuid,
+            arenaScopeUuid,
             target.arenaGroupType,
             target.arenaGroupRowVersion,
             durationMinutes,

@@ -439,6 +439,17 @@
 
 .offerDetails strong { color: var(--theme-text); font-size: .78rem; }
 .offerDetails small { overflow-wrap: anywhere; color: var(--theme-text-muted); font-size: .75rem; line-height: 1.35; }
+.offerDetails .offerScope {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: .28rem;
+  margin-top: .15rem;
+  color: color-mix(in srgb, var(--vip-tier-color) 72%, var(--theme-text));
+  font-size: .68rem;
+  font-weight: 750;
+}
+.offerScope > svg { width: .78rem; height: .78rem; flex: 0 0 auto; }
 
 .conversionPreview {
   display: grid;

@@ -1496,6 +1496,7 @@ function buildMembershipPlan(sources, targets, scopePlan, groupPlan, issues) {
 
 function buildPortalBridgePlan(sources, groupPlan, scopePlan, issues) {
   const globalScope = scopePlan.byVipServerId.get("0");
+  const scopesByUuid = new Map(scopePlan.scopes.map((scope) => [scope.scopeUuid, scope]));
   const listings = [];
   const rewards = [];
   const catalogueTargets = [];
@@ -1514,12 +1515,24 @@ function buildPortalBridgePlan(sources, groupPlan, scopePlan, issues) {
       issues.block("unresolved-listing-group", "A portal listing has no canonical arena group.", { listingId: String(row.id), portalGroupId: String(row.group_id) });
       continue;
     }
-    const mapping = { row, group, scope: globalScope };
+    const requestedScopeUuid = row.arena_scope_uuid === null || row.arena_scope_uuid === undefined
+      ? globalScope.scopeUuid
+      : normalizedName(row.arena_scope_uuid);
+    const scope = scopesByUuid.get(requestedScopeUuid);
+    if (!scope) {
+      issues.block("unresolved-listing-scope", "A portal listing targets an unknown Arena scope.", { listingId: String(row.id), arenaScopeUuid: requestedScopeUuid });
+      continue;
+    }
+    if (!group.scopes.has(scope.scopeUuid)) {
+      issues.block("listing-scope-not-enabled", "A portal listing targets a scope where its Arena group is not enabled.", { listingId: String(row.id), groupUuid: group.groupUuid, arenaScopeUuid: scope.scopeUuid });
+      continue;
+    }
+    const mapping = { row, group, scope };
     listings.push(mapping);
     for (const [column, expected] of [
       ["arena_group_uuid", group.groupUuid],
       ["arena_group_key", group.groupKey],
-      ["arena_scope_uuid", globalScope.scopeUuid],
+      ["arena_scope_uuid", scope.scopeUuid],
     ]) {
       const actual = row[column] === null || row[column] === undefined ? null : String(row[column]);
       if (actual !== null && normalizedName(actual) !== normalizedName(expected)) {
@@ -1535,7 +1548,7 @@ function buildPortalBridgePlan(sources, groupPlan, scopePlan, issues) {
       continue;
     }
     if (existingByCatalogue) {
-      if (String(existingByCatalogue.listing_id) !== String(row.id) || String(existingByCatalogue.arena_group_uuid).toLowerCase() !== group.groupUuid || String(existingByCatalogue.arena_scope_uuid).toLowerCase() !== globalScope.scopeUuid) {
+      if (String(existingByCatalogue.listing_id) !== String(row.id) || String(existingByCatalogue.arena_group_uuid).toLowerCase() !== group.groupUuid || String(existingByCatalogue.arena_scope_uuid).toLowerCase() !== scope.scopeUuid) {
         issues.block("catalogue-target-conflict", "A catalogue row already targets another listing or arena identity.", { catalogueId, listingId: String(row.id) });
         continue;
       }
@@ -1543,7 +1556,7 @@ function buildPortalBridgePlan(sources, groupPlan, scopePlan, issues) {
     catalogueTargets.push({
       row,
       group,
-      scope: globalScope,
+      scope,
       catalogueId,
       targetSnapshot: {
         schemaVersion: 1,
@@ -1552,7 +1565,7 @@ function buildPortalBridgePlan(sources, groupPlan, scopePlan, issues) {
         listingId: String(row.id),
         arenaGroupUuid: group.groupUuid,
         arenaGroupKey: group.groupKey,
-        arenaScopeUuid: globalScope.scopeUuid,
+        arenaScopeUuid: scope.scopeUuid,
         groupType: group.groupType,
         vipFamilyKey: group.vipFamilyKey,
         displayName: group.displayName,

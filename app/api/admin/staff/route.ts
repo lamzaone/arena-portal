@@ -51,6 +51,15 @@ function positiveDurationMinutes(value: FormDataEntryValue | null) {
     : null;
 }
 
+function assignmentDurationMinutes(value: FormDataEntryValue | null) {
+  const text = String(value ?? "").trim();
+  if (!/^\d+$/.test(text)) return null;
+  const parsed = Number(text);
+  return Number.isSafeInteger(parsed) && parsed >= 0 && parsed <= 525_600
+    ? parsed
+    : null;
+}
+
 function validVipAccountId(value: string, steamId: string) {
   if (!/^\d{1,20}$/.test(value)) return false;
   try {
@@ -223,7 +232,7 @@ export async function POST(request: Request) {
         return redirect(request, "admins", "error", "immunity");
       }
       const groupId = positiveGroupId(formData.get("groupId"));
-      const assignmentMinutes = positiveDurationMinutes(
+      const assignmentMinutes = assignmentDurationMinutes(
         formData.get("durationMinutes"),
       );
       const reason = String(formData.get("reason") ?? "");

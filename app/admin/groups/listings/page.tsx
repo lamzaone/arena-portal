@@ -6,6 +6,7 @@ import {
   Crown,
   LockKeyhole,
   PackageCheck,
+  Server,
   ShieldAlert,
   Sparkles,
 } from "lucide-react";
@@ -26,6 +27,7 @@ import {
   isMissingIdentityGroupListingSchemaError,
   type IdentityGroupListing,
   type IdentityGroupListingAdminSnapshot,
+  type IdentityGroupListingVipScope,
 } from "@/lib/data/identity-group-listings";
 import {
   getVipPerkAdminSnapshot,
@@ -117,6 +119,10 @@ const errors: Record<string, string> = {
   founder_listing_forbidden: "Founder is an external trust anchor and cannot be sold or granted through a portal listing.",
   listing_not_found: "That membership listing no longer exists.",
   staff_confirmation_required: "Confirm that this listing grants live game staff permissions.",
+  vip_scope_unavailable: "That VIP tier is not enabled on the selected Arena server.",
+  vip_scope_has_inventory: "This package has unconsumed copies. Retire it and create a new server-specific listing so owned items keep their original destination.",
+  arena_storage_unavailable: "The Arena group database is unavailable. Check GAME_DATABASE_URL before changing a VIP package.",
+  arena_target_conflict: "The selected group has conflicting Arena targets. Resolve its scopes before publishing it.",
   perk_not_found: "Choose an enabled individual perk.",
   perk_not_runtime_verified: "VIPCore has not recently reported that feature on the configured server.",
   offer_not_found: "That active individual perk offer no longer exists.",
@@ -128,11 +134,14 @@ const errors: Record<string, string> = {
 function ListingForm({
   csrf,
   listing,
+  vipScopes,
 }: {
   csrf: string;
   listing: IdentityGroupListing;
+  vipScopes: IdentityGroupListingVipScope[];
 }) {
   const staff = listing.group.sourceType === "admins_core";
+  const vip = listing.group.sourceType === "vipcore";
   return (
     <form className={`staff-management-form ${styles.editForm}`} action="/api/admin/group-listings" method="post">
       <Fields csrf={csrf} action="listing-update" />
@@ -158,6 +167,20 @@ function ListingForm({
         Sort order
         <input name="sortOrder" type="number" min="-1000000" max="1000000" defaultValue={listing.sortOrder} required />
       </label>
+      {vip ? (
+        <label>
+          VIP destination server
+          <select name="vipServerId" defaultValue={listing.vipScope?.serverId ?? 0} required>
+            {!vipScopes.length ? <option value="0">Shared / all Arena servers</option> : null}
+            {vipScopes.map((scope) => (
+              <option key={scope.scopeUuid} value={scope.serverId} disabled={!scope.hasDefinitions}>
+                {scope.label} · {scope.description}
+              </option>
+            ))}
+          </select>
+          <small>The item activates in this exact Arena scope, matching /vip_manage.</small>
+        </label>
+      ) : <input type="hidden" name="vipServerId" value="0" />}
       <label className={styles.wide}>
         Description
         <input name="description" maxLength={255} defaultValue={listing.description ?? ""} placeholder={`Activates ${listing.group.displayName} membership.`} />
@@ -202,7 +225,7 @@ export default async function GroupListingsPage({
   const activeView = selectedView(params.view);
   const selectedListingId = positiveInteger(params.listing);
   const csrf = createAdminActionToken(session);
-  let listingSnapshot: IdentityGroupListingAdminSnapshot = { groups: [], listings: [] };
+  let listingSnapshot: IdentityGroupListingAdminSnapshot = { groups: [], listings: [], vipScopes: [] };
   let perkSnapshot: VipPerkAdminSnapshot = { perks: [], offers: [], customGroups: [], playerGrants: [], groupGrants: [], grantTotal: 0, grantPage: 1, grantPageSize: 50 };
   let storageError = false;
   let migrationNeeded: 19 | 20 | null = null;
@@ -264,6 +287,18 @@ export default async function GroupListingsPage({
                   {listingSnapshot.groups.map((group) => <option key={group.id} value={group.id} disabled={!group.enabled}>{group.displayName} · {sourceName(group.sourceType)}{group.enabled ? "" : " · disabled"}</option>)}
                 </select>
               </label>
+              <label>
+                VIP destination server
+                <select name="vipServerId" defaultValue="0" required aria-describedby="vip-server-help">
+                  {!listingSnapshot.vipScopes.length ? <option value="0">Shared / all Arena servers</option> : null}
+                  {listingSnapshot.vipScopes.map((scope) => (
+                    <option key={scope.scopeUuid} value={scope.serverId} disabled={!scope.hasDefinitions}>
+                      {scope.label} · {scope.description}
+                    </option>
+                  ))}
+                </select>
+                <small id="vip-server-help">Used for VIPCore packages. Shared applies network-wide; a named server matches /vip_manage.</small>
+              </label>
               <label>Listing name<input name="listingName" maxLength={180} placeholder="Gold VIP · 30 days" required /></label>
               <label>Duration (minutes)<input name="durationMinutes" type="number" min="0" max="525600" defaultValue="43200" required /><small>0 permanent · 1440 one day · 43200 one month</small></label>
               <label>Donation price (EUR)<input name="euroPrice" type="number" min="0.01" max="10000000" step="0.01" defaultValue="5.00" required /></label>
@@ -285,10 +320,10 @@ export default async function GroupListingsPage({
                   <details className={styles.listing} id={`listing-${listing.id}`} key={listing.id} open={listing.id === selectedListingId} data-enabled={listing.enabled ? "true" : "false"}>
                     <summary>
                       <span className={styles.listingIdentity}><IdentityGroupBadge group={listing.group} compact /><span><strong>{listing.listingName}</strong><small>{listing.group.displayName} · {sourceName(listing.group.sourceType)}</small></span></span>
-                      <span className={styles.listingFacts}><span>{durationLabel(listing.durationMinutes)}</span><span>EUR {euroInput(listing.euroPriceCents)}</span><span>{listing.tokenPrice.toLocaleString()} Tokens</span><span className={styles.status} data-enabled={listing.enabled ? "true" : "false"}>{listing.enabled ? channels : "Disabled"}</span></span>
+                      <span className={styles.listingFacts}>{listing.group.sourceType === "vipcore" ? <span className={styles.scopeFact}><Server aria-hidden="true" /> {listing.vipScope?.label ?? "Arena scope unavailable"}</span> : null}<span>{durationLabel(listing.durationMinutes)}</span><span>EUR {euroInput(listing.euroPriceCents)}</span><span>{listing.tokenPrice.toLocaleString()} Tokens</span><span className={styles.status} data-enabled={listing.enabled ? "true" : "false"}>{listing.enabled ? channels : "Disabled"}</span></span>
                     </summary>
                     {listing.group.sourceType === "admins_core" ? <aside className={styles.dangerNote}><ShieldAlert aria-hidden="true" /><div><strong>Staff permission listing</strong><span>Anyone who activates this item receives the connected Admins.Core group for the configured duration.</span></div></aside> : null}
-                    <ListingForm csrf={csrf} listing={listing} />
+                    <ListingForm csrf={csrf} listing={listing} vipScopes={listingSnapshot.vipScopes} />
                   </details>
                 );
               })}

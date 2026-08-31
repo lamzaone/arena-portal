@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Check, Clock3, Crown, LockKeyhole, PackageCheck, RefreshCw, ShieldCheck, Sparkles, UsersRound } from "lucide-react";
+import { Check, Clock3, Crown, LockKeyhole, PackageCheck, RefreshCw, Server, ShieldCheck, Sparkles, UsersRound } from "lucide-react";
 import type { CSSProperties } from "react";
 
 import { formatDate } from "@/components/formatters";
@@ -849,6 +849,11 @@ export default async function VipPage({ searchParams }: VipPageProps) {
                                 <div className={styles.offerDetails}>
                                   <strong>{duration(listing.durationMinutes)}</strong>
                                   <small>{listing.listingName}</small>
+                                  {listing.group.sourceType === "vipcore" ? (
+                                    <small className={styles.offerScope}>
+                                      <Server aria-hidden="true" /> Applies to {listing.vipScope?.label ?? "the configured Arena scope"}
+                                    </small>
+                                  ) : null}
                                 </div>
                                 <div className={styles.conversionPreview} data-part="conversion-preview">
                                   <RefreshCw aria-hidden="true" />

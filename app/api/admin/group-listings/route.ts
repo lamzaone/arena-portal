@@ -82,6 +82,7 @@ export async function POST(request: Request) {
     marketEnabled: bool(formData, "marketEnabled"),
     enabled: bool(formData, "enabled"),
     sortOrder: integer(formData, "sortOrder"),
+    vipServerId: integer(formData, "vipServerId"),
     confirmStaffAccess: bool(formData, "confirmStaffAccess"),
   };
 

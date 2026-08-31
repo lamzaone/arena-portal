@@ -1114,7 +1114,7 @@ function QuickAdd({
             <input type="hidden" name="action" value="admin-membership-assign" />
             <header>
               <span data-kind="admin"><ShieldCheck aria-hidden="true" /></span>
-              <div><strong>Add Admin access</strong><small>Creates a separate timed assignment.</small></div>
+              <div><strong>Add Admin access</strong><small>Creates a timed or permanent Arena assignment.</small></div>
             </header>
             <PlayerSearchField
               id={`${generatedId}-admin-player`}
@@ -1137,8 +1137,8 @@ function QuickAdd({
             </label>
             <label>
               Duration (minutes)
-              <input name="durationMinutes" type="number" min="1" max="525600" defaultValue="1440" required />
-              <small>1440 = 1 day, 10080 = 7 days, 43200 = 30 days.</small>
+              <input name="durationMinutes" type="number" min="0" max="525600" defaultValue="1440" required />
+              <small>0 = permanent, 10 = 10 minutes, 1440 = 1 day.</small>
             </label>
             <label>
               Internal reason

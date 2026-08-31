@@ -8,7 +8,10 @@ import {
   type RowDataPacket,
 } from "mysql2/promise";
 
-import { getPortalDatabasePool } from "@/lib/data/database-pools";
+import {
+  getGameDatabasePool,
+  getPortalDatabasePool,
+} from "@/lib/data/database-pools";
 import {
   acquireIdentityCatalogueMutationLock,
   releaseIdentityCatalogueMutationLock,
@@ -39,6 +42,14 @@ export type GroupListingGroup = {
   enabled: boolean;
 };
 
+export type IdentityGroupListingVipScope = {
+  serverId: number;
+  scopeUuid: string;
+  label: string;
+  description: string;
+  hasDefinitions: boolean;
+};
+
 export type IdentityGroupListing = {
   id: number;
   groupId: number;
@@ -54,12 +65,15 @@ export type IdentityGroupListing = {
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
+  arenaScopeUuid: string | null;
+  vipScope: IdentityGroupListingVipScope | null;
   group: GroupListingGroup;
 };
 
 export type IdentityGroupListingAdminSnapshot = {
   groups: GroupListingGroup[];
   listings: IdentityGroupListing[];
+  vipScopes: IdentityGroupListingVipScope[];
 };
 
 export class IdentityGroupListingError extends Error {
@@ -102,7 +116,44 @@ type ListingRow = GroupRow & {
   sort_order: number | string;
   created_at: Date | string;
   updated_at: Date | string;
+  arena_group_uuid: string | null;
+  arena_group_key: string | null;
+  arena_scope_uuid: string | null;
+  arena_group_row_version: number | string | null;
   catalogue_metadata?: unknown;
+};
+
+type ArenaVipScopeRow = RowDataPacket & {
+  server_id: number | string;
+  scope_uuid: string;
+  display_name: string;
+  definition_count: number | string;
+};
+
+type ArenaCatalogueTargetRow = RowDataPacket & {
+  group_uuid: string;
+  group_key: string;
+  group_type: "admin" | "vip" | "custom";
+  vip_family_key: string | null;
+  display_name: string;
+  rank_weight: number | string;
+  row_version: number | string;
+  scope_uuid: string;
+  vip_server_id: number | string;
+  scope_display_name: string;
+};
+
+type ArenaCatalogueTarget = {
+  arenaGroupUuid: string;
+  arenaGroupKey: string;
+  arenaGroupType: "admin" | "vip" | "custom";
+  vipFamilyKey: string | null;
+  displayName: string;
+  rankWeight: number;
+  arenaGroupRowVersion: number;
+  arenaScopeUuid: string;
+  vipServerId: number;
+  scopeDisplayName: string;
 };
 
 type OperationRow = RowDataPacket & {
@@ -126,7 +177,8 @@ const groupSelect =
 const listingSelect =
   "SELECT listings.id AS listing_id, listings.group_id, listings.catalogue_id, listings.listing_name, listings.description AS listing_description, " +
   "listings.duration_minutes, listings.euro_price_cents, listings.token_price, listings.vip_page_enabled, listings.market_enabled, listings.enabled AS listing_enabled, " +
-  "listings.sort_order, listings.created_at, listings.updated_at, identity_group.id, identity_group.group_key, identity_group.display_name, identity_group.source_type, identity_group.external_key, identity_group.description, " +
+  "listings.sort_order, listings.created_at, listings.updated_at, listings.arena_group_uuid, listings.arena_group_key, listings.arena_scope_uuid, listings.arena_group_row_version, " +
+  "identity_group.id, identity_group.group_key, identity_group.display_name, identity_group.source_type, identity_group.external_key, identity_group.description, " +
   "identity_group.badge_label, identity_group.badge_icon_key, identity_group.badge_color, identity_group.badge_soft_color, identity_group.profile_priority, identity_group.enabled ";
 
 function fail(code: string, message: string): never {
@@ -204,7 +256,18 @@ function toGroup(row: GroupRow): GroupListingGroup {
   };
 }
 
-function toListing(row: ListingRow): IdentityGroupListing {
+function databaseUuid(value: unknown, field: string) {
+  const parsed = String(value ?? "").trim().toLowerCase();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(parsed)) {
+    fail("invalid_database_value", `${field} is invalid.`);
+  }
+  return parsed;
+}
+
+function toListing(
+  row: ListingRow,
+  vipScope?: IdentityGroupListingVipScope | null,
+): IdentityGroupListing {
   if (row.catalogue_id === null) {
     fail("invalid_database_value", "A group listing has no inventory catalogue item.");
   }
@@ -228,7 +291,97 @@ function toListing(row: ListingRow): IdentityGroupListing {
     sortOrder: integer(row.sort_order, "Sort order", -1_000_000, 1_000_000),
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
+    arenaScopeUuid: row.arena_scope_uuid
+      ? databaseUuid(row.arena_scope_uuid, "Arena scope UUID")
+      : null,
+    vipScope: vipScope ?? null,
     group: toGroup(row),
+  };
+}
+
+function arenaGroupType(sourceType: IdentityGroupSource): ArenaCatalogueTarget["arenaGroupType"] {
+  if (sourceType === "admins_core") return "admin";
+  if (sourceType === "vipcore") return "vip";
+  return "custom";
+}
+
+export async function getIdentityGroupListingVipScopes(): Promise<IdentityGroupListingVipScope[]> {
+  const pool = getGameDatabasePool();
+  if (!pool) return [];
+  const [rows] = await pool.query<ArenaVipScopeRow[]>(
+    "SELECT scope.vip_server_id AS server_id, scope.scope_uuid, scope.display_name, " +
+      "COUNT(identity_group.id) AS definition_count " +
+      "FROM arena_scopes AS scope " +
+      "LEFT JOIN arena_group_scopes AS group_scope ON group_scope.scope_id = scope.id AND group_scope.enabled = TRUE " +
+      "LEFT JOIN arena_groups AS identity_group ON identity_group.id = group_scope.group_id " +
+      "AND identity_group.group_type = 'vip' AND identity_group.enabled = TRUE " +
+      "WHERE scope.enabled = TRUE AND scope.vip_server_id IS NOT NULL " +
+      "GROUP BY scope.id, scope.vip_server_id, scope.scope_uuid, scope.display_name " +
+      "ORDER BY scope.vip_server_id",
+  );
+  return rows.map((row) => {
+    const serverId = integer(row.server_id, "VIP server ID");
+    const definitionCount = integer(row.definition_count, "VIP definition count");
+    return {
+      serverId,
+      scopeUuid: databaseUuid(row.scope_uuid, "Arena scope UUID"),
+      label: serverId === 0
+        ? "Shared / all Arena servers"
+        : String(row.display_name).trim() || `Arena server ${serverId}`,
+      description: definitionCount > 0
+        ? `${definitionCount} VIP tier definition${definitionCount === 1 ? "" : "s"}`
+        : "No enabled VIP tier definitions",
+      hasDefinitions: definitionCount > 0,
+    };
+  });
+}
+
+async function resolveArenaCatalogueTarget(
+  group: Pick<GroupRow, "id" | "source_type">,
+  requestedVipServerId: number,
+): Promise<ArenaCatalogueTarget> {
+  const pool = getGameDatabasePool();
+  if (!pool) {
+    fail("arena_storage_unavailable", "The Arena group database is not configured.");
+  }
+  const portalGroupId = integer(group.id, "Group ID", 1);
+  const vipServerId = group.source_type === "vipcore" ? requestedVipServerId : 0;
+  const [rows] = await pool.query<ArenaCatalogueTargetRow[]>(
+    "SELECT identity_group.group_uuid, identity_group.group_key, identity_group.group_type, " +
+      "identity_group.vip_family_key, identity_group.display_name, " +
+      "COALESCE(group_scope.rank_weight_override, identity_group.rank_weight) AS rank_weight, " +
+      "identity_group.row_version, scope.scope_uuid, scope.vip_server_id, scope.display_name AS scope_display_name " +
+      "FROM arena_groups AS identity_group " +
+      "INNER JOIN arena_group_scopes AS group_scope ON group_scope.group_id = identity_group.id AND group_scope.enabled = TRUE " +
+      "INNER JOIN arena_scopes AS scope ON scope.id = group_scope.scope_id AND scope.enabled = TRUE " +
+      "WHERE identity_group.legacy_portal_group_id = ? AND identity_group.group_type = ? " +
+      "AND identity_group.enabled = TRUE AND scope.vip_server_id = ? " +
+      "ORDER BY scope.id LIMIT 2",
+    [portalGroupId, arenaGroupType(group.source_type), vipServerId],
+  );
+  const row = rows[0];
+  if (!row) {
+    fail(
+      "vip_scope_unavailable",
+      group.source_type === "vipcore"
+        ? "That VIP tier is not enabled for the selected Arena server."
+        : "That connected group has no enabled global Arena target.",
+    );
+  }
+  if (rows.length > 1) {
+    fail("arena_target_conflict", "That group has multiple Arena targets for the selected server.");
+  }
+  return {
+    arenaGroupUuid: databaseUuid(row.group_uuid, "Arena group UUID"),
+    arenaGroupKey: String(row.group_key),
+    arenaGroupType: row.group_type,
+    vipFamilyKey: row.vip_family_key,
+    displayName: row.display_name,
+    rankWeight: integer(row.rank_weight, "Arena rank weight", -2_147_483_648, 2_147_483_647),
+    arenaGroupRowVersion: integer(row.row_version, "Arena group version", 1),
+    arenaScopeUuid: databaseUuid(row.scope_uuid, "Arena scope UUID"),
+    vipServerId: integer(row.vip_server_id, "VIP server ID"),
+    scopeDisplayName: String(row.scope_display_name).trim() || `Arena server ${vipServerId}`,
   };
 }
 
@@ -378,6 +531,23 @@ async function lockListingCatalogueProjection(
   }
 }
 
+async function requireScopeChangeHasNoOutstandingItems(
+  connection: PoolConnection,
+  catalogueId: number,
+) {
+  const [rows] = await connection.query<Array<RowDataPacket & { item_count: number | string }>>(
+    "SELECT COUNT(*) AS item_count FROM portal_inventory_items " +
+      "WHERE catalogue_id = ? AND state IN ('available', 'escrowed', 'attached', 'activation_pending')",
+    [catalogueId],
+  );
+  if (integer(rows[0]?.item_count ?? 0, "Outstanding item count") > 0) {
+    fail(
+      "vip_scope_has_inventory",
+      "This listing has unconsumed items. Retire it and create a server-specific listing so existing packages keep their original destination.",
+    );
+  }
+}
+
 function isFounderGroup(group: Pick<GroupRow, "source_type" | "external_key">) {
   return group.source_type === "admins_core" &&
     group.external_key?.trim().toLocaleLowerCase("en-US") === "founder";
@@ -412,6 +582,7 @@ function defaultArtwork(group: GroupRow) {
 function catalogueMetadata(input: {
   listingId: number;
   group: GroupRow;
+  target: ArenaCatalogueTarget;
   listingName: string;
   description: string | null;
   durationMinutes: number;
@@ -430,11 +601,14 @@ function catalogueMetadata(input: {
     membershipListingManaged: true,
     membershipListingId: input.listingId,
     membershipGroupId: integer(input.group.id, "Group ID", 1),
-    membershipGroupKey: input.group.group_key,
+    membershipGroupKey: input.target.arenaGroupKey,
     membershipGroupName: input.group.display_name,
     membershipSourceType: input.group.source_type,
     membershipExternalKey: input.group.external_key,
     membershipDurationMinutes: input.durationMinutes,
+    membershipScopeUuid: input.target.arenaScopeUuid,
+    membershipVipServerId: input.target.vipServerId,
+    membershipServerName: input.target.scopeDisplayName,
     donationEnabled: input.enabled && input.vipPageEnabled,
     donationPriceEuroCents: input.euroPriceCents,
     marketEnabled: input.enabled && input.marketEnabled,
@@ -456,11 +630,86 @@ function catalogueMetadata(input: {
   return metadata;
 }
 
+function catalogueTargetSnapshot(input: {
+  listingId: number;
+  group: GroupRow;
+  target: ArenaCatalogueTarget;
+  durationMinutes: number;
+}) {
+  return {
+    schemaVersion: 1,
+    legacyPortalGroupId: integer(input.group.id, "Group ID", 1),
+    listingId: input.listingId,
+    arenaGroupUuid: input.target.arenaGroupUuid,
+    arenaGroupKey: input.target.arenaGroupKey,
+    arenaScopeUuid: input.target.arenaScopeUuid,
+    groupType: input.target.arenaGroupType,
+    vipFamilyKey: input.target.vipFamilyKey,
+    displayName: input.target.displayName,
+    rankWeight: input.target.rankWeight,
+    arenaGroupRowVersion: input.target.arenaGroupRowVersion,
+    durationMinutes: input.durationMinutes,
+  };
+}
+
+async function writeCatalogueTarget(input: {
+  connection: PoolConnection;
+  listingId: number;
+  catalogueId: number;
+  group: GroupRow;
+  target: ArenaCatalogueTarget;
+  durationMinutes: number;
+  enabled: boolean;
+}) {
+  const snapshot = catalogueTargetSnapshot(input);
+  await input.connection.execute(
+    "INSERT INTO portal_arena_group_catalogue_targets " +
+      "(catalogue_id, listing_id, legacy_portal_group_id, arena_group_uuid, arena_group_key, arena_scope_uuid, arena_group_type, arena_group_row_version, duration_minutes, target_snapshot, enabled) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+      "ON DUPLICATE KEY UPDATE listing_id = VALUES(listing_id), legacy_portal_group_id = VALUES(legacy_portal_group_id), " +
+      "arena_group_uuid = VALUES(arena_group_uuid), arena_group_key = VALUES(arena_group_key), arena_scope_uuid = VALUES(arena_scope_uuid), " +
+      "arena_group_type = VALUES(arena_group_type), arena_group_row_version = VALUES(arena_group_row_version), " +
+      "duration_minutes = VALUES(duration_minutes), target_snapshot = VALUES(target_snapshot), enabled = VALUES(enabled)",
+    [
+      input.catalogueId,
+      input.listingId,
+      integer(input.group.id, "Group ID", 1),
+      input.target.arenaGroupUuid,
+      input.target.arenaGroupKey,
+      input.target.arenaScopeUuid,
+      input.target.arenaGroupType,
+      input.target.arenaGroupRowVersion,
+      input.durationMinutes,
+      JSON.stringify(snapshot),
+      input.enabled,
+    ],
+  );
+  const [rows] = await input.connection.query<Array<RowDataPacket & {
+    listing_id: number | string | null;
+    arena_group_uuid: string;
+    arena_scope_uuid: string;
+  }>>(
+    "SELECT listing_id, arena_group_uuid, arena_scope_uuid " +
+      "FROM portal_arena_group_catalogue_targets WHERE catalogue_id = ? LIMIT 1 FOR UPDATE",
+    [input.catalogueId],
+  );
+  const saved = rows[0];
+  if (
+    !saved ||
+    integer(saved.listing_id, "Target listing ID", 1) !== input.listingId ||
+    String(saved.arena_group_uuid).toLowerCase() !== input.target.arenaGroupUuid ||
+    String(saved.arena_scope_uuid).toLowerCase() !== input.target.arenaScopeUuid
+  ) {
+    fail("arena_target_conflict", "The catalogue is already connected to another Arena target.");
+  }
+}
+
 async function writeProjection(input: {
   connection: PoolConnection;
   listingId: number;
   catalogueId: number;
   group: GroupRow;
+  target: ArenaCatalogueTarget;
   listingName: string;
   description: string | null;
   durationMinutes: number;
@@ -474,6 +723,7 @@ async function writeProjection(input: {
   const metadata = catalogueMetadata({
     listingId: input.listingId,
     group: input.group,
+    target: input.target,
     listingName: input.listingName,
     description: input.description,
     durationMinutes: input.durationMinutes,
@@ -502,6 +752,7 @@ async function writeProjection(input: {
       `Identity group listing ${input.listingId}`,
     ],
   );
+  await writeCatalogueTarget(input);
 }
 
 function listingInput(input: {
@@ -545,8 +796,8 @@ export function isMissingIdentityGroupListingSchemaError(error: unknown) {
 
 export async function getIdentityGroupListingAdminSnapshot(): Promise<IdentityGroupListingAdminSnapshot> {
   const pool = getPortalDatabasePool();
-  if (!pool) return { groups: [], listings: [] };
-  const [[groups], [listings]] = await Promise.all([
+  if (!pool) return { groups: [], listings: [], vipScopes: [] };
+  const [[groups], [listings], vipScopes] = await Promise.all([
     pool.query<GroupRow[]>(
       groupSelect +
         "FROM portal_identity_groups AS identity_group " +
@@ -561,23 +812,43 @@ export async function getIdentityGroupListingAdminSnapshot(): Promise<IdentityGr
       "FROM portal_identity_group_listings AS listings INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = listings.group_id " +
       "ORDER BY listings.sort_order, identity_group.profile_priority DESC, listings.listing_name, listings.id",
     ),
+    getIdentityGroupListingVipScopes(),
   ]);
-  return { groups: groups.map(toGroup), listings: listings.map(toListing) };
+  const scopesByUuid = new Map(vipScopes.map((scope) => [scope.scopeUuid, scope]));
+  return {
+    groups: groups.map(toGroup),
+    listings: listings.map((listing) => toListing(
+      listing,
+      listing.arena_scope_uuid
+        ? scopesByUuid.get(String(listing.arena_scope_uuid).toLowerCase()) ?? null
+        : null,
+    )),
+    vipScopes,
+  };
 }
 
 export async function getVipPageIdentityGroupListings(): Promise<IdentityGroupListing[]> {
   const pool = getPortalDatabasePool();
   if (!pool) return [];
-  const [rows] = await pool.query<ListingRow[]>(
-    listingSelect +
-    "FROM portal_identity_group_listings AS listings INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = listings.group_id " +
-    "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id AND external_definition.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci " +
-    "WHERE listings.enabled = TRUE AND listings.vip_page_enabled = TRUE AND identity_group.enabled = TRUE " +
-    "AND (identity_group.source_type = 'custom' OR external_definition.group_id IS NOT NULL) " +
-    "AND NOT (identity_group.source_type = 'admins_core' AND LOWER(TRIM(COALESCE(identity_group.external_key, ''))) = 'founder') " +
-    "ORDER BY listings.sort_order, identity_group.profile_priority DESC, listings.listing_name, listings.id",
-  );
-  return rows.map(toListing);
+  const [[rows], vipScopes] = await Promise.all([
+    pool.query<ListingRow[]>(
+      listingSelect +
+      "FROM portal_identity_group_listings AS listings INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = listings.group_id " +
+      "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id AND external_definition.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci " +
+      "WHERE listings.enabled = TRUE AND listings.vip_page_enabled = TRUE AND identity_group.enabled = TRUE " +
+      "AND (identity_group.source_type = 'custom' OR external_definition.group_id IS NOT NULL) " +
+      "AND NOT (identity_group.source_type = 'admins_core' AND LOWER(TRIM(COALESCE(identity_group.external_key, ''))) = 'founder') " +
+      "ORDER BY listings.sort_order, identity_group.profile_priority DESC, listings.listing_name, listings.id",
+    ),
+    getIdentityGroupListingVipScopes(),
+  ]);
+  const scopesByUuid = new Map(vipScopes.map((scope) => [scope.scopeUuid, scope]));
+  return rows.map((row) => toListing(
+    row,
+    row.arena_scope_uuid
+      ? scopesByUuid.get(String(row.arena_scope_uuid).toLowerCase()) ?? null
+      : null,
+  ));
 }
 
 /**
@@ -596,7 +867,7 @@ export async function getVipTierConversionRateListings(): Promise<IdentityGroupL
     "ORDER BY identity_group.profile_priority DESC, identity_group.id ASC, listings.id ASC",
   );
   const byGroup = new Map<number, IdentityGroupListing[]>();
-  for (const listing of rows.map(toListing)) {
+  for (const listing of rows.map((row) => toListing(row))) {
     const groupListings = byGroup.get(listing.groupId) ?? [];
     groupListings.push(listing);
     byGroup.set(listing.groupId, groupListings);
@@ -645,15 +916,17 @@ export async function createIdentityGroupListing(input: {
   marketEnabled: boolean;
   enabled: boolean;
   sortOrder?: number;
+  vipServerId?: number;
   confirmStaffAccess?: boolean;
 }) {
   const groupId = integer(input.groupId, "Group ID", 1);
+  const vipServerId = integer(input.vipServerId ?? 0, "VIP server ID");
   const values = listingInput(input);
   return withListingMutation({
     operationName: "identity_group_listing.create",
     actor: input.actor,
     requestKey: input.requestKey,
-    request: { groupId, ...values, confirmStaffAccess: input.confirmStaffAccess === true },
+    request: { groupId, vipServerId, ...values, confirmStaffAccess: input.confirmStaffAccess === true },
     work: async (connection, actorSteamId, operationKey) => {
       const group = await lockGroup(connection, groupId);
       if (!bool(group.enabled)) fail("group_disabled", "Enable that group before publishing a listing.");
@@ -667,10 +940,15 @@ export async function createIdentityGroupListing(input: {
       if (group.source_type === "admins_core" && input.confirmStaffAccess !== true) {
         fail("staff_confirmation_required", "Confirm that this listing grants game staff permissions.");
       }
+      const target = await resolveArenaCatalogueTarget(group, vipServerId);
       const [listingResult] = await connection.execute<ResultSetHeader>(
-        "INSERT INTO portal_identity_group_listings (group_id, listing_name, description, duration_minutes, euro_price_cents, token_price, vip_page_enabled, market_enabled, enabled, sort_order, created_by_steam_id, updated_by_steam_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO portal_identity_group_listings (group_id, arena_group_uuid, arena_group_key, arena_scope_uuid, arena_group_row_version, listing_name, description, duration_minutes, euro_price_cents, token_price, vip_page_enabled, market_enabled, enabled, sort_order, created_by_steam_id, updated_by_steam_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           groupId,
+          target.arenaGroupUuid,
+          target.arenaGroupKey,
+          target.arenaScopeUuid,
+          target.arenaGroupRowVersion,
           values.listingName,
           values.description,
           values.durationMinutes,
@@ -685,7 +963,7 @@ export async function createIdentityGroupListing(input: {
         ],
       );
       const listingId = integer(listingResult.insertId, "Listing ID", 1);
-      const metadata = catalogueMetadata({ listingId, group, ...values });
+      const metadata = catalogueMetadata({ listingId, group, target, ...values });
       const [catalogueResult] = await connection.execute<ResultSetHeader>(
         "INSERT INTO portal_economy_catalogue (catalogue_key, market_hash_name, item_type, definition_index, paintkit, rarity_rank, display_name, metadata, enabled) VALUES (?, NULL, 'vip_membership', NULL, NULL, 8, ?, ?, TRUE)",
         [`tappd:special:identity-group-listing:${listingId}`, values.listingName, JSON.stringify(metadata)],
@@ -700,12 +978,13 @@ export async function createIdentityGroupListing(input: {
         listingId,
         catalogueId,
         group,
+        target,
         ...values,
         existingMetadata: metadata,
       });
       await connection.execute(
         "INSERT INTO portal_economy_admin_audit (actor_steam_id, action, target_steam_id, target_type, target_id, idempotency_key, metadata) VALUES (?, 'identity_group_listing.created', NULL, 'group-listing', ?, ?, ?)",
-        [actorSteamId, String(listingId), operationKey, JSON.stringify({ groupId, catalogueId, ...values })],
+        [actorSteamId, String(listingId), operationKey, JSON.stringify({ groupId, catalogueId, vipServerId: target.vipServerId, arenaScopeUuid: target.arenaScopeUuid, ...values })],
       );
       return { listingId, catalogueId };
     },
@@ -725,15 +1004,17 @@ export async function updateIdentityGroupListing(input: {
   marketEnabled: boolean;
   enabled: boolean;
   sortOrder?: number;
+  vipServerId?: number;
   confirmStaffAccess?: boolean;
 }) {
   const listingId = integer(input.listingId, "Listing ID", 1);
+  const vipServerId = integer(input.vipServerId ?? 0, "VIP server ID");
   const values = listingInput(input);
   return withListingMutation({
     operationName: "identity_group_listing.update",
     actor: input.actor,
     requestKey: input.requestKey,
-    request: { listingId, ...values, confirmStaffAccess: input.confirmStaffAccess === true },
+    request: { listingId, vipServerId, ...values, confirmStaffAccess: input.confirmStaffAccess === true },
     work: async (connection, actorSteamId, operationKey) => {
       // Resolve immutable relationship IDs without taking a row lock, then
       // follow the activation path's catalogue -> group -> definition ->
@@ -774,9 +1055,20 @@ export async function updateIdentityGroupListing(input: {
       if (current.source_type === "admins_core" && input.confirmStaffAccess !== true) {
         fail("staff_confirmation_required", "Confirm that this listing grants game staff permissions.");
       }
+      const target = await resolveArenaCatalogueTarget(current, vipServerId);
+      if (
+        !current.arena_scope_uuid ||
+        current.arena_scope_uuid.toLowerCase() !== target.arenaScopeUuid
+      ) {
+        await requireScopeChangeHasNoOutstandingItems(connection, catalogueId);
+      }
       await connection.execute(
-        "UPDATE portal_identity_group_listings SET listing_name = ?, description = ?, duration_minutes = ?, euro_price_cents = ?, token_price = ?, vip_page_enabled = ?, market_enabled = ?, enabled = ?, sort_order = ?, updated_by_steam_id = ? WHERE id = ?",
+        "UPDATE portal_identity_group_listings SET arena_group_uuid = ?, arena_group_key = ?, arena_scope_uuid = ?, arena_group_row_version = ?, listing_name = ?, description = ?, duration_minutes = ?, euro_price_cents = ?, token_price = ?, vip_page_enabled = ?, market_enabled = ?, enabled = ?, sort_order = ?, updated_by_steam_id = ? WHERE id = ?",
         [
+          target.arenaGroupUuid,
+          target.arenaGroupKey,
+          target.arenaScopeUuid,
+          target.arenaGroupRowVersion,
           values.listingName,
           values.description,
           values.durationMinutes,
@@ -795,12 +1087,13 @@ export async function updateIdentityGroupListing(input: {
         listingId,
         catalogueId,
         group: current,
+        target,
         ...values,
         existingMetadata: nullableRecord(current.catalogue_metadata),
       });
       await connection.execute(
         "INSERT INTO portal_economy_admin_audit (actor_steam_id, action, target_steam_id, target_type, target_id, idempotency_key, metadata) VALUES (?, 'identity_group_listing.updated', NULL, 'group-listing', ?, ?, ?)",
-        [actorSteamId, String(listingId), operationKey, JSON.stringify({ catalogueId, previous: toListing(current), next: values })],
+        [actorSteamId, String(listingId), operationKey, JSON.stringify({ catalogueId, previous: toListing(current), next: { ...values, vipServerId: target.vipServerId, arenaScopeUuid: target.arenaScopeUuid } })],
       );
       return { listingId, catalogueId };
     },

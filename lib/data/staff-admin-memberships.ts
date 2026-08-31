@@ -193,7 +193,17 @@ function requireActorImmunity(value: number) {
   return value;
 }
 
-function durationMinutes(value: number) {
+function assignmentDurationMinutes(value: number) {
+  if (!Number.isSafeInteger(value) || value < 0 || value > 525_600) {
+    adminMembershipError(
+      "admin-membership-invalid",
+      "The Admin assignment duration must be between 0 and 525600 minutes; 0 is permanent.",
+    );
+  }
+  return value;
+}
+
+function extensionDurationMinutes(value: number) {
   if (!Number.isSafeInteger(value) || value < 1 || value > 525_600) {
     adminMembershipError(
       "admin-membership-invalid",
@@ -903,7 +913,7 @@ export async function assignStaffAdminMembership(input: {
   const steamId = requireSteamId(input.steamId);
   const actorSteamId = requireSteamId(input.actorSteamId);
   const groupId = requirePositiveId(input.groupId, "The portal Admin group ID");
-  const minutes = durationMinutes(input.durationMinutes);
+  const minutes = assignmentDurationMinutes(input.durationMinutes);
   const actorImmunity = requireActorImmunity(input.actorImmunity);
   const reason = optionalReason(input.reason);
   return withGameTransaction(async (connection) => {
@@ -927,8 +937,10 @@ export async function assignStaffAdminMembership(input: {
     );
     requireRankWithinActor(liveDefinition.immunity, actorImmunity);
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + minutes * 60_000);
-    if (expiresAt.getTime() > maximumTimestampSeconds * 1_000) {
+    const expiresAt = minutes === 0
+      ? null
+      : new Date(now.getTime() + minutes * 60_000);
+    if (expiresAt && expiresAt.getTime() > maximumTimestampSeconds * 1_000) {
       adminMembershipError(
         "admin-membership-invalid",
         "The Admin membership expiry exceeds the supported date.",
@@ -1032,7 +1044,7 @@ export async function assignStaffAdminMembership(input: {
       rowVersion,
       groupId,
       steamId,
-      expiresAt: expiresAt.toISOString(),
+      expiresAt: expiresAt?.toISOString() ?? null,
     };
   });
 }
@@ -1048,7 +1060,7 @@ export async function extendStaffAdminMembership(input: {
   const steamId = reference.steamId;
   const actorSteamId = requireSteamId(input.actorSteamId);
   const groupId = reference.groupId;
-  const addedMinutes = durationMinutes(input.extensionMinutes);
+  const addedMinutes = extensionDurationMinutes(input.extensionMinutes);
   const actorImmunity = requireActorImmunity(input.actorImmunity);
   return withGameTransaction(async (connection) => {
     const nativeContext = await lockScopedNativeAdminContext(connection, steamId);

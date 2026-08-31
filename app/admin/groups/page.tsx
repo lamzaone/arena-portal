@@ -155,7 +155,7 @@ const noticeMessages: Record<string, string> = {
   "external-group-saved-sync-pending":
     "The runtime group was saved, but its portal adapter could not refresh yet. Use Synchronize catalogue after checking portal storage.",
   "admin-saved": "Admin assignment saved. Admins.Core will pick it up on its next database sync.",
-  "admin-assigned": "Timed Admins.Core membership assigned.",
+  "admin-assigned": "Admin membership assigned. Admins.Core will refresh live permissions within a few seconds.",
   "admin-extended": "Admin membership extended from its current expiry.",
   "admin-removed": "The exact Admin membership was removed.",
   "vip-saved": "VIP assignment saved. VIPCore will apply it when the player next connects.",
@@ -197,7 +197,7 @@ const errorMessages: Record<string, string> = {
   immunity: "You cannot act on an admin with higher immunity.",
   forbidden: "Your current staff assignment cannot perform that action.",
   steamid: "Choose a valid Steam player.",
-  "admin-details": "Review the admin name, groups, server scope, and immunity.",
+  "admin-details": "Review the Admin group and duration. Use 0 minutes for permanent access.",
   "admin-membership-invalid": "That exact Admin membership reference, group, or duration is invalid.",
   "admin-membership-not-found": "That Admin membership no longer exists.",
   "admin-membership-permanent": "A permanent Admin membership cannot be extended.",

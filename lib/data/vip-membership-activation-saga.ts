@@ -29,6 +29,7 @@ const COMMAND_TYPE = "inventory.vip.activate.v1";
 const RATE_ALGORITHM = "vip-price-ratio-seconds-v1";
 const RATE_SNAPSHOT_LIFETIME_MS = 10 * 60_000;
 const JOB_LEASE_MS = 30_000;
+const GLOBAL_SCOPE_UUID = "00000000-0000-0000-0000-000000000001";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const STEAM_ID_PATTERN = /^7656119[0-9]{10}$/;
 const KEY_PATTERN = /^[a-z0-9][a-z0-9._:-]{0,95}$/;
@@ -722,6 +723,7 @@ async function prepareActivation(input: {
       readMetadataInteger(attributes, "vipDurationMinutes");
     const itemGroupId = readMetadataInteger(attributes, "membershipGroupId");
     const itemGroupKey = readMetadataString(attributes, "membershipGroupKey")?.toLowerCase() ?? null;
+    const itemScopeUuid = readMetadataString(attributes, "membershipScopeUuid")?.toLowerCase() ?? null;
     const itemSource = readMetadataString(attributes, "membershipSourceType") ?? "vipcore";
     const catalogueGroupKey = readMetadataString(
       catalogueMetadata,
@@ -732,6 +734,10 @@ async function prepareActivation(input: {
       "membershipSourceType",
     );
     const catalogueGroupId = readMetadataInteger(catalogueMetadata, "membershipGroupId");
+    const catalogueScopeUuid = readMetadataString(
+      catalogueMetadata,
+      "membershipScopeUuid",
+    )?.toLowerCase() ?? null;
     if (
       durationMinutes === null ||
       durationMinutes < 0 ||
@@ -760,7 +766,9 @@ async function prepareActivation(input: {
       (target.legacyPortalGroupId !== null && itemGroupId !== null && itemGroupId !== target.legacyPortalGroupId) ||
       (target.legacyPortalGroupId !== null && catalogueGroupId !== null && catalogueGroupId !== target.legacyPortalGroupId) ||
       (itemGroupKey !== null && itemGroupKey !== target.arenaGroupKey) ||
-      (catalogueGroupKey !== null && catalogueGroupKey !== target.arenaGroupKey)
+      (catalogueGroupKey !== null && catalogueGroupKey !== target.arenaGroupKey) ||
+      (itemScopeUuid !== null && itemScopeUuid !== target.arenaScopeUuid) ||
+      (catalogueScopeUuid !== null && catalogueScopeUuid !== target.arenaScopeUuid)
     ) {
       fail("catalogue_unavailable", "This VIP item no longer matches its trusted Arena target.");
     }
@@ -770,9 +778,9 @@ async function prepareActivation(input: {
         "listing.group_id AS listing_group_id, listing.duration_minutes AS listing_duration_minutes, listing.token_price, listing.market_enabled, listing.enabled AS listing_enabled " +
         "FROM portal_arena_group_catalogue_targets AS target " +
         "INNER JOIN portal_identity_group_listings AS listing ON listing.id = target.listing_id " +
-        "WHERE target.arena_group_type = 'vip' AND target.arena_scope_uuid = ? AND target.enabled = TRUE AND listing.enabled = TRUE " +
+        "WHERE target.arena_group_type = 'vip' AND target.arena_scope_uuid IN (?, ?) AND target.enabled = TRUE AND listing.enabled = TRUE " +
         "ORDER BY target.arena_group_uuid, listing.id FOR UPDATE",
-      [target.arenaScopeUuid],
+      [target.arenaScopeUuid, GLOBAL_SCOPE_UUID],
     );
     const candidates = new Map<string, Array<VipTierRateListingCandidate & { snapshot: TargetSnapshot }>>();
     const syntheticIds = new Map<string, number>();
@@ -805,11 +813,19 @@ async function prepareActivation(input: {
     }
     const selectedRates: Array<{ rate: VipTierRate; snapshot: TargetSnapshot }> = [];
     for (const groupCandidates of candidates.values()) {
-      const selected = selectPreferredVipTierRateListing(groupCandidates);
+      const exactScopeCandidates = groupCandidates.filter(
+        (entry) => entry.snapshot.arenaScopeUuid === target.arenaScopeUuid,
+      );
+      const applicableCandidates = exactScopeCandidates.length > 0
+        ? exactScopeCandidates
+        : groupCandidates.filter(
+          (entry) => entry.snapshot.arenaScopeUuid === GLOBAL_SCOPE_UUID,
+        );
+      const selected = selectPreferredVipTierRateListing(applicableCandidates);
       if (!selected) continue;
-      const first = groupCandidates[0].snapshot;
+      const first = applicableCandidates[0].snapshot;
       if (
-        groupCandidates.some((entry) =>
+        applicableCandidates.some((entry) =>
           entry.snapshot.arenaGroupKey !== first.arenaGroupKey ||
           entry.snapshot.rankWeight !== first.rankWeight ||
           entry.snapshot.arenaGroupRowVersion !== first.arenaGroupRowVersion ||

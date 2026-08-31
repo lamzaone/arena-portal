@@ -9201,6 +9201,9 @@ async function createEconomyInventoryItem(
       "membershipSourceType",
       "membershipExternalKey",
       "membershipDurationMinutes",
+      "membershipScopeUuid",
+      "membershipVipServerId",
+      "membershipServerName",
       "vipTier",
       "vipDurationMinutes",
     ] as const;

@@ -200,6 +200,15 @@
   font-size: .66rem;
   white-space: nowrap;
 }
+.listingFacts .scopeFact {
+  display: inline-flex;
+  align-items: center;
+  gap: .28rem;
+  color: var(--listing-accent);
+  border-color: color-mix(in srgb, var(--listing-accent) 38%, var(--theme-border));
+  background: color-mix(in srgb, var(--listing-accent) 7%, var(--theme-control-bg));
+}
+.scopeFact > svg { width: .78rem; height: .78rem; }
 .status[data-enabled="true"] {
   color: var(--listing-positive);
   border-color: color-mix(in srgb, var(--listing-positive) 42%, var(--theme-border));
