@@ -1,12 +1,14 @@
 import "server-only";
 
 import { cache } from "react";
+import { type RowDataPacket } from "mysql2/promise";
 
 import { getAdminAuthorization, getPlayerDashboard, portalStorageConfigured } from "@/lib/data/portal-repository";
 import {
   getEffectiveIdentity,
-  getIdentityAdminAuthorizationDefinitions,
+  getIdentityAdminAuthorizationSnapshot,
 } from "@/lib/data/identity-groups";
+import { getGameDatabasePool } from "@/lib/data/database-pools";
 import {
   configuredGameServerGuid,
   isAssignedToConfiguredGameServer,
@@ -16,6 +18,13 @@ type AdminGroupConfig = {
   name?: unknown;
   immunity?: unknown;
   permissions?: unknown;
+};
+
+type LiveAdminGroupRow = RowDataPacket & {
+  Name: unknown;
+  Immunity: unknown;
+  Permissions: unknown;
+  Servers: unknown;
 };
 
 // Current Admins.Core group matrix used by the portal. Only permissions used
@@ -51,9 +60,71 @@ export type AdminAccess = {
   canManageEconomyLoadouts: boolean;
 };
 
-async function getConfiguredGroups() {
-  const databaseGroups = await getIdentityAdminAuthorizationDefinitions();
-  return databaseGroups.length ? databaseGroups : currentGroups;
+function storedStringList(value: unknown) {
+  let parsed = value;
+  if (Buffer.isBuffer(parsed)) parsed = parsed.toString("utf8");
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed) as unknown;
+    } catch {
+      return [] as string[];
+    }
+  }
+  if (!Array.isArray(parsed)) return [] as string[];
+  return [
+    ...new Set(
+      parsed
+        .filter((entry): entry is string => typeof entry === "string")
+        .map((entry) => entry.normalize("NFKC").trim())
+        .filter((entry) => entry.length > 0 && entry.length <= 100),
+    ),
+  ];
+}
+
+async function getConfiguredGroups(): Promise<AdminGroupConfig[]> {
+  const gamePool = getGameDatabasePool();
+  if (gamePool) {
+    try {
+      const [rows] = await gamePool.query<LiveAdminGroupRow[]>(
+        "SELECT Name, Immunity, Permissions, Servers FROM `groups` ORDER BY Immunity, Name, Id",
+      );
+      return rows.flatMap((row) => {
+        const name = typeof row.Name === "string"
+          ? row.Name.normalize("NFKC").trim()
+          : "";
+        const immunity = Number(row.Immunity);
+        const permissions = storedStringList(row.Permissions);
+        const servers = storedStringList(row.Servers);
+        if (
+          !name ||
+          name.length > 100 ||
+          !Number.isSafeInteger(immunity) ||
+          immunity < 0 ||
+          !isAssignedToConfiguredGameServer(servers)
+        ) {
+          return [];
+        }
+        return [{ name, immunity, permissions }];
+      });
+    } catch {
+      // A configured runtime database is the authority. Never fall back to a
+      // stale portal projection when its live group rows cannot be verified.
+      return [];
+    }
+  }
+
+  const snapshot = await getIdentityAdminAuthorizationSnapshot();
+  if (
+    snapshot.definitions.length ||
+    snapshot.databaseAuthoritative ||
+    portalStorageConfigured()
+  ) {
+    return snapshot.definitions;
+  }
+  // Built-in definitions are a legacy, no-game-database compatibility mode.
+  // Once a runtime source has become authoritative, an empty scope or a read
+  // failure must stay empty instead of silently restoring old permissions.
+  return currentGroups;
 }
 
 function permissionSet(group: AdminGroupConfig) {
@@ -70,40 +141,99 @@ function isStaffPermission(permission: string) {
 
 async function getAdminAccessUncached(steamId: string): Promise<AdminAccess> {
   const [profile, admin, configuredGroups] = await Promise.all([getPlayerDashboard(steamId), getAdminAuthorization(steamId), getConfiguredGroups()]);
-  const matchedGroups = configuredGroups.filter((configuredGroup) => {
+  const nativeAssigned = isAssignedToConfiguredGameServer(admin?.serverGuids);
+  const nativeMatchedGroups = nativeAssigned ? configuredGroups.filter((configuredGroup) => {
     const groupName = typeof configuredGroup.name === "string" ? configuredGroup.name : "";
     return admin?.groups.some((assignedGroup) => assignedGroup.trim().toLowerCase() === groupName.trim().toLowerCase()) ?? false;
-  });
-  const permissions = new Set<string>(admin?.permissions ?? []);
-  let immunity = Number(admin?.immunity ?? 0);
-
-  for (const group of matchedGroups) {
-    for (const permission of permissionSet(group)) permissions.add(permission);
-    if (typeof group.immunity === "number") immunity = Math.max(immunity, group.immunity);
-  }
+  }) : [];
+  // Admins.Core scopes the entire native row to its assigned servers. A timed
+  // portal membership can grant its own local group, but must never activate
+  // direct permissions, immunity, or groups from a remote-only native row.
+  const permissions = new Set<string>(nativeAssigned ? admin?.permissions ?? [] : []);
+  let immunity = nativeAssigned ? Number(admin?.immunity ?? 0) : 0;
 
   const identity = await getEffectiveIdentity({
     steamId,
     vipGroupNames: profile.vipGroups.map(
       (group) => group.externalKey ?? group.name,
     ),
-    adminGroupNames: admin?.groups ?? [],
+    adminGroupNames: nativeAssigned ? admin?.groups ?? [] : [],
   });
+  const liveAdminGroupNames = new Set(
+    configuredGroups
+      .map((group) => typeof group.name === "string"
+        ? group.name.trim().toLocaleLowerCase("en-US")
+        : "")
+      .filter(Boolean),
+  );
+  const portalAdminNames = new Set(
+    identity.groups
+      .filter(
+        (group) =>
+          group.sourceType === "admins_core" &&
+          group.hasPortalMembership &&
+          group.externalKey &&
+          liveAdminGroupNames.has(
+            group.externalKey.trim().toLocaleLowerCase("en-US"),
+          ),
+      )
+      .map((group) => group.externalKey!.trim().toLocaleLowerCase("en-US")),
+  );
+  const matchedGroups = configuredGroups.filter((configuredGroup) => {
+    const name = typeof configuredGroup.name === "string"
+      ? configuredGroup.name.trim().toLocaleLowerCase("en-US")
+      : "";
+    return nativeMatchedGroups.includes(configuredGroup) || portalAdminNames.has(name);
+  });
+  for (const group of matchedGroups) {
+    for (const permission of permissionSet(group)) permissions.add(permission);
+    if (typeof group.immunity === "number") immunity = Math.max(immunity, group.immunity);
+  }
   // Founder-managed identity grants are shared with the Swiftly runtime. A
   // game permission such as admins.commands.ban therefore authorizes the same
   // tightly-scoped portal action instead of drifting into a second matrix.
+  const directPrivilegeIds = new Set(
+    identity.directPrivileges.map((privilege) => privilege.id),
+  );
+  const liveGroupPrivilegeIds = new Set(
+    identity.groups
+      .filter(
+        (group) =>
+          group.sourceType !== "admins_core" ||
+          Boolean(
+            group.externalKey &&
+            liveAdminGroupNames.has(
+              group.externalKey.trim().toLocaleLowerCase("en-US"),
+            ),
+          ),
+      )
+      .flatMap((group) => group.privileges.map((privilege) => privilege.id)),
+  );
   for (const privilege of identity.privileges) {
-    permissions.add(privilege.key);
+    // Direct grants and privileges from currently valid groups remain
+    // additive. A stale Admin adapter cannot retain a removed live permission.
+    if (
+      directPrivilegeIds.has(privilege.id) ||
+      liveGroupPrivilegeIds.has(privilege.id)
+    ) {
+      permissions.add(privilege.key);
+    }
   }
 
-  const isAssignedToServer = isAssignedToConfiguredGameServer(
-    admin?.serverGuids,
-  );
+  const isAssignedToServer =
+    nativeAssigned ||
+    portalAdminNames.size > 0;
   // Founder is an immutable external trust anchor. Never derive it from a
   // portal-managed group, direct privilege, wildcard, badge, or display name.
-  const isFounder = isAssignedToServer && (admin?.groups.some(
-    (group) => group.trim().toLocaleLowerCase("en-US") === "founder",
-  ) ?? false);
+  const matchedFounderDefinition = matchedGroups.some((group) => {
+    const name = typeof group.name === "string" ? group.name.trim() : "";
+    return name.toLocaleLowerCase("en-US") === "founder" &&
+      permissionSet(group).has("*");
+  });
+  const isFounder = nativeAssigned && matchedFounderDefinition &&
+    (admin?.groups.some(
+      (group) => group.trim().toLocaleLowerCase("en-US") === "founder",
+    ) ?? false);
   const isAdmin = isAssignedToServer && (matchedGroups.length > 0 || [...permissions].some(isStaffPermission));
 
   return {

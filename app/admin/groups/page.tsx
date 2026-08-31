@@ -27,18 +27,39 @@ import { PortalToast } from "@/components/success-toast";
 import { AdminPageHeader } from "@/components/ui/admin-page-header";
 import { PortalShell } from "@/components/ui/portal-shell";
 import { getAdminAccess } from "@/lib/admin/access";
+import { configuredGameServerGuid } from "@/lib/admin/server-scope";
 import { createAdminActionToken, getSession } from "@/lib/auth/session";
 import {
   getIdentityAdminSnapshot,
+  getIdentityVipGroupDefinitions,
   identityGroupStorageConfigured,
   type IdentityAdminSnapshot,
   type IdentityGroup,
   type IdentityPrivilege,
 } from "@/lib/data/identity-groups";
 import {
+  getRuntimeExternalGroups,
+  type RuntimeExternalGroup,
+} from "@/lib/data/external-group-management";
+import {
   gameStorageConfigured,
   getExternalIdentityGroupMembershipIndex,
+  getStaffVips,
+  type StaffVip,
 } from "@/lib/data/portal-repository";
+import {
+  getStaffAdminMembershipSnapshot,
+  type StaffAdminMembershipPlayer,
+} from "@/lib/data/staff-admin-memberships";
+import {
+  getStaffVipMembershipSnapshot,
+  type StaffVipMembershipPlayer,
+} from "@/lib/data/staff-vip-memberships";
+import {
+  visibleVipGroups,
+} from "./vip-group-visibility";
+import { SourceAwareAdminMembershipList } from "./source-aware-admin-memberships";
+import { SourceAwareVipMembershipList } from "./source-aware-vip-memberships";
 import {
   resolvePlayerIdentities,
   type PlayerIdentityData,
@@ -60,6 +81,7 @@ type GroupsPageProps = {
     error?: string;
     group?: string;
     tab?: string;
+    assignment?: string;
   }>;
 };
 
@@ -103,7 +125,8 @@ const noticeMessages: Record<string, string> = {
   "group-updated": "Group presentation saved.",
   "group-archived": "Custom group archived and its active memberships revoked.",
   "membership-assigned": "Group membership assigned and missing rewards delivered.",
-  "membership-removed": "Custom group membership revoked.",
+  "membership-removed": "Portal-managed group membership revoked.",
+  "membership-extended": "Membership expiry extended from its existing end date.",
   "tag-created": "Chat tag created.",
   "tag-updated": "Chat tag saved.",
   "group-tag-attached": "Chat tag attached to the group.",
@@ -120,6 +143,20 @@ const noticeMessages: Record<string, string> = {
   "reward-retired":
     "Group reward retired. Account-bound awarded items were removed from inventories; tradable awards were retained.",
   "catalogue-synced": "External group definitions and discovered permissions were synchronized.",
+  "external-admin-group-created": "Admins.Core group created and connected to the portal.",
+  "external-admin-group-updated": "Admins.Core name, permissions, scope, and immunity saved.",
+  "external-vip-group-created": "VIPCore group created and connected to the portal.",
+  "external-vip-group-updated": "VIPCore weight, status, and perk configuration saved.",
+  "external-group-saved-sync-pending":
+    "The runtime group was saved, but its portal adapter could not refresh yet. Use Synchronize catalogue after checking portal storage.",
+  "admin-saved": "Admin assignment saved. Admins.Core will pick it up on its next database sync.",
+  "admin-assigned": "Timed Admins.Core membership assigned.",
+  "admin-extended": "Admin membership extended from its current expiry.",
+  "admin-removed": "The exact Admin membership was removed.",
+  "vip-saved": "VIP assignment saved. VIPCore will apply it when the player next connects.",
+  "vip-removed": "VIP assignment removed.",
+  "vip-extended": "VIP membership extended from its current expiry.",
+  "vip-consolidated": "VIP conflict consolidated without deleting preserved native records.",
 };
 
 const errorMessages: Record<string, string> = {
@@ -129,6 +166,10 @@ const errorMessages: Record<string, string> = {
   invalid_input: "Review the submitted fields and try again.",
   group_not_found: "That group no longer exists.",
   custom_group_required: "Only custom groups accept portal-managed memberships.",
+  group_disabled: "That group is disabled and cannot receive new members.",
+  membership_not_found: "That membership no longer exists or was already revoked.",
+  membership_permanent: "That membership is already permanent and cannot be extended.",
+  vip_conversion_required: "Use the source-aware VIP membership controls so tiers cannot stack.",
   external_group: "External Admins.Core and VIPCore adapters cannot be archived.",
   definition_not_found: "The selected tag or privilege is unavailable.",
   reward_exists: "That catalogue item is already an active reward for this group.",
@@ -137,7 +178,38 @@ const errorMessages: Record<string, string> = {
   request_replayed: "That action was already submitted. Refresh before trying again.",
   storage_unavailable: "The portal identity database is not configured.",
   catalogue_sync_failed: "The external group catalogue could not be imported. Check migration 014 and the configured JSON/JSONC paths.",
-  database: "The identity action could not be saved. Apply migrations through 014 and check the portal database.",
+  external_group_details: "Review the runtime group fields and try again.",
+  external_group_exists: "A runtime group already uses that name in this server scope.",
+  external_group_not_found: "That runtime definition changed. Refresh the page before saving again.",
+  founder_invariant: "Founder cannot be renamed, lose wildcard access, or be removed from this server.",
+  "admin-permission": "Your current admin permissions cannot manage staff assignments.",
+  "vip-permission": "Your current permissions cannot manage VIP assignments.",
+  immunity: "You cannot act on an admin with higher immunity.",
+  forbidden: "Your current staff assignment cannot perform that action.",
+  steamid: "Choose a valid Steam player.",
+  "admin-details": "Review the admin name, groups, server scope, and immunity.",
+  "admin-membership-invalid": "That exact Admin membership reference, group, or duration is invalid.",
+  "admin-membership-not-found": "That Admin membership no longer exists.",
+  "admin-membership-permanent": "A permanent Admin membership cannot be extended.",
+  "admin-membership-conflict": "That Admin membership already exists. Extend it instead.",
+  "admin-membership-stale": "The Admin membership or connected definition changed. Refresh before trying again.",
+  "admin-membership-founder": "Founder authority cannot be assigned, removed, or extended from this membership workflow.",
+  "admin-membership-immunity": "That Admin group or player has higher immunity than your assignment.",
+  "admin-game-storage": "The native Admins.Core database is unavailable.",
+  "admin-portal-storage": "The portal Admin membership database is unavailable.",
+  "vip-details": "Review the VIP tier, duration, and server scope.",
+  "vip-membership-invalid": "That exact VIP membership reference or duration is invalid.",
+  "vip-membership-not-found": "That VIP membership no longer exists.",
+  "vip-membership-permanent": "A permanent VIP membership cannot be extended or replaced by timed access.",
+  "vip-membership-conflict": "Resolve the conflicting VIP records before making that change.",
+  "vip-membership-stale": "The VIP membership changed. Refresh before trying again.",
+  "vip-conversion-storage": "Apply portal migration 022 before managing conversion-owned VIP memberships.",
+  "vip-game-storage": "The native VIP database is unavailable.",
+  "vip-portal-storage": "The portal VIP membership database is unavailable.",
+  "game-storage": "The game database is not configured for group assignments.",
+  game_storage: "The game database is not configured for runtime group definitions.",
+  action: "That group assignment action is not supported.",
+  database: "The identity action could not be saved. Apply portal migrations through 024 and check both databases.",
 };
 
 function MutationFields({
@@ -168,6 +240,12 @@ function sourceLabel(group: IdentityGroup) {
   if (group.sourceType === "admins_core") return "Admins.Core";
   if (group.sourceType === "vipcore") return "VIPCore";
   return "Portal custom";
+}
+
+function groupType(group: IdentityGroup): GroupWorkspaceEntry["groupType"] {
+  if (group.sourceType === "admins_core") return "admin";
+  if (group.sourceType === "vipcore") return "vip";
+  return "custom";
 }
 
 function formatSyncedAt(value: string | null | undefined) {
@@ -205,6 +283,7 @@ function groupWorkspaceEntries(groups: IdentityGroup[]): GroupWorkspaceEntry[] {
     key: group.key,
     displayName: group.displayName,
     source: sourceLabel(group),
+    groupType: groupType(group),
     enabled: group.enabled,
     accent: group.badgeColor,
     memberCount: group.memberCount,
@@ -214,19 +293,168 @@ function groupWorkspaceEntries(groups: IdentityGroup[]): GroupWorkspaceEntry[] {
   }));
 }
 
+function runtimeDefinitionForGroup(
+  group: IdentityGroup,
+  definitions: RuntimeExternalGroup[],
+) {
+  if (group.sourceType === "custom" || !group.externalKey) return null;
+  const identity = group.externalKey.trim().toLocaleLowerCase("en-US");
+  return definitions.find(
+    (definition) =>
+      definition.sourceType === group.sourceType &&
+      definition.name.trim().toLocaleLowerCase("en-US") === identity,
+  ) ?? null;
+}
+
+function RuntimeSourceEditor({
+  group,
+  definition,
+  csrf,
+}: {
+  group: IdentityGroup;
+  definition: RuntimeExternalGroup | null;
+  csrf: string;
+}) {
+  if (group.sourceType === "custom") return null;
+  if (!definition) {
+    return (
+      <aside className={styles.runtimeDefinitionMissing} role="status">
+        <strong>No editable runtime definition</strong>
+        <span>
+          This name was discovered from a live assignment, but it does not have
+          a matching row in the {sourceLabel(group)} definition table. Create
+          the definition or remove the stale assignment.
+        </span>
+      </aside>
+    );
+  }
+
+  if (definition.sourceType === "admins_core") {
+    const founder = definition.name.trim().toLocaleLowerCase("en-US") === "founder";
+    return (
+      <form
+        className={`staff-management-form ${styles.runtimeDefinitionForm}`}
+        action="/api/admin/groups"
+        method="post"
+        aria-label={`Edit ${definition.name} Admins.Core definition`}
+      >
+        <MutationFields csrf={csrf} action="external-admin-group-update" />
+        <input type="hidden" name="groupId" value={group.id} />
+        <input type="hidden" name="runtimeRowId" value={definition.rowId} />
+        <input type="hidden" name="previousName" value={definition.name} />
+        <div className={styles.runtimeDefinitionHeading}>
+          <div>
+            <span className={styles.controlLabel}>Live Admins.Core definition</span>
+            <strong>Authorization source</strong>
+          </div>
+          <p>Changes are read by Admins.Core from the database; JSON is only the initial seed.</p>
+        </div>
+        {founder ? (
+          <p className={styles.invariantNotice}>
+            Founder is the portal trust anchor. Its immunity and additional permissions remain editable,
+            but its name, wildcard permission, and current server scope are enforced when saving.
+          </p>
+        ) : null}
+        <div className={styles.runtimeDefinitionGrid}>
+          <label>
+            Runtime name
+            <input name="name" defaultValue={definition.name} maxLength={100} required readOnly={founder} />
+          </label>
+          <label>
+            Immunity
+            <input name="immunity" type="number" min="0" max="1000000" defaultValue={definition.immunity} required />
+          </label>
+          <label className={styles.fullField}>
+            Permissions
+            <textarea name="permissions" rows={Math.min(12, Math.max(5, definition.permissions.length + 1))} defaultValue={definition.permissions.join("\n")} spellCheck={false} required={founder} />
+            <small>One permission per line. Add or remove keys here; <code>*</code> remains mandatory for Founder.</small>
+          </label>
+          <label className={styles.fullField}>
+            Server GUIDs
+            <textarea name="serverGuids" rows={Math.min(6, Math.max(3, definition.serverGuids.length + 1))} defaultValue={definition.serverGuids.join("\n")} spellCheck={false} required />
+            <small>One GUID per line. Removing this arena scope also removes the group from its connected catalogue.</small>
+          </label>
+        </div>
+        <div className={styles.formActions}>
+          <button className="button button-primary" type="submit">Save Admins.Core definition</button>
+        </div>
+      </form>
+    );
+  }
+
+  const capabilityCount = Object.keys(definition.values).length;
+  return (
+    <form
+      className={`staff-management-form ${styles.runtimeDefinitionForm}`}
+      action="/api/admin/groups"
+      method="post"
+      aria-label={`Edit ${definition.name} VIPCore definition`}
+    >
+      <MutationFields csrf={csrf} action="external-vip-group-update" />
+      <input type="hidden" name="groupId" value={group.id} />
+      <input type="hidden" name="previousName" value={definition.name} />
+      <div className={styles.runtimeDefinitionHeading}>
+        <div>
+          <span className={styles.controlLabel}>Live VIPCore definition</span>
+          <strong>Tier perks &amp; priority</strong>
+        </div>
+        <p>{capabilityCount} configured perk{capabilityCount === 1 ? "" : "s"} in server scope {definition.serverId}.</p>
+      </div>
+      <div className={styles.runtimeDefinitionGrid}>
+        <label>
+          Runtime name
+          <input name="name" defaultValue={definition.name} maxLength={64} required />
+        </label>
+        <label>
+          Weight
+          <input name="weight" type="number" min="0" max="1000000" defaultValue={definition.weight} required />
+          <small>Higher weight wins if legacy data temporarily contains several tiers.</small>
+        </label>
+        <label>
+          Runtime status
+          <select name="runtimeEnabled" defaultValue={definition.enabled ? "true" : "false"}>
+            <option value="true">Enabled</option>
+            <option value="false">Disabled</option>
+          </select>
+        </label>
+        <label className={styles.fullField}>
+          Perks and configuration (JSON)
+          <textarea
+            className={styles.jsonEditor}
+            name="valuesJson"
+            rows={Math.min(28, Math.max(10, capabilityCount * 3))}
+            defaultValue={JSON.stringify(definition.values, null, 2)}
+            spellCheck={false}
+            required
+          />
+          <small>Each top-level key is a VIPCore perk. Add a property to grant it; remove the property to revoke it from this tier.</small>
+        </label>
+      </div>
+      <div className={styles.formActions}>
+        <button className="button button-primary" type="submit">Save VIPCore definition</button>
+      </div>
+    </form>
+  );
+}
+
 function GroupCard({
   group,
   snapshot,
   csrf,
   playerIdentities,
+  runtimeDefinitions,
 }: {
   group: IdentityGroup;
   snapshot: IdentityAdminSnapshot;
   csrf: string;
   playerIdentities: Readonly<Record<string, PlayerIdentityData>>;
+  runtimeDefinitions: RuntimeExternalGroup[];
 }) {
   const availablePermissions = privilegeOptions(snapshot.privileges);
   const externalDefinition = group.externalDefinition;
+  const runtimeDefinition = runtimeDefinitionForGroup(group, runtimeDefinitions);
+  const isFounderAdapter = group.sourceType === "admins_core" &&
+    group.externalKey?.normalize("NFKC").trim().toLocaleLowerCase("en-US") === "founder";
   const sourceDescription = group.sourceType === "custom"
     ? `${group.memberCount} portal member${group.memberCount === 1 ? "" : "s"}`
     : `External key · ${group.externalKey ?? "Unlinked"}`;
@@ -259,7 +487,7 @@ function GroupCard({
         <section className={styles.externalDefinition} aria-labelledby={`group-${group.id}-source-title`}>
           <div className={styles.externalDefinitionHeading}>
             <div>
-              <span className={styles.controlLabel}>Read-only source definition</span>
+              <span className={styles.controlLabel}>Synchronized source summary</span>
               <strong id={`group-${group.id}-source-title`}>{sourceLabel(group)} baseline</strong>
             </div>
             <span>Synced {formatSyncedAt(externalDefinition.syncedAt)}</span>
@@ -294,6 +522,8 @@ function GroupCard({
         </p>
       ) : null}
 
+      <RuntimeSourceEditor group={group} definition={runtimeDefinition} csrf={csrf} />
+
       <form className={`staff-management-form ${styles.groupPresentationForm}`} action="/api/admin/groups" method="post" aria-label={`Edit ${group.displayName} presentation`}>
         <MutationFields csrf={csrf} />
         <input type="hidden" name="groupId" value={group.id} />
@@ -304,7 +534,7 @@ function GroupCard({
           </div>
           <p>{group.sourceType === "custom"
             ? "Edit how this custom group is identified throughout ARENA."
-            : `These display settings do not change the read-only ${sourceLabel(group)} rank, permissions, capabilities, or membership.`}</p>
+            : `These display settings are the portal theme layer. Runtime ${sourceLabel(group)} access and perks are edited separately above.`}</p>
         </div>
         <fieldset className={styles.formSection}>
           <legend>Identity</legend>
@@ -356,11 +586,32 @@ function GroupCard({
             </label>
             <label>
               Status
-              <select name="enabled" defaultValue={group.enabled ? "true" : "false"}>
-                <option value="true">Enabled</option>
-                <option value="false">Disabled</option>
-              </select>
-              <small>Disabling revokes active account-bound rewards until the group is enabled again.</small>
+              {isFounderAdapter ? (
+                <>
+                  <input type="hidden" name="enabled" value="true" />
+                  <select value="true" disabled aria-label="Founder protected status">
+                    <option value="true">Enabled (protected)</option>
+                  </select>
+                  <small>Founder is the protected root adapter and cannot be disabled.</small>
+                </>
+              ) : group.sourceType === "vipcore" ? (
+                <>
+                  <input type="hidden" name="enabled" value={group.enabled ? "true" : "false"} />
+                  <select value={group.enabled ? "true" : "false"} disabled aria-label="VIPCore runtime status">
+                    <option value="true">Enabled by VIPCore</option>
+                    <option value="false">Disabled by VIPCore</option>
+                  </select>
+                  <small>Runtime status is authoritative. Change it in the VIPCore definition editor above.</small>
+                </>
+              ) : (
+                <>
+                  <select name="enabled" defaultValue={group.enabled ? "true" : "false"}>
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                  </select>
+                  <small>Disabling revokes active account-bound rewards until the group is enabled again.</small>
+                </>
+              )}
             </label>
           </div>
         </fieldset>
@@ -508,28 +759,54 @@ function GroupCard({
           <section className={styles.managementSection} aria-labelledby={`group-${group.id}-members-title`}>
             <div className={styles.managementHeading}>
               <span className={styles.managementIcon}><UsersRound aria-hidden="true" /></span>
-              <div><h4 id={`group-${group.id}-members-title`}>Membership</h4><p>{group.sourceType === "custom" ? "Portal-managed players currently assigned to this group." : `Owned by ${sourceLabel(group)} and read-only here.`}</p></div>
+              <div><h4 id={`group-${group.id}-members-title`}>Membership</h4><p>{group.sourceType === "custom" ? "Portal-managed players currently assigned to this group." : `Combined ${sourceLabel(group)} and portal records. Exact source actions stay separate.`}</p></div>
               <strong>{group.memberCount}</strong>
             </div>
             <div className={styles.managementBody}>
-              {group.memberships.map((membership) => group.sourceType === "custom" ? (
-                <ThemedPlayerContainer as="form" containerKind="management" ownerSteamId={membership.steamId} profileThemeKey={playerIdentities[membership.steamId]?.profileThemeKey} className={styles.memberRow} action="/api/admin/groups" method="post" key={membership.steamId}>
-                  <MutationFields csrf={csrf} action="membership-remove" />
+              {group.sourceType !== "custom" ? (
+                <div className={styles.memberWorkspaceAction}>
+                  <Link className={styles.memberSourceLink} href={`/admin/groups?tab=membership#${group.sourceType === "vipcore" ? "vip-assignments" : "admin-assignments"}`}>
+                    Add, extend, or remove exact memberships
+                  </Link>
+                </div>
+              ) : null}
+              {group.enabled &&
+              (group.sourceType === "custom" ||
+                (group.sourceType === "admins_core" &&
+                  group.externalKey?.trim().toLocaleLowerCase("en-US") !== "founder")) ? (
+                <form className={`staff-management-form ${styles.compactManagementForm} ${styles.memberAssignForm}`} action="/api/admin/groups" method="post">
+                  <MutationFields csrf={csrf} action="membership-assign" />
+                  <input type="hidden" name="groupId" value={group.id} />
+                  <PlayerSearchField name="steamId" label="Add player" mode="target" required includeSelf />
+                  <label>Duration (minutes)<input name="durationMinutes" type="number" min="0" max="525600" defaultValue="0" required /><small>0 is permanent.</small></label>
+                  <label>Reason<input name="reason" maxLength={180} placeholder="Optional internal reason" /></label>
+                  <button className="button button-primary" type="submit">Add member</button>
+                </form>
+              ) : null}
+              {group.memberships.map((membership) => {
+                const authoritativeExternal = membership.grantReason?.startsWith("Authoritative ") ?? false;
+                const portalManaged = group.sourceType === "custom" ||
+                  (group.sourceType === "admins_core" && !authoritativeExternal);
+                return portalManaged ? (
+                <ThemedPlayerContainer as="form" containerKind="management" ownerSteamId={membership.steamId} profileThemeKey={playerIdentities[membership.steamId]?.profileThemeKey} className={`${styles.memberRow} ${styles.editableMemberRow}`} action="/api/admin/groups" method="post" key={membership.steamId}>
+                  <MutationFields csrf={csrf} />
                   <input type="hidden" name="groupId" value={group.id} />
                   <input type="hidden" name="steamId" value={membership.steamId} />
                   <PlayerIdentity player={playerIdentities[membership.steamId] ?? { steamId: membership.steamId, displayName: membership.steamId, avatarUrl: null, presence: "unknown", profileThemeKey: null, identityGroups: [] }} variant="compact" />
-                  <span>{membership.expiresAt ? `Until ${new Date(membership.expiresAt).toLocaleDateString()}` : "Permanent"}</span>
-                  <button className="staff-danger-button" type="submit">Remove</button>
+                  <span>{membership.expiresAt ? <><span>Expires</span><time dateTime={membership.expiresAt}>{formatSyncedAt(membership.expiresAt)}</time></> : "Permanent"}</span>
+                  {membership.expiresAt ? <input name="durationMinutes" type="number" min="1" max="525600" defaultValue="1440" aria-label={`Minutes to extend ${membership.steamId}`} /> : null}
+                  {membership.expiresAt ? <button className="staff-unban-button" name="action" value="membership-extend" type="submit">Extend</button> : null}
+                  <ConfirmSubmitButton className="staff-danger-button" name="action" value="membership-remove" confirmation={`Remove ${membership.steamId} from ${group.displayName}?`}>Remove</ConfirmSubmitButton>
                 </ThemedPlayerContainer>
               ) : (
                 <ThemedPlayerContainer containerKind="management" ownerSteamId={membership.steamId} profileThemeKey={playerIdentities[membership.steamId]?.profileThemeKey} className={styles.memberRow} key={membership.steamId}>
                   <PlayerIdentity player={playerIdentities[membership.steamId] ?? { steamId: membership.steamId, displayName: membership.steamId, avatarUrl: null, presence: "unknown", profileThemeKey: null, identityGroups: [] }} variant="compact" />
-                  <span>Active in {sourceLabel(group)}</span>
-                  <Link className={styles.memberSourceLink} href={`/admin/${group.sourceType === "vipcore" ? "vips" : "admins"}`}>
+                  <span>{membership.expiresAt ? <>Expires <time dateTime={membership.expiresAt}>{formatSyncedAt(membership.expiresAt)}</time></> : `Active in ${sourceLabel(group)}`}</span>
+                  <Link className={styles.memberSourceLink} href={`/admin/groups?tab=membership#${group.sourceType === "vipcore" ? "vip-assignments" : "admin-assignments"}`}>
                     Manage
                   </Link>
                 </ThemedPlayerContainer>
-              ))}
+              );})}
               {!group.memberships.length ? (
                 <p className={styles.relationshipSummary}>
                   {group.sourceType === "custom"
@@ -548,24 +825,25 @@ function GroupCard({
 export default async function GroupsPage({ searchParams }: GroupsPageProps) {
   const [session, params] = await Promise.all([getSession(), searchParams]);
   if (!session) {
-    return <SignInRequired title="Identity groups" description="Sign in with the Founder Steam account to manage groups, tags, privileges, and rewards." />;
+    return <SignInRequired title="Identity groups" description="Sign in with your ARENA staff Steam account to review group assignments." />;
   }
   const access = await getAdminAccess(session.steamId);
-  if (!access.isAdmin || !access.isFounder || !access.canManageGroups) {
+  if (!access.isAdmin) {
     return (
       <PortalShell authenticated>
         <section className="staff-denied">
           <LockKeyhole aria-hidden="true" />
-          <p className="tapped-kicker">Founder restricted</p>
+          <p className="tapped-kicker">Staff restricted</p>
           <h1>Identity group access denied.</h1>
-          <p>Only the exact Founder assignment from Admins.Core on this server can open this control surface.</p>
+          <p>An active Admins.Core staff assignment on this server is required to review groups.</p>
           <Link className="button button-secondary" href={`/players/${session.steamId}`}>Back to profile</Link>
         </section>
       </PortalShell>
     );
   }
 
-  const activeTab = groupAdminTab(params.tab);
+  const requestedTab = groupAdminTab(params.tab);
+  const activeTab = access.canManageGroups ? requestedTab : "membership";
 
   let snapshot: IdentityAdminSnapshot = {
     groups: [],
@@ -580,13 +858,31 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
       lastSyncedAt: null,
     },
   };
-  let storageError = !identityGroupStorageConfigured();
-  if (!storageError) {
+  let storageError = access.canManageGroups && !identityGroupStorageConfigured();
+  if (access.canManageGroups && !storageError) {
     try {
       snapshot = await getIdentityAdminSnapshot();
     } catch {
       storageError = true;
     }
+  }
+  let runtimeExternalGroups: RuntimeExternalGroup[] = [];
+  let runtimeDefinitionError = false;
+  if (
+    access.canManageGroups &&
+    (activeTab === "connected" || activeTab === "create") &&
+    gameStorageConfigured()
+  ) {
+    try {
+      runtimeExternalGroups = await getRuntimeExternalGroups();
+    } catch {
+      runtimeDefinitionError = true;
+    }
+  } else if (
+    access.canManageGroups &&
+    (activeTab === "connected" || activeTab === "create")
+  ) {
+    runtimeDefinitionError = true;
   }
   let externalMembershipError = false;
   const externalGroups = snapshot.groups.filter(
@@ -626,13 +922,68 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
   } else if (activeTab === "connected" && externalGroups.length) {
     externalMembershipError = true;
   }
+  let assignmentError = false;
+  let staffVips: StaffVip[] = [];
+  let sourceAwareAdminPlayers: StaffAdminMembershipPlayer[] = [];
+  let sourceAwareVipPlayers: StaffVipMembershipPlayer[] = [];
+  let vipConversionStorageAvailable = true;
+  let staffVipGroupDefinitions = snapshot.groups
+    .filter((group) => group.sourceType === "vipcore")
+    .map((group) => group.externalKey ?? group.displayName);
+  if (activeTab === "membership") {
+    if (gameStorageConfigured()) {
+      try {
+        const [
+          vips,
+          vipGroupDefinitions,
+          adminMembershipSnapshot,
+          vipMembershipSnapshot,
+        ] = await Promise.all([
+          getStaffVips(),
+          getIdentityVipGroupDefinitions(),
+          getStaffAdminMembershipSnapshot(),
+          getStaffVipMembershipSnapshot(),
+        ]);
+        staffVips = vips;
+        if (vipGroupDefinitions.length) {
+          staffVipGroupDefinitions = vipGroupDefinitions.map((group) => group.name);
+        }
+        sourceAwareAdminPlayers = adminMembershipSnapshot.players;
+        sourceAwareVipPlayers = vipMembershipSnapshot.players;
+        vipConversionStorageAvailable = vipMembershipSnapshot.conversionStorageAvailable;
+      } catch {
+        assignmentError = true;
+      }
+    } else {
+      assignmentError = true;
+    }
+  }
+  const vipGroups = visibleVipGroups(
+    staffVipGroupDefinitions,
+    staffVips,
+  );
   const csrf = createAdminActionToken(session);
   const playerIdentities = await resolvePlayerIdentities(
     activeTab === "connected"
       ? snapshot.groups.flatMap((group) =>
           group.memberships.map((membership) => ({ steamId: membership.steamId })),
         )
-      : activeTab === "awards"
+        : activeTab === "membership"
+          ? [
+              ...sourceAwareAdminPlayers.map((player) => ({
+                steamId: player.steamId,
+                displayName: player.name,
+              })),
+              ...staffVips.map((vip) => ({
+                steamId: vip.steamId,
+                displayName: vip.name,
+              })),
+              ...sourceAwareVipPlayers.map((player) => ({
+                steamId: player.steamId,
+                displayName: player.name,
+              })),
+            ]
+          : activeTab === "awards"
         ? [
             ...snapshot.directTagGrants.map((grant) => ({ steamId: grant.steamId })),
             ...snapshot.directPrivilegeGrants.map((grant) => ({ steamId: grant.steamId })),
@@ -645,6 +996,17 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
   // loaded yet; hiding them would also hide their authoritative memberships.
   const connectedGroups = snapshot.groups;
   const customGroups = customGroupDefinitions.filter((group) => group.enabled);
+  const portalAssignableGroups = snapshot.groups.filter(
+    (group) =>
+      group.enabled &&
+      group.sourceType === "custom",
+  );
+  const adminPortalAssignableGroups = snapshot.groups.filter(
+    (group) =>
+      group.enabled &&
+      group.sourceType === "admins_core" &&
+      group.externalKey?.trim().toLocaleLowerCase("en-US") !== "founder",
+  );
   const availablePermissions = privilegeOptions(snapshot.privileges);
   const notice = params.notice ? noticeMessages[params.notice] : null;
   const error = params.error ? errorMessages[params.error] ?? "The identity action could not be completed." : null;
@@ -655,18 +1017,21 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
         <AdminPageHeader
           id="group-management-title"
           title="Group management"
-          description="Create custom identities, connect stable chat tags, assign tightly scoped privileges, and deliver catalogue-backed rewards."
+          description="Review Admin, VIP, and custom identities in one place; authorized staff can manage assignments and Founder-owned group configuration."
           access={access}
         />
         <StaffSubmenu access={access} active="groups" />
         <GroupAdminNav
           activeKey={activeTab}
           selectedGroupId={selectedGroupId}
+          canManageGroups={access.canManageGroups}
         />
         {notice ? <PortalToast message={notice} /> : null}
         {error ? <PortalToast variant="danger" message={error} /> : null}
-        {storageError ? <PortalToast variant="danger" message="Identity storage is unavailable. Apply portal migrations through db/014_external_identity_catalogue.sql." /> : null}
+        {storageError ? <PortalToast variant="danger" message="Identity storage is unavailable. Apply portal migrations through db/024_identity_group_rename_saga.sql." /> : null}
         {externalMembershipError ? <PortalToast variant="danger" message="One or more live Admins.Core/VIPCore membership lists could not be read. Connected group counts may be incomplete until the game database is available." /> : null}
+        {assignmentError ? <PortalToast variant="danger" message="Live Admins.Core/VIPCore assignments could not be read. Check the configured game database before making group changes." /> : null}
+        {runtimeDefinitionError ? <PortalToast variant="danger" message="Runtime Admins.Core/VIPCore definitions could not be read. Connected presentation remains visible, but native fields cannot be edited until the game database is available." /> : null}
 
         {activeTab === "connected" ? <section id="connected-groups" className="staff-record-section" aria-labelledby="external-group-definitions-title">
           <div className="staff-section-heading">
@@ -693,7 +1058,7 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
           {connectedGroups.length ? (
             <GroupWorkspace id="connected-groups-workspace" groups={groupWorkspaceEntries(connectedGroups)} initialSelectedId={selectedGroupId}>
               {connectedGroups.map((group) => (
-                <GroupCard key={group.id} group={group} snapshot={snapshot} csrf={csrf} playerIdentities={playerIdentities} />
+                <GroupCard key={group.id} group={group} snapshot={snapshot} csrf={csrf} playerIdentities={playerIdentities} runtimeDefinitions={runtimeExternalGroups} />
               ))}
             </GroupWorkspace>
           ) : (
@@ -702,8 +1067,12 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
         </section> : null}
 
         {activeTab === "create" ? <section id="create-group" className="staff-record-section">
-          <div className="staff-section-heading"><div><p className="tapped-kicker"><ShieldCheck aria-hidden="true" /> Custom identity</p><h2>Create a group</h2></div><span>{customGroups.length} custom groups</span></div>
-          <p className={styles.sectionIntro}>Start with a stable internal key, then define the player-facing identity and badge. Tags, access, rewards, and members are attached after creation.</p>
+          <div className="staff-section-heading"><div><p className="tapped-kicker"><ShieldCheck aria-hidden="true" /> Connected identity</p><h2>Create a group</h2></div><span>Custom · Admin · VIP</span></div>
+          <p className={styles.sectionIntro}>Create a portal-only identity or a real Admins.Core/VIPCore runtime definition. Runtime definitions are written to the database and then connected to the portal theme layer.</p>
+          <div className={styles.createTypeHeading}>
+            <span className={styles.sourceBadge} data-source="custom">Portal custom</span>
+            <strong>Custom identity and presentation</strong>
+          </div>
           <form className={`staff-management-form ${styles.createGroupForm}`} action="/api/admin/groups" method="post">
             <MutationFields csrf={csrf} action="group-create" />
             <fieldset className={styles.formSection}>
@@ -734,20 +1103,126 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
             </fieldset>
             <div className={styles.formActions}><button className="button button-primary" type="submit">Create group</button></div>
           </form>
+          <div className={styles.runtimeCreateGrid}>
+            <form className={`staff-management-form ${styles.runtimeCreateForm}`} action="/api/admin/groups" method="post">
+              <MutationFields csrf={csrf} action="external-admin-group-create" />
+              <div className={styles.createTypeHeading}>
+                <span className={styles.sourceBadge} data-source="admins_core">Admins.Core</span>
+                <strong>New administrator group</strong>
+              </div>
+              <p>Creates an editable row in <code>groups</code>. Admins.Core reloads the database definition; the JSON file is not changed.</p>
+              <div className={styles.runtimeDefinitionGrid}>
+                <label>Runtime name<input name="name" maxLength={100} required placeholder="Community Manager" /></label>
+                <label>Immunity<input name="immunity" type="number" min="0" max="1000000" defaultValue="10" required /></label>
+                <label className={styles.fullField}>Permissions<textarea name="permissions" rows={7} defaultValue="admins.notify" spellCheck={false} /><small>One permission per line.</small></label>
+                <label className={styles.fullField}>Server GUIDs<textarea name="serverGuids" rows={3} defaultValue={configuredGameServerGuid()} spellCheck={false} required /><small>One server GUID per line.</small></label>
+              </div>
+              <button className="button button-primary" type="submit">Create Admins.Core group</button>
+            </form>
+
+            <form className={`staff-management-form ${styles.runtimeCreateForm}`} action="/api/admin/groups" method="post">
+              <MutationFields csrf={csrf} action="external-vip-group-create" />
+              <div className={styles.createTypeHeading}>
+                <span className={styles.sourceBadge} data-source="vipcore">VIPCore</span>
+                <strong>New VIP tier</strong>
+              </div>
+              <p>Creates an editable row in <code>vip_group_definitions</code> for the configured arena scope.</p>
+              <div className={styles.runtimeDefinitionGrid}>
+                <label>Runtime name<input name="name" maxLength={64} required placeholder="PLATINUM" /></label>
+                <label>Weight<input name="weight" type="number" min="0" max="1000000" defaultValue="0" required /></label>
+                <label>Runtime status<select name="runtimeEnabled" defaultValue="true"><option value="true">Enabled</option><option value="false">Disabled</option></select></label>
+                <label className={styles.fullField}>Perks and configuration (JSON)<textarea className={styles.jsonEditor} name="valuesJson" rows={12} defaultValue={'{\n  "vip.health": {\n    "Health": 110\n  }\n}'} spellCheck={false} required /><small>Each top-level property is a VIPCore feature key.</small></label>
+              </div>
+              <button className="button button-primary" type="submit">Create VIPCore group</button>
+            </form>
+          </div>
         </section> : null}
 
-        {activeTab === "membership" ? <section id="membership" className="staff-record-section">
-          <div className="staff-section-heading"><div><p className="tapped-kicker"><UsersRound aria-hidden="true" /> Membership</p><h2>Assign a custom group</h2></div><span>Founder audited</span></div>
-          <form className="staff-management-form" action="/api/admin/groups" method="post">
-            <MutationFields csrf={csrf} />
-            <PlayerSearchField name="steamId" label="Player" mode="target" required includeSelf />
-            <label>Custom group<select name="groupId" required defaultValue=""><option value="" disabled>Choose a group</option>{customGroups.map((group) => <GroupOption key={group.id} group={group} />)}</select></label>
-            <label>Duration (minutes)<input name="durationMinutes" type="number" min="0" max="525600" defaultValue="0" required /><small>0 is permanent.</small></label>
-            <label>Reason<input name="reason" maxLength={180} placeholder="Optional internal reason" /></label>
-            <button className="button button-primary" name="action" value="membership-assign" type="submit">Assign group</button>
-            <button className="staff-danger-button" name="action" value="membership-remove" type="submit">Remove group</button>
-          </form>
-        </section> : null}
+        {activeTab === "membership" ? <>
+          <section id="custom-group-assignments" className="staff-record-section" aria-labelledby="custom-group-assignments-title">
+            <div className="staff-section-heading">
+              <div><p className="tapped-kicker"><UsersRound aria-hidden="true" /> Portal managed</p><h2 id="custom-group-assignments-title">Timed &amp; custom assignments</h2></div>
+              <span>Founder audited</span>
+            </div>
+            <p className={styles.sectionIntro}>Add permanent or expiring portal custom memberships. Extending adds time after the later of now or the current expiry. Admin and VIP assignments use the source-aware controls below.</p>
+            {access.canManageGroups ? (
+              <form className="staff-management-form" action="/api/admin/groups" method="post">
+                <MutationFields csrf={csrf} />
+                <PlayerSearchField name="steamId" label="Player" mode="target" required includeSelf />
+                <label>Group<select name="groupId" required defaultValue=""><option value="" disabled>Choose a group</option>{portalAssignableGroups.map((group) => <GroupOption key={group.id} group={group} />)}</select></label>
+                <label>Duration (minutes)<input name="durationMinutes" type="number" min="0" max="525600" defaultValue="0" required /><small>0 is permanent.</small></label>
+                <label>Reason<input name="reason" maxLength={180} placeholder="Optional internal reason" /></label>
+                <button className="button button-primary" name="action" value="membership-assign" type="submit">Assign / replace</button>
+                <button className="staff-unban-button" name="action" value="membership-extend" type="submit">Extend</button>
+                <button className="staff-danger-button" name="action" value="membership-remove" type="submit">Remove</button>
+              </form>
+            ) : (
+              <p className="staff-readonly-note">Custom group membership remains Founder-managed. Your current role can review the Admins.Core and VIPCore assignments below.</p>
+            )}
+          </section>
+          {!assignmentError ? (
+            <div id="admin-assignments" className={styles.vipMembershipWorkspace}>
+              {access.canManageAdmins ? (
+                <form className={`staff-management-form ${styles.vipGrantForm}`} action="/api/admin/staff" method="post">
+                  <input type="hidden" name="csrf" value={csrf} />
+                  <input type="hidden" name="action" value="admin-membership-assign" />
+                  <div className={styles.vipGrantIntro}>
+                    <span className={styles.sourceBadge} data-source="admins_core">Admins.Core</span>
+                    <div><strong>Add another Admin group</strong><p>Creates a separate timed portal assignment without replacing the player&apos;s native groups or direct permissions.</p></div>
+                  </div>
+                  <PlayerSearchField name="steamId" label="Admin player" mode="target" required includeSelf />
+                  <label>Admin group<select name="groupId" required defaultValue=""><option value="" disabled>Choose a group</option>{adminPortalAssignableGroups.map((group) => <GroupOption key={group.id} group={group} />)}</select></label>
+                  <label>Duration (minutes)<input name="durationMinutes" type="number" min="1" max="525600" defaultValue="1440" required /><small>Extend later without replacing its expiry.</small></label>
+                  <label>Reason<input name="reason" maxLength={180} placeholder="Optional internal reason" /></label>
+                  <button className="button button-primary" type="submit" disabled={!adminPortalAssignableGroups.length}>Add membership</button>
+                </form>
+              ) : null}
+              <SourceAwareAdminMembershipList
+                csrf={csrf}
+                players={sourceAwareAdminPlayers}
+                identities={playerIdentities}
+                permissions={{
+                  extend: access.canManageAdmins,
+                  remove: access.canManageAdmins,
+                }}
+                heading="Admin memberships"
+                description="Native Admins.Core groups and portal-issued assignments stay separate, with exact source, scope, expiration, and actions."
+              />
+            </div>
+          ) : null}
+          {!assignmentError ? (
+            <div id="vip-assignments" className={styles.vipMembershipWorkspace}>
+              {access.canManageVips ? (
+                <form className={`staff-management-form ${styles.vipGrantForm}`} action="/api/admin/staff" method="post">
+                  <input type="hidden" name="csrf" value={csrf} />
+                  <input type="hidden" name="action" value="vip-upsert" />
+                  <div className={styles.vipGrantIntro}>
+                    <span className={styles.sourceBadge} data-source="vipcore">VIPCore</span>
+                    <div><strong>Add a VIP membership</strong><p>New native grants are rejected while a portal conversion is authoritative, preventing hidden tiers from stacking.</p></div>
+                  </div>
+                  <PlayerSearchField name="steamId" label="VIP player" mode="target" required includeSelf companionNameField="name" />
+                  <label>Player name<input name="name" maxLength={64} placeholder="Filled from the selected profile" /></label>
+                  <label>VIP tier<select name="group" required defaultValue=""><option value="" disabled>Choose a tier</option>{vipGroups.map((group) => <option key={group}>{group}</option>)}</select></label>
+                  <label>Duration (minutes)<input name="durationMinutes" type="number" min="0" max="525600" defaultValue="1440" required /><small>0 creates permanent access.</small></label>
+                  <button className="button button-primary" type="submit">Add membership</button>
+                </form>
+              ) : null}
+              <SourceAwareVipMembershipList
+                csrf={csrf}
+                players={sourceAwareVipPlayers}
+                identities={playerIdentities}
+                permissions={{
+                  extend: access.canManageVips,
+                  remove: access.canManageVips,
+                  consolidate: access.canManageVips,
+                }}
+                conversionStorageAvailable={vipConversionStorageAvailable}
+                heading="VIP memberships"
+                description="Native VIPCore rows and portal-issued memberships stay separate, with exact expiration and source-aware actions."
+              />
+            </div>
+          ) : null}
+        </> : null}
 
         {activeTab === "tags" ? <section id="tag-definitions" className="staff-record-section">
           <div className="staff-section-heading"><div><p className="tapped-kicker"><Tags aria-hidden="true" /> GlobalChatTags</p><h2>Tag definitions</h2></div><span>{snapshot.tags.length} tags</span></div>

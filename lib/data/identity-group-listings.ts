@@ -9,7 +9,12 @@ import {
 } from "mysql2/promise";
 
 import { getPortalDatabasePool } from "@/lib/data/database-pools";
+import {
+  acquireIdentityCatalogueMutationLock,
+  releaseIdentityCatalogueMutationLock,
+} from "@/lib/data/identity-catalogue-lock";
 import type { IdentityGroupSource } from "@/lib/data/identity-groups";
+import { selectPreferredVipTierRateListing } from "@/lib/economy/vip-membership-conversion";
 
 export const MAX_GROUP_LISTING_DURATION_MINUTES = 525_600;
 export const MAX_GROUP_LISTING_PRICE = 1_000_000_000;
@@ -107,6 +112,11 @@ type OperationRow = RowDataPacket & {
   request_hash: string;
   status: "processing" | "completed";
   result_json: unknown;
+};
+
+type ListingLockTargetRow = RowDataPacket & {
+  group_id: number | string;
+  catalogue_id: number | string | null;
 };
 
 const groupSelect =
@@ -260,7 +270,16 @@ async function withListingMutation<T extends Record<string, unknown>>(input: {
   });
   const connection = await pool.getConnection();
   let transactionStarted = false;
+  let catalogueLockAcquired = false;
   try {
+    catalogueLockAcquired =
+      await acquireIdentityCatalogueMutationLock(connection);
+    if (!catalogueLockAcquired) {
+      fail(
+        "operation_unavailable",
+        "The connected-group catalogue is busy. Retry this action shortly.",
+      );
+    }
     await connection.beginTransaction();
     transactionStarted = true;
     const [insert] = await connection.execute<ResultSetHeader>(
@@ -304,7 +323,16 @@ async function withListingMutation<T extends Record<string, unknown>>(input: {
     }
     throw error;
   } finally {
-    connection.release();
+    let connectionDiscarded = false;
+    if (catalogueLockAcquired) {
+      try {
+        await releaseIdentityCatalogueMutationLock(connection);
+      } catch {
+        connection.destroy();
+        connectionDiscarded = true;
+      }
+    }
+    if (!connectionDiscarded) connection.release();
   }
 }
 
@@ -315,6 +343,39 @@ async function lockGroup(connection: PoolConnection, groupId: number) {
   );
   if (!rows[0]) fail("group_not_found", "That connected group no longer exists.");
   return rows[0];
+}
+
+async function resolveListingLockTarget(
+  connection: PoolConnection,
+  listingId: number,
+) {
+  const [rows] = await connection.query<ListingLockTargetRow[]>(
+    "SELECT group_id, catalogue_id FROM portal_identity_group_listings WHERE id = ? LIMIT 1",
+    [listingId],
+  );
+  const row = rows[0];
+  if (!row || row.catalogue_id === null) {
+    fail("listing_not_found", "That listing no longer exists.");
+  }
+  return {
+    groupId: integer(row.group_id, "Group ID", 1),
+    catalogueId: integer(row.catalogue_id, "Catalogue ID", 1),
+  };
+}
+
+async function lockListingCatalogueProjection(
+  connection: PoolConnection,
+  catalogueId: number,
+) {
+  const [rows] = await connection.query<Array<RowDataPacket & { id: number | string }>>(
+    "SELECT catalogue.id FROM portal_economy_catalogue AS catalogue " +
+      "LEFT JOIN portal_economy_catalogue_prices AS price ON price.catalogue_id = catalogue.id AND price.is_current = TRUE " +
+      "WHERE catalogue.id = ? LIMIT 1 FOR UPDATE",
+    [catalogueId],
+  );
+  if (!rows[0]) {
+    fail("listing_not_found", "That listing's catalogue projection no longer exists.");
+  }
 }
 
 function isFounderGroup(group: Pick<GroupRow, "source_type" | "external_key">) {
@@ -380,6 +441,9 @@ function catalogueMetadata(input: {
     marketTokenPrice: input.tokenPrice,
     description: input.description ?? `Activates ${input.group.display_name} membership.`,
   };
+  // Legacy builds snapshotted a conversion face value here. Live-rate
+  // conversion intentionally resolves the canonical listing schedule at use.
+  delete metadata.membershipConversionValueTokens;
   const artwork = metadata.staffArtworkUrl ?? metadata.imageUrl ?? defaultArtwork(input.group);
   if (artwork) metadata.imageUrl = artwork;
   if (input.group.source_type === "vipcore" && input.group.external_key) {
@@ -516,6 +580,43 @@ export async function getVipPageIdentityGroupListings(): Promise<IdentityGroupLi
   return rows.map(toListing);
 }
 
+/**
+ * Returns the same canonical live marketplace reference listing used when a
+ * VIP item is activated. These values are advisory on the storefront; the
+ * activation transaction locks and resolves them again before consuming.
+ */
+export async function getVipTierConversionRateListings(): Promise<IdentityGroupListing[]> {
+  const pool = getPortalDatabasePool();
+  if (!pool) return [];
+  const [rows] = await pool.query<ListingRow[]>(
+    listingSelect +
+    "FROM portal_identity_group_listings AS listings INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = listings.group_id " +
+    "INNER JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id AND external_definition.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci " +
+    "WHERE listings.catalogue_id IS NOT NULL AND listings.enabled = TRUE AND listings.duration_minutes > 0 AND identity_group.enabled = TRUE AND identity_group.source_type = 'vipcore' " +
+    "ORDER BY identity_group.profile_priority DESC, identity_group.id ASC, listings.id ASC",
+  );
+  const byGroup = new Map<number, IdentityGroupListing[]>();
+  for (const listing of rows.map(toListing)) {
+    const groupListings = byGroup.get(listing.groupId) ?? [];
+    groupListings.push(listing);
+    byGroup.set(listing.groupId, groupListings);
+  }
+  return [...byGroup.values()].flatMap((listings) => {
+    const selected = selectPreferredVipTierRateListing(
+      listings.map((listing) => ({
+        listing,
+        groupId: listing.groupId,
+        listingId: listing.id,
+        durationSeconds: BigInt(listing.durationMinutes) * 60n,
+        priceTokens: BigInt(listing.tokenPrice),
+        marketEnabled: listing.marketEnabled,
+        enabled: listing.enabled,
+      })),
+    );
+    return selected ? [selected.listing] : [];
+  });
+}
+
 export async function getIdentityGroupListing(listingIdValue: number) {
   const listingId = integer(listingIdValue, "Listing ID", 1);
   const pool = getPortalDatabasePool();
@@ -634,6 +735,15 @@ export async function updateIdentityGroupListing(input: {
     requestKey: input.requestKey,
     request: { listingId, ...values, confirmStaffAccess: input.confirmStaffAccess === true },
     work: async (connection, actorSteamId, operationKey) => {
+      // Resolve immutable relationship IDs without taking a row lock, then
+      // follow the activation path's catalogue -> group -> definition ->
+      // listing order. Re-read and validate everything under lock below.
+      const lockTarget = await resolveListingLockTarget(connection, listingId);
+      await lockListingCatalogueProjection(connection, lockTarget.catalogueId);
+      const lockedGroup = await lockGroup(connection, lockTarget.groupId);
+      if (values.enabled) {
+        await requireCurrentExternalDefinition(connection, lockedGroup);
+      }
       const [rows] = await connection.query<ListingRow[]>(
         listingSelect +
         ", catalogue.metadata AS catalogue_metadata FROM portal_identity_group_listings AS listings " +
@@ -644,6 +754,14 @@ export async function updateIdentityGroupListing(input: {
       );
       const current = rows[0];
       if (!current || current.catalogue_id === null) fail("listing_not_found", "That listing no longer exists.");
+      const currentGroupId = integer(current.group_id, "Group ID", 1);
+      const catalogueId = integer(current.catalogue_id, "Catalogue ID", 1);
+      if (
+        currentGroupId !== lockTarget.groupId ||
+        catalogueId !== lockTarget.catalogueId
+      ) {
+        fail("listing_not_found", "That listing changed while it was being locked. Retry the update.");
+      }
       if (!bool(current.enabled) && values.enabled && (values.vipPageEnabled || values.marketEnabled)) {
         fail("group_disabled", "Enable the connected group before publishing this listing.");
       }
@@ -653,11 +771,9 @@ export async function updateIdentityGroupListing(input: {
           "Founder is an external trust anchor. Disable this legacy listing; it cannot be published or activated.",
         );
       }
-      if (values.enabled) await requireCurrentExternalDefinition(connection, current);
       if (current.source_type === "admins_core" && input.confirmStaffAccess !== true) {
         fail("staff_confirmation_required", "Confirm that this listing grants game staff permissions.");
       }
-      const catalogueId = integer(current.catalogue_id, "Catalogue ID", 1);
       await connection.execute(
         "UPDATE portal_identity_group_listings SET listing_name = ?, description = ?, duration_minutes = ?, euro_price_cents = ?, token_price = ?, vip_page_enabled = ?, market_enabled = ?, enabled = ?, sort_order = ?, updated_by_steam_id = ? WHERE id = ?",
         [

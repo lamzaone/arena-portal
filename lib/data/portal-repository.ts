@@ -15,6 +15,7 @@ import { isAssignedToConfiguredGameServer } from "@/lib/admin/server-scope";
 import {
   applyIdentityGroupMembershipRewards,
   getEffectiveIdentityGroupBadgesForPlayers,
+  reconcileIdentityGroupMembershipRewardsInTransaction,
   type IdentityGroupBadgeData,
   type IdentityGroupSource,
 } from "@/lib/data/identity-groups";
@@ -22,6 +23,11 @@ import {
   getGameDatabasePool,
   getPortalDatabasePool,
 } from "@/lib/data/database-pools";
+import {
+  acquireIdentityCatalogueMutationLock,
+  releaseIdentityCatalogueMutationLock,
+} from "@/lib/data/identity-catalogue-lock";
+import { StaffVipMembershipError } from "@/lib/data/staff-vip-memberships";
 import {
   ECONOMY_ITEM_TYPES,
   ECONOMY_MAX_RARITY_RANK,
@@ -43,6 +49,15 @@ import {
   selectMarketplacePriceFallback,
 } from "@/lib/economy/market-pricing";
 import { economySellbackPayoutTokens } from "@/lib/economy/sellback";
+import {
+  compareVipTierRates,
+  convertTimedVipMembership,
+  selectPreferredVipTierRateListing,
+  VipMembershipConversionError,
+  type VipTierRate,
+  type VipTierRateListingCandidate,
+  type VipTimedConversionKind,
+} from "@/lib/economy/vip-membership-conversion";
 
 type StatRow = RowDataPacket & {
   name: string;
@@ -579,6 +594,7 @@ export type StaffVip = {
   group: string;
   expiresAt: number;
   serverId: number;
+  suppressedByPortal?: boolean;
 };
 
 export type VipRosterEntry = StaffVip & {
@@ -1304,10 +1320,7 @@ export async function getPlayerDashboard(
       `SELECT name, value, rank, kills, deaths, headshots, ${noscopeSelection}, playtime, game_wins, game_losses, games_played FROM lvl_base WHERE steam = ? LIMIT 1`,
       [steamId],
     ),
-    safeGameQuery<VipUserRow>(
-      "SELECT account_id, name, lastvisit, sid, `group`, expires FROM vip_users WHERE account_id = ? AND sid = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) ORDER BY `group`",
-      [toAccountId(steamId), getVipServerId()],
-    ),
+    safeVipCoreRowsForSteamId(steamId),
     safeAdminQuery<RowDataPacket & { Groups: string; Servers: string }>(
       "SELECT Groups, Servers FROM admins WHERE SteamId64 = ? LIMIT 1",
       [steamId],
@@ -1421,10 +1434,7 @@ export async function getPublicPlayerProfile(
       `SELECT name, value, rank, kills, deaths, headshots, ${noscopeSelection}, playtime, game_wins, game_losses, games_played FROM lvl_base WHERE steam = ? LIMIT 1`,
       [steamId],
     ),
-    safeGameQuery<VipUserRow>(
-      "SELECT account_id, name, lastvisit, sid, `group`, expires FROM vip_users WHERE account_id = ? AND sid = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) ORDER BY `group`",
-      [toAccountId(steamId), getVipServerId()],
-    ),
+    safeVipCoreRowsForSteamId(steamId),
     safeAdminQuery<RowDataPacket & { Groups: string; Servers: string }>(
       "SELECT Groups, Servers FROM admins WHERE SteamId64 = ? LIMIT 1",
       [steamId],
@@ -1479,27 +1489,32 @@ async function getGroupMembershipsForPlayers(steamIds: string[]) {
   if (!uniqueSteamIds.length) return result;
 
   const accountIds = uniqueSteamIds.map(toAccountId);
-  const accountPlaceholders = accountIds.map(() => "?").join(", ");
+  const allVipAccountIds = [...new Set([...uniqueSteamIds, ...accountIds])];
+  const accountPlaceholders = allVipAccountIds.map(() => "?").join(", ");
   const steamPlaceholders = uniqueSteamIds.map(() => "?").join(", ");
-  const [vipRows, adminRows] = await Promise.all([
+  const vipServerId = getVipServerId();
+  const sharedVipScope = vipServerId === 0;
+  const [vipRows, adminRows, suppressedNativeVipSteamIds] = await Promise.all([
     safeGameQuery<VipUserRow>(
-      `SELECT account_id, name, lastvisit, sid, \`group\`, expires FROM vip_users WHERE sid = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) AND account_id IN (${accountPlaceholders})`,
-      [getVipServerId(), ...accountIds],
+      `SELECT account_id, name, lastvisit, sid, \`group\`, expires FROM vip_users WHERE ${sharedVipScope ? "" : "sid = ? AND "}account_id IN (${accountPlaceholders})`,
+      sharedVipScope ? allVipAccountIds : [vipServerId, ...allVipAccountIds],
     ),
     safeAdminQuery<AdminListRow>(
       `SELECT Id, SteamId64, Username, Permissions, Groups, Immunity, Servers FROM admins WHERE SteamId64 IN (${steamPlaceholders})`,
       uniqueSteamIds,
     ),
+    getActiveNativeVipSuppressedSteamIds(uniqueSteamIds),
   ]);
 
   for (const steamId of uniqueSteamIds)
     result.set(steamId, { vipGroups: [], adminGroups: [] });
   for (const steamId of uniqueSteamIds) {
-    const accountId = toAccountId(steamId);
     result.set(steamId, {
-      vipGroups: toVipMemberships(
-        vipRows.filter((row) => String(row.account_id) === accountId),
-      ),
+      vipGroups: suppressedNativeVipSteamIds.has(steamId)
+        ? []
+        : toVipMemberships(
+            selectVipCoreRowsForSteamId(vipRows, steamId),
+          ),
       adminGroups: toScopedAdminMemberships(
         adminRows.find((row) => String(row.SteamId64) === steamId),
       ),
@@ -1549,18 +1564,15 @@ export async function getAuthoritativeExternalIdentityMemberships(
   if (!isSteamId(steamId)) throw new Error("Invalid SteamID64.");
   const pool = getGamePool();
   if (!pool) throw new Error("Game database is not configured.");
-  const [vipResult, adminResult] = await Promise.all([
-    pool.query<VipUserRow[]>(
-      "SELECT account_id, name, lastvisit, sid, `group`, expires FROM vip_users WHERE account_id = ? AND sid = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) ORDER BY `group`",
-      [toAccountId(steamId), getVipServerId()],
-    ),
+  const [vipRows, adminResult] = await Promise.all([
+    authoritativeVipCoreRowsForSteamId(pool, steamId),
     pool.query<Array<RowDataPacket & { Groups: string; Servers: string }>>(
       "SELECT Groups, Servers FROM admins WHERE SteamId64 = ? LIMIT 1",
       [steamId],
     ),
   ]);
   return {
-    vipGroupNames: toVipMemberships(vipResult[0]).map(
+    vipGroupNames: toVipMemberships(vipRows).map(
       (group) => group.externalKey ?? group.name,
     ),
     adminGroupNames: toScopedAdminMemberships(adminResult[0][0]).map(
@@ -1586,19 +1598,32 @@ export async function getExternalIdentityGroupMemberSteamIds(input: {
   }
 
   if (input.sourceType === "vipcore") {
-    const [rows] = await pool.query<
-      Array<RowDataPacket & { account_id: string | number }>
-    >(
-      "SELECT DISTINCT account_id FROM vip_users WHERE sid = ? AND `group` = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) ORDER BY account_id",
-      [getVipServerId(), externalKey],
+    const serverId = getVipServerId();
+    const sharedScope = serverId === 0;
+    const [rows] = await pool.query<VipUserRow[]>(
+      "SELECT account_id, name, lastvisit, sid, `group`, expires FROM vip_users " +
+        (sharedScope ? "" : "WHERE sid = ? ") +
+        "ORDER BY account_id, `group`, expires DESC",
+      sharedScope ? [] : [serverId],
     );
-    return [
+    const groupIdentity = externalKey.toLocaleLowerCase("en-US");
+    const candidateSteamIds = [
       ...new Set(
         rows
           .map((row) => vipAccountToSteamId(String(row.account_id)))
           .filter(isSteamId),
       ),
     ];
+    const suppressed = await getActiveNativeVipSuppressedSteamIds(
+      candidateSteamIds,
+      { strict: true },
+    );
+    return candidateSteamIds.filter((steamId) =>
+      !suppressed.has(steamId) &&
+      selectVipCoreRowsForSteamId(rows, steamId).some(
+        (row) => String(row.group).toLocaleLowerCase("en-US") === groupIdentity,
+      ),
+    );
   }
 
   const [rows] = await pool.query<AdminListRow[]>(
@@ -1631,10 +1656,14 @@ export async function getExternalIdentityGroupMembershipIndex() {
   const pool = getGamePool();
   if (!pool) throw new Error("The game database is not configured.");
 
+  const vipServerId = getVipServerId();
+  const sharedVipScope = vipServerId === 0;
   const [vipResult, adminResult] = await Promise.all([
-    pool.query<Array<RowDataPacket & { account_id: string | number; group_name: string }>>(
-      "SELECT account_id, `group` AS group_name FROM vip_users WHERE sid = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) ORDER BY `group`, account_id",
-      [getVipServerId()],
+    pool.query<VipUserRow[]>(
+      "SELECT account_id, name, lastvisit, sid, `group`, expires FROM vip_users " +
+        (sharedVipScope ? "" : "WHERE sid = ? ") +
+        "ORDER BY account_id, `group`, expires DESC",
+      sharedVipScope ? [] : [vipServerId],
     ),
     pool.query<AdminListRow[]>(
       "SELECT Id, SteamId64, Username, Permissions, Groups, Immunity, Servers FROM admins ORDER BY SteamId64",
@@ -1655,10 +1684,21 @@ export async function getExternalIdentityGroupMembershipIndex() {
     sets.set(lookupKey, members);
   };
 
-  for (const row of vipResult[0]) {
-    const groupName = String(row.group_name ?? "").trim();
-    const memberSteamId = vipAccountToSteamId(String(row.account_id));
-    if (groupName) add("vipcore", groupName, memberSteamId);
+  const vipSteamIds = [
+    ...new Set(
+      vipResult[0]
+        .map((row) => vipAccountToSteamId(String(row.account_id)))
+        .filter(isSteamId),
+      ),
+  ];
+  const suppressedNativeVipSteamIds =
+    await getActiveNativeVipSuppressedSteamIds(vipSteamIds);
+  for (const memberSteamId of vipSteamIds) {
+    if (suppressedNativeVipSteamIds.has(memberSteamId)) continue;
+    for (const row of selectVipCoreRowsForSteamId(vipResult[0], memberSteamId)) {
+      const groupName = String(row.group ?? "").trim();
+      if (groupName) add("vipcore", groupName, memberSteamId);
+    }
   }
   for (const row of adminResult[0]) {
     if (!isAssignedToConfiguredGameServer(toGroups(row.Servers))) continue;
@@ -1937,11 +1977,132 @@ function getVipServerId() {
   return Number.isSafeInteger(configured) && configured >= 0 ? configured : 1;
 }
 
-export async function getStaffVips(): Promise<StaffVip[]> {
-  const rows = await safeGameQuery<VipUserRow>(
-    "SELECT account_id, MAX(name) AS name, MAX(lastvisit) AS lastvisit, sid, `group`, CASE WHEN SUM(expires = 0) > 0 THEN 0 ELSE MAX(expires) END AS expires FROM vip_users WHERE sid = ? GROUP BY account_id, sid, `group` ORDER BY `group` ASC, name ASC",
-    [getVipServerId()],
+type NativeVipSuppressionLookupRow = RowDataPacket & {
+  steam_id: string;
+};
+
+async function getActiveNativeVipSuppressedSteamIds(
+  steamIds: string[],
+  options: { strict?: boolean } = {},
+) {
+  const validSteamIds = [
+    ...new Set(steamIds.filter((steamId) => isSteamId(steamId))),
+  ];
+  if (!validSteamIds.length) return new Set<string>();
+  const pool = getPortalPool();
+  if (!pool) {
+    if (options.strict) {
+      throw new Error("Portal VIP suppression storage is not configured.");
+    }
+    return new Set<string>();
+  }
+  try {
+    const [rows] = await pool.query<NativeVipSuppressionLookupRow[]>(
+      "SELECT steam_id FROM portal_vip_membership_conversion_state " +
+        `WHERE steam_id IN (${validSteamIds.map(() => "?").join(", ")}) ` +
+        "AND (native_suppressed_permanently = TRUE OR native_suppressed_until > CURRENT_TIMESTAMP) " +
+        "ORDER BY steam_id",
+      validSteamIds,
+    );
+    return new Set(rows.map((row) => String(row.steam_id)));
+  } catch (error) {
+    if (options.strict) throw error;
+    // Preserve legacy VIPCore availability while migration 022 or the portal
+    // database is unavailable, matching the runtime plug-in's fail-open path.
+    return new Set<string>();
+  }
+}
+
+function activeVipRows(rows: VipUserRow[]) {
+  const now = Math.floor(Date.now() / 1_000);
+  return rows.filter((row) => {
+    const expires = Number(row.expires ?? 0);
+    return expires === 0 || expires > now;
+  });
+}
+
+function selectVipCoreRowsForSteamId(rows: VipUserRow[], steamId: string) {
+  const steamIdRows = rows.filter(
+    (row) => String(row.account_id) === steamId,
   );
+  if (steamIdRows.length) return activeVipRows(steamIdRows);
+  const shortAccountId = toAccountId(steamId);
+  return activeVipRows(
+    rows.filter((row) => String(row.account_id) === shortAccountId),
+  );
+}
+
+async function safeVipCoreRowsForSteamId(steamId: string) {
+  const serverId = getVipServerId();
+  const sharedScope = serverId === 0;
+  const readRows = (accountId: string) => safeGameQuery<VipUserRow>(
+    "SELECT account_id, name, lastvisit, sid, `group`, expires FROM vip_users WHERE account_id = ? " +
+      (sharedScope ? "" : "AND sid = ? ") +
+      "ORDER BY `group`, expires DESC",
+    sharedScope ? [accountId] : [accountId, serverId],
+  );
+  const steamIdRows = await readRows(steamId);
+  let selectedRows: VipUserRow[];
+  if (steamIdRows.length) {
+    selectedRows = activeVipRows(steamIdRows);
+  } else {
+    const shortAccountId = toAccountId(steamId);
+    selectedRows = shortAccountId === steamId
+      ? []
+      : activeVipRows(await readRows(shortAccountId));
+  }
+  if (!selectedRows.length) return [];
+  const suppressed = await getActiveNativeVipSuppressedSteamIds([steamId]);
+  return suppressed.has(steamId) ? [] : selectedRows;
+}
+
+async function authoritativeVipCoreRowsForSteamId(
+  pool: Pool,
+  steamId: string,
+) {
+  const serverId = getVipServerId();
+  const sharedScope = serverId === 0;
+  const readRows = async (accountId: string) => {
+    const [rows] = await pool.query<VipUserRow[]>(
+      "SELECT account_id, name, lastvisit, sid, `group`, expires FROM vip_users WHERE account_id = ? " +
+        (sharedScope ? "" : "AND sid = ? ") +
+        "ORDER BY `group`, expires DESC",
+      sharedScope ? [accountId] : [accountId, serverId],
+    );
+    return rows;
+  };
+  const steamIdRows = await readRows(steamId);
+  let selectedRows: VipUserRow[];
+  if (steamIdRows.length) {
+    selectedRows = activeVipRows(steamIdRows);
+  } else {
+    const shortAccountId = toAccountId(steamId);
+    selectedRows = shortAccountId === steamId
+      ? []
+      : activeVipRows(await readRows(shortAccountId));
+  }
+  if (!selectedRows.length) return [];
+  const suppressed = await getActiveNativeVipSuppressedSteamIds(
+    [steamId],
+    { strict: true },
+  );
+  return suppressed.has(steamId) ? [] : selectedRows;
+}
+
+export async function getStaffVips(): Promise<StaffVip[]> {
+  const serverId = getVipServerId();
+  const sharedScope = serverId === 0;
+  const rows = await safeGameQuery<VipUserRow>(
+    "SELECT account_id, MAX(name) AS name, MAX(lastvisit) AS lastvisit, sid, `group`, CASE WHEN SUM(expires = 0) > 0 THEN 0 ELSE MAX(expires) END AS expires " +
+      "FROM vip_users " +
+      (sharedScope ? "" : "WHERE sid = ? ") +
+    "GROUP BY account_id, sid, `group` ORDER BY `group` ASC, name ASC, sid ASC",
+    sharedScope ? [] : [serverId],
+  );
+  const suppressedNativeVipSteamIds =
+    await getActiveNativeVipSuppressedSteamIds(
+      rows.map((row) => vipAccountToSteamId(String(row.account_id))),
+    );
   return rows.map((row) => ({
     steamId: vipAccountToSteamId(String(row.account_id)),
     accountId: String(row.account_id),
@@ -1949,6 +2110,9 @@ export async function getStaffVips(): Promise<StaffVip[]> {
     group: row.group,
     expiresAt: Number(row.expires ?? 0),
     serverId: Number(row.sid ?? 0),
+    suppressedByPortal: suppressedNativeVipSteamIds.has(
+      vipAccountToSteamId(String(row.account_id)),
+    ),
   }));
 }
 
@@ -2044,13 +2208,49 @@ async function readCompactNativeVipRoster(now: number) {
   const pool = getGamePool();
   if (!pool) return [] as CompactNativeVipRosterRow[];
   try {
-    const [rows] = await pool.query<CompactNativeVipRosterRow[]>(
-      "SELECT account_id, MAX(name) AS name, `group`, CASE WHEN SUM(expires = 0) > 0 THEN 0 ELSE MAX(expires) END AS expires " +
-        "FROM vip_users WHERE sid = ? AND `group` IS NOT NULL AND (expires = 0 OR expires > ?) " +
-        "GROUP BY account_id, `group`",
-      [getVipServerId(), now],
+    const serverId = getVipServerId();
+    const sharedScope = serverId === 0;
+    const [rows] = await pool.query<VipUserRow[]>(
+      "SELECT account_id, name, lastvisit, sid, `group`, expires FROM vip_users " +
+        `WHERE ${sharedScope ? "" : "sid = ? AND "}\`group\` IS NOT NULL ` +
+        "ORDER BY account_id, `group`, expires DESC",
+      sharedScope ? [] : [serverId],
     );
-    return rows;
+    const compact = new Map<string, CompactNativeVipRosterRow>();
+    const steamIds = [
+      ...new Set(
+        rows
+          .map((row) => vipAccountToSteamId(String(row.account_id)))
+          .filter(isSteamId),
+      ),
+    ];
+    const suppressedNativeVipSteamIds =
+      await getActiveNativeVipSuppressedSteamIds(steamIds);
+    for (const steamId of steamIds) {
+      if (suppressedNativeVipSteamIds.has(steamId)) continue;
+      for (const row of selectVipCoreRowsForSteamId(rows, steamId)) {
+        const expires = Number(row.expires ?? 0);
+        if (expires !== 0 && expires <= now) continue;
+        const group = String(row.group ?? "");
+        const key = `${steamId}\0${group.toLocaleLowerCase("en-US")}`;
+        const existing = compact.get(key);
+        if (!existing) {
+          compact.set(key, {
+            account_id: steamId,
+            name: row.name || null,
+            group,
+            expires,
+          } as CompactNativeVipRosterRow);
+        } else {
+          existing.expires = mergeVipRosterExpiry(
+            Number(existing.expires ?? 0),
+            expires,
+          );
+          if (!existing.name && row.name) existing.name = row.name;
+        }
+      }
+    }
+    return [...compact.values()];
   } catch {
     return [] as CompactNativeVipRosterRow[];
   }
@@ -2070,10 +2270,16 @@ async function readCompactPortalVipRoster() {
         "ON external_definition.group_id = identity_group.id " +
         "AND external_definition.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci " +
         "AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci " +
+        "INNER JOIN portal_vip_membership_conversion_state AS conversion_state " +
+        "ON conversion_state.steam_id COLLATE utf8mb4_unicode_ci = membership.steam_id COLLATE utf8mb4_unicode_ci AND conversion_state.group_id = membership.group_id " +
         "WHERE identity_group.enabled = TRUE AND identity_group.source_type = 'vipcore' " +
         "AND identity_group.external_key IS NOT NULL " +
         "AND membership.revoked_at IS NULL AND membership.starts_at <= CURRENT_TIMESTAMP " +
-        "AND (membership.expires_at IS NULL OR membership.expires_at > CURRENT_TIMESTAMP)",
+        "AND (membership.expires_at IS NULL OR membership.expires_at > CURRENT_TIMESTAMP) " +
+        "AND (conversion_state.entitlement_expires_at IS NULL OR conversion_state.entitlement_expires_at > CURRENT_TIMESTAMP) " +
+        "AND ((conversion_state.entitlement_expires_at IS NULL AND membership.expires_at IS NULL) " +
+        "OR (conversion_state.entitlement_expires_at IS NOT NULL AND membership.expires_at IS NOT NULL " +
+        "AND ABS(TIMESTAMPDIFF(SECOND, conversion_state.entitlement_expires_at, membership.expires_at)) <= 1))",
     );
     return rows;
   } catch {
@@ -3187,41 +3393,106 @@ export async function getCaseAttachment(attachmentId: number) {
   }
 }
 
-export async function upsertStaffAdmin(input: {
-  steamId: string;
-  username: string;
-  groups: string[];
-  immunity: number;
-  serverGuids: string[];
-}) {
-  const pool = getAdminPool();
-  if (!pool) throw new Error("Game database is not configured.");
-  await pool.execute(
-    `INSERT INTO admins (SteamId64, Username, Permissions, Groups, Immunity, Servers)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE Username = VALUES(Username), Groups = VALUES(Groups), Immunity = VALUES(Immunity), Servers = VALUES(Servers)`,
-    [
-      input.steamId,
-      input.username,
-      JSON.stringify([]),
-      JSON.stringify(input.groups),
-      input.immunity,
-      JSON.stringify(input.serverGuids),
-    ],
+type StaffVipResolutionRow = RowDataPacket & {
+  group_name: string;
+  expires: number | string;
+  sid: number | string;
+};
+
+type StaffRuntimeVipGroupRow = RowDataPacket & {
+  name: string;
+  enabled: number | boolean;
+};
+
+function validateStaffVipAccountId(steamId: string, accountId?: string) {
+  if (accountId === undefined) return null;
+  const normalized = accountId.trim();
+  if (!/^\d{1,20}$/.test(normalized)) {
+    throw new Error("VIP account ID is invalid.");
+  }
+  try {
+    if (vipAccountToSteamId(normalized) !== steamId) {
+      throw new Error("VIP account ID does not match the selected player.");
+    }
+  } catch {
+    throw new Error("VIP account ID is invalid.");
+  }
+  return normalized;
+}
+
+async function readStaffVipAccountRows(
+  connection: PoolConnection,
+  accountId: string,
+  configuredServerId: number,
+  serverId: number,
+  options: { lock?: boolean } = {},
+) {
+  const [rows] = await connection.query<StaffVipResolutionRow[]>(
+    "SELECT `group` AS group_name, expires, sid FROM vip_users WHERE account_id = ? " +
+      (configuredServerId === 0 ? "" : "AND sid = ? ") +
+      "ORDER BY sid, `group`, expires DESC" +
+      (options.lock ? " FOR UPDATE" : ""),
+    configuredServerId === 0 ? [accountId] : [accountId, serverId],
   );
+  return rows;
+}
+
+async function resolveActiveStaffVipGroupNames(
+  connection: PoolConnection,
+  steamId: string,
+  configuredServerId: number,
+  serverId: number,
+) {
+  const steamIdRows = await readStaffVipAccountRows(
+    connection,
+    steamId,
+    configuredServerId,
+    serverId,
+  );
+  const shortAccountId = toAccountId(steamId);
+  const selectedRows = steamIdRows.length || shortAccountId === steamId
+    ? steamIdRows
+    : await readStaffVipAccountRows(
+        connection,
+        shortAccountId,
+        configuredServerId,
+        serverId,
+      );
+  const now = Math.floor(Date.now() / 1_000);
+  return [...new Set(
+    selectedRows
+      .filter((row) => {
+        const expires = Number(row.expires ?? 0);
+        return expires === 0 || expires > now;
+      })
+      .map((row) => String(row.group_name)),
+  )].sort((left, right) => left.localeCompare(right, "en", { sensitivity: "base" }));
 }
 
 export async function upsertStaffVip(input: {
   steamId: string;
+  accountId?: string;
   name: string;
   group: string;
   durationMinutes: number;
   previousGroup?: string;
+  serverId?: number;
 }) {
   const pool = getGamePool();
   if (!pool) throw new Error("Game database is not configured.");
-  const accountId = toAccountId(input.steamId);
-  const serverId = getVipServerId();
+  let accountId =
+    validateStaffVipAccountId(input.steamId, input.accountId) ??
+    toAccountId(input.steamId);
+  const configuredServerId = getVipServerId();
+  const serverId = input.serverId ?? configuredServerId;
+  if (
+    !Number.isSafeInteger(serverId) ||
+    serverId < 0 ||
+    serverId > 2_147_483_647 ||
+    (configuredServerId !== 0 && serverId !== configuredServerId)
+  ) {
+    throw new Error("VIP server scope is invalid.");
+  }
   const expires =
     input.durationMinutes === 0
       ? 0
@@ -3229,6 +3500,104 @@ export async function upsertStaffVip(input: {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+    // Runtime definition editing takes the delivery catalogue before vip_users.
+    // Use the same order and revalidate the exact live tier while locked.
+    const [runtimeDefinitions] = await connection.query<StaffRuntimeVipGroupRow[]>(
+      "SELECT name, enabled FROM vip_group_definitions " +
+        "WHERE server_id = ? ORDER BY name FOR UPDATE",
+      [configuredServerId],
+    );
+    const targetIdentity = vipRuntimeGroupIdentity(input.group);
+    const matchingDefinitions = runtimeDefinitions.filter(
+      (definition) =>
+        vipRuntimeGroupIdentity(definition.name) === targetIdentity,
+    );
+    if (
+      matchingDefinitions.length !== 1 ||
+      !economyBoolean(matchingDefinitions[0].enabled)
+    ) {
+      throw new StaffVipMembershipError(
+        "vip-membership-stale",
+        "The selected VIPCore tier is no longer a unique enabled live definition for this server.",
+      );
+    }
+    let selectedRows: StaffVipResolutionRow[] | null = null;
+    if (input.accountId === undefined) {
+      const existingSteamIdRows = await readStaffVipAccountRows(
+        connection,
+        input.steamId,
+        configuredServerId,
+        serverId,
+        { lock: true },
+      );
+      if (existingSteamIdRows.length) {
+        accountId = input.steamId;
+        selectedRows = existingSteamIdRows;
+      }
+    }
+    selectedRows ??= await readStaffVipAccountRows(
+      connection,
+      accountId,
+      configuredServerId,
+      serverId,
+      { lock: true },
+    );
+    const now = Math.floor(Date.now() / 1_000);
+    const isExactPreviousRow = (row: StaffVipResolutionRow) =>
+      input.previousGroup !== undefined &&
+      Number(row.sid) === serverId &&
+      String(row.group_name) === input.previousGroup;
+    const exactPreviousRows = input.previousGroup === undefined
+      ? []
+      : selectedRows.filter(isExactPreviousRow);
+    if (input.previousGroup !== undefined && exactPreviousRows.length !== 1) {
+      throw new StaffVipMembershipError(
+        "vip-membership-stale",
+        "The exact native VIP row being edited changed before it could be saved.",
+      );
+    }
+    if (
+      input.durationMinutes > 0 &&
+      exactPreviousRows.some((row) => Number(row.expires ?? 0) === 0)
+    ) {
+      throw new StaffVipMembershipError(
+        "vip-membership-permanent",
+        "A permanent native VIP cannot be replaced by a timed grant.",
+      );
+    }
+
+    const activeRowsAfterPrevious = selectedRows.filter((row) => {
+      if (isExactPreviousRow(row)) return false;
+      const rowExpires = Number(row.expires ?? 0);
+      return rowExpires === 0 || rowExpires > now;
+    });
+    if (input.previousGroup === undefined && activeRowsAfterPrevious.length > 0) {
+      throw new StaffVipMembershipError(
+        "vip-membership-conflict",
+        "This player already has active native VIP access. Refresh and manage the exact membership instead of replacing it from the add form.",
+      );
+    }
+    const activeTargetRows = activeRowsAfterPrevious.filter(
+      (row) => vipRuntimeGroupIdentity(row.group_name) === targetIdentity,
+    );
+    if (
+      input.durationMinutes > 0 &&
+      activeTargetRows.some((row) => Number(row.expires ?? 0) === 0)
+    ) {
+      throw new StaffVipMembershipError(
+        "vip-membership-permanent",
+        "Permanent native VIP access cannot be shortened by a timed grant.",
+      );
+    }
+    const activeOtherRows = activeRowsAfterPrevious.filter(
+      (row) => vipRuntimeGroupIdentity(row.group_name) !== targetIdentity,
+    );
+    if (activeOtherRows.length > 0) {
+      throw new StaffVipMembershipError(
+        "vip-membership-conflict",
+        "This player has another active native VIP tier. Manage the exact records before editing this row.",
+      );
+    }
     if (input.previousGroup && input.previousGroup !== input.group) {
       await connection.execute(
         "DELETE FROM vip_users WHERE account_id = ? AND sid = ? AND `group` = ?",
@@ -3248,49 +3617,14 @@ export async function upsertStaffVip(input: {
         expires,
       ],
     );
-    const [activeRows] = await connection.query<
-      Array<RowDataPacket & { group_name: string }>
-    >(
-      "SELECT DISTINCT `group` AS group_name FROM vip_users WHERE account_id = ? AND sid = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) ORDER BY `group`",
-      [accountId, serverId],
+    const vipGroupNames = await resolveActiveStaffVipGroupNames(
+      connection,
+      input.steamId,
+      configuredServerId,
+      serverId,
     );
     await connection.commit();
-    return {
-      vipGroupNames: activeRows.map((row) => String(row.group_name)),
-    };
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
-}
-
-export async function removeStaffVip(input: {
-  steamId: string;
-  group: string;
-}) {
-  const pool = getGamePool();
-  if (!pool) throw new Error("Game database is not configured.");
-  const accountId = toAccountId(input.steamId);
-  const serverId = getVipServerId();
-  const connection = await pool.getConnection();
-  try {
-    await connection.beginTransaction();
-    await connection.execute(
-      "DELETE FROM vip_users WHERE account_id = ? AND sid = ? AND `group` = ?",
-      [accountId, serverId, input.group],
-    );
-    const [activeRows] = await connection.query<
-      Array<RowDataPacket & { group_name: string }>
-    >(
-      "SELECT DISTINCT `group` AS group_name FROM vip_users WHERE account_id = ? AND sid = ? AND (expires = 0 OR expires > UNIX_TIMESTAMP()) ORDER BY `group`",
-      [accountId, serverId],
-    );
-    await connection.commit();
-    return {
-      vipGroupNames: activeRows.map((row) => String(row.group_name)),
-    };
+    return { vipGroupNames };
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -3852,11 +4186,21 @@ export type ActivateVipMembershipItemInput = {
 export type ActivateVipMembershipItemResult = {
   itemId: string;
   catalogueId: number;
+  itemGroupId: number;
+  itemGroupName: string;
   groupId: number;
   groupKey: string;
   groupName: string;
   sourceType: IdentityGroupSource;
   durationMinutes: number;
+  activationKind:
+    | VipTimedConversionKind
+    | "made-permanent"
+    | "permanent-upgrade";
+  previousGroupName: string | null;
+  convertedDurationSeconds: number;
+  conversionSourceSeconds: number;
+  timeDeductedSeconds: number;
   expiresAt: string | null;
 };
 
@@ -5997,6 +6341,7 @@ async function runEconomyMutation<T extends Record<string, unknown>>(input: {
     storedResult: Record<string, unknown>,
     context: EconomyMutationContext,
   ) => Promise<T>;
+  identityCatalogueLock?: boolean;
 }): Promise<T> {
   const pool = economyStorageRequired();
   const actorSteamId = economySteamId(input.actorSteamId, "Actor Steam ID");
@@ -6008,8 +6353,19 @@ async function runEconomyMutation<T extends Record<string, unknown>>(input: {
   });
   const connection = await pool.getConnection();
   let transactionStarted = false;
+  let identityCatalogueLockAcquired = false;
 
   try {
+    if (input.identityCatalogueLock) {
+      identityCatalogueLockAcquired =
+        await acquireIdentityCatalogueMutationLock(connection);
+      if (!identityCatalogueLockAcquired) {
+        economyError(
+          "operation_unavailable",
+          "The connected-group catalogue is busy. Retry this operation shortly.",
+        );
+      }
+    }
     await connection.beginTransaction();
     transactionStarted = true;
     const [insert] = await connection.execute<ResultSetHeader>(
@@ -6087,7 +6443,18 @@ async function runEconomyMutation<T extends Record<string, unknown>>(input: {
     }
     throw error;
   } finally {
-    connection.release();
+    let connectionDiscarded = false;
+    if (identityCatalogueLockAcquired) {
+      try {
+        await releaseIdentityCatalogueMutationLock(connection);
+      } catch {
+        // A pooled connection must never be returned while it may still own
+        // the session-scoped catalogue lock.
+        connection.destroy();
+        connectionDiscarded = true;
+      }
+    }
+    if (!connectionDiscarded) connection.release();
   }
 }
 
@@ -10678,6 +11045,275 @@ function economyGroupMembershipDetails(item: EconomyInventoryItem) {
   };
 }
 
+type VipActivationGroupRow = RowDataPacket & {
+  id: number | string;
+  group_key: string;
+  display_name: string;
+  source_type: IdentityGroupSource;
+  external_key: string | null;
+  enabled: number | boolean;
+  external_definition_group_id: number | string | null;
+  rank_weight: number | string | null;
+};
+
+type IdentityGroupExternalAliasRow = RowDataPacket & {
+  group_id: number | string;
+};
+
+type VipActivationMembershipRow = RowDataPacket & {
+  group_id: number | string;
+  starts_at: Date | string;
+  expires_at: Date | string | null;
+  revoked_at: Date | string | null;
+  group_key: string;
+  display_name: string;
+  external_key: string | null;
+  rank_weight: number | string;
+};
+
+type VipConversionStateRow = RowDataPacket & {
+  group_id: number | string;
+  entitlement_expires_at: Date | string | null;
+  native_suppressed_until: Date | string | null;
+  native_suppressed_permanently: number | boolean;
+};
+
+type VipConversionListingRow = RowDataPacket & {
+  id: number | string;
+  group_id: number | string;
+  duration_minutes: number | string;
+  token_price: number | string;
+  market_enabled: number | boolean;
+};
+
+type NativeVipActivationRow = RowDataPacket & {
+  group_name: string;
+  expires: number | string;
+};
+
+type NativeVipStoredRow = RowDataPacket & {
+  group_name: string;
+  expires: number | string;
+};
+
+function vipRuntimeGroupIdentity(value: string | null | undefined) {
+  // VIPCore resolves config keys with OrdinalIgnoreCase and does not trim or
+  // rewrite aliases. Being more permissive here could turn an ignored legacy
+  // row such as `VIP_GOLD` into real GOLD access during a conversion. Known
+  // tier keys are ASCII; fold ASCII only so JavaScript's Unicode expansion
+  // cannot make `ſILVER` or `ß` equal an ASCII VIPCore key.
+  return String(value ?? "").replace(
+    /[a-z]/g,
+    (character) => String.fromCharCode(character.charCodeAt(0) - 32),
+  );
+}
+
+function externalIdentityGroupAliasLookupKey(
+  sourceType: "admins_core" | "vipcore",
+  externalKey: string,
+) {
+  // Keep this byte-for-byte compatible with identity-catalogue's migration-024
+  // alias identity. VIPCore uses OrdinalIgnoreCase semantics, represented by
+  // the same deliberately ASCII-only fold as runtime delivery.
+  const identity = sourceType === "vipcore"
+    ? vipRuntimeGroupIdentity(externalKey)
+    : externalKey.normalize("NFKC").trim().toLocaleLowerCase("en-US");
+  return createHash("sha256")
+    .update(sourceType)
+    .update("\0")
+    .update(identity)
+    .digest("hex");
+}
+
+async function lockExternalIdentityGroupAlias(
+  connection: PoolConnection,
+  sourceType: "admins_core" | "vipcore",
+  externalKey: string,
+) {
+  try {
+    const [rows] = await connection.query<IdentityGroupExternalAliasRow[]>(
+      "SELECT group_id FROM portal_identity_group_external_aliases " +
+        "WHERE source_type = ? AND alias_lookup_key = ? LIMIT 1 FOR UPDATE",
+      [sourceType, externalIdentityGroupAliasLookupKey(sourceType, externalKey)],
+    );
+    return rows[0]
+      ? economyNumber(rows[0].group_id, "historical alias group ID", 1)
+      : null;
+  } catch (error) {
+    const candidate = error as { code?: unknown; errno?: unknown };
+    // A rolling deployment without migration 024 has no rename history. Keep
+    // exact current-key activations working; renamed legacy items still fail
+    // closed because no alias target can be established.
+    if (candidate.code === "ER_NO_SUCH_TABLE" || candidate.errno === 1146) return null;
+    throw error;
+  }
+}
+
+function vipBigInt(value: unknown, label: string) {
+  const normalized = typeof value === "bigint"
+    ? value.toString()
+    : typeof value === "number" && Number.isSafeInteger(value)
+      ? String(value)
+      : typeof value === "string"
+        ? value.trim()
+        : "";
+  if (!/^\d+$/.test(normalized)) {
+    economyError("invalid_database_value", `The ${label} is invalid.`);
+  }
+  return BigInt(normalized);
+}
+
+function vipSecondsBetween(later: Date, earlier: Date) {
+  return BigInt(Math.max(0, Math.floor((later.getTime() - earlier.getTime()) / 1_000)));
+}
+
+function vipExpiryFromNow(now: Date, seconds: bigint) {
+  if (seconds <= 0n || seconds > BigInt(Number.MAX_SAFE_INTEGER / 1_000)) {
+    economyError("incompatible_item", "The converted VIP duration is invalid.");
+  }
+  const expiresAtMs = now.getTime() + Number(seconds) * 1_000;
+  // portal_identity_group_memberships uses MySQL TIMESTAMP. Refuse an
+  // overflow instead of silently wrapping a paid entitlement.
+  if (!Number.isSafeInteger(expiresAtMs) || expiresAtMs > 2_147_483_000_000) {
+    economyError(
+      "incompatible_item",
+      "This VIP extension would exceed the supported expiry date. Contact staff before consuming the item.",
+    );
+  }
+  return new Date(expiresAtMs);
+}
+
+async function readNativeVipActivationRows(steamId: string) {
+  const pool = getGamePool();
+  if (!pool) {
+    economyError(
+      "storage_unavailable",
+      "VIP activation is paused because the authoritative game membership database is unavailable.",
+    );
+  }
+  try {
+    const serverId = getVipServerId();
+    const readAccountRows = async (accountId: string) => {
+      const sharedServer = serverId === 0;
+      const [rows] = await pool.query<NativeVipStoredRow[]>(
+        "SELECT `group` AS group_name, expires " +
+          "FROM vip_users WHERE account_id = ? " +
+          (sharedServer ? "" : "AND sid = ? ") +
+          "ORDER BY `group`, expires DESC",
+        sharedServer ? [accountId] : [accountId, serverId],
+      );
+      return rows;
+    };
+
+    // Mirror VIPCore's resolver exactly: SteamID64 wins, and the short
+    // AccountID is only consulted when the first lookup returns no rows.
+    const steamIdRows = await readAccountRows(steamId);
+    const accountId = toAccountId(steamId);
+    const selectedRows = steamIdRows.length > 0 || accountId === steamId
+      ? steamIdRows
+      : await readAccountRows(accountId);
+    const nowSeconds = Math.floor(Date.now() / 1_000);
+    const activeGroups = new Map<string, NativeVipActivationRow>();
+    for (const row of selectedRows) {
+      const expires = economyNumber(row.expires, "native VIP expiry");
+      if (expires !== 0 && expires <= nowSeconds) continue;
+      const identity = vipRuntimeGroupIdentity(row.group_name);
+      const existing = activeGroups.get(identity);
+      if (!existing) {
+        activeGroups.set(identity, { ...row, expires });
+      } else {
+        const existingExpires = economyNumber(
+          existing.expires,
+          "native VIP expiry",
+        );
+        existing.expires = existingExpires === 0 || expires === 0
+          ? 0
+          : Math.max(existingExpires, expires);
+      }
+    }
+    return [...activeGroups.values()];
+  } catch {
+    economyError(
+      "storage_unavailable",
+      "VIP activation is paused because current game memberships could not be verified.",
+    );
+  }
+}
+
+async function lockVipConversionRateListings(
+  connection: PoolConnection,
+  vipGroups: VipActivationGroupRow[],
+) {
+  const groupIds = vipGroups.map((group) =>
+    economyNumber(group.id, "VIP group ID", 1)
+  );
+  if (!groupIds.length) {
+    economyError(
+      "catalogue_unavailable",
+      "VIP conversion is paused because no enabled VIP tiers are configured. Nothing was consumed.",
+    );
+  }
+  const [rows] = await connection.query<VipConversionListingRow[]>(
+    "SELECT id, group_id, duration_minutes, token_price, market_enabled " +
+      "FROM portal_identity_group_listings " +
+      `WHERE group_id IN (${groupIds.map(() => "?").join(", ")}) ` +
+      "AND catalogue_id IS NOT NULL AND enabled = TRUE AND duration_minutes > 0 " +
+      "ORDER BY group_id ASC, id ASC FOR UPDATE",
+    groupIds,
+  );
+
+  const candidatesByGroupId = new Map<
+    number,
+    VipTierRateListingCandidate[]
+  >();
+  for (const row of rows) {
+    const groupId = economyNumber(row.group_id, "VIP rate group ID", 1);
+    const durationSeconds = vipBigInt(row.duration_minutes, "VIP rate duration") * 60n;
+    const priceTokens = vipBigInt(row.token_price, "VIP rate Token price");
+    const candidate: VipTierRateListingCandidate = {
+      groupId,
+      listingId: economyNumber(row.id, "VIP rate listing ID", 1),
+      durationSeconds,
+      priceTokens,
+      marketEnabled: economyBoolean(row.market_enabled),
+      enabled: true,
+    };
+    const groupCandidates = candidatesByGroupId.get(groupId) ?? [];
+    groupCandidates.push(candidate);
+    candidatesByGroupId.set(groupId, groupCandidates);
+  }
+
+  const ratesByGroupId = new Map<number, VipTierRate>();
+  const rankedRates = vipGroups.map((group) => {
+    const groupId = economyNumber(group.id, "VIP group ID", 1);
+    const rate = selectPreferredVipTierRateListing(
+      candidatesByGroupId.get(groupId) ?? [],
+    );
+    if (!rate) {
+      economyError(
+        "catalogue_unavailable",
+        `VIP conversion is paused because ${group.display_name} has no live finite marketplace rate. Nothing was consumed.`,
+      );
+    }
+    ratesByGroupId.set(groupId, rate);
+    return {
+      rate,
+      rankWeight: economyNumber(group.rank_weight, "VIP tier rank"),
+    };
+  }).sort((left, right) => left.rankWeight - right.rankWeight);
+  for (let index = 1; index < rankedRates.length; index += 1) {
+    const lower = rankedRates[index - 1];
+    const higher = rankedRates[index];
+    if (compareVipTierRates(lower.rate, higher.rate) >= 0) {
+      economyError(
+        "catalogue_unavailable",
+        "VIP conversion is paused because live marketplace rates do not increase strictly through the tier ranks. Nothing was consumed.",
+      );
+    }
+  }
+  return ratesByGroupId;
+}
+
 /**
  * Consumes an owned, catalogue-backed membership and extends the matching
  * portal identity-group grant. VIPCore and Admins.Core read these grants as
@@ -10694,7 +11330,11 @@ export async function activateVipMembershipItem(
     actorSteamId: steamId,
     idempotencyKey: input.idempotencyKey,
     request: { itemId },
+    identityCatalogueLock: true,
     work: async (context) => {
+      // Match sale/customisation lock order. This account row is also the one
+      // shared lock that serializes two different VIP items for this player.
+      await lockTokenAccounts(context.connection, [steamId]);
       const item = await lockEconomyInventoryItem(context.connection, itemId);
       if (item.ownerSteamId !== steamId) {
         economyError(
@@ -10733,12 +11373,19 @@ export async function activateVipMembershipItem(
           ?.trim()
           .toUpperCase() ||
         null;
+      const stableCatalogueTargetMatches =
+        catalogueGroupId !== null &&
+        membership.groupId !== null &&
+        catalogueGroupId === membership.groupId;
       if (
         (catalogueGroupId !== null &&
           membership.groupId !== null &&
           catalogueGroupId !== membership.groupId) ||
         (catalogueSource && catalogueSource !== membership.sourceType) ||
-        (catalogueExternalKey && catalogueExternalKey !== membership.externalKey)
+        (catalogueExternalKey &&
+          catalogueExternalKey !== membership.externalKey &&
+          !stableCatalogueTargetMatches &&
+          !(membership.groupId === null && catalogueGroupId !== null))
       ) {
         economyError(
           "catalogue_unavailable",
@@ -10754,23 +11401,59 @@ export async function activateVipMembershipItem(
         groupWhere = "identity_group.source_type = 'vipcore' AND identity_group.external_key = ?";
         groupValues.push(membership.externalKey);
       }
-      const [groupRows] = await context.connection.query<
-        Array<RowDataPacket & {
-          id: number | string;
-          group_key: string;
-          display_name: string;
-          source_type: IdentityGroupSource;
-          external_key: string | null;
-          enabled: number | boolean;
-          external_definition_group_id: number | string | null;
-        }>
-      >(
-        "SELECT identity_group.id, identity_group.group_key, identity_group.display_name, identity_group.source_type, identity_group.external_key, identity_group.enabled, external_definition.group_id AS external_definition_group_id " +
-          "FROM portal_identity_groups AS identity_group " +
-          "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id AND external_definition.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci " +
-          "WHERE " + groupWhere + " LIMIT 1 FOR UPDATE",
-        groupValues,
-      );
+      let lockedVipGroupRows: VipActivationGroupRow[] | null = null;
+      let historicalAliasGroupId: number | null = null;
+      let groupRows: VipActivationGroupRow[];
+      if (membership.sourceType === "vipcore") {
+        const [rows] = await context.connection.query<VipActivationGroupRow[]>(
+          "SELECT identity_group.id, identity_group.group_key, identity_group.display_name, identity_group.source_type, identity_group.external_key, identity_group.enabled, external_definition.group_id AS external_definition_group_id, external_definition.rank_weight " +
+            "FROM portal_identity_groups AS identity_group " +
+            "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id AND external_definition.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci " +
+            "WHERE identity_group.source_type = 'vipcore' ORDER BY identity_group.id FOR UPDATE",
+        );
+        lockedVipGroupRows = rows;
+        if (membership.groupId !== null) {
+          groupRows = rows.filter(
+            (row) => economyNumber(row.id, "VIP group ID", 1) === membership.groupId,
+          );
+        } else {
+          const directRows = rows.filter(
+            (row) => vipRuntimeGroupIdentity(row.external_key) ===
+              vipRuntimeGroupIdentity(membership.externalKey),
+          );
+          historicalAliasGroupId = membership.externalKey
+            ? await lockExternalIdentityGroupAlias(
+                context.connection,
+                "vipcore",
+                membership.externalKey,
+              )
+            : null;
+          if (
+            directRows[0] &&
+            historicalAliasGroupId !== null &&
+            economyNumber(directRows[0].id, "VIP group ID", 1) !== historicalAliasGroupId
+          ) {
+            economyError(
+              "catalogue_unavailable",
+              "This legacy VIP key is ambiguous with a historical group rename.",
+            );
+          }
+          groupRows = historicalAliasGroupId === null
+            ? directRows
+            : rows.filter(
+                (row) => economyNumber(row.id, "VIP group ID", 1) === historicalAliasGroupId,
+              );
+        }
+      } else {
+        const [rows] = await context.connection.query<VipActivationGroupRow[]>(
+          "SELECT identity_group.id, identity_group.group_key, identity_group.display_name, identity_group.source_type, identity_group.external_key, identity_group.enabled, external_definition.group_id AS external_definition_group_id, external_definition.rank_weight " +
+            "FROM portal_identity_groups AS identity_group " +
+            "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id AND external_definition.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci " +
+            "WHERE " + groupWhere + " LIMIT 1 FOR UPDATE",
+          groupValues,
+        );
+        groupRows = rows;
+      }
       const group = groupRows[0];
       if (!group || !economyBoolean(group.enabled)) {
         economyError(
@@ -10798,14 +11481,599 @@ export async function activateVipMembershipItem(
       }
       const groupId = economyNumber(group.id, "identity group ID", 1);
       if (
+        membership.groupId !== null &&
+        membership.externalKey !== null &&
+        group.external_key !== membership.externalKey &&
+        (membership.sourceType === "admins_core" || membership.sourceType === "vipcore")
+      ) {
+        historicalAliasGroupId = await lockExternalIdentityGroupAlias(
+          context.connection,
+          membership.sourceType,
+          membership.externalKey,
+        );
+      }
+      if (catalogueGroupId !== null && catalogueGroupId !== groupId) {
+        economyError(
+          "catalogue_unavailable",
+          "This membership item's catalogue no longer targets the same connected group.",
+        );
+      }
+      const externalKeyMatches = membership.externalKey === null ||
+        group.external_key === membership.externalKey ||
+        historicalAliasGroupId === groupId;
+      if (
         group.source_type !== membership.sourceType ||
-        (membership.externalKey !== null && group.external_key !== membership.externalKey) ||
+        !externalKeyMatches ||
         (membership.groupKey !== null && group.group_key !== membership.groupKey)
       ) {
         economyError(
           "catalogue_unavailable",
           "This membership no longer matches its connected group.",
         );
+      }
+
+      if (group.source_type === "vipcore") {
+        const itemRankWeight = economyNumber(
+          group.rank_weight,
+          "VIP tier rank",
+        );
+        const vipGroupRows = (lockedVipGroupRows ?? []).filter(
+          (row) =>
+            economyBoolean(row.enabled) &&
+            row.external_definition_group_id !== null,
+        );
+        const vipGroupsById = new Map(
+          vipGroupRows.map((row) => [
+            economyNumber(row.id, "VIP group ID", 1),
+            row,
+          ] as const),
+        );
+        const vipGroupsByExternalKey = new Map<string, VipActivationGroupRow>();
+        const rankOwners = new Map<number, number>();
+        for (const row of vipGroupRows) {
+          const rowId = economyNumber(row.id, "VIP group ID", 1);
+          const rowRank = economyNumber(row.rank_weight, "VIP tier rank");
+          const existingRankOwner = rankOwners.get(rowRank);
+          if (existingRankOwner !== undefined && existingRankOwner !== rowId) {
+            economyError(
+              "catalogue_unavailable",
+              "VIP conversion is paused because two tiers have the same rank.",
+            );
+          }
+          rankOwners.set(rowRank, rowId);
+          const externalKey = vipRuntimeGroupIdentity(row.external_key);
+          if (externalKey) vipGroupsByExternalKey.set(externalKey, row);
+        }
+        // Always lock live rates in one deterministic pass before locking the
+        // consumed item's individual listing. Concurrent activations across
+        // different tiers therefore cannot take the same price rows in an
+        // opposing order.
+        const liveRatesByGroupId = await lockVipConversionRateListings(
+          context.connection,
+          vipGroupRows,
+        );
+        const [itemListingRows] = await context.connection.query<
+          VipConversionListingRow[]
+        >(
+          "SELECT id, group_id, duration_minutes, token_price, market_enabled FROM portal_identity_group_listings " +
+            "WHERE catalogue_id = ? LIMIT 1 FOR UPDATE",
+          [catalogueId],
+        );
+        const itemListing = itemListingRows[0];
+        if (
+          !itemListing ||
+          economyNumber(itemListing.group_id, "VIP listing group ID", 1) !== groupId
+        ) {
+          economyError(
+            "catalogue_unavailable",
+            "This VIP item's listing no longer matches its connected group.",
+          );
+        }
+
+        const [portalMembershipRows] = await context.connection.query<
+          VipActivationMembershipRow[]
+        >(
+          "SELECT membership.group_id, membership.starts_at, membership.expires_at, membership.revoked_at, identity_group.group_key, identity_group.display_name, identity_group.external_key, external_definition.rank_weight " +
+            "FROM portal_identity_group_memberships AS membership " +
+            "INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = membership.group_id " +
+            "INNER JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id AND external_definition.source_type COLLATE utf8mb4_unicode_ci = identity_group.source_type COLLATE utf8mb4_unicode_ci AND external_definition.external_key COLLATE utf8mb4_unicode_ci = identity_group.external_key COLLATE utf8mb4_unicode_ci " +
+            "WHERE membership.steam_id = ? AND identity_group.source_type = 'vipcore' ORDER BY membership.group_id FOR UPDATE",
+          [steamId],
+        );
+
+        let conversionState: VipConversionStateRow | undefined;
+        try {
+          const [stateRows] = await context.connection.query<
+            VipConversionStateRow[]
+          >(
+            "SELECT group_id, entitlement_expires_at, native_suppressed_until, native_suppressed_permanently " +
+              "FROM portal_vip_membership_conversion_state WHERE steam_id = ? LIMIT 1 FOR UPDATE",
+            [steamId],
+          );
+          conversionState = stateRows[0];
+        } catch (error) {
+          const candidate = error as { code?: unknown; errno?: unknown };
+          if (
+            candidate.code === "ER_NO_SUCH_TABLE" ||
+            candidate.errno === 1146 ||
+            candidate.code === "ER_BAD_FIELD_ERROR" ||
+            candidate.errno === 1054
+          ) {
+            economyError(
+              "storage_unavailable",
+              "VIP conversion storage is not installed. Staff must apply db/022_non_stackable_vip_memberships.sql.",
+            );
+          }
+          throw error;
+        }
+
+        const nativeRows = await readNativeVipActivationRows(steamId);
+        const now = new Date();
+        const nowSeconds = Math.floor(now.getTime() / 1_000);
+        const stateExpiresAt = conversionState?.entitlement_expires_at
+          ? new Date(conversionState.entitlement_expires_at)
+          : null;
+        if (stateExpiresAt && !Number.isFinite(stateExpiresAt.getTime())) {
+          economyError(
+            "invalid_database_value",
+            "The VIP conversion entitlement expiry is invalid.",
+          );
+        }
+        const stateActive = Boolean(
+          conversionState &&
+          (stateExpiresAt === null || stateExpiresAt.getTime() > now.getTime()),
+        );
+        const stateGroupId = conversionState
+          ? economyNumber(conversionState.group_id, "VIP conversion group ID", 1)
+          : null;
+        const stateNativeSuppressedUntil = conversionState?.native_suppressed_until
+          ? new Date(conversionState.native_suppressed_until)
+          : null;
+        if (
+          stateNativeSuppressedUntil &&
+          !Number.isFinite(stateNativeSuppressedUntil.getTime())
+        ) {
+          economyError(
+            "invalid_database_value",
+            "The native VIP suppression expiry is invalid.",
+          );
+        }
+        const stateNativeSuppressedPermanently = Boolean(
+          conversionState &&
+          economyBoolean(conversionState.native_suppressed_permanently),
+        );
+        const nativeSuppressionActive = Boolean(
+          stateNativeSuppressedPermanently ||
+          (stateNativeSuppressedUntil &&
+            stateNativeSuppressedUntil.getTime() > now.getTime()),
+        );
+        const activePortalMemberships = portalMembershipRows.filter((row) => {
+          const startsAt = new Date(row.starts_at);
+          const expiresAt = row.expires_at ? new Date(row.expires_at) : null;
+          return row.revoked_at === null &&
+            startsAt.getTime() <= now.getTime() &&
+            (expiresAt === null || expiresAt.getTime() > now.getTime());
+        });
+        const portalGroupIds = new Set(
+          activePortalMemberships.map((row) =>
+            economyNumber(row.group_id, "VIP membership group ID", 1),
+          ),
+        );
+        if (portalGroupIds.size > 1) {
+          economyError(
+            "incompatible_item",
+            "Your portal account already has overlapping VIP tiers. Staff must consolidate them before another item can be consumed. Nothing was consumed.",
+          );
+        }
+
+        // Once an inventory activation adopts a native VIP, its finite legacy
+        // time has already been converted and must not be counted twice. A
+        // preserved permanent native row is different: after staff ends the
+        // portal entitlement it still represents permanent ownership, so keep
+        // it in the current-tier guard and refuse timed items instead of
+        // silently consuming them.
+        const nativeRowsForConversion = !nativeSuppressionActive
+          ? nativeRows
+          : !stateActive
+            ? nativeRows.filter(
+                (row) => economyNumber(row.expires, "native VIP expiry") === 0,
+              )
+            : [];
+        const nativeMemberships = nativeRowsForConversion.map((row) => {
+          const definition = vipGroupsByExternalKey.get(
+            vipRuntimeGroupIdentity(row.group_name),
+          );
+          const expires = economyNumber(row.expires, "native VIP expiry");
+          if (!definition || (expires !== 0 && expires <= nowSeconds)) {
+            economyError(
+              "catalogue_unavailable",
+              "A current native VIP membership could not be matched to the live tier catalogue. Nothing was consumed.",
+            );
+          }
+          return {
+            groupId: economyNumber(definition.id, "native VIP group ID", 1),
+            expires,
+          };
+        });
+        const nativeGroupIds = new Set(
+          nativeMemberships.map((entry) => entry.groupId),
+        );
+        if (nativeGroupIds.size > 1) {
+          economyError(
+            "incompatible_item",
+            "Your game account already has overlapping native VIP tiers. Staff must consolidate them before another item can be consumed. Nothing was consumed.",
+          );
+        }
+
+        const actualGroupIds = new Set([...portalGroupIds, ...nativeGroupIds]);
+        if (actualGroupIds.size > 1) {
+          economyError(
+            "incompatible_item",
+            "Your game and portal VIP tiers conflict. Staff must consolidate them before another item can be consumed. Nothing was consumed.",
+          );
+        }
+
+        const actualGroupId = [...actualGroupIds][0] ?? null;
+        if (
+          stateActive &&
+          (actualGroupId === null || actualGroupId !== stateGroupId)
+        ) {
+          economyError(
+            "incompatible_item",
+            "Your VIP conversion ledger does not match the active membership. Nothing was consumed; staff must reconcile the account.",
+          );
+        }
+
+        const currentGroupId = stateActive ? stateGroupId : actualGroupId;
+        const currentGroup = currentGroupId === null
+          ? null
+          : vipGroupsById.get(currentGroupId) ?? null;
+        if (currentGroupId !== null && !currentGroup) {
+          economyError(
+            "catalogue_unavailable",
+            "The current VIP tier is missing from the live tier catalogue. Nothing was consumed.",
+          );
+        }
+        const currentRankWeight = currentGroup
+          ? economyNumber(currentGroup.rank_weight, "current VIP tier rank")
+          : null;
+
+        const portalCurrentRows = currentGroupId === null
+          ? []
+          : activePortalMemberships.filter(
+              (row) =>
+                economyNumber(row.group_id, "VIP membership group ID", 1) ===
+                currentGroupId,
+            );
+        const nativeCurrentRows = currentGroupId === null
+          ? []
+          : nativeMemberships.filter((row) => row.groupId === currentGroupId);
+        const currentPermanent = currentGroup !== null && Boolean(
+          portalCurrentRows.some((row) => row.expires_at === null) ||
+          nativeCurrentRows.some((row) => row.expires === 0),
+        );
+        const actualTimedExpiryMs = [
+          ...portalCurrentRows.flatMap((row) =>
+            row.expires_at ? [new Date(row.expires_at).getTime()] : [],
+          ),
+          ...nativeCurrentRows.flatMap((row) =>
+            row.expires === 0 ? [] : [row.expires * 1_000],
+          ),
+        ].reduce((latest, value) => Math.max(latest, value), 0);
+        const actualTimedExpiresAt = actualTimedExpiryMs > now.getTime()
+          ? new Date(actualTimedExpiryMs)
+          : null;
+
+        if (stateActive && conversionState) {
+          if (stateExpiresAt === null && !currentPermanent) {
+            economyError(
+              "incompatible_item",
+              "The permanent VIP conversion ledger has no matching permanent membership. Nothing was consumed.",
+            );
+          }
+          if (
+            stateExpiresAt !== null &&
+            !currentPermanent &&
+            (!actualTimedExpiresAt ||
+              actualTimedExpiresAt.getTime() + 1_000 < stateExpiresAt.getTime())
+          ) {
+            economyError(
+              "incompatible_item",
+              "The active VIP expiry is shorter than its conversion ledger. Nothing was consumed; staff must reconcile the account.",
+            );
+          }
+        }
+
+        let currentTimed: {
+          groupId: number;
+          rankWeight: number;
+          remainingSeconds: bigint;
+        } | null = null;
+        if (currentGroup && !currentPermanent) {
+          if (!actualTimedExpiresAt || currentRankWeight === null) {
+            economyError(
+              "incompatible_item",
+              "The current VIP expiry is invalid. Nothing was consumed.",
+            );
+          }
+          const remainingSeconds = vipSecondsBetween(actualTimedExpiresAt, now);
+          if (remainingSeconds <= 0n) {
+            economyError(
+              "incompatible_item",
+              "The current VIP has no remaining time to convert. Nothing was consumed.",
+            );
+          }
+          currentTimed = {
+            groupId: currentGroupId!,
+            rankWeight: currentRankWeight,
+            remainingSeconds,
+          };
+        }
+
+        const itemIsPermanent = membership.durationMinutes === 0;
+        const itemDurationSeconds = BigInt(membership.durationMinutes) * 60n;
+        const itemRate = liveRatesByGroupId.get(groupId) ?? null;
+        const currentRate = currentGroupId === null
+          ? null
+          : liveRatesByGroupId.get(currentGroupId) ?? null;
+        let finalGroup = group;
+        let activationKind: ActivateVipMembershipItemResult["activationKind"];
+        let convertedDurationSeconds = 0n;
+        let conversionSourceSeconds = 0n;
+        let timeDeductedSeconds = 0n;
+        let finalExpiresAt: Date | null;
+
+        if (!currentGroup) {
+          if (itemIsPermanent) {
+            activationKind = "made-permanent";
+            finalExpiresAt = null;
+          } else {
+            const converted = convertTimedVipMembership({
+              current: null,
+              item: {
+                groupId,
+                rankWeight: itemRankWeight,
+                durationSeconds: itemDurationSeconds,
+              },
+              currentRate,
+              itemRate,
+            });
+            activationKind = converted.kind;
+            convertedDurationSeconds = converted.convertedSeconds;
+            conversionSourceSeconds = converted.conversionSourceSeconds;
+            timeDeductedSeconds = converted.timeDeductedSeconds;
+            finalExpiresAt = vipExpiryFromNow(now, converted.resultSeconds);
+          }
+        } else if (currentPermanent) {
+          if (!itemIsPermanent) {
+            economyError(
+              "incompatible_item",
+              `You already have permanent ${currentGroup.display_name} access. This timed item remains in your inventory.`,
+            );
+          }
+          if (groupId === currentGroupId || itemRankWeight <= currentRankWeight!) {
+            economyError(
+              "incompatible_item",
+              `You already own permanent ${currentGroup.display_name} access. This item was not consumed.`,
+            );
+          }
+          activationKind = "permanent-upgrade";
+          finalExpiresAt = null;
+        } else if (itemIsPermanent) {
+          if (groupId !== currentGroupId && itemRankWeight <= currentRankWeight!) {
+            economyError(
+              "incompatible_item",
+              `Permanent ${group.display_name} cannot replace your higher ${currentGroup.display_name} tier. This item was not consumed.`,
+            );
+          }
+          activationKind = groupId === currentGroupId
+            ? "made-permanent"
+            : "permanent-upgrade";
+          finalExpiresAt = null;
+        } else {
+          let converted;
+          try {
+            converted = convertTimedVipMembership({
+              current: currentTimed,
+              item: {
+                groupId,
+                rankWeight: itemRankWeight,
+                durationSeconds: itemDurationSeconds,
+              },
+              currentRate,
+              itemRate,
+            });
+          } catch (error) {
+            if (error instanceof VipMembershipConversionError) {
+              economyError(
+                "incompatible_item",
+                error.code === "conversion-too-small"
+                  ? `At the current live marketplace rates, this ${group.display_name} item converts to less than one second of ${currentGroup.display_name}. Nothing was consumed.`
+                  : "VIP conversion could not be calculated from the current live marketplace rates. Nothing was consumed.",
+              );
+            }
+            throw error;
+          }
+          finalGroup = vipGroupsById.get(converted.resultGroupId)!;
+          activationKind = converted.kind;
+          convertedDurationSeconds = converted.convertedSeconds;
+          conversionSourceSeconds = converted.conversionSourceSeconds;
+          timeDeductedSeconds = converted.timeDeductedSeconds;
+          finalExpiresAt = vipExpiryFromNow(now, converted.resultSeconds);
+        }
+
+        const finalGroupId = economyNumber(finalGroup.id, "result VIP group ID", 1);
+        const finalGroupKey = finalGroup.group_key;
+        const nativeHasPermanentRow = nativeRowsForConversion.some(
+          (row) => economyNumber(row.expires, "native VIP expiry") === 0,
+        );
+        // A portal VIP is the account's single authoritative tier for its full
+        // entitlement lifetime. Suppress every native row even when none was
+        // visible during this activation: VIPCore may later expose a latent
+        // short-AccountID row after cleaning an expired SteamID64 row, and a
+        // later staff/native grant must not stack beside the portal tier.
+        const shouldSuppressNative = true;
+        const nativeSuppressedPermanently = Boolean(
+          stateNativeSuppressedPermanently ||
+          nativeHasPermanentRow ||
+          finalExpiresAt === null,
+        );
+        const nativeSuppressionCandidates = shouldSuppressNative
+          ? [
+              stateNativeSuppressedUntil?.getTime() ?? 0,
+              finalExpiresAt?.getTime() ?? 0,
+              ...nativeRowsForConversion.map((row) => {
+            const expires = economyNumber(row.expires, "native VIP expiry");
+            return expires === 0 ? 0 : expires * 1_000;
+              }),
+            ]
+          : [];
+        const nativeSuppressedUntilMs = Math.max(
+          now.getTime(),
+          ...nativeSuppressionCandidates,
+        );
+        if (
+          !nativeSuppressedPermanently &&
+          nativeSuppressedUntilMs > 2_147_483_000_000
+        ) {
+          economyError(
+            "incompatible_item",
+            "The native VIP suppression period exceeds the supported expiry date. Nothing was consumed.",
+          );
+        }
+        const nativeSuppressedUntil = nativeSuppressedPermanently ||
+            !shouldSuppressNative
+          ? null
+          : new Date(nativeSuppressedUntilMs);
+        const replacedPortalGroupIds = [...new Set(
+          activePortalMemberships
+            .map((row) => economyNumber(row.group_id, "VIP membership group ID", 1))
+            .filter((activeGroupId) => activeGroupId !== finalGroupId),
+        )];
+        await context.connection.execute(
+          "UPDATE portal_identity_group_memberships AS membership " +
+            "INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = membership.group_id " +
+            "SET membership.revoked_at = CURRENT_TIMESTAMP, membership.revoked_by_steam_id = ? " +
+            "WHERE membership.steam_id = ? AND identity_group.source_type = 'vipcore' AND membership.group_id <> ? AND membership.revoked_at IS NULL",
+          [steamId, steamId, finalGroupId],
+        );
+        await context.connection.execute(
+          "INSERT INTO portal_identity_group_memberships (group_id, steam_id, starts_at, expires_at, granted_by_steam_id, grant_reason, revoked_at, revoked_by_steam_id) " +
+            "VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?, ?, NULL, NULL) " +
+            "ON DUPLICATE KEY UPDATE starts_at = IF(revoked_at IS NULL AND starts_at <= CURRENT_TIMESTAMP AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP), starts_at, CURRENT_TIMESTAMP), expires_at = VALUES(expires_at), granted_by_steam_id = VALUES(granted_by_steam_id), grant_reason = VALUES(grant_reason), revoked_at = NULL, revoked_by_steam_id = NULL",
+          [
+            finalGroupId,
+            steamId,
+            finalExpiresAt,
+            steamId,
+            `Activated inventory VIP item ${itemId}`,
+          ],
+        );
+        await context.connection.execute(
+          "INSERT INTO portal_vip_membership_conversion_state (steam_id, group_id, entitlement_expires_at, native_suppressed_until, native_suppressed_permanently) " +
+            "VALUES (?, ?, ?, ?, ?) " +
+            "ON DUPLICATE KEY UPDATE group_id = VALUES(group_id), entitlement_expires_at = VALUES(entitlement_expires_at), native_suppressed_until = VALUES(native_suppressed_until), native_suppressed_permanently = VALUES(native_suppressed_permanently)",
+          [
+            steamId,
+            finalGroupId,
+            finalExpiresAt,
+            nativeSuppressedUntil,
+            nativeSuppressedPermanently,
+          ],
+        );
+        const [consumeResult] =
+          await context.connection.execute<ResultSetHeader>(
+            "UPDATE portal_inventory_items SET state = 'consumed', consumed_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_steam_id = ? AND state = 'available'",
+            [itemId, steamId],
+          );
+        if (consumeResult.affectedRows !== 1) {
+          economyError(
+            "item_unavailable",
+            "That VIP membership could not be consumed.",
+          );
+        }
+        // Consume before removing replaced-tier rewards. If this membership
+        // item was itself an account-bound reward, the reconciler must retire
+        // its entitlement record without changing the already-consumed state.
+        const rewardResult =
+          await reconcileIdentityGroupMembershipRewardsInTransaction(
+            context.connection,
+            {
+              steamId,
+              effectiveGroupIds: [finalGroupId],
+              authoritativeSources: ["vipcore"],
+              actorSteamId: steamId,
+            },
+          );
+        const expiresAtIso = finalExpiresAt?.toISOString() ?? null;
+        await writeInventoryEvent({
+          connection: context.connection,
+          itemId,
+          actorSteamId: steamId,
+          eventType: "group_membership.activated",
+          idempotencyKey: context.idempotencyKey,
+          lineKey: "group-membership:consumed",
+          beforeState: economyInventorySnapshot(item),
+          afterState: { ...economyInventorySnapshot(item), state: "consumed" },
+          metadata: {
+            catalogueId,
+            activationKind,
+            itemGroupId: groupId,
+            itemGroupKey: group.group_key,
+            itemGroupName: group.display_name,
+            previousGroupId: currentGroupId,
+            previousGroupName: currentGroup?.display_name ?? null,
+            resultGroupId: finalGroupId,
+            resultGroupKey: finalGroupKey,
+            resultGroupName: finalGroup.display_name,
+            durationMinutes: membership.durationMinutes,
+            convertedDurationSeconds: convertedDurationSeconds.toString(),
+            conversionSourceSeconds: conversionSourceSeconds.toString(),
+            timeDeductedSeconds: timeDeductedSeconds.toString(),
+            liveVipRateSchedule: [...liveRatesByGroupId.values()].map((rate) => ({
+              groupId: rate.groupId,
+              listingId: rate.listingId,
+              durationSeconds: rate.durationSeconds.toString(),
+              priceTokens: rate.priceTokens.toString(),
+            })),
+            expiresAt: expiresAtIso,
+            nativeSuppressedUntil: nativeSuppressedUntil?.toISOString() ?? null,
+            nativeSuppressedPermanently,
+            replacedPortalGroupIds,
+            awardedItemIds: rewardResult.awardedItemIds,
+            restoredItemIds: rewardResult.restoredItemIds,
+            reactivatedItemIds: rewardResult.reactivatedItemIds,
+            deactivatedItemIds: rewardResult.deactivatedItemIds,
+            revokedItemIds: rewardResult.revokedItemIds,
+          },
+        });
+
+        return {
+          itemId,
+          catalogueId,
+          itemGroupId: groupId,
+          itemGroupName: group.display_name,
+          groupId: finalGroupId,
+          groupKey: finalGroupKey,
+          groupName: finalGroup.display_name,
+          sourceType: group.source_type,
+          durationMinutes: membership.durationMinutes,
+          activationKind,
+          previousGroupName: currentGroup?.display_name ?? null,
+          convertedDurationSeconds: economyNumber(
+            convertedDurationSeconds.toString(),
+            "converted VIP duration",
+          ),
+          conversionSourceSeconds: economyNumber(
+            conversionSourceSeconds.toString(),
+            "VIP conversion source duration",
+          ),
+          timeDeductedSeconds: economyNumber(
+            timeDeductedSeconds.toString(),
+            "deducted VIP duration",
+          ),
+          expiresAt: expiresAtIso,
+        };
       }
 
       const [currentRows] = await context.connection.query<
@@ -10901,11 +12169,22 @@ export async function activateVipMembershipItem(
       return {
         itemId,
         catalogueId,
+        itemGroupId: groupId,
+        itemGroupName: group.display_name,
         groupId,
         groupKey: group.group_key,
         groupName: group.display_name,
         sourceType: group.source_type,
         durationMinutes: membership.durationMinutes,
+        activationKind: membership.durationMinutes === 0
+          ? "made-permanent"
+          : currentActive
+            ? "extended"
+            : "activated",
+        previousGroupName: currentActive ? group.display_name : null,
+        convertedDurationSeconds: membership.durationMinutes * 60,
+        conversionSourceSeconds: membership.durationMinutes * 60,
+        timeDeductedSeconds: 0,
         expiresAt: expiresAtIso,
       };
     },

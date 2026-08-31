@@ -37,7 +37,7 @@ const groupAdminNavItems = [
   {
     key: "membership",
     href: "/admin/groups?tab=membership",
-    label: "Membership",
+    label: "Assignments",
     icon: UsersRound,
   },
   {
@@ -75,17 +75,21 @@ const groupAdminNavItems = [
 export function GroupAdminNav({
   activeKey,
   selectedGroupId = null,
+  canManageGroups = true,
 }: {
   activeKey: GroupAdminNavKey;
   selectedGroupId?: number | null;
+  canManageGroups?: boolean;
 }) {
-  const items = groupAdminNavItems.map((item) => ({
+  const items = groupAdminNavItems
+    .filter((item) => canManageGroups || item.key === "membership")
+    .map((item) => ({
     ...item,
     href:
       item.key === "connected" && selectedGroupId !== null
         ? `${item.href}&group=${encodeURIComponent(String(selectedGroupId))}`
         : item.href,
-  }));
+    }));
 
   return (
     <SectionNav

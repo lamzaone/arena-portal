@@ -864,9 +864,11 @@ export function InventoryManager({
                   <fieldset className="form-panel inventory-vip-activation">
                     <legend>Use group membership</legend>
                     <p className="empty-copy">
-                      Activate this item when you are ready. It will be consumed
-                      and extend its connected group immediately. Until then, it
-                      remains a normal item that you can trade or sell.
+                      The server will keep one VIP tier: the same tier extends
+                      exactly, a lower tier converts into time on your current
+                      tier, and every higher tier upgrades it. Cross-tier time
+                      is recalculated from the latest marketplace price rates
+                      when you activate the item, and always rounds down.
                     </p>
                     <button
                       type="button"
@@ -881,7 +883,7 @@ export function InventoryManager({
                       }
                     >
                       <ShieldCheck aria-hidden="true" />{" "}
-                      {pending ? "Activating…" : "Activate membership"}
+                      {pending ? "Checking conversion…" : "Convert & activate"}
                     </button>
                   </fieldset>
                 ) : null}

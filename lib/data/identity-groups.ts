@@ -19,6 +19,10 @@ import {
   isIdentityGroupBadgeIconKey,
 } from "@/lib/content/identity-group-badges";
 import { getPortalDatabasePool } from "@/lib/data/database-pools";
+import {
+  acquireIdentityCatalogueMutationLock,
+  releaseIdentityCatalogueMutationLock,
+} from "@/lib/data/identity-catalogue-lock";
 
 export type IdentityGroupSource = "custom" | "admins_core" | "vipcore";
 export type IdentityPrivilegeScope = "portal" | "game";
@@ -149,6 +153,7 @@ export type EffectiveIdentity = {
   groups: EffectiveIdentityGroup[];
   tags: IdentityChatTag[];
   privileges: IdentityPrivilege[];
+  directPrivileges: IdentityPrivilege[];
 };
 
 export type IdentityAdminSnapshot = {
@@ -300,6 +305,16 @@ type IdentityAdminAuthorizationRow = RowDataPacket & {
   external_key: string;
   rank_weight: number | string;
   baseline_permissions: unknown;
+};
+
+type IdentityCatalogueAuthorityRow = RowDataPacket & {
+  source_type: Exclude<IdentityGroupSource, "custom">;
+};
+
+export type IdentityExternalDefinitionSnapshot<T> = {
+  definitions: T[];
+  databaseAuthoritative: boolean;
+  available: boolean;
 };
 
 function getIdentityPool() {
@@ -598,7 +613,16 @@ async function withIdentityTransaction<T>(
     );
   }
   const connection = await pool.getConnection();
+  let catalogueLockAcquired = false;
   try {
+    catalogueLockAcquired =
+      await acquireIdentityCatalogueMutationLock(connection);
+    if (!catalogueLockAcquired) {
+      identityError(
+        "storage_unavailable",
+        "The connected-group catalogue is busy. Retry this action shortly.",
+      );
+    }
     await connection.beginTransaction();
     const result = await work(connection);
     await connection.commit();
@@ -607,7 +631,16 @@ async function withIdentityTransaction<T>(
     await connection.rollback();
     throw error;
   } finally {
-    connection.release();
+    let connectionDiscarded = false;
+    if (catalogueLockAcquired) {
+      try {
+        await releaseIdentityCatalogueMutationLock(connection);
+      } catch {
+        connection.destroy();
+        connectionDiscarded = true;
+      }
+    }
+    if (!connectionDiscarded) connection.release();
   }
 }
 
@@ -878,47 +911,112 @@ export async function syncExternalIdentityCatalogue(input: {
   }
 }
 
+export async function getIdentityAdminAuthorizationSnapshot(): Promise<
+  IdentityExternalDefinitionSnapshot<{
+    name: string;
+    immunity: number;
+    permissions: string[];
+  }>
+> {
+  const runtimeDatabaseConfigured = Boolean(process.env.GAME_DATABASE_URL?.trim());
+  const pool = getIdentityPool();
+  if (!pool) {
+    return {
+      definitions: [],
+      databaseAuthoritative: runtimeDatabaseConfigured,
+      available: false,
+    };
+  }
+  try {
+    await ensureIdentityCatalogue(pool);
+    const [definitionResult, authorityResult] = await Promise.all([
+      pool.query<IdentityAdminAuthorizationRow[]>(
+        "SELECT definitions.external_key, definitions.rank_weight, definitions.baseline_permissions " +
+          "FROM portal_identity_external_group_definitions AS definitions " +
+          "INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = definitions.group_id " +
+          "WHERE definitions.source_type = 'admins_core' AND identity_group.enabled = TRUE " +
+          "ORDER BY definitions.rank_weight, definitions.external_key",
+      ),
+      pool.query<IdentityCatalogueAuthorityRow[]>(
+        "SELECT source_type FROM portal_identity_catalogue_authority " +
+          "WHERE source_type = 'admins_core' AND database_authoritative = TRUE LIMIT 1",
+      ),
+    ]);
+    return {
+      definitions: definitionResult[0].map((row) => ({
+        name: String(row.external_key),
+        immunity: Number(row.rank_weight),
+        permissions: asStringArray(row.baseline_permissions),
+      })),
+      databaseAuthoritative:
+        runtimeDatabaseConfigured || authorityResult[0].length > 0,
+      available: true,
+    };
+  } catch {
+    return {
+      definitions: [],
+      databaseAuthoritative: runtimeDatabaseConfigured,
+      available: false,
+    };
+  }
+}
+
 export async function getIdentityAdminAuthorizationDefinitions(): Promise<
   Array<{ name: string; immunity: number; permissions: string[] }>
 > {
+  return (await getIdentityAdminAuthorizationSnapshot()).definitions;
+}
+
+export async function getIdentityVipGroupSnapshot(): Promise<
+  IdentityExternalDefinitionSnapshot<{ name: string; weight: number }>
+> {
+  const runtimeDatabaseConfigured = Boolean(process.env.GAME_DATABASE_URL?.trim());
   const pool = getIdentityPool();
-  if (!pool) return [];
+  if (!pool) {
+    return {
+      definitions: [],
+      databaseAuthoritative: runtimeDatabaseConfigured,
+      available: false,
+    };
+  }
   try {
     await ensureIdentityCatalogue(pool);
-    const [rows] = await pool.query<IdentityAdminAuthorizationRow[]>(
-      "SELECT external_key, rank_weight, baseline_permissions " +
-        "FROM portal_identity_external_group_definitions " +
-        "WHERE source_type = 'admins_core' ORDER BY rank_weight, external_key",
-    );
-    return rows.map((row) => ({
-      name: String(row.external_key),
-      immunity: Number(row.rank_weight),
-      permissions: asStringArray(row.baseline_permissions),
-    }));
+    const [definitionResult, authorityResult] = await Promise.all([
+      pool.query<IdentityAdminAuthorizationRow[]>(
+        "SELECT definitions.external_key, definitions.rank_weight, definitions.baseline_permissions " +
+          "FROM portal_identity_external_group_definitions AS definitions " +
+          "INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = definitions.group_id " +
+          "WHERE definitions.source_type = 'vipcore' AND identity_group.enabled = TRUE " +
+          "AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(definitions.definition, '$.enabled')), 'true') = 'true' " +
+          "ORDER BY definitions.rank_weight DESC, definitions.external_key",
+      ),
+      pool.query<IdentityCatalogueAuthorityRow[]>(
+        "SELECT source_type FROM portal_identity_catalogue_authority " +
+          "WHERE source_type = 'vipcore' AND database_authoritative = TRUE LIMIT 1",
+      ),
+    ]);
+    return {
+      definitions: definitionResult[0].map((row) => ({
+        name: String(row.external_key),
+        weight: Number(row.rank_weight),
+      })),
+      databaseAuthoritative:
+        runtimeDatabaseConfigured || authorityResult[0].length > 0,
+      available: true,
+    };
   } catch {
-    return [];
+    return {
+      definitions: [],
+      databaseAuthoritative: runtimeDatabaseConfigured,
+      available: false,
+    };
   }
 }
 
 export async function getIdentityVipGroupDefinitions(): Promise<
   Array<{ name: string; weight: number }>
 > {
-  const pool = getIdentityPool();
-  if (!pool) return [];
-  try {
-    await ensureIdentityCatalogue(pool);
-    const [rows] = await pool.query<IdentityAdminAuthorizationRow[]>(
-      "SELECT external_key, rank_weight, baseline_permissions " +
-        "FROM portal_identity_external_group_definitions " +
-        "WHERE source_type = 'vipcore' ORDER BY rank_weight DESC, external_key",
-    );
-    return rows.map((row) => ({
-      name: String(row.external_key),
-      weight: Number(row.rank_weight),
-    }));
-  } catch {
-    return [];
-  }
+  return (await getIdentityVipGroupSnapshot()).definitions;
 }
 
 function normalizeExternalNames(values: string[] | undefined) {
@@ -929,6 +1027,42 @@ function normalizeExternalNames(values: string[] | undefined) {
         .filter((value) => value.length > 0 && value.length <= 100),
     ),
   ];
+}
+
+type NativeVipSuppressionRow = RowDataPacket & {
+  steam_id: string;
+};
+
+function isMissingNativeVipSuppressionStorage(error: unknown) {
+  const candidate = error as { code?: unknown; errno?: unknown };
+  return candidate.code === "ER_NO_SUCH_TABLE" ||
+    candidate.errno === 1146 ||
+    candidate.code === "ER_BAD_FIELD_ERROR" ||
+    candidate.errno === 1054;
+}
+
+async function getActiveNativeVipSuppressions(
+  executor: Pick<Pool, "query"> | Pick<PoolConnection, "query">,
+  steamIds: string[],
+  options: { lock?: boolean } = {},
+) {
+  if (!steamIds.length) return new Set<string>();
+  try {
+    const [rows] = await executor.query<NativeVipSuppressionRow[]>(
+      "SELECT steam_id FROM portal_vip_membership_conversion_state " +
+        `WHERE steam_id IN (${steamIds.map(() => "?").join(", ")}) ` +
+        "AND (native_suppressed_permanently = TRUE OR native_suppressed_until > CURRENT_TIMESTAMP) " +
+        "ORDER BY steam_id" +
+        (options.lock ? " FOR UPDATE" : ""),
+      steamIds,
+    );
+    return new Set(rows.map((row) => String(row.steam_id)));
+  } catch (error) {
+    // Identity pages remain compatible while migration 022 is being staged.
+    // Activation itself still fails closed until the migration is installed.
+    if (isMissingNativeVipSuppressionStorage(error)) return new Set<string>();
+    throw error;
+  }
 }
 
 function toIdentityGroupBadgeData(
@@ -990,22 +1124,36 @@ export async function getEffectiveIdentityGroupBadgesForPlayers(
     const steamIds = [...consolidated.keys()];
     if (!steamIds.length) return groupsBySteamId;
     const steamPlaceholders = steamIds.map(() => "?").join(", ");
-    const [[externalRows], [membershipRows]] = await Promise.all([
+    const [[externalRows], [membershipRows], suppressedNativeVipSteamIds] = await Promise.all([
       pool.query<IdentityGroupRow[]>(
         identityGroupSelect +
-          " FROM portal_identity_groups AS g WHERE g.enabled = TRUE AND g.source_type IN ('admins_core', 'vipcore') ORDER BY g.profile_priority DESC, g.display_name, g.id",
+          " FROM portal_identity_groups AS g " +
+          "INNER JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = g.id " +
+          "WHERE g.enabled = TRUE AND g.source_type IN ('admins_core', 'vipcore') " +
+          "ORDER BY g.profile_priority DESC, g.display_name, g.id",
       ),
       pool.query<IdentityGroupMembershipBadgeRow[]>(
         identityGroupSelect +
           ", membership.steam_id FROM portal_identity_groups AS g " +
           "INNER JOIN portal_identity_group_memberships AS membership ON membership.group_id = g.id " +
-          "WHERE g.enabled = TRUE AND membership.steam_id IN (" +
+          "LEFT JOIN portal_vip_membership_conversion_state AS vip_conversion_state " +
+          "ON vip_conversion_state.steam_id COLLATE utf8mb4_unicode_ci = membership.steam_id COLLATE utf8mb4_unicode_ci AND vip_conversion_state.group_id = membership.group_id " +
+          "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = g.id " +
+          "WHERE g.enabled = TRUE AND (g.source_type = 'custom' OR external_definition.group_id IS NOT NULL) AND membership.steam_id IN (" +
           steamPlaceholders +
           ") AND membership.revoked_at IS NULL AND membership.starts_at <= CURRENT_TIMESTAMP " +
+          "AND NOT (g.source_type = 'admins_core' AND LOWER(TRIM(COALESCE(g.external_key, ''))) = 'founder') " +
           "AND (membership.expires_at IS NULL OR membership.expires_at > CURRENT_TIMESTAMP) " +
+          "AND (g.source_type <> 'vipcore' OR (" +
+          "vip_conversion_state.steam_id IS NOT NULL " +
+          "AND (vip_conversion_state.entitlement_expires_at IS NULL OR vip_conversion_state.entitlement_expires_at > CURRENT_TIMESTAMP) " +
+          "AND ((vip_conversion_state.entitlement_expires_at IS NULL AND membership.expires_at IS NULL) " +
+          "OR (vip_conversion_state.entitlement_expires_at IS NOT NULL AND membership.expires_at IS NOT NULL " +
+          "AND ABS(TIMESTAMPDIFF(SECOND, vip_conversion_state.entitlement_expires_at, membership.expires_at)) <= 1)))) " +
           "ORDER BY g.profile_priority DESC, g.display_name, g.id",
         steamIds,
       ),
+      getActiveNativeVipSuppressions(pool, steamIds),
     ]);
 
     const addGroup = (steamId: string, row: IdentityGroupRow) => {
@@ -1030,11 +1178,13 @@ export async function getEffectiveIdentityGroupBadgesForPlayers(
       if (!externalByKey.has(key)) externalByKey.set(key, row);
     }
     for (const [steamId, membership] of consolidated) {
-      for (const name of membership.vipGroupNames) {
-        const row = externalByKey.get(
-          identityExternalBadgeLookupKey("vipcore", name),
-        );
-        if (row) addGroup(steamId, row);
+      if (!suppressedNativeVipSteamIds.has(steamId)) {
+        for (const name of membership.vipGroupNames) {
+          const row = externalByKey.get(
+            identityExternalBadgeLookupKey("vipcore", name),
+          );
+          if (row) addGroup(steamId, row);
+        }
       }
       for (const name of membership.adminGroupNames) {
         const row = externalByKey.get(
@@ -1086,7 +1236,12 @@ async function getEffectiveGroupRows(
   },
 ) {
   const steamId = identitySteamId(input.steamId);
-  const vipNames = normalizeExternalNames(input.vipGroupNames);
+  const suppressedNativeVipSteamIds = input.vipGroupNames?.length
+    ? await getActiveNativeVipSuppressions(executor, [steamId])
+    : new Set<string>();
+  const vipNames = suppressedNativeVipSteamIds.has(steamId)
+    ? []
+    : normalizeExternalNames(input.vipGroupNames);
   const adminNames = normalizeExternalNames(input.adminGroupNames);
   const externalClauses: string[] = [];
   const externalValues: unknown[] = [];
@@ -1113,15 +1268,40 @@ async function getEffectiveGroupRows(
     identityGroupSelect +
       ", membership.group_id IS NOT NULL AS has_portal_membership, membership.expires_at AS membership_expires_at " +
       "FROM portal_identity_groups AS g " +
+      "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = g.id " +
       "LEFT JOIN portal_identity_group_memberships AS membership ON membership.group_id = g.id AND membership.steam_id = ? " +
       "AND membership.revoked_at IS NULL AND membership.starts_at <= CURRENT_TIMESTAMP AND (membership.expires_at IS NULL OR membership.expires_at > CURRENT_TIMESTAMP) " +
-      "WHERE g.enabled = TRUE AND (membership.group_id IS NOT NULL" +
+      "LEFT JOIN portal_vip_membership_conversion_state AS vip_conversion_state " +
+      "ON vip_conversion_state.steam_id COLLATE utf8mb4_unicode_ci = membership.steam_id COLLATE utf8mb4_unicode_ci AND vip_conversion_state.group_id = membership.group_id " +
+      "WHERE g.enabled = TRUE AND (g.source_type = 'custom' OR external_definition.group_id IS NOT NULL) " +
+      "AND ((membership.group_id IS NOT NULL " +
+      "AND NOT (g.source_type = 'admins_core' AND LOWER(TRIM(COALESCE(g.external_key, ''))) = 'founder') " +
+      "AND (g.source_type <> 'vipcore' OR (" +
+      "vip_conversion_state.steam_id IS NOT NULL " +
+      "AND (vip_conversion_state.entitlement_expires_at IS NULL OR vip_conversion_state.entitlement_expires_at > CURRENT_TIMESTAMP) " +
+      "AND ((vip_conversion_state.entitlement_expires_at IS NULL AND membership.expires_at IS NULL) " +
+      "OR (vip_conversion_state.entitlement_expires_at IS NOT NULL AND membership.expires_at IS NOT NULL " +
+      "AND ABS(TIMESTAMPDIFF(SECOND, vip_conversion_state.entitlement_expires_at, membership.expires_at)) <= 1)))))" +
       externalSql +
       ") ORDER BY g.profile_priority DESC, g.display_name, g.id" +
       (input.lock ? " FOR UPDATE" : ""),
     [steamId, ...externalValues],
   );
-  return rows;
+  if (!input.lock || !vipNames.length) return rows;
+
+  // Activation locks VIP group rows before its conversion-state row. Recheck
+  // suppression with a current locking read only after taking the same group
+  // locks, so a concurrent first conversion cannot leave this transaction
+  // using the stale pre-conversion snapshot without inverting lock order.
+  const currentSuppressedNativeVipSteamIds =
+    await getActiveNativeVipSuppressions(executor, [steamId], { lock: true });
+  if (!currentSuppressedNativeVipSteamIds.has(steamId)) return rows;
+
+  // Suppression applies only to raw VIPCore names. A portal membership remains
+  // authoritative even when it targets the same VIPCore identity group.
+  return rows.filter(
+    (row) => row.source_type !== "vipcore" || asBoolean(row.has_portal_membership),
+  );
 }
 
 async function getEffectiveIdentityUnsafe(input: {
@@ -1130,7 +1310,9 @@ async function getEffectiveIdentityUnsafe(input: {
   adminGroupNames?: string[];
 }): Promise<EffectiveIdentity> {
   const pool = getIdentityPool();
-  if (!pool) return { groups: [], tags: [], privileges: [] };
+  if (!pool) {
+    return { groups: [], tags: [], privileges: [], directPrivileges: [] };
+  }
   const steamId = identitySteamId(input.steamId);
   const groupRows = await getEffectiveGroupRows(pool, { ...input, steamId });
   const groups = groupRows.map((row) => ({
@@ -1187,17 +1369,21 @@ async function getEffectiveIdentityUnsafe(input: {
     if (row.group_id !== undefined) groupsById.get(Number(row.group_id))?.tags.push(tag);
   }
   const privileges = new Map<number, IdentityPrivilege>();
+  const directPrivileges = new Map<number, IdentityPrivilege>();
   for (const row of [...groupPrivilegeRows[0], ...playerPrivilegeRows[0]]) {
     const privilege = toPrivilege(row);
     privileges.set(privilege.id, privilege);
     if (row.group_id !== undefined) {
       groupsById.get(Number(row.group_id))?.privileges.push(privilege);
+    } else {
+      directPrivileges.set(privilege.id, privilege);
     }
   }
   return {
     groups,
     tags: [...tags.values()],
     privileges: [...privileges.values()],
+    directPrivileges: [...directPrivileges.values()],
   };
 }
 
@@ -1212,7 +1398,7 @@ export async function getEffectiveIdentity(input: {
   try {
     return await getEffectiveIdentityUnsafe(input);
   } catch {
-    return { groups: [], tags: [], privileges: [] };
+    return { groups: [], tags: [], privileges: [], directPrivileges: [] };
   }
 }
 
@@ -1323,6 +1509,35 @@ export async function updateIdentityGroup(input: {
 
   return withIdentityTransaction(async (connection) => {
     const previous = await lockGroup(connection, groupId);
+    const isFounderAdapter =
+      previous.source_type === "admins_core" &&
+      String(previous.external_key ?? "")
+        .normalize("NFKC")
+        .trim()
+        .toLocaleLowerCase("en-US") === "founder";
+    if (isFounderAdapter && !input.enabled) {
+      identityError(
+        "founder_invariant",
+        "Founder is the protected root adapter and cannot be disabled.",
+      );
+    }
+    if (previous.source_type === "vipcore" && input.enabled) {
+      const [runtimeRows] = await connection.query<
+        Array<RowDataPacket & { group_id: number | string }>
+      >(
+        "SELECT group_id FROM portal_identity_external_group_definitions " +
+          "WHERE group_id = ? AND source_type = 'vipcore' " +
+          "AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(definition, '$.enabled')), 'true') = 'true' " +
+          "LIMIT 1 FOR UPDATE",
+        [groupId],
+      );
+      if (!runtimeRows.length) {
+        identityError(
+          "group_disabled",
+          "VIPCore has disabled this runtime tier; enable it in the runtime definition first.",
+        );
+      }
+    }
     await connection.execute(
       "UPDATE portal_identity_groups SET display_name = ?, description = ?, badge_label = ?, badge_icon_key = ?, badge_color = ?, badge_soft_color = ?, profile_priority = ?, enabled = ? WHERE id = ?",
       [
@@ -1432,10 +1647,26 @@ export async function assignIdentityGroup(input: {
   const reason = identityOptionalText(input.reason, "Grant reason", 180);
   return withIdentityTransaction(async (connection) => {
     const group = await lockGroup(connection, groupId);
-    if (group.source_type !== "custom" || !asBoolean(group.enabled)) {
+    if (!asBoolean(group.enabled)) {
       identityError(
-        "custom_group_required",
-        "Only an enabled custom group can receive portal-managed members.",
+        "group_disabled",
+        "Only an enabled group can receive portal-managed members.",
+      );
+    }
+    const externalKey = String(group.external_key ?? "").trim();
+    if (
+      group.source_type === "admins_core" &&
+      externalKey.toLocaleLowerCase("en-US") === "founder"
+    ) {
+      identityError(
+        "founder_invariant",
+        "Founder authority cannot be assigned through a portal membership.",
+      );
+    }
+    if (group.source_type === "vipcore") {
+      identityError(
+        "vip_conversion_required",
+        "VIP memberships must use the source-aware non-stackable VIP workflow.",
       );
     }
     await connection.execute(
@@ -1485,10 +1716,19 @@ export async function removeIdentityGroupMembership(input: {
   const steamId = identitySteamId(input.steamId, "Player SteamID64");
   return withIdentityTransaction(async (connection) => {
     const group = await lockGroup(connection, groupId);
-    if (group.source_type !== "custom") {
+    if (
+      group.source_type === "admins_core" &&
+      String(group.external_key ?? "").trim().toLocaleLowerCase("en-US") === "founder"
+    ) {
       identityError(
-        "custom_group_required",
-        "External memberships must be managed by Admins.Core or VIPCore.",
+        "founder_invariant",
+        "Founder authority cannot be removed through a portal membership.",
+      );
+    }
+    if (group.source_type === "vipcore") {
+      identityError(
+        "vip_conversion_required",
+        "VIP memberships must use the source-aware non-stackable VIP workflow.",
       );
     }
     const [result] = await connection.execute<ResultSetHeader>(
@@ -1522,6 +1762,78 @@ export async function removeIdentityGroupMembership(input: {
       changed: result.affectedRows > 0,
       revokedItemIds,
     };
+  });
+}
+
+export async function extendIdentityGroupMembership(input: {
+  actor: IdentityFounderActor;
+  requestKey: string;
+  groupId: number;
+  steamId: string;
+  durationMinutes: number;
+}) {
+  const actorSteamId = requireFounder(input.actor);
+  const requestKey = identityRequestKey(input.requestKey);
+  const groupId = identityId(input.groupId, "Group ID");
+  const steamId = identitySteamId(input.steamId, "Player SteamID64");
+  const durationMinutes = identityInteger(
+    input.durationMinutes,
+    "Extension duration",
+    1,
+    525_600,
+  );
+  return withIdentityTransaction(async (connection) => {
+    const group = await lockGroup(connection, groupId);
+    if (
+      group.source_type === "admins_core" &&
+      String(group.external_key ?? "").trim().toLocaleLowerCase("en-US") === "founder"
+    ) {
+      identityError(
+        "founder_invariant",
+        "Founder authority cannot be changed through a portal membership.",
+      );
+    }
+    if (group.source_type === "vipcore") {
+      identityError(
+        "vip_conversion_required",
+        "VIP membership time must be changed through the source-aware non-stackable workflow.",
+      );
+    }
+    const [rows] = await connection.query<Array<RowDataPacket & {
+      expires_at: Date | string | null;
+      revoked_at: Date | string | null;
+    }>>(
+      "SELECT expires_at, revoked_at FROM portal_identity_group_memberships WHERE group_id = ? AND steam_id = ? LIMIT 1 FOR UPDATE",
+      [groupId, steamId],
+    );
+    const membership = rows[0];
+    if (!membership || membership.revoked_at) {
+      identityError("membership_not_found", "That portal membership is no longer active.");
+    }
+    if (membership.expires_at === null) {
+      identityError("membership_permanent", "Permanent memberships do not need an extension.");
+    }
+    const currentExpiry = new Date(membership.expires_at).getTime();
+    const base = Math.max(Date.now(), Number.isFinite(currentExpiry) ? currentExpiry : 0);
+    const nextExpiry = new Date(base + durationMinutes * 60_000);
+    await connection.execute(
+      "UPDATE portal_identity_group_memberships SET starts_at = LEAST(starts_at, CURRENT_TIMESTAMP), expires_at = ?, revoked_at = NULL, revoked_by_steam_id = NULL, granted_by_steam_id = ? WHERE group_id = ? AND steam_id = ?",
+      [nextExpiry, actorSteamId, groupId, steamId],
+    );
+    await writeIdentityAudit(connection, {
+      requestKey: `${requestKey}:membership-extend`,
+      actorSteamId,
+      action: "identity.membership.extended",
+      targetType: "steam-player",
+      targetId: steamId,
+      metadata: {
+        groupId,
+        durationMinutes,
+        previousExpiresAt: new Date(currentExpiry).toISOString(),
+        expiresAt: nextExpiry.toISOString(),
+      },
+    });
+    return { groupId, steamId, expiresAt: nextExpiry.toISOString() };
   });
 }
 
@@ -2050,10 +2362,13 @@ async function loadAccountBoundRewardAwards(
     Array<IdentityRewardAwardRow & { source_type: IdentityGroupSource }>
   >(
     "SELECT awards.reward_id, rewards.group_id, awards.steam_id, awards.ordinal, awards.item_id, awards.entitlement_active, awards.item_revoked_by_entitlement, " +
-      "items.state AS item_state, items.item_type, items.tradable, identity_group.enabled AS group_enabled, rewards.enabled AS reward_enabled, identity_group.source_type " +
+      "items.state AS item_state, items.item_type, items.tradable, " +
+      "(identity_group.enabled AND (identity_group.source_type = 'custom' OR external_definition.group_id IS NOT NULL)) AS group_enabled, " +
+      "rewards.enabled AS reward_enabled, identity_group.source_type " +
       "FROM portal_identity_group_reward_awards AS awards " +
       "INNER JOIN portal_identity_group_rewards AS rewards ON rewards.id = awards.reward_id " +
       "INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = rewards.group_id " +
+      "LEFT JOIN portal_identity_external_group_definitions AS external_definition ON external_definition.group_id = identity_group.id " +
       "INNER JOIN portal_inventory_items AS items ON items.id = awards.item_id " +
       `WHERE ${where.join(" AND ")} ORDER BY awards.steam_id, awards.reward_id, awards.ordinal FOR UPDATE`,
     values,
@@ -2625,6 +2940,64 @@ export async function applyIdentityGroupMembershipRewards(
       ...reactivated.restoredItemIds,
     ]),
     reactivatedItemIds: reactivated.reactivatedItemIds,
+  };
+}
+
+/**
+ * Reconciles a caller-supplied set of already-authorized effective groups in
+ * the caller's transaction. Membership replacement and account-bound reward
+ * revocation therefore commit (or roll back) together with the entitlement.
+ */
+export async function reconcileIdentityGroupMembershipRewardsInTransaction(
+  connection: PoolConnection,
+  input: {
+    steamId: string;
+    effectiveGroupIds: number[];
+    authoritativeSources: IdentityGroupSource[];
+    actorSteamId: string | null;
+  },
+) {
+  const steamId = identitySteamId(input.steamId);
+  const actorSteamId = input.actorSteamId === null
+    ? null
+    : identitySteamId(input.actorSteamId, "Reward actor SteamID64");
+  const effectiveGroupIds = new Set(
+    input.effectiveGroupIds.map((groupId) => identityId(groupId, "Group ID")),
+  );
+  const authoritativeSources = new Set(input.authoritativeSources);
+  const awardedItemIds: string[] = [];
+  const restoredItemIds: string[] = [];
+  const reactivatedItemIds: string[] = [];
+
+  for (const groupId of [...effectiveGroupIds].sort((left, right) => left - right)) {
+    const rewardResult = await applyIdentityGroupMembershipRewards(connection, {
+      groupId,
+      steamId,
+      actorSteamId,
+      reason: "group-membership-effective",
+    });
+    awardedItemIds.push(...rewardResult.awardedItemIds);
+    restoredItemIds.push(...rewardResult.restoredItemIds);
+    reactivatedItemIds.push(...rewardResult.reactivatedItemIds);
+  }
+
+  const entitlementResult = await reconcileAccountBoundRewardEntitlements(
+    connection,
+    {
+      steamId,
+      effectiveGroupIds,
+      authoritativeSources,
+      actorSteamId,
+    },
+  );
+  restoredItemIds.push(...entitlementResult.restoredItemIds);
+  reactivatedItemIds.push(...entitlementResult.reactivatedItemIds);
+  return {
+    awardedItemIds: uniqueStrings(awardedItemIds),
+    restoredItemIds: uniqueStrings(restoredItemIds),
+    reactivatedItemIds: uniqueStrings(reactivatedItemIds),
+    deactivatedItemIds: uniqueStrings(entitlementResult.deactivatedItemIds),
+    revokedItemIds: uniqueStrings(entitlementResult.revokedItemIds),
   };
 }
 

@@ -100,6 +100,8 @@
     :is(
       [data-ui="panel"],
       [data-ui="item-card"],
+      [data-ui="vip-current-status"],
+      [data-ui="vip-tier-card"],
       [data-ui="item-modal"],
       [data-ui="empty-state"],
       [data-ui="toast"],
@@ -116,6 +118,41 @@
     background: Canvas;
     box-shadow: none;
     text-shadow: none;
+  }
+
+  :where([data-theme][data-theme-surface])
+    [data-ui="vip-tier-card"] :is(
+      [data-part="artwork"],
+      [data-part="status"],
+      [data-part="benefits"],
+      [data-part="offers"],
+      [data-part="conversion-preview"],
+      [data-part="relationship"]
+    ) {
+    border-color: CanvasText;
+    color: CanvasText;
+    background: Canvas;
+    box-shadow: none;
+    text-shadow: none;
+  }
+
+  :where([data-theme][data-theme-surface])
+    [data-ui="vip-tier-card"] :is([data-part="accent"], [data-part="artwork-shade"]) {
+    display: none;
+  }
+
+  :where([data-theme][data-theme-surface])
+    [data-ui="vip-tier-card"] [data-part="artwork"] img {
+    opacity: .32;
+    filter: grayscale(1);
+  }
+
+  :where([data-theme][data-theme-surface])
+    [data-ui="vip-tier-card"] [data-part="action"] {
+    border-color: ButtonText;
+    color: ButtonText;
+    background: ButtonFace;
+    box-shadow: none;
   }
 
   :where([data-theme][data-theme-surface])

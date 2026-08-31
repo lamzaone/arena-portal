@@ -553,7 +553,7 @@
 
 .groupWorkspace {
   display: grid;
-  grid-template-columns: minmax(232px, 0.29fr) minmax(0, 1fr);
+  grid-template-columns: minmax(330px, 0.36fr) minmax(0, 1fr);
   min-height: 400px;
   overflow: clip;
   border: 1px solid var(--theme-border);
@@ -625,12 +625,157 @@
 }
 
 .groupNavigationList {
-  display: grid;
-  align-content: start;
   min-height: 96px;
+  overflow-x: auto;
   overflow-y: auto;
   scrollbar-color: var(--theme-accent) var(--theme-surface);
   scrollbar-width: thin;
+}
+
+.groupNavigationTable {
+  width: 100%;
+  min-width: 400px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.groupNavigationTable th:first-child {
+  width: 52%;
+}
+
+.groupNavigationTable th:nth-child(2) {
+  width: 27%;
+}
+
+.groupNavigationTable th:last-child {
+  width: 21%;
+}
+
+.groupNavigationTable thead {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  background: var(--theme-surface-raised);
+}
+
+.groupNavigationTable th {
+  height: 44px;
+  padding: 0;
+  border-bottom: 1px solid var(--theme-border-strong);
+  color: var(--theme-text-subtle);
+  font-size: 0.6875rem;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.groupNavigationTable th button {
+  display: inline-flex;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 8px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+.groupNavigationTable th button:hover,
+.groupNavigationTable th button:focus-visible {
+  color: var(--theme-text);
+  background: var(--theme-control-hover);
+  outline: none;
+}
+
+.groupNavigationTable th button:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--theme-focus-ring);
+}
+
+.groupNavigationTable th[aria-sort] button {
+  color: var(--theme-text);
+  background: color-mix(in srgb, var(--theme-accent) 8%, transparent);
+}
+
+.groupNavigationTable th svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  color: var(--theme-text-subtle);
+}
+
+.groupNavigationTable th svg[data-active="true"] {
+  color: var(--theme-accent-soft);
+}
+
+.groupNavigationTable tbody tr {
+  border-bottom: 1px solid var(--theme-border);
+  transition: background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.groupNavigationTable tbody tr[data-selected="true"] {
+  background: color-mix(in srgb, var(--group-accent) 11%, var(--theme-control-hover));
+  box-shadow: inset 3px 0 0 var(--group-accent);
+}
+
+.groupNavigationTable td {
+  min-width: 0;
+  padding: 8px;
+  color: var(--theme-text-muted);
+  font-size: 0.75rem;
+  vertical-align: middle;
+}
+
+.groupNavigationTable td:first-child {
+  padding: 0;
+}
+
+.groupNavigationTable td:nth-child(2) > small {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--theme-text-subtle);
+  font-size: 0.6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groupNavigationTable td[data-column="members"] {
+  color: var(--theme-text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  text-align: center;
+}
+
+.groupTypeBadge {
+  display: inline-flex;
+  min-height: 22px;
+  padding: 3px 6px;
+  align-items: center;
+  border: 1px solid var(--theme-border);
+  border-radius: calc(var(--theme-radius) - 2px);
+  color: var(--theme-text-muted);
+  background: var(--theme-control-bg);
+  font-size: 0.6875rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.groupTypeBadge[data-group-type="admin"] {
+  border-color: color-mix(in srgb, var(--theme-accent-soft) 45%, var(--theme-border));
+  color: color-mix(in srgb, var(--theme-accent-soft) 72%, var(--theme-text));
+}
+
+.groupTypeBadge[data-group-type="vip"] {
+  border-color: color-mix(in srgb, var(--theme-accent-strong) 48%, var(--theme-border));
+  color: color-mix(in srgb, var(--theme-accent-strong) 76%, var(--theme-text));
 }
 
 .groupNavigationItem {
@@ -638,12 +783,12 @@
   display: grid;
   grid-template-columns: 3px minmax(0, 1fr) 15px;
   width: 100%;
-  min-height: 72px;
+  min-height: 78px;
   padding: 9px 10px 9px 8px;
   align-items: center;
   gap: 10px;
   border: 0;
-  border-bottom: 1px solid var(--theme-border);
+  border: 0;
   border-radius: 0;
   color: var(--theme-text-muted);
   background: transparent;
@@ -664,10 +809,8 @@
   box-shadow: inset 0 0 0 2px var(--theme-focus-ring);
 }
 
-.groupNavigationItem[data-selected="true"] {
+.groupNavigationTable tr[data-selected="true"] .groupNavigationItem {
   color: var(--theme-text);
-  background: color-mix(in srgb, var(--group-accent) 11%, var(--theme-control-hover));
-  box-shadow: inset 3px 0 0 var(--group-accent);
 }
 
 .groupNavigationAccent {
@@ -702,19 +845,19 @@
 
 .groupNavigationCopy strong {
   color: inherit;
-  font-size: 11px;
+  font-size: 0.75rem;
 }
 
 .groupNavigationCopy code,
 .groupNavigationCopy small {
   color: var(--theme-text-subtle);
-  font-size: 8px;
+  font-size: 0.6875rem;
 }
 
 .groupNavigationCopy i {
   flex: 0 0 auto;
   color: var(--theme-text-subtle);
-  font-size: 7px;
+  font-size: 0.6875rem;
   font-style: normal;
   font-weight: 850;
   letter-spacing: 0.06em;
@@ -732,7 +875,7 @@
   transition: color 180ms ease, transform 180ms ease;
 }
 
-.groupNavigationItem[data-selected="true"] > svg {
+.groupNavigationTable tr[data-selected="true"] .groupNavigationItem > svg {
   color: var(--group-accent);
   transform: translateX(2px);
 }
@@ -852,6 +995,196 @@
   color: var(--theme-text);
   font-family: var(--font-display);
   font-size: 13px;
+}
+
+.runtimeDefinitionForm.runtimeDefinitionForm,
+.runtimeCreateForm.runtimeCreateForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+  padding: 16px;
+  align-items: stretch;
+  gap: 13px;
+  border: 0;
+  border-bottom: 1px solid var(--theme-border);
+  border-radius: 0;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--theme-accent) 8%, var(--theme-surface-raised)),
+      color-mix(in srgb, var(--theme-surface) 92%, transparent) 52%
+    );
+}
+
+.runtimeDefinitionHeading,
+.createTypeHeading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.runtimeDefinitionHeading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.runtimeDefinitionHeading strong,
+.createTypeHeading > strong {
+  color: var(--theme-text);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+
+.runtimeDefinitionHeading p,
+.runtimeCreateForm > p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--theme-text-muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.runtimeDefinitionHeading p {
+  text-align: right;
+}
+
+.runtimeDefinitionGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 11px;
+}
+
+.runtimeDefinitionGrid > label {
+  min-width: 0;
+}
+
+.runtimeDefinitionForm :is(input, select, textarea, button),
+.runtimeCreateForm :is(input, select, textarea, button) {
+  min-height: 44px;
+}
+
+.runtimeDefinitionForm textarea,
+.runtimeCreateForm textarea {
+  resize: vertical;
+}
+
+.jsonEditor {
+  min-height: 220px;
+  tab-size: 2;
+  font-family: var(--font-mono, ui-monospace, "Cascadia Code", Consolas, monospace);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.invariantNotice,
+.runtimeDefinitionMissing {
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--theme-accent-strong) 36%, var(--theme-border));
+  color: var(--theme-text-muted);
+  background: color-mix(in srgb, var(--theme-accent-strong) 8%, var(--theme-surface));
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.invariantNotice {
+  padding: 10px 12px;
+}
+
+.runtimeDefinitionMissing {
+  display: grid;
+  padding: 14px 16px;
+  gap: 3px;
+  border-right: 0;
+  border-left: 0;
+}
+
+.runtimeDefinitionMissing strong {
+  color: var(--theme-text);
+}
+
+.createTypeHeading {
+  margin: 18px 0 9px;
+  justify-content: flex-start;
+}
+
+.runtimeCreateGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.runtimeCreateForm.runtimeCreateForm {
+  align-content: start;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius);
+  box-shadow: var(--theme-shadow);
+}
+
+.runtimeCreateForm .createTypeHeading {
+  margin: 0;
+}
+
+.runtimeCreateForm .runtimeDefinitionGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.vipMembershipWorkspace {
+  display: grid;
+  gap: 14px;
+}
+
+.vipGrantForm.vipGrantForm {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.35fr) repeat(3, minmax(150px, .7fr)) auto;
+  padding: 14px;
+  align-items: end;
+  gap: 10px;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius);
+  background: linear-gradient(
+    130deg,
+    color-mix(in srgb, var(--theme-accent-strong) 9%, var(--theme-surface-raised)),
+    color-mix(in srgb, var(--theme-surface) 92%, transparent)
+  );
+  box-shadow: var(--theme-shadow);
+}
+
+.vipGrantForm :is(input, select, button) {
+  min-height: 44px;
+}
+
+.vipGrantIntro {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.vipGrantIntro > div {
+  display: grid;
+  gap: 3px;
+}
+
+.vipGrantIntro strong {
+  color: var(--theme-text);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 400;
+  text-transform: uppercase;
+}
+
+.vipGrantIntro p {
+  max-width: 760px;
+  margin: 0;
+  color: var(--theme-text-muted);
+  font-size: 10px;
+  line-height: 1.5;
 }
 
 .groupPresentationForm.groupPresentationForm,
@@ -1160,6 +1493,27 @@
   grid-template-columns: minmax(155px, 1fr) auto auto;
 }
 
+.editableMemberRow {
+  grid-template-columns: minmax(155px, 1fr) minmax(130px, .8fr) minmax(92px, .45fr) auto auto;
+}
+
+.editableMemberRow > input {
+  width: 100%;
+  min-height: 44px;
+}
+
+.memberAssignForm.memberAssignForm {
+  background: color-mix(in srgb, var(--theme-accent) 5%, transparent);
+}
+
+.memberWorkspaceAction {
+  display: flex;
+  padding: 10px 12px;
+  justify-content: flex-end;
+  border-bottom: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-accent) 4%, transparent);
+}
+
 .memberSourceLink {
   display: inline-flex;
   min-height: 44px;
@@ -1395,7 +1749,7 @@
 
 @media (max-width: 1080px) {
   .groupWorkspace {
-    grid-template-columns: minmax(215px, 0.27fr) minmax(0, 1fr);
+    grid-template-columns: minmax(310px, 0.35fr) minmax(0, 1fr);
   }
 
   .groupCardHeader,
@@ -1410,6 +1764,28 @@
 
   .badgeFormGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .runtimeDefinitionGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vipGrantForm.vipGrantForm {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vipGrantIntro,
+  .vipGrantForm > :global(.button) {
+    grid-column: 1 / -1;
+  }
+
+  .editableMemberRow {
+    grid-template-columns: minmax(155px, 1fr) minmax(130px, .8fr) auto;
+  }
+
+  .editableMemberRow > input,
+  .editableMemberRow > button:last-child {
+    grid-column: auto;
   }
 }
 
@@ -1426,38 +1802,47 @@
   }
 
   .groupNavigationList {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
     max-height: 260px;
   }
 
-  .groupNavigationItem:nth-last-child(-n + 2) {
-    border-bottom: 0;
-  }
-
-  .groupNavigationItem:nth-child(odd) {
-    border-right: 1px solid var(--theme-border);
-  }
-
   .groupPresentationForm.groupPresentationForm,
-  .createGroupForm.createGroupForm {
+  .createGroupForm.createGroupForm,
+  .runtimeDefinitionForm.runtimeDefinitionForm,
+  .runtimeCreateForm.runtimeCreateForm {
     padding: 14px;
+  }
+
+  .runtimeCreateGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .vipGrantForm.vipGrantForm {
+    grid-template-columns: 1fr;
+  }
+
+  .vipGrantIntro,
+  .vipGrantForm > :global(.button) {
+    grid-column: 1;
   }
 }
 
 @media (max-width: 540px) {
-  .groupNavigationList,
   .formGrid,
   .badgeFormGrid,
-  .rewardOptions {
+  .rewardOptions,
+  .runtimeDefinitionGrid,
+  .runtimeCreateForm .runtimeDefinitionGrid {
     grid-template-columns: 1fr;
   }
 
-  .groupNavigationItem:nth-child(odd) {
-    border-right: 0;
+  .runtimeDefinitionHeading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
   }
 
-  .groupNavigationItem:nth-last-child(2) {
-    border-bottom: 1px solid var(--theme-border);
+  .runtimeDefinitionHeading p {
+    text-align: left;
   }
 
   .groupCardHeader {
@@ -1511,10 +1896,22 @@
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
+  .editableMemberRow > input {
+    grid-column: 1 / -1;
+  }
+
   .relationshipRow > button,
   .memberRow > button {
     grid-column: 1 / -1;
     justify-self: stretch;
+  }
+
+  .memberWorkspaceAction {
+    padding: 10px;
+  }
+
+  .memberWorkspaceAction .memberSourceLink {
+    width: 100%;
   }
 
   .formActions,

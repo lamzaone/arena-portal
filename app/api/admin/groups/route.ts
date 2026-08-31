@@ -11,6 +11,7 @@ import {
   createIdentityPrivilege,
   detachIdentityGroupPrivilege,
   detachIdentityGroupTag,
+  extendIdentityGroupMembership,
   grantIdentityPlayerPrivilege,
   grantIdentityPlayerTag,
   getIdentityAdminSnapshot,
@@ -27,7 +28,17 @@ import {
   type IdentityPrivilegeScope,
   type IdentityTradePolicy,
 } from "@/lib/data/identity-groups";
-import { getExternalIdentityGroupMemberSteamIds } from "@/lib/data/portal-repository";
+import {
+  createRuntimeAdminsCoreGroup,
+  createRuntimeVipCoreGroup,
+  ExternalGroupManagementError,
+  updateRuntimeAdminsCoreGroup,
+  updateRuntimeVipCoreGroup,
+} from "@/lib/data/external-group-management";
+import {
+  getExternalIdentityGroupMemberSteamIds,
+  writeStaffActionAudit,
+} from "@/lib/data/portal-repository";
 import { formActionRedirect } from "@/lib/form-action-response";
 
 function redirect(
@@ -123,6 +134,101 @@ export async function POST(request: Request) {
         await syncExternalIdentityCatalogue({ actor, requestKey });
         return redirectResult("notice", "catalogue-synced");
 
+      case "external-admin-group-create": {
+        const result = await createRuntimeAdminsCoreGroup({
+          actorSteamId: actor.steamId,
+          requestKey,
+          name: text(formData, "name"),
+          permissions: text(formData, "permissions"),
+          serverGuids: text(formData, "serverGuids"),
+          immunity: text(formData, "immunity"),
+        });
+        await writeStaffActionAudit(
+          actor.steamId,
+          "identity.admins-core-group.created",
+          "admins-core-group",
+          result.name,
+        );
+        return redirectResult(
+          "notice",
+          result.catalogueSynced
+            ? "external-admin-group-created"
+            : "external-group-saved-sync-pending",
+        );
+      }
+
+      case "external-admin-group-update": {
+        const result = await updateRuntimeAdminsCoreGroup({
+          actorSteamId: actor.steamId,
+          requestKey,
+          rowId: text(formData, "runtimeRowId"),
+          previousName: text(formData, "previousName"),
+          name: text(formData, "name"),
+          permissions: text(formData, "permissions"),
+          serverGuids: text(formData, "serverGuids"),
+          immunity: text(formData, "immunity"),
+        });
+        await writeStaffActionAudit(
+          actor.steamId,
+          "identity.admins-core-group.updated",
+          "admins-core-group",
+          result.name,
+        );
+        return redirectResult(
+          "notice",
+          result.catalogueSynced
+            ? "external-admin-group-updated"
+            : "external-group-saved-sync-pending",
+        );
+      }
+
+      case "external-vip-group-create": {
+        const result = await createRuntimeVipCoreGroup({
+          actorSteamId: actor.steamId,
+          requestKey,
+          name: text(formData, "name"),
+          weight: text(formData, "weight"),
+          values: text(formData, "valuesJson"),
+          enabled: bool(formData, "runtimeEnabled"),
+        });
+        await writeStaffActionAudit(
+          actor.steamId,
+          "identity.vipcore-group.created",
+          "vipcore-group",
+          result.name,
+        );
+        return redirectResult(
+          "notice",
+          result.catalogueSynced
+            ? "external-vip-group-created"
+            : "external-group-saved-sync-pending",
+        );
+      }
+
+      case "external-vip-group-update": {
+        const result = await updateRuntimeVipCoreGroup({
+          actorSteamId: actor.steamId,
+          requestKey,
+          previousName: text(formData, "previousName"),
+          name: text(formData, "name"),
+          weight: text(formData, "weight"),
+          values: text(formData, "valuesJson"),
+          enabled: bool(formData, "runtimeEnabled"),
+        });
+        await writeStaffActionAudit(
+          actor.steamId,
+          "identity.vipcore-group.updated",
+          "vipcore-group",
+          result.name,
+        );
+        return redirectResult(
+          "notice",
+          result.catalogueSynced
+            ? "external-vip-group-updated"
+            : "external-group-saved-sync-pending",
+        );
+      }
+
       case "group-create":
         const createdGroup = await createIdentityGroup({
           actor,
@@ -187,6 +293,16 @@ export async function POST(request: Request) {
           steamId: text(formData, "steamId"),
         });
         return redirectResult("notice", "membership-removed");
+
+      case "membership-extend":
+        await extendIdentityGroupMembership({
+          actor,
+          requestKey,
+          groupId: number(formData, "groupId"),
+          steamId: text(formData, "steamId"),
+          durationMinutes: number(formData, "durationMinutes"),
+        });
+        return redirectResult("notice", "membership-extended");
 
       case "tag-create":
         await createIdentityChatTag({
@@ -351,6 +467,9 @@ export async function POST(request: Request) {
     }
   } catch (error) {
     if (error instanceof IdentityGroupError) {
+      return redirectResult("error", error.code);
+    }
+    if (error instanceof ExternalGroupManagementError) {
       return redirectResult("error", error.code);
     }
     return redirectResult("error", "database");

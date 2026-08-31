@@ -1,12 +1,21 @@
-import {
-  StaffManagementPage,
-  type StaffManagementSearchParams,
-} from "@/app/admin/staff-management-page";
+import { redirect } from "next/navigation";
 
-export default function AdminsPage({
+type LegacyAssignmentSearchParams = Promise<{
+  notice?: string;
+  error?: string;
+}>;
+
+export default async function AdminsPage({
   searchParams,
 }: {
-  searchParams: Promise<StaffManagementSearchParams>;
+  searchParams: LegacyAssignmentSearchParams;
 }) {
-  return <StaffManagementPage section="admins" searchParams={searchParams} />;
+  const parameters = await searchParams;
+  const query = new URLSearchParams({
+    tab: "membership",
+    assignment: "admin",
+  });
+  if (parameters.notice) query.set("notice", parameters.notice);
+  if (parameters.error) query.set("error", parameters.error);
+  redirect(`/admin/groups?${query.toString()}#admin-assignments`);
 }

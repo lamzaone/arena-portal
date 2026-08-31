@@ -1,13 +1,10 @@
 import Link from "next/link";
-import { AlertTriangle, Ban, Gavel, LockKeyhole, Ticket, UsersRound, VolumeX } from "lucide-react";
+import { Ban, Gavel, LockKeyhole, Ticket, VolumeX } from "lucide-react";
 
-import { adminWriteConfigured, getAdminAccess, getStaffGroupDefinitions } from "@/lib/admin/access";
+import { adminWriteConfigured, getAdminAccess } from "@/lib/admin/access";
 import { getSession, createAdminActionToken } from "@/lib/auth/session";
 import { CaseStatusTag } from "@/components/case-status-tag";
 import { formatDate, formatPortalDate, isActiveSanction } from "@/components/formatters";
-import {
-  IdentityGroupBadge,
-} from "@/components/identity-group-badge";
 import { PlayerSearchField } from "@/components/player-search-field";
 import { PlayerIdentity } from "@/components/player-identity";
 import { SignInRequired } from "@/components/sign-in-required";
@@ -23,13 +20,7 @@ import { PortalShell } from "@/components/ui/portal-shell";
 import { SearchNavigationForm, SearchSubmitButton } from "@/components/ui/search-field";
 import { ThemedPlayerTableRow } from "@/components/ui/themed-player-table-row";
 import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
-import { identityExternalBadgeLookupKey } from "@/lib/content/identity-group-badges";
-import { getStaffAdmins, getStaffAppeals, getStaffModeration, getStaffTickets, getStaffVips, type CaseMessage, type StaffAdmin, type StaffAppeal, type StaffSanction } from "@/lib/data/portal-repository";
-import {
-  getIdentityGroupBadgeCatalogue,
-  getIdentityVipGroupDefinitions,
-  type IdentityGroupBadgeData,
-} from "@/lib/data/identity-groups";
+import { getStaffAppeals, getStaffModeration, getStaffTickets, type CaseMessage, type StaffAppeal, type StaffSanction } from "@/lib/data/portal-repository";
 import {
   resolvePlayerIdentities,
   type PlayerIdentityData,
@@ -43,13 +34,10 @@ type StaffManagementPageProps = {
   searchParams: Promise<StaffManagementSearchParams>;
 };
 
-const fallbackVipGroups = ["ULTIMATE", "DIAMOND", "GOLD", "SILVER", "STANDARD"];
-
 function getPageNumber(value: string | undefined) {
   const parsed = Number.parseInt(value ?? "1", 10);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : 1;
 }
-
 function staffLink(tab: StaffTab, page = 1, query = "") {
   const parameters = new URLSearchParams({ page: String(page) });
   if (query) parameters.set("q", query);
@@ -58,31 +46,6 @@ function staffLink(tab: StaffTab, page = 1, query = "") {
 
 function isSteamId(value: string) {
   return /^7656119\d{10}$/.test(value);
-}
-
-type ExternalBadgeLookup = Map<string, IdentityGroupBadgeData>;
-
-function configuredExternalBadge(
-  badges: ExternalBadgeLookup,
-  sourceType: "admins_core" | "vipcore",
-  group: string,
-) {
-  return badges.get(identityExternalBadgeLookupKey(sourceType, group)) ?? null;
-}
-
-function ConfiguredExternalGroupBadge({
-  badges,
-  sourceType,
-  group,
-  compact = false,
-}: {
-  badges: ExternalBadgeLookup;
-  sourceType: "admins_core" | "vipcore";
-  group: string;
-  compact?: boolean;
-}) {
-  const badge = configuredExternalBadge(badges, sourceType, group);
-  return badge ? <IdentityGroupBadge group={badge} compact={compact} /> : <>{group}</>;
 }
 
 function ProfileMention({ steamId, name, identities }: { steamId: string | null; name: string; identities: Readonly<Record<string, PlayerIdentityData>> }) {
@@ -156,22 +119,6 @@ function AppealBanSource({ appeal, identities }: { appeal: StaffAppeal; identiti
   return <p className="staff-appeal-source"><span>Original ban</span> {appeal.ban.reason} · issued by <ProfileMention steamId={appeal.ban.adminSteamId} name={issuerName} identities={identities} /> on {formatDate(appeal.ban.createdAt)}</p>;
 }
 
-function AdminAssignments({ admins, csrf, canManage, groupDefinitions, badges, identities }: { admins: StaffAdmin[]; csrf: string; canManage: boolean; groupDefinitions: Array<{ name: string; immunity: number }>; badges: ExternalBadgeLookup; identities: Readonly<Record<string, PlayerIdentityData>> }) {
-  const grouped = new Map(groupDefinitions.map((group) => [group.name, admins.filter((admin) => admin.groups.includes(group.name))]));
-  const unassigned = admins.filter((admin) => !admin.groups.length);
-
-  return <section className="staff-record-section"><div className="staff-section-heading"><div><p className="tapped-kicker"><UsersRound aria-hidden="true" /> Admins.Core</p><h2>Admin assignments</h2></div><span>{admins.length.toLocaleString()} admins</span></div>
-    {canManage ? <form className="staff-management-form" action="/api/admin/staff" method="post"><input type="hidden" name="csrf" value={csrf} /><input type="hidden" name="action" value="admin-upsert" /><PlayerSearchField name="steamId" label="Staff player" mode="target" required includeSelf companionNameField="username" /><label>Display name<input name="username" maxLength={64} required placeholder="Staff name" /></label><label>Groups<select name="groups" multiple required size={Math.min(6, groupDefinitions.length)}>{groupDefinitions.map((group) => <option key={group.name} value={group.name}>{group.name} · immunity {group.immunity}</option>)}</select><small>Hold Ctrl/Cmd to assign multiple groups.</small></label><button className="button button-primary" type="submit">Save admin</button></form> : <p className="staff-readonly-note">You can review staff assignments, but only admins with <code>admins.commands.admin</code> can add or modify them.</p>}
-    {[...grouped.entries(), ...(unassigned.length ? [["Unassigned", unassigned] as const] : [])].map(([groupName, entries]) => <article className="staff-group-card" key={groupName}><div><h3>{groupName === "Unassigned" ? groupName : <ConfiguredExternalGroupBadge badges={badges} sourceType="admins_core" group={groupName} />}</h3><span>{entries.length} member{entries.length === 1 ? "" : "s"}</span></div>{entries.length ? <div className="staff-group-list">{entries.map((admin) => { const identity = identities[admin.steamId] ?? { steamId: admin.steamId, displayName: admin.username, avatarUrl: null, presence: "unknown" as const, profileThemeKey: null, identityGroups: [] }; return canManage ? <ThemedPlayerContainer as="form" containerKind="management" ownerSteamId={identity.steamId} profileThemeKey={identity.profileThemeKey} className="staff-admin-edit" action="/api/admin/staff" method="post" key={admin.id}><input type="hidden" name="csrf" value={csrf} /><input type="hidden" name="action" value="admin-upsert" /><input type="hidden" name="steamId" value={admin.steamId} /><PlayerIdentity player={identity} variant="compact" /><input name="username" defaultValue={admin.username} maxLength={64} required aria-label={`Display name for ${admin.username}`} /><select name="groups" multiple defaultValue={admin.groups} aria-label={`Groups for ${admin.username}`} size={Math.min(4, groupDefinitions.length)}>{groupDefinitions.map((group) => <option key={group.name} value={group.name}>{group.name}</option>)}</select><span>Immunity {admin.immunity}</span><button className="staff-unban-button" type="submit">Save</button></ThemedPlayerContainer> : <ThemedPlayerContainer containerKind="management" ownerSteamId={identity.steamId} profileThemeKey={identity.profileThemeKey} className="staff-admin-read" key={admin.id}><PlayerIdentity player={identity} variant="compact" /><span>{admin.groups.join(" + ") || "No group"}</span><span>Immunity {admin.immunity}</span></ThemedPlayerContainer>; })}</div> : <p className="empty-copy">No admins are assigned to this group.</p>}</article>)}</section>;
-}
-
-function VipAssignments({ vips, vipGroups, csrf, canManage, badges, identities }: { vips: Awaited<ReturnType<typeof getStaffVips>>; vipGroups: string[]; csrf: string; canManage: boolean; badges: ExternalBadgeLookup; identities: Readonly<Record<string, PlayerIdentityData>> }) {
-  return <section className="staff-record-section"><div className="staff-section-heading"><div><p className="tapped-kicker">VIPCore</p><h2>VIP assignments</h2></div><span>{vips.length.toLocaleString()} active records</span></div>
-    {canManage ? <form className="staff-management-form vip" action="/api/admin/staff" method="post"><input type="hidden" name="csrf" value={csrf} /><input type="hidden" name="action" value="vip-upsert" /><PlayerSearchField name="steamId" label="VIP player" mode="target" required includeSelf companionNameField="name" /><label>Player name<input name="name" maxLength={64} placeholder="Filled from the selected profile" /></label><label>VIP tier<select name="group">{vipGroups.map((group) => <option key={group}>{group}</option>)}</select></label><label>Duration (minutes)<input name="durationMinutes" type="number" min="0" max="525600" defaultValue="1440" required /><small>Use 0 for permanent access.</small></label><button className="button button-primary" type="submit">Save VIP</button></form> : <p className="staff-readonly-note">VIP changes require the VIPCore management permission. Your current staff role remains read-only here.</p>}
-    {vipGroups.map((group) => { const entries = vips.filter((vip) => vip.group === group); return <article className="staff-group-card" key={group}><div><h3><ConfiguredExternalGroupBadge badges={badges} sourceType="vipcore" group={group} /></h3><span>{entries.length} member{entries.length === 1 ? "" : "s"}</span></div>{entries.length ? <div className="staff-group-list">{entries.map((vip) => { const identity = identities[vip.steamId] ?? { steamId: vip.steamId, displayName: vip.name, avatarUrl: null, presence: "unknown" as const, profileThemeKey: null, identityGroups: [] }; return canManage ? <ThemedPlayerContainer as="form" containerKind="management" ownerSteamId={identity.steamId} profileThemeKey={identity.profileThemeKey} className="staff-vip-edit" action="/api/admin/staff" method="post" key={`${vip.steamId}-${vip.group}`}><input type="hidden" name="csrf" value={csrf} /><input type="hidden" name="steamId" value={vip.steamId} /><input type="hidden" name="previousGroup" value={vip.group} /><PlayerIdentity player={identity} variant="compact" /><input name="name" defaultValue={vip.name} maxLength={64} required aria-label={`Name for ${vip.name}`} /><select name="group" defaultValue={vip.group}>{vipGroups.map((name) => <option key={name}>{name}</option>)}</select><input name="durationMinutes" type="number" min="0" max="525600" defaultValue={vip.expiresAt === 0 ? 0 : Math.max(1, Math.floor((vip.expiresAt - Date.now() / 1000) / 60))} aria-label={`Duration in minutes for ${vip.name}`} /><span>{vip.expiresAt === 0 ? "Permanent" : `Ends ${formatDate(vip.expiresAt)}`}</span><button className="staff-unban-button" name="action" value="vip-upsert" type="submit">Save</button><button className="staff-danger-button" name="action" value="vip-remove" type="submit">Remove</button></ThemedPlayerContainer> : <ThemedPlayerContainer containerKind="management" ownerSteamId={identity.steamId} profileThemeKey={identity.profileThemeKey} className="staff-admin-read" key={`${vip.steamId}-${vip.group}`}><PlayerIdentity player={identity} variant="compact" /><ConfiguredExternalGroupBadge badges={badges} sourceType="vipcore" group={vip.group} compact /><span>{vip.expiresAt === 0 ? "Permanent" : `Ends ${formatDate(vip.expiresAt)}`}</span></ThemedPlayerContainer>; })}</div> : <p className="empty-copy">No VIP assignments in this tier.</p>}</article>; })}
-  </section>;
-}
-
 export async function StaffManagementPage({ section, searchParams }: StaffManagementPageProps) {
   const [session, params] = await Promise.all([getSession(), searchParams]);
   if (!session) return <SignInRequired title="Staff moderation" description="Sign in with the Steam account that has your ARENA admin group." />;
@@ -182,22 +129,13 @@ export async function StaffManagementPage({ section, searchParams }: StaffManage
   const tab = section;
   const page = getPageNumber(params.page);
   const query = (params.q ?? "").trim().slice(0, 64);
-  const [moderation, admins, vips, appealPage, ticketPage, vipGroupDefinitions, badgeCatalogue] = await Promise.all([
+  const [moderation, appealPage, ticketPage] = await Promise.all([
     tab === "bans" ? getStaffModeration(page, query) : Promise.resolve(null),
-    tab === "admins" ? getStaffAdmins() : Promise.resolve([]),
-    tab === "vips" ? getStaffVips() : Promise.resolve([]),
     tab === "appeals" && access.canUnban ? getStaffAppeals(page) : Promise.resolve(null),
     tab === "tickets" ? getStaffTickets(page) : Promise.resolve(null),
-    tab === "vips" ? getIdentityVipGroupDefinitions() : Promise.resolve([]),
-    getIdentityGroupBadgeCatalogue(),
   ]);
-  const vipGroups = vipGroupDefinitions.length
-    ? vipGroupDefinitions.map((group) => group.name)
-    : fallbackVipGroups;
   const profileSeeds: PlayerIdentitySeed[] = [
     { steamId: session.steamId, profileThemeKey: session.profileThemeKey },
-    ...admins.map((admin) => ({ steamId: admin.steamId, displayName: admin.username })),
-    ...vips.map((vip) => ({ steamId: vip.steamId, displayName: vip.name })),
     ...(moderation?.bans.flatMap((ban) => [
       { steamId: ban.steamId, displayName: ban.playerName },
       { steamId: ban.adminSteamId, displayName: ban.adminName },
@@ -221,15 +159,6 @@ export async function StaffManagementPage({ section, searchParams }: StaffManage
   const actionsReady = adminWriteConfigured();
   const notice = noticeText(params.notice);
   const error = errorText(params.error);
-  const groupDefinitions = await getStaffGroupDefinitions();
-  const externalBadges: ExternalBadgeLookup = new Map();
-  for (const badge of badgeCatalogue) {
-    if (!badge.externalKey || badge.sourceType === "custom") continue;
-    externalBadges.set(
-      identityExternalBadgeLookupKey(badge.sourceType, badge.externalKey),
-      badge,
-    );
-  }
   const totalPages = moderation ? Math.max(1, Math.ceil(Math.max(moderation.banTotal, moderation.sanctionTotal) / moderation.pageSize)) : 1;
   const casePage = appealPage ?? ticketPage;
   const caseTotalPages = casePage ? Math.max(1, Math.ceil(casePage.total / casePage.pageSize)) : 1;
@@ -237,7 +166,7 @@ export async function StaffManagementPage({ section, searchParams }: StaffManage
   return <PortalShell authenticated className="staff-page">
     <AdminPageHeader
       id="staff-management-title"
-      title={tab === "bans" ? "Bans" : tab === "admins" ? "Admins" : tab === "vips" ? "VIPs" : tab === "appeals" ? "Appeals" : "Tickets"}
+      title={tab === "bans" ? "Bans" : tab === "appeals" ? "Appeals" : "Tickets"}
       description="Moderate the server, manage staff and VIP access, and respond to player cases."
       access={access}
     />
@@ -252,10 +181,6 @@ export async function StaffManagementPage({ section, searchParams }: StaffManage
       <section className="staff-record-section"><div className="staff-section-heading"><div><p className="tapped-kicker"><VolumeX aria-hidden="true" /> Communication</p><h2>Gag, mute &amp; silence history</h2></div><span>{moderation.sanctionTotal.toLocaleString()} raw records</span></div>{getSanctionEvents(moderation.sanctions).length ? <DataTable className="staff-table-scroll" tableClassName="staff-table" caption="Communication sanction records"><thead><tr><th scope="col">Player</th><th scope="col">Type</th><th scope="col">Reason</th><th scope="col">Issued by</th><th scope="col">Status</th></tr></thead><tbody>{getSanctionEvents(moderation.sanctions).map((sanction) => { const player = playerIdentities[sanction.steamId] ?? { steamId: sanction.steamId, displayName: sanction.playerName, avatarUrl: null, presence: "unknown" as const, profileThemeKey: null, identityGroups: [] }; return <ThemedPlayerTableRow profileThemeKey={player.profileThemeKey} key={`${sanction.id}-${sanction.kind}`}><td><PlayerIdentity player={player} variant="table" /></td><td><span className={`sanction-type ${sanction.kind.toLowerCase()}`}>{sanction.kind}</span></td><td><strong>{sanction.reason}</strong><small>{formatDate(sanction.createdAt)}</small></td><td><ProfileMention steamId={sanction.adminSteamId} name={sanction.adminSteamId ? playerIdentities[sanction.adminSteamId]?.displayName ?? sanction.adminName : sanction.adminName} identities={playerIdentities} /></td><td><span className={isActiveSanction(sanction.expiresAt) ? "staff-status active" : "staff-status"}>{isActiveSanction(sanction.expiresAt) ? "Active" : "Expired"}</span></td></ThemedPlayerTableRow>; })}</tbody></DataTable> : <p className="empty-copy">No communication sanctions match this search.</p>}</section>
       <LinkPagination className="staff-pagination" page={page} totalPages={totalPages} label="Ban list pages" hrefForPage={(targetPage) => staffLink("bans", targetPage, query)} />
     </> : null}
-
-    {tab === "admins" ? <AdminAssignments admins={admins} csrf={csrf} canManage={access.canManageAdmins} groupDefinitions={groupDefinitions} badges={externalBadges} identities={playerIdentities} /> : null}
-
-    {tab === "vips" ? <VipAssignments vips={vips} vipGroups={vipGroups} csrf={csrf} canManage={access.canManageVips} badges={externalBadges} identities={playerIdentities} /> : null}
 
     {tab === "appeals" ? access.canUnban && appealPage ? <section className="staff-record-section"><div className="staff-section-heading"><div><p className="tapped-kicker"><Ban aria-hidden="true" /> Unban review</p><h2>Appeals</h2></div><span>{appealPage.total.toLocaleString()} cases</span></div>{appealPage.appeals.length ? <div className="staff-case-list">{appealPage.appeals.map((appeal) => { const identity = playerIdentities[appeal.steamId] ?? { steamId: appeal.steamId, displayName: `Steam ${appeal.steamId}`, avatarUrl: null, presence: "unknown" as const, profileThemeKey: null, identityGroups: [] }; return <ThemedPlayerContainer as="article" containerKind="case" ownerSteamId={identity.steamId} profileThemeKey={identity.profileThemeKey} className="staff-case" key={appeal.id}><div className="staff-case-heading"><PlayerIdentity player={identity} variant="compact" /><CaseStatusTag status={appeal.status} /></div><AppealBanSource appeal={appeal} identities={playerIdentities} /><p>{appeal.body}</p><small>Opened {formatPortalDate(appeal.createdAt)} · Updated {formatPortalDate(appeal.updatedAt)}</small><CaseMessages messages={appeal.messages} identities={playerIdentities} /><form className="staff-case-form" action="/api/admin/cases" method="post" encType="multipart/form-data"><input type="hidden" name="csrf" value={csrf} /><input type="hidden" name="caseId" value={appeal.id} /><textarea name="body" maxLength={5000} placeholder="Reply to the player (optional when closing)" /><label>Screenshot (optional)<input name="screenshot" type="file" accept="image/png,image/jpeg,image/webp" /></label><div><button className="staff-unban-button" name="action" value="appeal-reply" type="submit">Reply</button><button className="staff-danger-button" name="action" value="appeal-close-banned" type="submit">Close: still banned</button><button className="button button-primary" name="action" value="appeal-close-unbanned" type="submit">Close: unbanned</button></div></form></ThemedPlayerContainer>; })}</div> : <p className="empty-copy">No appeals have been submitted.</p>}<LinkPagination className="staff-pagination" page={page} totalPages={caseTotalPages} label="Appeal pages" hrefForPage={(targetPage) => staffLink("appeals", targetPage)} /></section> : <section className="staff-denied"><LockKeyhole aria-hidden="true" /><p className="tapped-kicker">Unban restricted</p><h1>Appeal access requires unban permission.</h1><p>Only staff members with <code>admins.commands.unban</code> can read, reply to, or resolve ban appeals.</p></section> : null}
 

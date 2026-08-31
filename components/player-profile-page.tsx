@@ -133,7 +133,8 @@ function identityMembershipLabel(
       .some((value) =>
         groupNames.has(value.trim().toLocaleLowerCase("en-US")),
       );
-  const nativeVipMembership = group.sourceType === "vipcore"
+  const nativeVipMembership = group.sourceType === "vipcore" &&
+      !group.hasPortalMembership
     ? profile.vipGroups.find(matchesGroup) ?? null
     : null;
   const nativeAdminMembership = group.sourceType === "admins_core"

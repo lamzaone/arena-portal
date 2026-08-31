@@ -13,7 +13,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { ChevronRight } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronRight } from "lucide-react";
 
 import { SearchField } from "@/components/ui/search-field";
 
@@ -39,6 +39,7 @@ export type GroupWorkspaceEntry = {
   key: string;
   displayName: string;
   source: string;
+  groupType: "admin" | "vip" | "custom";
   enabled: boolean;
   accent: string;
   memberCount: number;
@@ -46,6 +47,45 @@ export type GroupWorkspaceEntry = {
   privilegeCount: number;
   rewardCount: number;
 };
+
+type GroupSortKey = "name" | "type" | "members";
+type GroupSort = { key: GroupSortKey; direction: "ascending" | "descending" };
+
+const groupTypeOrder: Record<GroupWorkspaceEntry["groupType"], number> = {
+  admin: 0,
+  vip: 1,
+  custom: 2,
+};
+
+function groupTypeLabel(value: GroupWorkspaceEntry["groupType"]) {
+  if (value === "admin") return "Admin";
+  if (value === "vip") return "VIP";
+  return "Custom";
+}
+
+function compareGroups(
+  left: GroupWorkspaceEntry,
+  right: GroupWorkspaceEntry,
+  sort: GroupSort,
+) {
+  let difference = 0;
+  if (sort.key === "type") {
+    const typeDifference =
+      groupTypeOrder[left.groupType] - groupTypeOrder[right.groupType];
+    if (typeDifference) difference = typeDifference;
+  }
+  if (!difference && sort.key === "members") {
+    difference = left.memberCount - right.memberCount;
+  }
+  if (!difference) {
+    difference = left.displayName.localeCompare(right.displayName, "en", {
+      sensitivity: "base",
+      numeric: true,
+    });
+  }
+  if (!difference) difference = left.id - right.id;
+  return sort.direction === "ascending" ? difference : -difference;
+}
 
 export function ConfirmSubmitButton({
   confirmation,
@@ -99,16 +139,23 @@ export function GroupWorkspace({
       : groups[0]?.id ?? null,
   );
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<GroupSort>({
+    key: "name",
+    direction: "ascending",
+  });
   const deferredQuery = useDeferredValue(query);
   const panels = Children.toArray(children);
   const filteredGroups = useMemo(
-    () => groups.filter((group) => matches([
-      group.displayName,
-      group.key,
-      group.source,
-      group.enabled ? "enabled active" : "disabled inactive",
-    ].join(" "), deferredQuery)),
-    [deferredQuery, groups],
+    () => groups
+      .filter((group) => matches([
+        group.displayName,
+        group.key,
+        group.source,
+        groupTypeLabel(group.groupType),
+        group.enabled ? "enabled active" : "disabled inactive",
+      ].join(" "), deferredQuery))
+      .sort((left, right) => compareGroups(left, right, sort)),
+    [deferredQuery, groups, sort],
   );
   const selectedGroup =
     filteredGroups.find((group) => group.id === selectedId) ??
@@ -126,6 +173,42 @@ export function GroupWorkspace({
   function selectGroup(groupId: number) {
     setSelectedId(groupId);
     replaceSelectedGroupUrl(groupId);
+  }
+
+  function changeSort(key: GroupSortKey) {
+    setSort((current) => ({
+      key,
+      direction:
+        current.key === key
+          ? current.direction === "ascending"
+            ? "descending"
+            : "ascending"
+          : key === "members"
+            ? "descending"
+            : "ascending",
+    }));
+  }
+
+  function ariaSort(key: GroupSortKey): GroupSort["direction"] | undefined {
+    return sort.key === key ? sort.direction : undefined;
+  }
+
+  function sortButtonLabel(key: GroupSortKey, label: string) {
+    const defaultDirection = key === "members" ? "descending" : "ascending";
+    if (sort.key !== key) {
+      return `${label}, not sorted. Activate to sort ${defaultDirection}.`;
+    }
+    const nextDirection = sort.direction === "ascending" ? "descending" : "ascending";
+    return `${label}, sorted ${sort.direction}. Activate to sort ${nextDirection}.`;
+  }
+
+  function sortIcon(key: GroupSortKey) {
+    const Icon = sort.key !== key
+      ? ArrowUpDown
+      : sort.direction === "ascending"
+        ? ArrowUp
+        : ArrowDown;
+    return <Icon aria-hidden="true" data-active={sort.key === key ? "true" : "false"} />;
   }
 
   return (
@@ -155,51 +238,90 @@ export function GroupWorkspace({
         <span className="sr-only" id={statusId} role="status" aria-live="polite">
           {filteredGroups.length} matching group{filteredGroups.length === 1 ? "" : "s"}.
           {selectedGroup ? ` ${selectedGroup.displayName} selected.` : " No group selected."}
+          {` Sorted by ${sort.key}, ${sort.direction}.`}
         </span>
         <div className={styles.groupNavigationList}>
-          {filteredGroups.length ? filteredGroups.map((group) => {
-            const selected = group.id === visibleSelectedId;
-            const relatedCount = group.tagCount + group.privilegeCount + group.rewardCount;
-            return (
-              <button
-                key={group.id}
-                className={styles.groupNavigationItem}
-                type="button"
-                aria-pressed={selected}
-                data-selected={selected ? "true" : "false"}
-                style={{ "--group-accent": group.accent } as CSSProperties}
-                onClick={() => selectGroup(group.id)}
-              >
-                <span className={styles.groupNavigationAccent} aria-hidden="true" />
-                <span className={styles.groupNavigationCopy}>
-                  <span>
-                    <strong>{group.displayName}</strong>
-                    <i data-enabled={group.enabled ? "true" : "false"}>
-                      {group.enabled ? "Active" : "Disabled"}
-                    </i>
-                  </span>
-                  <code>{group.key}</code>
-                  <small>
-                    {group.source} · {group.memberCount} member{group.memberCount === 1 ? "" : "s"} · {relatedCount} linked
-                  </small>
-                </span>
-                <ChevronRight aria-hidden="true" />
-              </button>
-            );
-          }) : (
+          {filteredGroups.length ? (
+            <table className={styles.groupNavigationTable}>
+              <caption className="sr-only">Connected groups. Select a column heading to sort.</caption>
+              <thead>
+                <tr>
+                  <th scope="col" aria-sort={ariaSort("name")}>
+                    <button type="button" onClick={() => changeSort("name")} aria-label={sortButtonLabel("name", "Group name")}>
+                      Group {sortIcon("name")}
+                    </button>
+                  </th>
+                  <th scope="col" aria-sort={ariaSort("type")}>
+                    <button type="button" onClick={() => changeSort("type")} aria-label={sortButtonLabel("type", "Group type")}>
+                      Type {sortIcon("type")}
+                    </button>
+                  </th>
+                  <th scope="col" aria-sort={ariaSort("members")}>
+                    <button type="button" onClick={() => changeSort("members")} aria-label={sortButtonLabel("members", "Member count")}>
+                      Members {sortIcon("members")}
+                    </button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredGroups.map((group) => {
+                  const selected = group.id === visibleSelectedId;
+                  const relatedCount = group.tagCount + group.privilegeCount + group.rewardCount;
+                  return (
+                    <tr
+                      key={group.id}
+                      data-selected={selected ? "true" : "false"}
+                      style={{ "--group-accent": group.accent } as CSSProperties}
+                    >
+                      <td>
+                        <button
+                          className={styles.groupNavigationItem}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => selectGroup(group.id)}
+                        >
+                          <span className={styles.groupNavigationAccent} aria-hidden="true" />
+                          <span className={styles.groupNavigationCopy}>
+                            <span>
+                              <strong>{group.displayName}</strong>
+                              <i data-enabled={group.enabled ? "true" : "false"}>
+                                {group.enabled ? "Active" : "Disabled"}
+                              </i>
+                            </span>
+                            <code>{group.key}</code>
+                            <small>{relatedCount} linked</small>
+                          </span>
+                          <ChevronRight aria-hidden="true" />
+                        </button>
+                      </td>
+                      <td>
+                        <span className={styles.groupTypeBadge} data-group-type={group.groupType}>
+                          {groupTypeLabel(group.groupType)}
+                        </span>
+                        <small>{group.source}</small>
+                      </td>
+                      <td data-column="members">{group.memberCount}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : (
             <p className={styles.navigatorEmpty}>No groups match this search.</p>
           )}
         </div>
       </aside>
 
       <div className={styles.groupWorkspacePanels}>
-        {selectedGroup ? (
-          panels.map((panel, index) => (
-            <div key={groups[index]?.id ?? index} hidden={groups[index]?.id !== visibleSelectedId}>
-              {panel}
-            </div>
-          ))
-        ) : (
+        {panels.map((panel, index) => (
+          <div
+            key={groups[index]?.id ?? index}
+            hidden={groups[index]?.id !== visibleSelectedId}
+          >
+            {panel}
+          </div>
+        ))}
+        {!selectedGroup ? (
           <div className={styles.groupWorkspaceEmpty}>
             <strong>No matching group to edit.</strong>
             <span>Adjust the group search or clear it to return to the current selection.</span>
@@ -207,7 +329,7 @@ export function GroupWorkspace({
               Clear search
             </button>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

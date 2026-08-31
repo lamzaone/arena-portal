@@ -1713,6 +1713,70 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
   box-shadow: inset 3px 0 0 var(--tap-hot), 0 0 18px rgba(255, 23, 68, .25);
 }
 
+/* VIP products retain their trusted group accent inside TAP GOD's blood-metal
+   geometry. The theme still owns the canvas and controls; the tier owns only
+   its rail, status edge, artwork glow, and product badge. */
+:is(
+  html.global-theme-tap-god,
+  html[data-theme="tap_god"][data-theme-surface~="global"]
+):not(:has(.player-profile-page[data-theme-owner="profile"])) body [data-ui="vip-current-status"] {
+  border-color: color-mix(in srgb, var(--vip-tier-color, var(--tap-red)) 54%, var(--tap-red));
+  border-radius: 0;
+  box-shadow:
+    inset 3px 0 0 color-mix(in srgb, var(--vip-tier-color, var(--tap-hot)) 72%, var(--tap-red)),
+    inset 0 0 38px rgba(255, 23, 68, .1),
+    0 20px 46px rgba(0, 0, 0, .46);
+}
+
+:is(
+  html.global-theme-tap-god,
+  html[data-theme="tap_god"][data-theme-surface~="global"]
+):not(:has(.player-profile-page[data-theme-owner="profile"])) body [data-ui="vip-tier-card"] {
+  border-color: color-mix(in srgb, var(--vip-tier-color, var(--tap-red)) 58%, var(--tap-red));
+  border-radius: 0;
+  color: var(--tap-text);
+  background:
+    radial-gradient(circle at 88% 0, color-mix(in srgb, var(--vip-tier-color, var(--tap-red)) 16%, transparent), transparent 18rem),
+    repeating-linear-gradient(115deg, rgba(255, 23, 68, .035) 0 1px, transparent 1px 42px),
+    linear-gradient(145deg, rgba(22, 0, 7, .96), rgba(2, 0, 1, .985));
+  box-shadow:
+    inset 3px 0 0 color-mix(in srgb, var(--vip-tier-color, var(--tap-hot)) 72%, var(--tap-red)),
+    inset 0 1px 0 rgba(255, 220, 226, .065),
+    0 0 28px color-mix(in srgb, var(--vip-tier-color, var(--tap-red)) 12%, transparent);
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+
+:is(
+  html.global-theme-tap-god,
+  html[data-theme="tap_god"][data-theme-surface~="global"]
+):not(:has(.player-profile-page[data-theme-owner="profile"])) body [data-ui="vip-tier-card"]:is(:hover, :focus-within) {
+  border-color: var(--vip-tier-color, var(--tap-hot));
+  box-shadow:
+    inset 3px 0 0 var(--vip-tier-color, var(--tap-hot)),
+    inset 0 0 28px rgba(255, 23, 68, .1),
+    0 0 31px color-mix(in srgb, var(--vip-tier-color, var(--tap-red)) 25%, transparent);
+}
+
+:is(
+  html.global-theme-tap-god,
+  html[data-theme="tap_god"][data-theme-surface~="global"]
+):not(:has(.player-profile-page[data-theme-owner="profile"])) body [data-ui="vip-tier-card"] [data-part="artwork"] {
+  border-color: color-mix(in srgb, var(--vip-tier-color, var(--tap-red)) 42%, var(--tap-red));
+  border-radius: 0;
+  background:
+    radial-gradient(circle at 50% 48%, color-mix(in srgb, var(--vip-tier-color, var(--tap-red)) 24%, transparent), transparent 58%),
+    rgba(2, 0, 1, .98);
+}
+
+:is(
+  html.global-theme-tap-god,
+  html[data-theme="tap_god"][data-theme-surface~="global"]
+):not(:has(.player-profile-page[data-theme-owner="profile"])) body [data-ui="vip-tier-card"] :is([data-part="relationship"], [data-part="status"], [data-part="conversion-preview"]) {
+  border-color: color-mix(in srgb, var(--vip-tier-color, var(--tap-red)) 54%, var(--tap-red));
+  border-radius: 0;
+  background: color-mix(in srgb, var(--vip-tier-color, var(--tap-red)) 8%, rgba(2, 0, 1, .96));
+}
+
 :is(
   html.global-theme-tap-god,
   html[data-theme="tap_god"][data-theme-surface~="global"]

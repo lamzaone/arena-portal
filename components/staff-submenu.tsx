@@ -3,9 +3,7 @@ import {
   BadgeCheck,
   Ban,
   Boxes,
-  Crown,
   KeyRound,
-  ShieldCheck,
   Ticket,
   UsersRound,
 } from "lucide-react";
@@ -15,8 +13,6 @@ import type { AdminAccess } from "@/lib/admin/access";
 
 export const staffModerationSections = [
   { id: "bans", label: "Bans", icon: Ban },
-  { id: "admins", label: "Admins", icon: ShieldCheck },
-  { id: "vips", label: "VIPs", icon: Crown },
   { id: "appeals", label: "Appeals", icon: BadgeCheck },
   { id: "tickets", label: "Tickets", icon: Ticket },
 ] as const;
@@ -32,7 +28,7 @@ export type StaffSection =
 
 type StaffSubmenuAccess = Pick<
   AdminAccess,
-  "canUnban" | "canViewEconomy" | "canManageEconomy" | "canManageGroups"
+  "isAdmin" | "canUnban" | "canViewEconomy" | "canManageEconomy"
 >;
 
 export function StaffSubmenu({
@@ -52,8 +48,8 @@ export function StaffSubmenu({
       scroll: true,
     }));
 
-  if (access.canManageGroups) {
-    items.push({ key: "groups", href: "/admin/groups", label: "Groups", icon: UsersRound, scroll: true });
+  if (access.isAdmin) {
+    items.splice(1, 0, { key: "groups", href: "/admin/groups", label: "Groups", icon: UsersRound, scroll: true });
   }
   if (access.canViewEconomy) {
     items.push({ key: "items", href: "/admin/items", label: "Items", icon: Boxes, scroll: true });

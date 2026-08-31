@@ -299,6 +299,55 @@ body:has(.player-profile-page[data-theme-owner="profile"])
     linear-gradient(145deg, color-mix(in srgb, var(--theme-surface-raised) 88%, transparent), color-mix(in srgb, var(--theme-page-bg) 94%, transparent));
 }
 
+/* Membership cards keep their connected group's validated color as a local
+   product accent while the viewer's active theme continues to own every
+   surface, text, control, radius, shadow, and focus token. */
+:where([data-theme][data-theme-surface])
+  :is([data-ui="vip-current-status"], [data-ui="vip-tier-card"]) {
+  border-color: color-mix(in srgb, var(--vip-tier-color, var(--theme-accent)) 34%, var(--theme-border));
+  border-radius: var(--theme-radius);
+  color: var(--theme-text);
+  background-color: color-mix(in srgb, var(--theme-surface) 88%, transparent);
+}
+
+:where([data-theme][data-theme-surface])
+  [data-ui="vip-tier-card"] [data-part="heading"] :is(h2, h3, strong),
+:where([data-theme][data-theme-surface])
+  [data-ui="vip-current-status"] strong {
+  color: var(--theme-text);
+}
+
+:where([data-theme][data-theme-surface])
+  [data-ui="vip-tier-card"] :is(p, small),
+:where([data-theme][data-theme-surface])
+  [data-ui="vip-current-status"] small {
+  color: var(--theme-text-muted);
+}
+
+:where([data-theme][data-theme-surface])
+  [data-ui="vip-tier-card"] [data-part="artwork"] {
+  border-color: color-mix(in srgb, var(--vip-tier-color, var(--theme-accent)) 26%, var(--theme-border));
+  background-color: var(--theme-surface-raised);
+}
+
+:where([data-theme][data-theme-surface])
+  [data-ui="vip-tier-card"] :is([data-part="status"], [data-part="benefits"], [data-part="offers"]) {
+  border-color: var(--theme-border);
+}
+
+:where([data-theme][data-theme-surface])
+  [data-ui="vip-tier-card"] [data-part="conversion-preview"] {
+  border-color: color-mix(in srgb, var(--vip-tier-color, var(--theme-accent)) 34%, var(--theme-border));
+  color: var(--theme-text);
+  background-color: color-mix(in srgb, var(--vip-tier-color, var(--theme-accent)) 6%, var(--theme-control-bg));
+}
+
+:where([data-theme][data-theme-surface])
+  [data-ui="vip-tier-card"] [data-part="relationship"] {
+  border-color: color-mix(in srgb, var(--vip-tier-color, var(--theme-accent)) 55%, var(--theme-border));
+  color: color-mix(in srgb, var(--vip-tier-soft, var(--theme-accent-soft)) 72%, var(--theme-text));
+}
+
 :where([data-theme][data-theme-surface])
   button[data-ui="item-card"]:is(:hover, :focus-visible, .is-selected),
 :where([data-theme][data-theme-surface])
