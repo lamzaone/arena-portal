@@ -2266,7 +2266,7 @@ async function readCompactArenaVipRoster() {
     const [rows] = await pool.query<CompactArenaVipRosterRow[]>(
       "SELECT subscription.steam_id, identity_group.external_key, " +
         "CASE WHEN subscription.expires_at IS NULL THEN 0 " +
-        "ELSE UNIX_TIMESTAMP(subscription.expires_at) END AS expires, " +
+        "ELSE FLOOR(UNIX_TIMESTAMP(subscription.expires_at)) END AS expires, " +
         "COALESCE(group_scope.rank_weight_override, identity_group.rank_weight) AS rank_weight, " +
         "subscription.vip_family_key, identity_group.id AS arena_group_id, " +
         "scope.scope_type, scope.vip_server_id AS server_id " +
@@ -2361,7 +2361,7 @@ function mergeCompactVipRoster(
     try {
       const steamId = vipAccountToSteamId(String(row.account_id));
       const group = String(row.group ?? "").normalize("NFKC").trim();
-      const expiresAt = Number(row.expires);
+      const expiresAt = Math.floor(Number(row.expires));
       if (
         !isSteamId(steamId) ||
         !group ||
@@ -2387,7 +2387,7 @@ function mergeCompactVipRoster(
   for (const row of arenaRows) {
     const steamId = String(row.steam_id ?? "").trim();
     const group = String(row.external_key ?? "").normalize("NFKC").trim();
-    const expiresAt = Number(row.expires);
+    const expiresAt = Math.floor(Number(row.expires));
     const rankWeight = Number(row.rank_weight);
     if (
       !isSteamId(steamId) ||

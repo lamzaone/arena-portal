@@ -9,6 +9,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Tags,
+  Trash2,
   UsersRound,
 } from "lucide-react";
 
@@ -152,6 +153,9 @@ const noticeMessages: Record<string, string> = {
   "external-admin-group-updated": "Admins.Core name, permissions, scope, and immunity saved.",
   "external-vip-group-created": "VIPCore group created in Arena and linked to its portal presentation.",
   "external-vip-group-updated": "VIPCore weight, status, and perk configuration saved.",
+  "external-vip-group-deleted": "VIPCore group removed from the Arena server.",
+  "external-group-delete-sync-pending":
+    "The VIPCore definition was removed, but the portal projection has not refreshed yet. Use Synchronize catalogue to finish cleanup.",
   "external-group-saved-sync-pending":
     "The runtime group was saved, but its portal adapter could not refresh yet. Use Synchronize catalogue after checking portal storage.",
   "admin-saved": "Admin assignment saved. Admins.Core will pick it up on its next database sync.",
@@ -191,6 +195,8 @@ const errorMessages: Record<string, string> = {
   external_group_details: "Review the runtime group fields and try again.",
   external_group_exists: "A runtime group already uses that name in this server scope.",
   external_group_not_found: "That runtime definition changed. Refresh the page before saving again.",
+  external_group_in_use:
+    "That VIPCore group still has active memberships. Remove them from Assignments, then delete the group.",
   founder_invariant: "Founder cannot be renamed, lose wildcard access, or be removed from this server.",
   "admin-permission": "Your current admin permissions cannot manage staff assignments.",
   "vip-permission": "Your current permissions cannot manage VIP assignments.",
@@ -392,7 +398,7 @@ function RuntimeSourceEditor({
       method="post"
       aria-label={`Edit ${definition.name} VIPCore definition`}
     >
-      <MutationFields csrf={csrf} action="external-vip-group-update" />
+      <MutationFields csrf={csrf} />
       <input type="hidden" name="groupId" value={group.id} />
       <input type="hidden" name="previousName" value={definition.name} />
       <div className={styles.runtimeDefinitionHeading}>
@@ -433,7 +439,15 @@ function RuntimeSourceEditor({
         </label>
       </div>
       <div className={styles.formActions}>
-        <button className="button button-primary" type="submit">Save VIPCore definition</button>
+        <button className="button button-primary" name="action" value="external-vip-group-update" type="submit">Save VIPCore definition</button>
+        <ConfirmSubmitButton
+          className="staff-danger-button"
+          name="action"
+          value="external-vip-group-delete"
+          confirmation={`Delete ${definition.name} from VIPCore server scope ${definition.serverId}? This permanently removes the live tier definition and disables its connected marketplace offers. Active memberships must be removed first.`}
+        >
+          <Trash2 aria-hidden="true" /> Delete VIPCore group
+        </ConfirmSubmitButton>
       </div>
     </form>
   );
@@ -1026,10 +1040,19 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
           ]
         : [],
   );
-  // The connected registry is the canonical inventory of identities. Keep
-  // runtime-only adapters visible even if their richer definition could not be
-  // loaded yet; hiding them would also hide their authoritative memberships.
-  const connectedGroups = snapshot.groups;
+  // Keep stale external adapters visible while they still carry memberships,
+  // presentation links, or a definition that needs repair. A successfully
+  // deleted, empty runtime adapter is a retained rollback tombstone and should
+  // not remain in the active Connected Groups workspace.
+  const connectedGroups = snapshot.groups.filter((group) =>
+    group.sourceType === "custom" ||
+    Boolean(runtimeDefinitionForGroup(group, runtimeExternalGroups)) ||
+    group.enabled ||
+    Boolean(group.externalDefinition) ||
+    group.memberCount > 0 ||
+    group.tags.length > 0 ||
+    group.privileges.length > 0 ||
+    group.rewards.length > 0);
   const availablePermissions = privilegeOptions(snapshot.privileges);
   const notice = params.notice ? noticeMessages[params.notice] : null;
   const error = params.error ? errorMessages[params.error] ?? "The identity action could not be completed." : null;

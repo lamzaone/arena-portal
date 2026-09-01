@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   type PoolConnection,
+  type ResultSetHeader,
   type RowDataPacket,
 } from "mysql2/promise";
 
@@ -897,4 +898,77 @@ export async function updateRuntimeVipCoreGroup(input: {
   }
   const catalogueSynced = await completeRenameAndRefreshPortal(input, renameIntent);
   return { name, catalogueSynced };
+}
+
+export async function deleteRuntimeVipCoreGroup(input: {
+  actorSteamId: string;
+  requestKey: string;
+  previousName: string;
+}) {
+  const serverId = vipServerId();
+  const previousName = normalizedName(
+    input.previousName,
+    64,
+    "Existing group name",
+  );
+  const removedName = await withGameTransaction(async (connection) => {
+    const [definitions] = await connection.query<VipGroupRow[]>(
+      "SELECT server_id, name, weight, values_json, enabled FROM vip_group_definitions " +
+        "ORDER BY server_id, name FOR UPDATE",
+    );
+    const matches = definitions.filter((row) =>
+      Number(row.server_id) === serverId && sameName(String(row.name), previousName));
+    if (matches.length !== 1) {
+      fail(
+        "external_group_not_found",
+        "That VIPCore group changed or was already removed. Refresh the page.",
+      );
+    }
+    const storedName = String(matches[0].name);
+    const [nativeMemberships] = await connection.query<Array<RowDataPacket & {
+      account_id: string;
+    }>>(
+      "SELECT account_id FROM vip_users WHERE sid = ? " +
+        "AND LOWER(TRIM(`group`)) = LOWER(TRIM(?)) " +
+        "AND (expires = 0 OR expires > UNIX_TIMESTAMP()) " +
+        "ORDER BY account_id LIMIT 1 FOR UPDATE",
+      [serverId, storedName],
+    );
+    const [arenaMemberships] = await connection.query<Array<RowDataPacket & {
+      membership_uuid: string;
+    }>>(
+      "SELECT membership.membership_uuid FROM arena_group_memberships AS membership " +
+        "INNER JOIN arena_groups AS identity_group ON identity_group.id = membership.group_id " +
+        "INNER JOIN arena_scopes AS scope ON scope.id = membership.scope_id " +
+        "WHERE identity_group.group_type = 'vip' " +
+        "AND LOWER(TRIM(identity_group.external_key)) = LOWER(TRIM(?)) " +
+        "AND scope.vip_server_id = ? " +
+        "AND membership.status IN ('active', 'conflict') " +
+        "ORDER BY membership.membership_uuid LIMIT 1 FOR UPDATE",
+      [storedName, serverId],
+    );
+    if (nativeMemberships.length || arenaMemberships.length) {
+      fail(
+        "external_group_in_use",
+        "Remove every active membership from this VIPCore group before deleting its definition.",
+      );
+    }
+    const [result] = await connection.execute<ResultSetHeader>(
+      "DELETE FROM vip_group_definitions WHERE server_id = ? AND name = ?",
+      [serverId, storedName],
+    );
+    if (result.affectedRows !== 1) {
+      fail(
+        "external_group_not_found",
+        "That VIPCore group changed before it could be removed. Refresh the page.",
+      );
+    }
+    await synchronizeVipAuthority(connection, {
+      actorSteamId: input.actorSteamId,
+      serverId,
+    });
+    return storedName;
+  });
+  const catalogueSynced = await refreshPortalCatalogue(input);
+  return { name: removedName, catalogueSynced };
 }

@@ -31,6 +31,7 @@ import {
 import {
   createRuntimeAdminsCoreGroup,
   createRuntimeVipCoreGroup,
+  deleteRuntimeVipCoreGroup,
   ExternalGroupManagementError,
   updateRuntimeAdminsCoreGroup,
   updateRuntimeVipCoreGroup,
@@ -235,6 +236,29 @@ export async function POST(request: Request) {
           result.catalogueSynced
             ? "external-vip-group-updated"
             : "external-group-saved-sync-pending",
+        );
+      }
+
+      case "external-vip-group-delete": {
+        const result = await deleteRuntimeVipCoreGroup({
+          actorSteamId: actor.steamId,
+          requestKey,
+          previousName: text(formData, "previousName"),
+        });
+        await writeStaffActionAudit(
+          actor.steamId,
+          "identity.vipcore-group.deleted",
+          "vipcore-group",
+          result.name,
+        );
+        return redirect(
+          request,
+          "notice",
+          result.catalogueSynced
+            ? "external-vip-group-deleted"
+            : "external-group-delete-sync-pending",
+          undefined,
+          "connected",
         );
       }
 
