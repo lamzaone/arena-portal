@@ -12,7 +12,6 @@ import {
   PackageOpen,
   PencilLine,
   Plus,
-  Search,
   Server,
   ShieldAlert,
   ShieldCheck,
@@ -33,7 +32,10 @@ import {
 
 import { IdentityGroupBadge } from "@/components/identity-group-badge";
 import { PlayerIdentity } from "@/components/player-identity";
-import { PlayerSearchField } from "@/components/player-search-field";
+import {
+  PlayerSearchField,
+  type PlayerSearchResult,
+} from "@/components/player-search-field";
 import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
 import type {
   IdentityGroup,
@@ -60,6 +62,10 @@ export type AssignmentVipScope = Readonly<{
   label: string;
   description?: string;
   hasDefinitions: boolean;
+  scopeId?: number | null;
+  scopeKey?: string | null;
+  scopeType?: "global" | "server" | null;
+  adminServerGuid?: string | null;
 }>;
 
 export type AssignmentsWorkspaceProps = Readonly<{
@@ -156,6 +162,7 @@ type StatusFilter =
   | "review";
 
 const sevenDaysMilliseconds = 7 * 24 * 60 * 60 * 1_000;
+const globalArenaScopeKey = "arena:global";
 
 const dateTimeFormatter = new Intl.DateTimeFormat("en-GB", {
   dateStyle: "medium",
@@ -222,22 +229,87 @@ function groupDefinition(
   return groups.find((group) => groupMatches(group, kind, groupName, groupId)) ?? null;
 }
 
-function adminScopes(record: StaffAdminMembershipRecord) {
-  if (record.source === "portal") {
-    const key = record.scopeKey ?? (record.scopeId === null
-      ? "arena:unknown"
-      : `arena:${record.scopeId}`);
-    const label = record.scopeName ?? (record.scopeType === "global"
-      ? "Global Arena scope"
-      : `Arena scope #${record.scopeId ?? "?"}`);
-    return { keys: [key], labels: [label] };
+function registeredServerScopeKey(scope: AssignmentVipScope) {
+  return `arena:server:${scope.id}`;
+}
+
+function registeredServerScopes(scopes: readonly AssignmentVipScope[]) {
+  return scopes.filter((scope) => scope.id > 0 && scope.scopeType !== "global");
+}
+
+function findRegisteredServerScope(
+  scopes: readonly AssignmentVipScope[],
+  input: Readonly<{
+    vipServerId?: number | null;
+    authorityScopeId?: number | null;
+    scopeKey?: string | null;
+    adminServerGuid?: string | null;
+  }>,
+) {
+  const serverScopes = registeredServerScopes(scopes);
+  if (input.vipServerId !== null && input.vipServerId !== undefined) {
+    const match = serverScopes.find((scope) => scope.id === input.vipServerId);
+    if (match) return match;
   }
-  if (!record.serverGuids.length) {
-    return { keys: ["admin:none"], labels: ["No server scope"] };
+  if (input.authorityScopeId !== null && input.authorityScopeId !== undefined) {
+    const match = serverScopes.find((scope) => scope.scopeId === input.authorityScopeId);
+    if (match) return match;
   }
+  const wantedScopeKey = normalize(input.scopeKey ?? "");
+  if (wantedScopeKey) {
+    const match = serverScopes.find((scope) => normalize(scope.scopeKey ?? "") === wantedScopeKey);
+    if (match) return match;
+  }
+  const wantedGuid = normalize(input.adminServerGuid ?? "");
+  if (wantedGuid) {
+    const match = serverScopes.find((scope) => normalize(scope.adminServerGuid ?? "") === wantedGuid);
+    if (match) return match;
+  }
+  return null;
+}
+
+function globalArenaScope() {
+  return { keys: [globalArenaScopeKey], labels: ["All ARENA servers"] };
+}
+
+function registeredArenaScope(scope: AssignmentVipScope) {
   return {
-    keys: record.serverGuids.map((guid) => `admin:${guid}`),
-    labels: record.serverGuids.map((guid) => `Server ${guid}`),
+    keys: [registeredServerScopeKey(scope)],
+    labels: [scope.label.trim() || `Arena server ${scope.id}`],
+  };
+}
+
+function unregisteredScopeKey(value: string | number | null | undefined) {
+  return `arena:unregistered:${normalize(String(value ?? "unknown")) || "unknown"}`;
+}
+
+function adminScopes(
+  record: StaffAdminMembershipRecord,
+  vipScopes: readonly AssignmentVipScope[],
+) {
+  if (record.source === "portal") {
+    if (record.scopeType === "global") return globalArenaScope();
+    const registered = findRegisteredServerScope(vipScopes, {
+      authorityScopeId: record.scopeId,
+      scopeKey: record.scopeKey,
+      adminServerGuid: record.serverGuids[0],
+    });
+    if (registered) return registeredArenaScope(registered);
+    return {
+      keys: [unregisteredScopeKey(record.scopeKey ?? record.scopeId)],
+      labels: [record.scopeName ?? "Unregistered Arena server"],
+    };
+  }
+  if (!record.serverGuids.length) return globalArenaScope();
+  const scopes = record.serverGuids.map((guid) => {
+    const registered = findRegisteredServerScope(vipScopes, { adminServerGuid: guid });
+    return registered
+      ? { key: registeredServerScopeKey(registered), label: registered.label }
+      : { key: unregisteredScopeKey(guid), label: `Unregistered server ${guid}` };
+  });
+  return {
+    keys: scopes.map((scope) => scope.key),
+    labels: scopes.map((scope) => scope.label),
   };
 }
 
@@ -256,19 +328,31 @@ function vipScope(
         }
       : { keys: ["vip:none"], labels: ["Unknown VIP scope"] };
   }
-  if (serverId === 0) {
-    const configured = vipScopes.find((scope) => scope.id === 0);
-    return {
-      keys: ["vip:0"],
-      labels: [configured?.label || "Shared / all Arena servers"],
-    };
-  }
-  const configured = vipScopes.find((scope) => scope.id === serverId);
+  if (serverId === 0) return globalArenaScope();
+  const configured = findRegisteredServerScope(vipScopes, { vipServerId: serverId });
   return {
-    keys: [`vip:${serverId}`],
+    keys: [configured
+      ? registeredServerScopeKey(configured)
+      : unregisteredScopeKey(`vip-${serverId}`)],
     labels: [configured
       ? `${configured.label}${configured.hasDefinitions ? "" : " · Legacy / orphaned"}`
       : `VIP server ${serverId} · Legacy / orphaned`],
+  };
+}
+
+function customScope(
+  record: IdentityGroupMembership,
+  vipScopes: readonly AssignmentVipScope[],
+) {
+  if (record.scopeType === "global") return globalArenaScope();
+  const registered = findRegisteredServerScope(vipScopes, {
+    authorityScopeId: record.scopeId,
+    scopeKey: record.scopeKey,
+  });
+  if (registered) return registeredArenaScope(registered);
+  return {
+    keys: [unregisteredScopeKey(record.scopeKey ?? record.scopeId)],
+    labels: [record.scopeName ?? "Unregistered Arena server"],
   };
 }
 
@@ -285,7 +369,7 @@ function assignmentRecords({
 
   for (const player of adminPlayers) {
     for (const record of player.records) {
-      const scopes = adminScopes(record);
+      const scopes = adminScopes(record, vipScopes);
       assignments.push({
         key: `admin:${record.recordKey}`,
         kind: "admin",
@@ -349,14 +433,7 @@ function assignmentRecords({
         : expiresAt && expiresAt.getTime() <= now
           ? "expired"
           : "active";
-      const scopeKey = record.scopeKey ?? (record.scopeId
-        ? `arena:${record.scopeId}`
-        : "arena:unknown");
-      const scopeLabel = record.scopeName ?? (record.scopeType === "global"
-        ? "All Arena servers"
-        : record.scopeId
-          ? `Arena scope #${record.scopeId}`
-          : "Unknown Arena scope");
+      const scope = customScope(record, vipScopes);
       assignments.push({
         key: `custom:${record.membershipUuid ?? `${group.id}:${record.steamId}:${record.startsAt}`}`,
         kind: "custom",
@@ -364,8 +441,8 @@ function assignmentRecords({
         playerName: identities[record.steamId]?.displayName ?? `Steam ${record.steamId}`,
         groupName: group.displayName,
         groupDefinition: group,
-        scopeKeys: [scopeKey],
-        scopeLabels: [scopeLabel],
+        scopeKeys: scope.keys,
+        scopeLabels: scope.labels,
         status,
         permanent: record.expiresAt === null,
         startsAt: record.startsAt,
@@ -385,7 +462,6 @@ function assignmentRecords({
 
 function effectiveVipScopeOptions(
   configured: readonly AssignmentVipScope[],
-  players: readonly StaffVipMembershipPlayer[],
 ) {
   const scopes = new Map<number, AssignmentVipScope>();
   for (const scope of configured) {
@@ -393,24 +469,9 @@ function effectiveVipScopeOptions(
     scopes.set(scope.id, {
       ...scope,
       label: scope.id === 0
-        ? "Shared / all Arena servers"
+        ? "All ARENA servers"
         : scope.label.trim() || `VIP server ${scope.id}`,
     });
-  }
-  for (const player of players) {
-    for (const record of player.records) {
-      if (record.source !== "native" || record.serverId === null || scopes.has(record.serverId)) {
-        continue;
-      }
-      scopes.set(record.serverId, {
-        id: record.serverId,
-        label: record.serverId === 0
-          ? "Shared / all Arena servers"
-          : `VIP server ${record.serverId}`,
-        description: "Discovered from an existing membership row.",
-        hasDefinitions: false,
-      });
-    }
   }
   return [...scopes.values()].sort((left, right) => left.id - right.id);
 }
@@ -447,12 +508,17 @@ function matchesStatus(
   return assignment.status === filter;
 }
 
-function searchableText(assignment: Assignment) {
+function searchableText(
+  assignment: Assignment,
+  identity: PlayerIdentityData | undefined,
+) {
   const source = assignment.kind === "custom"
     ? "arena custom"
     : assignment.record.source;
   return normalize([
     assignment.playerName,
+    identity?.displayName,
+    identity?.steamId,
     assignment.steamId,
     assignment.groupName,
     assignment.kind,
@@ -760,7 +826,7 @@ function VipEditForm({
     availableScopes.push({
       id: currentServerId,
       label: currentServerId === 0
-        ? "Shared / all Arena servers"
+        ? "All ARENA servers"
         : `VIP server ${currentServerId}`,
       description: "Discovered from this existing membership.",
       hasDefinitions: false,
@@ -1297,6 +1363,8 @@ export function AssignmentsWorkspace({
 }: AssignmentsWorkspaceProps) {
   const [view, setView] = useState<AssignmentWorkspaceView>(assignmentView);
   const [query, setQuery] = useState("");
+  const [selectedPlayerSteamId, setSelectedPlayerSteamId] = useState<string | null>(null);
+  const [searchResetKey, setSearchResetKey] = useState(0);
   const [scope, setScope] = useState("all");
   const [status, setStatus] = useState<StatusFilter>("all");
   const deferredQuery = useDeferredValue(query);
@@ -1308,8 +1376,8 @@ export function AssignmentsWorkspace({
   }, [assignmentView]);
 
   const effectiveVipScopes = useMemo(
-    () => effectiveVipScopeOptions(vipScopes, vipPlayers),
-    [vipPlayers, vipScopes],
+    () => effectiveVipScopeOptions(vipScopes),
+    [vipScopes],
   );
 
   const assignments = useMemo(
@@ -1333,21 +1401,35 @@ export function AssignmentsWorkspace({
     () => groups.filter((group) => group.enabled && group.sourceType === "custom"),
     [groups],
   );
+  const profileSearchPlayers = useMemo(
+    () => Object.values(identities).map((identity): PlayerSearchResult => ({
+      steamId: identity.steamId,
+      displayName: identity.displayName,
+      avatarUrl: identity.avatarUrl,
+      presence: identity.presence,
+      profileThemeKey: identity.profileThemeKey,
+      inventoryVisibility: "private",
+    })),
+    [identities],
+  );
   const scopeOptions = useMemo(() => {
-    const options = new Map<string, string>();
-    for (const assignment of assignments) {
-      assignment.scopeKeys.forEach((key, index) => {
-        options.set(key, assignment.scopeLabels[index] ?? key);
-      });
+    const options: Array<readonly [string, string]> = [["all", "All ARENA servers"]];
+    for (const registered of registeredServerScopes(effectiveVipScopes)) {
+      options.push([
+        registeredServerScopeKey(registered),
+        registered.label.trim() || `Arena server ${registered.id}`,
+      ]);
     }
-    return [...options].sort((left, right) => left[1].localeCompare(right[1], "en", { numeric: true }));
-  }, [assignments]);
-  const normalizedQuery = normalize(deferredQuery);
+    return options;
+  }, [effectiveVipScopes]);
+  const normalizedQuery = normalize(selectedPlayerSteamId ?? deferredQuery);
   const visibleAssignments = assignments.filter((assignment) =>
     (view === "all" || assignment.kind === view) &&
-    (scope === "all" || assignment.scopeKeys.includes(scope)) &&
+    (scope === "all" ||
+      assignment.scopeKeys.includes(globalArenaScopeKey) ||
+      assignment.scopeKeys.includes(scope)) &&
     matchesStatus(assignment, status, now) &&
-    (!normalizedQuery || searchableText(assignment).includes(normalizedQuery)));
+    (!normalizedQuery || searchableText(assignment, identities[assignment.steamId]).includes(normalizedQuery)));
   const groupedPlayers = useMemo(() => {
     const result = new Map<string, Assignment[]>();
     for (const assignment of visibleAssignments) {
@@ -1377,11 +1459,13 @@ export function AssignmentsWorkspace({
   const adminCount = assignments.filter((assignment) => assignment.kind === "admin").length;
   const vipCount = assignments.filter((assignment) => assignment.kind === "vip").length;
   const customCount = assignments.filter((assignment) => assignment.kind === "custom").length;
-  const filtersActive = Boolean(query || scope !== "all" || status !== "all");
+  const filtersActive = Boolean(query || selectedPlayerSteamId || scope !== "all" || status !== "all");
   const resultStatusId = `${generatedId}-results-status`;
 
   function clearFilters() {
     setQuery("");
+    setSelectedPlayerSteamId(null);
+    setSearchResetKey((current) => current + 1);
     setScope("all");
     setStatus("all");
   }
@@ -1451,31 +1535,23 @@ export function AssignmentsWorkspace({
         </div>
 
         <div className={styles.filters}>
-          <label className={styles.searchField}>
-            <span>Search assignments</span>
-            <span>
-              <Search aria-hidden="true" />
-              <input
-                id={`${generatedId}-search`}
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.currentTarget.value)}
-                placeholder="Player, SteamID, group, or source"
-                autoComplete="off"
-                maxLength={100}
-                aria-describedby={resultStatusId}
-              />
-              {query ? (
-                <button type="button" onClick={() => setQuery("")} aria-label="Clear assignment search">
-                  <X aria-hidden="true" />
-                </button>
-              ) : null}
-            </span>
-          </label>
+          <PlayerSearchField
+            className={styles.searchField}
+            id={`${generatedId}-search`}
+            includeSelf
+            key={searchResetKey}
+            label="Search player profiles"
+            localPlayers={profileSearchPlayers}
+            mode="query"
+            name="assignmentPlayerQuery"
+            placeholder="Player name or SteamID64"
+            helpText="Choose a profile for an exact match, or keep typing to filter assignments."
+            onQueryChange={setQuery}
+            onSelectionChange={(player) => setSelectedPlayerSteamId(player?.steamId ?? null)}
+          />
           <label>
             <span>Scope</span>
             <select id={`${generatedId}-scope`} value={scope} onChange={(event) => setScope(event.currentTarget.value)}>
-              <option value="all">All scopes</option>
               {scopeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>

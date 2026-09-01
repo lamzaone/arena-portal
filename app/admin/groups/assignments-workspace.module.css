@@ -616,59 +616,6 @@
   background: color-mix(in srgb, var(--theme-surface) 86%, transparent);
 }
 
-.searchField > span:last-child {
-  position: relative;
-  display: flex;
-  min-width: 0;
-  align-items: center;
-}
-
-.searchField > span:last-child > svg {
-  position: absolute;
-  z-index: 1;
-  left: 11px;
-  width: 17px;
-  height: 17px;
-  color: var(--theme-text-subtle);
-  pointer-events: none;
-}
-
-.searchField input {
-  padding-right: 43px !important;
-  padding-left: 37px !important;
-}
-
-.searchField button {
-  position: absolute;
-  right: 5px;
-  display: grid;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  place-items: center;
-  border: 0;
-  border-radius: var(--theme-control-radius);
-  color: var(--theme-text-muted);
-  background: transparent;
-  cursor: pointer;
-}
-
-.searchField button:hover,
-.searchField button:focus-visible {
-  color: var(--theme-text);
-  background: var(--theme-control-hover);
-}
-
-.searchField button:focus-visible {
-  outline: 2px solid var(--theme-focus-ring);
-  outline-offset: 1px;
-}
-
-.searchField button svg {
-  width: 16px;
-  height: 16px;
-}
-
 .playerList {
   display: grid;
   gap: 14px;

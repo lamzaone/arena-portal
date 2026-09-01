@@ -69,6 +69,10 @@ export type StaffVipServerScope = {
   label: string;
   description: string;
   hasDefinitions: boolean;
+  scopeId: number | null;
+  scopeKey: string | null;
+  scopeType: "global" | "server" | null;
+  adminServerGuid: string | null;
 };
 
 export type StaffVipNativeMembershipReference = {
@@ -187,8 +191,12 @@ type VipServerScopeRow = RowDataPacket & {
 };
 
 type ArenaVipScopeRow = RowDataPacket & {
+  scope_id: string | number;
+  scope_key: string;
+  scope_type: "global" | "server";
   server_id: string | number;
   display_name: string;
+  admin_server_guid: string | null;
   definition_count: string | number;
 };
 
@@ -401,7 +409,8 @@ export async function getStaffVipServerScopes(): Promise<StaffVipServerScope[]> 
   if (!pool) return [];
   try {
     const [authorityRows] = await pool.query<ArenaVipScopeRow[]>(
-      "SELECT scope.vip_server_id AS server_id, scope.display_name, " +
+      "SELECT scope.id AS scope_id, scope.scope_key, scope.scope_type, " +
+        "scope.vip_server_id AS server_id, scope.display_name, scope.admin_server_guid, " +
         "COUNT(identity_group.id) AS definition_count " +
         "FROM arena_scopes AS scope " +
         "LEFT JOIN arena_group_scopes AS group_scope " +
@@ -410,7 +419,8 @@ export async function getStaffVipServerScopes(): Promise<StaffVipServerScope[]> 
         "ON identity_group.id = group_scope.group_id " +
         "AND identity_group.group_type = 'vip' AND identity_group.enabled = TRUE " +
         "WHERE scope.enabled = TRUE AND scope.vip_server_id IS NOT NULL " +
-        "GROUP BY scope.id, scope.vip_server_id, scope.display_name " +
+        "GROUP BY scope.id, scope.scope_key, scope.scope_type, scope.vip_server_id, " +
+        "scope.display_name, scope.admin_server_guid " +
         "ORDER BY scope.vip_server_id",
     );
     if (authorityRows.length) {
@@ -420,12 +430,16 @@ export async function getStaffVipServerScopes(): Promise<StaffVipServerScope[]> 
         return {
           id,
           label: id === 0
-            ? "Shared / all Arena servers"
+            ? "All ARENA servers"
             : String(row.display_name).trim() || `Arena server ${id}`,
           description: definitionCount
             ? `${definitionCount} VIP tier definitions`
             : "No enabled VIP tier definitions",
           hasDefinitions: definitionCount > 0,
+          scopeId: Number(row.scope_id),
+          scopeKey: String(row.scope_key).trim() || null,
+          scopeType: row.scope_type,
+          adminServerGuid: String(row.admin_server_guid ?? "").trim() || null,
         };
       });
     }
@@ -454,13 +468,17 @@ export async function getStaffVipServerScopes(): Promise<StaffVipServerScope[]> 
   return [
     {
       id: 0,
-      label: "Shared / all Arena servers",
+      label: "All ARENA servers",
       description: sharedDefinitionCount
         ? `${sharedDefinitionCount} VIP tier definitions`
         : "Legacy shared scope; no scope-specific tier definitions",
       hasDefinitions: sharedDefinitionCount > 0,
+      scopeId: null,
+      scopeKey: "global",
+      scopeType: "global",
+      adminServerGuid: null,
     },
-    ...scopeRows[0].map((row) => {
+    ...scopeRows[0].map((row): StaffVipServerScope => {
       const id = Number(row.server_id);
       const endpoint = row.server_ip && row.port
         ? `${row.server_ip}:${row.port}`
@@ -477,6 +495,10 @@ export async function getStaffVipServerScopes(): Promise<StaffVipServerScope[]> 
             : "no tier definitions",
         ].filter(Boolean).join(" · "),
         hasDefinitions: definitionCount > 0,
+        scopeId: null,
+        scopeKey: null,
+        scopeType: "server",
+        adminServerGuid: String(row.guid ?? "").trim() || null,
       };
     }),
   ];

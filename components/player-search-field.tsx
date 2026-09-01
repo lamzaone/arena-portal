@@ -6,6 +6,7 @@ import {
   type KeyboardEvent,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -26,6 +27,8 @@ export type PlayerSearchResult = {
   inventoryVisibility: "public" | "private";
 };
 
+const noLocalPlayers: readonly PlayerSearchResult[] = [];
+
 export type PlayerSearchFieldProps = {
   /** The existing form field receiving the query or selected SteamID64. */
   name: string;
@@ -39,11 +42,14 @@ export type PlayerSearchFieldProps = {
   required?: boolean;
   disabled?: boolean;
   includeSelf?: boolean;
+  /** Already-resolved profiles that should be searchable before the API responds. */
+  localPlayers?: readonly PlayerSearchResult[];
   /** Optional second existing field that always receives the selected SteamID64. */
   selectionName?: string;
   /** Existing sibling field to populate with the selected profile name. */
   companionNameField?: string;
   autoSubmitOnSelect?: boolean;
+  onQueryChange?: (query: string) => void;
   onSelectionChange?: (player: PlayerSearchResult | null) => void;
   showInventoryVisibility?: boolean;
 };
@@ -124,9 +130,11 @@ export function PlayerSearchField({
   required = false,
   disabled = false,
   includeSelf = false,
+  localPlayers = noLocalPlayers,
   selectionName,
   companionNameField,
   autoSubmitOnSelect = false,
+  onQueryChange,
   onSelectionChange,
   showInventoryVisibility = false,
 }: PlayerSearchFieldProps) {
@@ -151,6 +159,14 @@ export function PlayerSearchField({
   const submittedValue = mode === "target"
     ? selectedSteamId
     : selected?.steamId ?? trimmedQuery;
+
+  const localMatches = useMemo(() => {
+    const wanted = trimmedQuery.normalize("NFKC").toLocaleLowerCase("en-US");
+    return localPlayers
+      .filter((player) => player.steamId.includes(trimmedQuery) ||
+        player.displayName.normalize("NFKC").toLocaleLowerCase("en-US").includes(wanted))
+      .slice(0, 8);
+  }, [localPlayers, trimmedQuery]);
 
   useEffect(() => {
     setQuery(defaultQuery);
@@ -182,8 +198,8 @@ export function PlayerSearchField({
     }
 
     setSearchState("loading");
-    setResults([]);
-    setActiveIndex(-1);
+    setResults(localMatches);
+    setActiveIndex(localMatches.length ? 0 : -1);
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       const params = new URLSearchParams({ q: trimmedQuery });
@@ -200,17 +216,20 @@ export function PlayerSearchField({
         })
         .then((body) => {
           if (controller.signal.aborted) return;
-          const players = parsePlayers(body);
-          setResults(players);
-          setActiveIndex(players.length ? 0 : -1);
+          const players = new Map(
+            [...localMatches, ...parsePlayers(body)].map((player) => [player.steamId, player]),
+          );
+          const mergedPlayers = [...players.values()].slice(0, 8);
+          setResults(mergedPlayers);
+          setActiveIndex(mergedPlayers.length ? 0 : -1);
           setSearchState("ready");
           setOpen(true);
         })
         .catch(() => {
           if (controller.signal.aborted) return;
-          setResults([]);
-          setActiveIndex(-1);
-          setSearchState("error");
+          setResults(localMatches);
+          setActiveIndex(localMatches.length ? 0 : -1);
+          setSearchState(localMatches.length ? "ready" : "error");
           setOpen(true);
         });
     }, 300);
@@ -219,7 +238,7 @@ export function PlayerSearchField({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [disabled, engaged, includeSelf, selected, trimmedQuery]);
+  }, [disabled, engaged, includeSelf, localPlayers, selected, trimmedQuery]);
 
   useEffect(() => {
     const form = rootRef.current?.closest("form");
@@ -257,6 +276,7 @@ export function PlayerSearchField({
     setOpen(false);
     setValidationMessage("");
     setCompanionField(form, companionNameField, player.displayName);
+    onQueryChange?.(player.displayName);
     onSelectionChange?.(player);
     inputRef.current?.focus();
     if (autoSubmitOnSelect) {
@@ -282,6 +302,7 @@ export function PlayerSearchField({
     setActiveIndex(-1);
     setOpen(false);
     setValidationMessage("");
+    onQueryChange?.("");
     onSelectionChange?.(null);
     inputRef.current?.focus();
   }
@@ -302,6 +323,7 @@ export function PlayerSearchField({
       onSelectionChange?.(null);
     }
     setQuery(value);
+    onQueryChange?.(value);
     setEngaged(true);
     setValidationMessage("");
     setOpen(true);
@@ -414,12 +436,12 @@ export function PlayerSearchField({
       </span>
       {showResults ? (
         <div data-part="results" className={styles.results} id={listboxId} role="listbox" aria-label="Matching players">
-          {searchState === "loading" ? Array.from({ length: 3 }, (_, index) => (
+          {searchState === "loading" && !results.length ? Array.from({ length: 3 }, (_, index) => (
             <span className={styles.skeleton} key={index} aria-hidden="true">
               <i className={styles.skeletonAvatar} />
               <span className={styles.skeletonCopy}><i className={styles.skeletonLine} /><i className={styles.skeletonLine} /></span>
             </span>
-          )) : searchState === "ready" && results.length ? results.map((player, index) => (
+          )) : results.length ? results.map((player, index) => (
             <ThemedPlayerContainer
               className={`${styles.result}${showInventoryVisibility ? ` ${styles.resultWithMeta}` : ""}`}
               containerKind="search-result"
