@@ -26,9 +26,9 @@ test("groups only owned weapon skins with a definition index", () => {
 
 test("keeps legacy weapons and sorts groups and owned instances by display name", () => {
   const groups = ownedWeaponSkins([
+    { id: "m4-printstream", itemType: "skin", definitionIndex: 16, displayName: "M4A4 | Printstream" },
     { id: "ak-zebra", itemType: "weapon", definitionIndex: 7, displayName: "AK-47 | Zebra" },
     { id: "ak-redline", itemType: "skin", definitionIndex: 7, displayName: "AK-47 | Redline" },
-    { id: "m4-printstream", itemType: "skin", definitionIndex: 16, displayName: "M4A4 | Printstream" },
   ] as never);
 
   assert.deepEqual(
