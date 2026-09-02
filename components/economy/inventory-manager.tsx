@@ -56,8 +56,13 @@ import {
   economySellbackUsesMinimum,
 } from "@/lib/economy/sellback";
 import {
+  beginSaleLockOverrides,
   canSelectForLock,
   canSellInventoryItem,
+  reconcileSaleLockOverrides,
+  rejectSaleLockOverrides,
+  settleSaleLockOverrides,
+  type SaleLockOverride,
 } from "@/lib/economy/inventory-sale-lock";
 
 type InventoryManagerProps = {
@@ -164,15 +169,17 @@ export function InventoryManager({
 }: InventoryManagerProps) {
   const router = useRouter();
   const inventoryItems = useMemo(() => economyItems(inventory), [inventory]);
-  const [saleLockOverrides, setSaleLockOverrides] = useState<Map<string, boolean>>(
+  const [saleLockOverrides, setSaleLockOverrides] = useState<Map<string, SaleLockOverride>>(
     () => new Map(),
   );
+  const inventoryRevisionRef = useRef(0);
+  const saleLockRequestVersionRef = useRef(0);
   const [soldItemIds, setSoldItemIds] = useState<Set<string>>(() => new Set());
   const items = useMemo(
     () => inventoryItems
       .filter((item) => !soldItemIds.has(item.id))
       .map((item) => saleLockOverrides.has(item.id)
-        ? { ...item, saleLocked: saleLockOverrides.get(item.id) ?? item.saleLocked }
+        ? { ...item, saleLocked: saleLockOverrides.get(item.id)?.saleLocked ?? item.saleLocked }
         : item),
     [inventoryItems, saleLockOverrides, soldItemIds],
   );
@@ -393,13 +400,15 @@ export function InventoryManager({
   }, [inventoryPageCount]);
 
   useEffect(() => {
-    setSaleLockOverrides((current) => {
-      const next = new Map(current);
-      for (const item of inventoryItems) {
-        if (next.get(item.id) === item.saleLocked) next.delete(item.id);
-      }
-      return next.size === current.size ? current : next;
-    });
+    inventoryRevisionRef.current += 1;
+    const authoritative = new Map(
+      inventoryItems.map((item) => [item.id, item.saleLocked] as const),
+    );
+    setSaleLockOverrides((current) => reconcileSaleLockOverrides(
+      current,
+      authoritative,
+      inventoryRevisionRef.current,
+    ));
     setSoldItemIds((current) => {
       const next = new Set(
         [...current].filter((itemId) =>
@@ -653,6 +662,13 @@ export function InventoryManager({
 
   function updateSaleLocks(itemIds: string[], saleLocked: boolean) {
     if (!itemIds.length || pending || bulkSelling || bulkLocking || interactionDisabled) return;
+    const requestVersion = ++saleLockRequestVersionRef.current;
+    setSaleLockOverrides((current) => beginSaleLockOverrides(
+      current,
+      itemIds,
+      saleLocked,
+      requestVersion,
+    ));
     setBulkSaleConfirming(false);
     setBulkLocking(true);
     setNotice(null);
@@ -666,11 +682,12 @@ export function InventoryManager({
           csrf,
           payload,
         );
-        setSaleLockOverrides((current) => {
-          const next = new Map(current);
-          for (const itemId of itemIds) next.set(itemId, saleLocked);
-          return next;
-        });
+        setSaleLockOverrides((current) => settleSaleLockOverrides(
+          current,
+          itemIds,
+          requestVersion,
+          inventoryRevisionRef.current,
+        ));
         setSaleConfirmationItemId("");
         setNotice({
           type: "success",
@@ -678,6 +695,12 @@ export function InventoryManager({
         });
         router.refresh();
       } catch (error) {
+        setSaleLockOverrides((current) => rejectSaleLockOverrides(
+          current,
+          itemIds,
+          requestVersion,
+        ));
+        router.refresh();
         setNotice({
           type: "error",
           text: error instanceof Error
