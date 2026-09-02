@@ -6,6 +6,14 @@ type SaleCandidate = {
   tradable: boolean;
 };
 
+type LockCandidate = {
+  state: string;
+};
+
+export function canSelectForLock(item: LockCandidate) {
+  return item.state !== "consumed" && item.state !== "revoked";
+}
+
 export function canSellInventoryItem(item: SaleCandidate) {
   return (
     item.state === "available" &&

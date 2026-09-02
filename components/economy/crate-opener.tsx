@@ -74,6 +74,7 @@ type CrateOpenerProps = {
   inventory: unknown;
   wallet: unknown;
   csrf: string;
+  mode?: "full" | "owned";
 };
 
 type CatalogueTypeFilter = "all" | "crate" | "capsule";
@@ -576,7 +577,7 @@ function OwnedCrateInlineOpener({
                 type="button"
                 className="button button-secondary crate-inline-drops-toggle"
                 aria-expanded={showDrops}
-                aria-controls={dropsId}
+                aria-controls={showDrops ? dropsId : undefined}
                 onClick={() => setShowDrops((visible) => !visible)}
               >
                 <ChevronDown aria-hidden="true" /> {dropButtonLabel}
@@ -744,7 +745,7 @@ function MarketCrateInlineOpener({
       </div>
       <div className="crate-market-inline-actions">
         <CratePurchaseControls crate={crate} walletBalance={walletBalance} quantity={quantity} pending={busy} buying={purchasing} onQuantityChange={onQuantityChange} onPurchase={onPurchase} />
-        <button type="button" className="button button-secondary crate-inline-drops-toggle" aria-expanded={showDrops} aria-controls={dropsId} onClick={() => setShowDrops((visible) => !visible)} disabled={busy}>
+        <button type="button" className="button button-secondary crate-inline-drops-toggle" aria-expanded={showDrops} aria-controls={showDrops ? dropsId : undefined} onClick={() => setShowDrops((visible) => !visible)} disabled={busy}>
           <ChevronDown aria-hidden="true" /> {showDrops ? "Hide possible drops" : dropCount !== null ? `Show ${dropCount.toLocaleString()} possible drops` : "Show possible drops"}
         </button>
       </div>
@@ -804,7 +805,9 @@ export function CrateOpener({
   inventory,
   wallet,
   csrf,
+  mode = "full",
 }: CrateOpenerProps) {
+  const ownedOnly = mode === "owned";
   const router = useRouter();
   const crateCatalogue = useMemo(() => economyCrates(crates), [crates]);
   const inventoryCrates = useMemo(
@@ -912,7 +915,7 @@ export function CrateOpener({
       (crate) => crate.catalogueId === selectedMarketCatalogueId,
     ) ?? null;
   const selectedCrate =
-    activeTab === "owned" ? selectedOwnedCrate : selectedMarketCrate;
+    ownedOnly || activeTab === "owned" ? selectedOwnedCrate : selectedMarketCrate;
   const bulkAnimating = bulkOpeningRows.some(
     (row) => row.preparing || row.opening !== null,
   );
@@ -1656,8 +1659,8 @@ export function CrateOpener({
   }
 
   return (
-    <section aria-label="Crate opening">
-      <div className="content-grid">
+    <section className={ownedOnly ? "inventory-owned-crates" : undefined} aria-label={ownedOnly ? "Owned crate opening" : "Crate opening"}>
+      {!ownedOnly ? <div className="content-grid">
         <div className="panel">
           <p className="eyebrow">
             <Gift aria-hidden="true" /> Crate opening
@@ -1670,7 +1673,7 @@ export function CrateOpener({
           </p>
         </div>
         <TokenBalance wallet={walletView} />
-      </div>
+      </div> : null}
 
       {notice ? (
         <PortalToast
@@ -1682,14 +1685,14 @@ export function CrateOpener({
 
       <section className="history-section crate-picker-section" aria-labelledby="crate-browser-heading">
         <div className="section-heading compact crate-browser-heading">
-          <div><p className="eyebrow"><Box aria-hidden="true" /> Crate inventory</p><h2 id="crate-browser-heading">Select, inspect, then open or buy</h2><p>Every container shows its live price and server-verified possible drops before you commit.</p></div>
-          <div className="crate-tabs" role="tablist" aria-label="Crate source">
+          <div><p className="eyebrow"><Box aria-hidden="true" /> Crate inventory</p><h2 id="crate-browser-heading">{ownedOnly ? "Open owned crates and capsules" : "Select, inspect, then open or buy"}</h2><p>{ownedOnly ? "Inspect the server-verified possible drops, then open one container or select several for a multi-open." : "Every container shows its live price and server-verified possible drops before you commit."}</p></div>
+          {!ownedOnly ? <div className="crate-tabs" role="tablist" aria-label="Crate source">
             <button id="crate-owned-tab" type="button" role="tab" aria-controls="crate-owned-panel" aria-selected={activeTab === "owned"} className={activeTab === "owned" ? "active" : ""} disabled={busy} onClick={() => changeCrateTab("owned")}><Gift aria-hidden="true" /> Owned <span>{ownedCrates.length}</span></button>
             <button id="crate-market-tab" type="button" role="tab" aria-controls="crate-market-panel" aria-selected={activeTab === "market"} className={activeTab === "market" ? "active" : ""} disabled={busy} onClick={() => changeCrateTab("market")}><ShoppingBag aria-hidden="true" /> Market <span>{crateCatalogue.length}</span></button>
-          </div>
+          </div> : <span className="tag">{ownedCrates.length} owned</span>}
         </div>
 
-        {activeTab === "owned" ? <>
+        {ownedOnly || activeTab === "owned" ? <>
           <section
             className={`panel economy-bulk-toolbar crate-bulk-toolbar${selectionMode ? " is-active" : ""}`}
             aria-label="Crate selection actions"
@@ -1750,7 +1753,7 @@ export function CrateOpener({
                   ? `Showing ${ownedPageStart + 1}-${ownedPageEnd} of ${ownedCrates.length} owned crates`
                   : "No unopened crates remain"}
             </p>
-            <div ref={ownedGridRef} id="crate-owned-panel" className="feature-grid crate-item-grid crate-owned-grid" role="tabpanel" aria-labelledby="crate-owned-tab">
+            <div ref={ownedGridRef} id={ownedOnly ? "inventory-owned-crates" : "crate-owned-panel"} className="feature-grid crate-item-grid crate-owned-grid" role={ownedOnly ? undefined : "tabpanel"} aria-labelledby={ownedOnly ? undefined : "crate-owned-tab"}>
             {visibleOwnedCrates.map((crate, index) => {
               const isRetainedConsumedSlot =
                 crate.id === retainedOpenedCrate?.id &&
@@ -1775,7 +1778,7 @@ export function CrateOpener({
             })}
             </div>
             <PaginationControls page={visibleOwnedPage} pageSize={OWNED_CRATE_PAGE_SIZE} totalItems={displayedOwnedCrates.length} disabled={busy} label="Owned crate pages" onPageChange={changeOwnedPage} />
-          </> : <div id="crate-owned-panel" role="tabpanel" aria-labelledby="crate-owned-tab"><EconomyEmptyState title="You do not have a crate yet" description="Crates can arrive as match drops, hourly drops, map-end drops, or direct marketplace purchases in the Market tab." icon={<Gift aria-hidden="true" />} /></div>}
+          </> : <div id={ownedOnly ? "inventory-owned-crates" : "crate-owned-panel"} role={ownedOnly ? undefined : "tabpanel"} aria-labelledby={ownedOnly ? undefined : "crate-owned-tab"}><EconomyEmptyState title="You do not have a crate yet" description="Crates can arrive as match drops, hourly drops, map-end drops, or direct marketplace purchases in Market." icon={<Gift aria-hidden="true" />} /></div>}
         </> : <>
           <form className="panel form-panel crate-catalogue-filters" onSubmit={(event) => event.preventDefault()}>
             <div className="crate-filter-heading"><div><p className="eyebrow"><SlidersHorizontal aria-hidden="true" /> Browse containers</p><p className="empty-copy">Search the crate name, public market name, loot-table code, or rarity. Results update as you filter.</p></div><span className="tag">Up to {CATALOGUE_PAGE_SIZE} per page</span></div>

@@ -78,6 +78,14 @@ export function EconomyItemCard({
             <LockKeyhole aria-hidden="true" /> Untradable
           </span>
         ) : null}
+        {item.saleLocked ? (
+          <span
+            className="tag inventory-sale-lock-badge"
+            title="This item is locked and cannot be sold until you unlock it."
+          >
+            <LockKeyhole aria-hidden="true" /> Sale locked
+          </span>
+        ) : null}
         {item.equippedSlots.map((slot) => <span key={slot} className="tag tag-vip">Equipped: {humanize(slot)}</span>)}
         {price !== null ? (
           <span

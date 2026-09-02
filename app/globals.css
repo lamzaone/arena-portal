@@ -454,6 +454,15 @@ code { padding: 2px 4px; border-radius: 4px; color: #fecdd3; background: rgba(22
 .inventory-sell-panel > .inventory-management-panel-heading small { color: #e896a5; letter-spacing: .05em; }
 .inventory-sell-panel-body { display: grid; justify-items: start; gap: 11px; padding: 13px; }
 .inventory-sell-panel-body > .empty-copy { margin: 0; }
+.inventory-sale-lock-panel { border: 1px solid var(--theme-border, rgba(255, 181, 71, .38)); background: color-mix(in srgb, var(--theme-surface-raised, #24070d) 88%, var(--theme-accent, #e11d48) 12%); }
+.inventory-sale-lock-panel > .inventory-management-panel-heading { min-height: 43px; color: var(--theme-text, #fff0d1); border-bottom-color: var(--theme-border, rgba(255, 181, 71, .3)); background: color-mix(in srgb, var(--theme-accent, #e11d48) 14%, transparent); }
+.inventory-sale-lock-panel > .inventory-management-panel-heading svg { color: var(--theme-accent, #ffb547); }
+.inventory-sale-lock-panel > .inventory-management-panel-heading small { color: var(--theme-text-muted, #d8b991); }
+.inventory-sale-lock-panel-body { display: grid; justify-items: stretch; gap: 11px; padding: 13px; }
+.inventory-sale-lock-panel-body > .empty-copy { margin: 0; }
+.inventory-lock-action { border-color: var(--theme-border, rgba(255, 181, 71, .38)); }
+.inventory-sale-lock-badge { border-color: var(--theme-border, rgba(255, 181, 71, .48)); color: var(--theme-text, #ffe7b8); background: color-mix(in srgb, var(--theme-accent, #e11d48) 18%, transparent); }
+.inventory-owned-crates { margin-top: clamp(34px, 5vw, 58px); padding-top: clamp(24px, 3vw, 38px); border-top: 1px solid var(--theme-border, rgba(255, 113, 133, .22)); }
 .inventory-sell-price { display: grid; width: 100%; gap: 3px; padding: 11px 12px; border: 1px solid rgba(251,113,133,.36); border-radius: 5px; background: rgba(96,12,35,.33); }
 .inventory-sell-price > span { color: #e5abb5; font-size: 9px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
 .inventory-sell-price strong { color: #fff0f2; font-family: var(--font-display); font-size: 1.28rem; line-height: 1.08; }
@@ -2706,6 +2715,13 @@ fieldset.settings-section { padding-top: 20px; }
 
 @media (prefers-reduced-motion: reduce) {
   .economy-bulk-spinner { animation: none; }
+}
+
+@media (forced-colors: active) {
+  .inventory-sale-lock-badge,
+  .inventory-sale-lock-panel,
+  .inventory-owned-crates { border-color: CanvasText; }
+  .inventory-lock-action:focus-visible { outline: 2px solid Highlight !important; outline-offset: 2px; }
 }
 
 /* Live marketplace promotions use the same explicit rules as final prices. */

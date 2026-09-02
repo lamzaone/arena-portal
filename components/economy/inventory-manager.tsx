@@ -5,6 +5,8 @@ import {
   Coins,
   Crosshair,
   ListChecks,
+  LockKeyhole,
+  LockOpen,
   LoaderCircle,
   Palette,
   PencilLine,
@@ -53,6 +55,10 @@ import {
   economySellbackPayoutTokens,
   economySellbackUsesMinimum,
 } from "@/lib/economy/sellback";
+import {
+  canSelectForLock,
+  canSellInventoryItem,
+} from "@/lib/economy/inventory-sale-lock";
 
 type InventoryManagerProps = {
   inventory: unknown;
@@ -131,9 +137,7 @@ function rowEndIndex(itemIndex: number, columns: number, itemCount: number) {
 
 function canBulkSellItem(item: EconomyItemView) {
   return (
-    item.state === "available" &&
-    item.tradable &&
-    item.stickers.length === 0 &&
+    canSellInventoryItem(item) &&
     (item.marketPriceTokens !== null || item.catalogueId !== null)
   );
 }
@@ -146,10 +150,17 @@ export function InventoryManager({
 }: InventoryManagerProps) {
   const router = useRouter();
   const inventoryItems = useMemo(() => economyItems(inventory), [inventory]);
+  const [saleLockOverrides, setSaleLockOverrides] = useState<Map<string, boolean>>(
+    () => new Map(),
+  );
   const [soldItemIds, setSoldItemIds] = useState<Set<string>>(() => new Set());
   const items = useMemo(
-    () => inventoryItems.filter((item) => !soldItemIds.has(item.id)),
-    [inventoryItems, soldItemIds],
+    () => inventoryItems
+      .filter((item) => !soldItemIds.has(item.id))
+      .map((item) => saleLockOverrides.has(item.id)
+        ? { ...item, saleLocked: saleLockOverrides.get(item.id) ?? item.saleLocked }
+        : item),
+    [inventoryItems, saleLockOverrides, soldItemIds],
   );
   const loadoutView = useMemo(() => economyLoadout(loadout), [loadout]);
   const walletView = useMemo(() => economyWallet(wallet), [wallet]);
@@ -166,6 +177,7 @@ export function InventoryManager({
   );
   const [bulkSaleConfirming, setBulkSaleConfirming] = useState(false);
   const [bulkSelling, setBulkSelling] = useState(false);
+  const [bulkLocking, setBulkLocking] = useState(false);
   const [selectedTeams, setSelectedTeams] = useState<Array<"T" | "CT">>([]);
   const [nametag, setNametag] = useState("");
   const [nametagItemId, setNametagItemId] = useState("");
@@ -240,9 +252,10 @@ export function InventoryManager({
     inventoryPageStart + visibleItems.length,
   );
   const bulkSelectedItems = items.filter(
-    (item) => bulkSelectedIds.has(item.id) && canBulkSellItem(item),
+    (item) => bulkSelectedIds.has(item.id) && canSelectForLock(item),
   );
-  const bulkKnownPayout = bulkSelectedItems.reduce(
+  const bulkSellableItems = bulkSelectedItems.filter(canBulkSellItem);
+  const bulkKnownPayout = bulkSellableItems.reduce(
     (total, item) =>
       total +
       (item.marketPriceTokens === null
@@ -250,7 +263,7 @@ export function InventoryManager({
         : economySellbackPayoutTokens(item.marketPriceTokens)),
     0,
   );
-  const bulkUnknownPriceCount = bulkSelectedItems.filter(
+  const bulkUnknownPriceCount = bulkSellableItems.filter(
     (item) => item.marketPriceTokens === null,
   ).length;
 
@@ -271,6 +284,8 @@ export function InventoryManager({
     ? null
     : selected.state !== "available"
       ? "Attached or trade-reserved items cannot be sold."
+      : selected.saleLocked
+        ? "Unlock this item before selling it."
       : !selected.tradable
         ? "This account-bound item cannot be sold or traded."
       : selected.stickers.length
@@ -363,6 +378,13 @@ export function InventoryManager({
   }, [inventoryPageCount]);
 
   useEffect(() => {
+    setSaleLockOverrides((current) => {
+      const next = new Map(current);
+      for (const item of inventoryItems) {
+        if (next.get(item.id) === item.saleLocked) next.delete(item.id);
+      }
+      return next.size === current.size ? current : next;
+    });
     setSoldItemIds((current) => {
       const next = new Set(
         [...current].filter((itemId) =>
@@ -375,7 +397,7 @@ export function InventoryManager({
       const next = new Set(
         [...current].filter((itemId) =>
           inventoryItems.some(
-            (item) => item.id === itemId && canBulkSellItem(item),
+            (item) => item.id === itemId && canSelectForLock(item),
           ),
         ),
       );
@@ -435,7 +457,7 @@ export function InventoryManager({
   }
 
   function toggleSelectionMode() {
-    if (pending || bulkSelling) return;
+    if (pending || bulkSelling || bulkLocking) return;
     setSelectionMode((current) => {
       const next = !current;
       if (!next) setBulkSelectedIds(new Set());
@@ -448,18 +470,11 @@ export function InventoryManager({
   }
 
   function toggleBulkItem(item: EconomyItemView) {
-    if (bulkSelling) return;
-    if (!canBulkSellItem(item)) {
+    if (bulkSelling || bulkLocking) return;
+    if (!canSelectForLock(item)) {
       setNotice({
         type: "error",
-        text:
-          item.state !== "available"
-            ? "Attached or trade-reserved items cannot be bulk sold."
-            : !item.tradable
-              ? "Account-bound group rewards cannot be sold or traded."
-            : item.stickers.length
-              ? "Remove attached stickers before selecting this item for sale."
-              : "This item needs a current market or last-known price before it can be sold.",
+        text: "Consumed or revoked items cannot be updated.",
       });
       return;
     }
@@ -469,7 +484,7 @@ export function InventoryManager({
     ) {
       setNotice({
         type: "error",
-        text: `You can sell up to ${MAX_BULK_SELL_ITEMS} items at once.`,
+        text: `You can update up to ${MAX_BULK_SELL_ITEMS} items at once.`,
       });
       return;
     }
@@ -489,7 +504,7 @@ export function InventoryManager({
       const next = new Set(current);
       for (const item of visibleItems) {
         if (next.size >= MAX_BULK_SELL_ITEMS) break;
-        if (canBulkSellItem(item)) next.add(item.id);
+        if (canSelectForLock(item)) next.add(item.id);
       }
       return next;
     });
@@ -503,13 +518,13 @@ export function InventoryManager({
   }
 
   async function bulkSellItems() {
-    if (!bulkSelectedItems.length || bulkSelling) return;
+    if (!bulkSellableItems.length || bulkSelling || bulkLocking) return;
     if (!bulkSaleConfirming) {
       setBulkSaleConfirming(true);
       return;
     }
 
-    const saleItems = [...bulkSelectedItems];
+    const saleItems = [...bulkSellableItems];
     const itemIds = saleItems.map((item) => item.id);
     const signature = JSON.stringify([...itemIds].sort());
     if (bulkSaleRequestRef.current?.signature !== signature) {
@@ -588,6 +603,45 @@ export function InventoryManager({
       setBulkSaleConfirming(false);
       setBulkSelling(false);
     }
+  }
+
+  function updateSaleLocks(itemIds: string[], saleLocked: boolean) {
+    if (!itemIds.length || pending || bulkSelling || bulkLocking) return;
+    setBulkSaleConfirming(false);
+    setBulkLocking(true);
+    setNotice(null);
+    startTransition(async () => {
+      try {
+        const payload = itemIds.length === 1
+          ? { itemId: itemIds[0], saleLocked }
+          : { itemIds, saleLocked };
+        const result = await postEconomyAction(
+          "/api/economy/items/lock",
+          csrf,
+          payload,
+        );
+        setSaleLockOverrides((current) => {
+          const next = new Map(current);
+          for (const itemId of itemIds) next.set(itemId, saleLocked);
+          return next;
+        });
+        setSaleConfirmationItemId("");
+        setNotice({
+          type: "success",
+          text: result.message || `${itemIds.length} ${itemIds.length === 1 ? "item" : "items"} ${saleLocked ? "locked from" : "unlocked for"} sale.`,
+        });
+        router.refresh();
+      } catch (error) {
+        setNotice({
+          type: "error",
+          text: error instanceof Error
+            ? error.message
+            : "The inventory sale lock could not be updated.",
+        });
+      } finally {
+        setBulkLocking(false);
+      }
+    });
   }
 
   function runAction(
@@ -747,6 +801,7 @@ export function InventoryManager({
         <section
           className={`panel economy-bulk-toolbar${selectionMode ? " is-active" : ""}`}
           aria-label="Inventory selection actions"
+          aria-busy={bulkSelling || bulkLocking}
         >
           <div className="economy-bulk-toolbar-copy">
             <ListChecks aria-hidden="true" />
@@ -754,8 +809,8 @@ export function InventoryManager({
               <strong>{selectionMode ? "Selection mode" : "Bulk actions"}</strong>
               <span>
                 {selectionMode
-                  ? `${bulkSelectedItems.length.toLocaleString()} of ${MAX_BULK_SELL_ITEMS} sellable items selected`
-                  : `Select and sell up to ${MAX_BULK_SELL_ITEMS} items in one request.`}
+                  ? `${bulkSelectedItems.length.toLocaleString()} of ${MAX_BULK_SELL_ITEMS} items selected · ${bulkSellableItems.length.toLocaleString()} sellable`
+                  : `Select up to ${MAX_BULK_SELL_ITEMS} items to lock, unlock, or sell.`}
               </span>
             </div>
           </div>
@@ -765,7 +820,7 @@ export function InventoryManager({
                 <button
                   type="button"
                   className="button button-quiet"
-                  disabled={bulkSelling || bulkSelectedItems.length >= MAX_BULK_SELL_ITEMS || !visibleItems.some(canBulkSellItem)}
+                  disabled={bulkSelling || bulkLocking || bulkSelectedItems.length >= MAX_BULK_SELL_ITEMS || !visibleItems.some(canSelectForLock)}
                   onClick={selectSellablePage}
                 >
                   Select page
@@ -773,7 +828,7 @@ export function InventoryManager({
                 <button
                   type="button"
                   className="button button-quiet"
-                  disabled={bulkSelling || !bulkSelectedItems.length}
+                  disabled={bulkSelling || bulkLocking || !bulkSelectedItems.length}
                   onClick={() => {
                     setBulkSelectedIds(new Set());
                     setBulkSaleConfirming(false);
@@ -783,14 +838,30 @@ export function InventoryManager({
                 </button>
                 <button
                   type="button"
+                  className="button button-secondary inventory-lock-action"
+                  disabled={bulkSelling || bulkLocking || !bulkSelectedItems.length || bulkSelectedItems.every((item) => item.saleLocked)}
+                  onClick={() => updateSaleLocks(bulkSelectedItems.map((item) => item.id), true)}
+                >
+                  <LockKeyhole aria-hidden="true" /> Lock selected
+                </button>
+                <button
+                  type="button"
+                  className="button button-secondary inventory-lock-action"
+                  disabled={bulkSelling || bulkLocking || !bulkSelectedItems.length || bulkSelectedItems.every((item) => !item.saleLocked)}
+                  onClick={() => updateSaleLocks(bulkSelectedItems.map((item) => item.id), false)}
+                >
+                  <LockOpen aria-hidden="true" /> Unlock selected
+                </button>
+                <button
+                  type="button"
                   className="button inventory-sell-confirm"
-                  disabled={bulkSelling || !bulkSelectedItems.length}
+                  disabled={bulkSelling || bulkLocking || !bulkSellableItems.length}
                   onClick={() => void bulkSellItems()}
                 >
                   {bulkSelling ? (
                     <><LoaderCircle aria-hidden="true" className="economy-bulk-spinner" /> Selling…</>
                   ) : bulkSaleConfirming ? (
-                    <><Coins aria-hidden="true" /> Confirm sell {bulkSelectedItems.length}</>
+                    <><Coins aria-hidden="true" /> Confirm sell {bulkSellableItems.length}</>
                   ) : (
                     <><Coins aria-hidden="true" /> Sell selected</>
                   )}
@@ -801,7 +872,7 @@ export function InventoryManager({
               type="button"
               className={`button ${selectionMode ? "button-secondary" : "button-primary"}`}
               aria-pressed={selectionMode}
-              disabled={pending || bulkSelling}
+              disabled={pending || bulkSelling || bulkLocking}
               onClick={toggleSelectionMode}
             >
               <ListChecks aria-hidden="true" />
@@ -810,7 +881,7 @@ export function InventoryManager({
           </div>
           {selectionMode && bulkSaleConfirming ? (
             <p className="economy-bulk-confirmation" role="alert">
-              Selling is permanent. The current estimate is {formatTokens(bulkKnownPayout)} Tokens
+              Selling {bulkSellableItems.length} eligible {bulkSellableItems.length === 1 ? "item" : "items"} is permanent. The current estimate is {formatTokens(bulkKnownPayout)} Tokens
               {bulkUnknownPriceCount
                 ? ` plus ${bulkUnknownPriceCount} server-priced ${bulkUnknownPriceCount === 1 ? "item" : "items"}`
                 : ""}. Select Confirm sell to continue.
@@ -829,12 +900,12 @@ export function InventoryManager({
                   selected={selectionMode ? bulkSelectedIds.has(item.id) : selected?.id === item.id}
                   onSelect={() => selectionMode ? toggleBulkItem(item) : selectInventoryItem(item.id)}
                   selectionLabel={selectionMode
-                    ? `${bulkSelectedIds.has(item.id) ? "Remove" : "Add"} ${item.displayName} ${bulkSelectedIds.has(item.id) ? "from" : "to"} sale selection`
+                    ? `${bulkSelectedIds.has(item.id) ? "Remove" : "Add"} ${item.displayName} ${bulkSelectedIds.has(item.id) ? "from" : "to"} inventory selection`
                     : `Manage ${item.displayName}`}
                   selectionControls={!selectionMode && selected?.id === item.id ? `inventory-item-modal-${item.id}` : undefined}
                   enableMarketPreview
-                  disabled={bulkSelling}
-                  className={selectionMode && !canBulkSellItem(item) ? "is-selection-unavailable" : ""}
+                  disabled={bulkSelling || bulkLocking}
+                  className={selectionMode && !canSelectForLock(item) ? "is-selection-unavailable" : ""}
                 />
                 {!selectionMode && index === inventoryInlineModalIndex ? <div ref={setInventoryModalHost} className="inventory-inline-modal-host" aria-live="polite" /> : null}
               </Fragment>
@@ -1216,7 +1287,36 @@ export function InventoryManager({
                   </section>
                 ) : null}
                 </div>
-                <aside className="inventory-management-aside" aria-label="Market selling options">
+                <aside className="inventory-management-aside" aria-label="Sale protection and market selling options">
+                <section className="inventory-sale-lock-panel" aria-labelledby="inventory-sale-lock-heading">
+                  <header className="inventory-management-panel-heading">
+                    <div className="inventory-management-panel-title">
+                      {selected.saleLocked ? <LockKeyhole aria-hidden="true" /> : <LockOpen aria-hidden="true" />}
+                      <h4 id="inventory-sale-lock-heading">Sale protection</h4>
+                    </div>
+                    <small>{selected.saleLocked ? "Locked" : "Unlocked"}</small>
+                  </header>
+                  <div className="inventory-sale-lock-panel-body">
+                    <p className="empty-copy">
+                      {selected.saleLocked
+                        ? "This item cannot be sold until you unlock it. Other inventory uses remain available."
+                        : "Lock this item to protect it from individual and bulk sale actions."}
+                    </p>
+                    <button
+                      type="button"
+                      className="button button-secondary inventory-lock-action"
+                      disabled={pending || bulkLocking || !canSelectForLock(selected)}
+                      onClick={() => updateSaleLocks([selected.id], !selected.saleLocked)}
+                    >
+                      {selected.saleLocked ? <LockOpen aria-hidden="true" /> : <LockKeyhole aria-hidden="true" />}
+                      {bulkLocking
+                        ? "Saving…"
+                        : selected.saleLocked
+                          ? "Unlock for sale"
+                          : "Lock from sale"}
+                    </button>
+                  </div>
+                </section>
                 <section className="inventory-sell-panel" aria-labelledby="inventory-sell-heading">
                   <header className="inventory-management-panel-heading">
                     <div className="inventory-management-panel-title">
