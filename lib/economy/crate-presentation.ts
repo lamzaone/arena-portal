@@ -99,6 +99,16 @@ export function inlinePanelInsertionIndex(
   return Math.min(itemCount - 1, rowEnd);
 }
 
+export function crateDropDisclosureLabel(
+  expanded: boolean,
+  dropCount: number | null,
+) {
+  if (expanded) return "Hide possible drops";
+  return dropCount !== null && Number.isSafeInteger(dropCount) && dropCount >= 0
+    ? `Show ${dropCount.toLocaleString("en-US")} possible drops`
+    : "Show possible drops";
+}
+
 export function crateDropStateFromResponse<TCatalogue = Record<string, unknown>>(
   value: unknown,
   catalogueFromResponse: (

@@ -54,6 +54,7 @@ import {
 import {
   canAffordCratePurchase,
   clampCrateQuantity,
+  crateDropDisclosureLabel,
   cratePurchaseTotal,
   inlinePanelInsertionIndex,
   MAX_CRATE_PURCHASE_QUANTITY,
@@ -721,11 +722,15 @@ function MarketplaceContainerPanel({
   onClose: () => void;
 }) {
   const [quantity, setQuantity] = useState(1);
+  const [showDrops, setShowDrops] = useState(false);
+  const [dropsRequested, setDropsRequested] = useState(false);
   const [dropState, setDropState] = useState<EconomyCrateDropState>({
     status: "idle",
   });
   const quantityId = `market-container-${item.catalogueId ?? item.id}-quantity`;
   const quantityHelpId = `${quantityId}-help`;
+  const dropsToggleId = `market-container-${item.catalogueId ?? item.id}-drops-toggle`;
+  const dropsPanelId = `market-container-${item.catalogueId ?? item.id}-drops`;
   const unitPrice = item.marketPriceTokens;
   const priceAvailable =
     unitPrice !== null && Number.isSafeInteger(unitPrice) && unitPrice >= 0;
@@ -738,19 +743,26 @@ function MarketplaceContainerPanel({
   const canRefreshPrice = Boolean(item.marketHashName);
   const purchaseAvailable =
     item.catalogueId !== null &&
-    (priceAvailable || canRefreshPrice) &&
-    dropState.status === "ready";
+    (priceAvailable || canRefreshPrice);
   const buyLabel = pending
     ? "Buying..."
-    : dropState.status !== "ready"
-      ? "Verify drops before buying"
-      : unaffordable
-        ? "Not enough Tokens"
-        : totalPrice !== null
-          ? `Buy ${quantity} for ${formatTokens(totalPrice)} Tokens`
-          : canRefreshPrice
-            ? `Refresh price & buy ${quantity}`
-            : "Price pending staff";
+    : unaffordable
+      ? "Not enough Tokens"
+      : totalPrice !== null
+        ? `Buy ${quantity} for ${formatTokens(totalPrice)} Tokens`
+        : canRefreshPrice
+          ? `Refresh price & buy ${quantity}`
+          : "Price pending staff";
+  const dropToggleLabel = crateDropDisclosureLabel(
+    showDrops,
+    dropState.status === "ready" ? dropState.drops.length : null,
+  );
+
+  function toggleDrops() {
+    const next = !showDrops;
+    if (next) setDropsRequested(true);
+    setShowDrops(next);
+  }
 
   return (
     <section
@@ -779,12 +791,6 @@ function MarketplaceContainerPanel({
           <X aria-hidden="true" /> Close
         </button>
       </header>
-      <div className="crate-inline-modal-drops">
-        <CrateDropPreview
-          catalogueId={item.catalogueId}
-          onStateChange={setDropState}
-        />
-      </div>
       <div className="crate-catalogue-purchase crate-selected-purchase">
         <div
           className={`market-price-hud ${priceAvailable ? "" : "is-unavailable"}`}
@@ -877,6 +883,32 @@ function MarketplaceContainerPanel({
           <small className="crate-purchase-help" role="status">
             Need {formatTokens(totalPrice - walletBalance)} more Tokens.
           </small>
+        ) : null}
+      </div>
+      <button
+        id={dropsToggleId}
+        type="button"
+        className="button button-secondary market-buy-button crate-inline-drops-toggle"
+        aria-expanded={showDrops}
+        aria-controls={dropsPanelId}
+        disabled={pending}
+        onClick={toggleDrops}
+      >
+        <ChevronDown aria-hidden="true" /> {dropToggleLabel}
+      </button>
+      <div
+        id={dropsPanelId}
+        className="crate-inline-modal-drops"
+        role="region"
+        aria-labelledby={dropsToggleId}
+        hidden={!showDrops}
+        style={showDrops ? undefined : { display: "none" }}
+      >
+        {dropsRequested ? (
+          <CrateDropPreview
+            catalogueId={item.catalogueId}
+            onStateChange={setDropState}
+          />
         ) : null}
       </div>
     </section>
