@@ -1421,6 +1421,30 @@ code { padding: 2px 4px; border-radius: 4px; color: #fecdd3; background: rgba(22
   border-top: 1px solid var(--theme-border);
 }
 .loadout-action-bar .button { min-height: 40px; margin: 0; }
+.loadout-manager .loadout-action-bar > .button:first-child:not(.button-secondary) {
+  border-color: var(--theme-accent);
+  color: var(--theme-page-bg);
+  background: var(--theme-accent);
+  box-shadow: none;
+}
+.loadout-manager .loadout-action-bar > .button:first-child:not(.button-secondary):is(:hover, :focus-visible):not(:disabled) {
+  border-color: var(--theme-accent-soft);
+  color: var(--theme-page-bg);
+  background: var(--theme-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--theme-accent);
+}
+.loadout-manager .loadout-action-bar > .button:first-child:not(.button-secondary):focus-visible {
+  outline: 2px solid var(--theme-focus-ring);
+  outline-offset: 2px;
+}
+.loadout-manager .loadout-action-bar > .button:first-child:not(.button-secondary):disabled {
+  border-color: var(--theme-border);
+  color: var(--theme-text-subtle);
+  background: var(--theme-control-bg);
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: .52;
+}
 .loadout-action-bar .button-secondary { color: var(--theme-text-muted); }
 .loadout-spinner { width: 12px; height: 12px; animation: loadout-spinner 1s linear infinite; }
 @keyframes loadout-spinner { to { transform: rotate(360deg); } }
@@ -1448,7 +1472,8 @@ code { padding: 2px 4px; border-radius: 4px; color: #fecdd3; background: rgba(22
   .loadout-choice-grid,
   .loadout-current-slots { grid-template-columns: minmax(0, 1fr); }
   .loadout-team-target { width: 100%; grid-auto-columns: minmax(0, 1fr); }
-  .loadout-team-target button { min-width: 0; min-height: 44px; padding-inline: 8px; }
+  .loadout-team-target button,
+  .loadout-weapon-categories button { min-width: 0; min-height: 44px; padding-inline: 8px; }
   .loadout-action-bar .button { width: 100%; min-height: 44px; }
   .loadout-current-slot { grid-template-columns: 82px minmax(0, 1fr); }
 }
@@ -1472,7 +1497,11 @@ code { padding: 2px 4px; border-radius: 4px; color: #fecdd3; background: rgba(22
   .loadout-team-target button:focus-visible,
   .loadout-weapon-card:focus-visible,
   .loadout-choice-card:focus-visible,
-  .loadout-empty a:focus-visible { outline-color: Highlight; }
+  .loadout-action-bar .button:focus-visible,
+  .loadout-empty a:focus-visible {
+    outline: 3px solid Highlight !important;
+    outline-offset: 3px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .loadout-category-card,
