@@ -686,10 +686,18 @@ function MarketplaceContainerCard({
   expanded: boolean;
   onToggle: () => void;
 }) {
+  const discountLabel = discountPercentLabel(item);
   return (
     <EconomyItemCard
       item={item}
       enableMarketPreview
+      previewOverlay={
+        discountLabel ? (
+          <span className="market-artwork-discount-tag">
+            <BadgePercent aria-hidden="true" /> {discountLabel}
+          </span>
+        ) : null
+      }
       actions={
         <button
           id={marketContainerToggleId(item)}
@@ -701,7 +709,7 @@ function MarketplaceContainerCard({
           onClick={onToggle}
         >
           <ChevronDown aria-hidden="true" />
-          {expanded ? "Hide drops and purchase" : "View drops and purchase"}
+          {expanded ? "Hide purchase details" : "Buy / view drops"}
         </button>
       }
     />
