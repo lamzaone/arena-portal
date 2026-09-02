@@ -127,6 +127,22 @@ export function withRetainedOpenedItem<T extends { id: string }>(
   return next;
 }
 
+export function inventoryItemsDuringCrateOpening<T extends { id: string }>(
+  items: readonly T[],
+  consumedItemIds: ReadonlySet<string>,
+  retainedItem: T | null,
+  retainedIndex = items.length,
+) {
+  return withRetainedOpenedItem(
+    items.filter(
+      (item) =>
+        !consumedItemIds.has(item.id) || item.id === retainedItem?.id,
+    ),
+    retainedItem,
+    retainedIndex,
+  );
+}
+
 export function activeConsumedItemIds(
   currentIds: Iterable<string>,
   inventoryIds: ReadonlySet<string>,

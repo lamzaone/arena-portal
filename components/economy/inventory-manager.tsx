@@ -26,6 +26,10 @@ import {
   EconomyItemCard,
 } from "@/components/economy/economy-item-card";
 import {
+  InventorySingleCrateOpening,
+  useInventoryCrateOpening,
+} from "@/components/economy/inventory-crate-opening";
+import {
   createEconomyIdempotencyKey,
   EconomyActionRequestError,
   postEconomyAction,
@@ -51,6 +55,10 @@ import { PortalToast } from "@/components/success-toast";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { SearchField } from "@/components/ui/search-field";
 import {
+  inventoryItemsDuringCrateOpening,
+  isOpenableInventoryCrate,
+} from "@/lib/economy/inventory-selection";
+import {
   ECONOMY_SELLBACK_PERCENT_LABEL,
   economySellbackUsesMinimum,
 } from "@/lib/economy/sellback";
@@ -69,13 +77,6 @@ type InventoryManagerProps = {
   loadout: unknown;
   wallet: unknown;
   csrf: string;
-  selectionMode?: boolean;
-  onSelectionModeChange?: (active: boolean) => void;
-  selectionDisabled?: boolean;
-  interactionDisabled?: boolean;
-  interactionResetKey?: number;
-  onInteractionStart?: () => void;
-  onMutationActiveChange?: (active: boolean) => void;
 };
 
 type SortMode = "newest" | "name" | "rarity" | "float";
@@ -163,15 +164,9 @@ export function InventoryManager({
   loadout,
   wallet,
   csrf,
-  selectionMode: controlledSelectionMode,
-  onSelectionModeChange,
-  selectionDisabled = false,
-  interactionDisabled = false,
-  interactionResetKey = 0,
-  onInteractionStart,
-  onMutationActiveChange,
 }: InventoryManagerProps) {
   const router = useRouter();
+  const crateOpening = useInventoryCrateOpening({ csrf });
   const inventoryItems = useMemo(() => economyItems(inventory), [inventory]);
   const [saleLockOverrides, setSaleLockOverrides] = useState<Map<string, SaleLockOverride>>(
     () => new Map(),
@@ -179,13 +174,27 @@ export function InventoryManager({
   const inventoryRevisionRef = useRef(0);
   const saleLockRequestVersionRef = useRef(0);
   const [soldItemIds, setSoldItemIds] = useState<Set<string>>(() => new Set());
-  const items = useMemo(
+  const managedItems = useMemo(
     () => inventoryItems
       .filter((item) => !soldItemIds.has(item.id))
       .map((item) => saleLockOverrides.has(item.id)
         ? { ...item, saleLocked: saleLockOverrides.get(item.id)?.saleLocked ?? item.saleLocked }
         : item),
     [inventoryItems, saleLockOverrides, soldItemIds],
+  );
+  const selectedItemIndexRef = useRef(0);
+  const items = useMemo(
+    () => inventoryItemsDuringCrateOpening(
+      managedItems,
+      crateOpening.consumedItemIds,
+      crateOpening.retainedSingleCrate,
+      selectedItemIndexRef.current,
+    ),
+    [
+      crateOpening.consumedItemIds,
+      crateOpening.retainedSingleCrate,
+      managedItems,
+    ],
   );
   const loadoutView = useMemo(() => economyLoadout(loadout), [loadout]);
   const walletView = useMemo(() => economyWallet(wallet), [wallet]);
@@ -197,7 +206,7 @@ export function InventoryManager({
   const [inventoryPage, setInventoryPage] = useState(1);
   const [selectedId, setSelectedId] = useState("");
   const [internalSelectionMode, setInternalSelectionMode] = useState(false);
-  const selectionMode = controlledSelectionMode ?? internalSelectionMode;
+  const selectionMode = internalSelectionMode;
   const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -293,6 +302,8 @@ export function InventoryManager({
 
   const selected = visibleItems.find((item) => item.id === selectedId) ?? null;
   const selectedIndex = visibleItems.findIndex((item) => item.id === selectedId);
+  const selectedConsumedByOpening =
+    selected !== null && crateOpening.consumedItemIds.has(selected.id);
   const selectedSalePayout = selected?.sellbackPayoutTokens ?? null;
   const salePriceIsKnown = selectedSalePayout !== null;
   // Inventory records retain a saved snapshot while the Market can show a
@@ -302,6 +313,8 @@ export function InventoryManager({
   const saleIsConfirming = selected?.id === saleConfirmationItemId;
   const saleUnavailableReason = !selected
     ? null
+    : selectedConsumedByOpening
+      ? "This container has been opened and cannot be sold. Dismiss its result to continue browsing."
     : selected.state !== "available"
       ? "Attached or trade-reserved items cannot be sold."
       : selected.saleLocked
@@ -367,6 +380,8 @@ export function InventoryManager({
     (itemSupportsNametag(selected) ||
       itemSupportsCharm(selected) ||
       itemSupportsStickers(selected));
+  const inventoryInteractionBusy =
+    pending || bulkSelling || bulkLocking || crateOpening.busy;
 
   useEffect(() => {
     setDisplayWallet(walletView);
@@ -385,11 +400,12 @@ export function InventoryManager({
 
   useEffect(() => {
     if (selectedId && !visibleItems.some((item) => item.id === selectedId)) {
+      crateOpening.dismissSingle();
       setSelectedId("");
       setInventoryInlineModalIndex(-1);
       setSaleConfirmationItemId("");
     }
-  }, [selectedId, visibleItems]);
+  }, [crateOpening.dismissSingle, selectedId, visibleItems]);
 
   useEffect(() => {
     setInventoryPage(1);
@@ -436,26 +452,6 @@ export function InventoryManager({
   }, [selectionMode]);
 
   useEffect(() => {
-    if (!selectionDisabled || !selectionMode) return;
-    if (controlledSelectionMode === undefined) setInternalSelectionMode(false);
-    onSelectionModeChange?.(false);
-  }, [controlledSelectionMode, onSelectionModeChange, selectionDisabled, selectionMode]);
-
-  useEffect(() => {
-    onMutationActiveChange?.(pending || bulkSelling || bulkLocking);
-  }, [bulkLocking, bulkSelling, onMutationActiveChange, pending]);
-
-  useEffect(() => {
-    if (!interactionDisabled && interactionResetKey === 0) return;
-    setSelectedId("");
-    setInventoryInlineModalIndex(-1);
-    setSaleConfirmationItemId("");
-    setBulkSelectedIds(new Set());
-    setBulkSaleConfirming(false);
-    if (controlledSelectionMode === undefined) setInternalSelectionMode(false);
-  }, [controlledSelectionMode, interactionDisabled, interactionResetKey]);
-
-  useEffect(() => {
     const grid = inventoryGridRef.current;
     if (!grid) return;
 
@@ -479,14 +475,14 @@ export function InventoryManager({
   }, [selectedIndex, visibleItems.length]);
 
   function selectInventoryItem(itemId: string) {
-    if (interactionDisabled) return;
+    if (crateOpening.busy) return;
     const grid = inventoryGridRef.current;
     const columns = grid ? gridColumnCount(grid) : inventoryGridColumns;
     const nextSelectedId = selectedId === itemId ? "" : itemId;
-    if (nextSelectedId) onInteractionStart?.();
 
     setInventoryGridColumns(columns);
     if (!nextSelectedId) {
+      crateOpening.dismissSingle();
       setInventoryInlineModalIndex(-1);
       setSaleConfirmationItemId("");
       setSelectedId("");
@@ -494,6 +490,11 @@ export function InventoryManager({
     }
 
     const itemIndex = visibleItems.findIndex((item) => item.id === itemId);
+    selectedItemIndexRef.current = Math.max(
+      0,
+      items.findIndex((item) => item.id === itemId),
+    );
+    crateOpening.dismissSingle();
     setInventoryInlineModalIndex(
       rowEndIndex(itemIndex, columns, visibleItems.length),
     );
@@ -502,12 +503,17 @@ export function InventoryManager({
   }
 
   function closeInventoryItem(itemId: string) {
+    if (crateOpening.busy) return;
+    crateOpening.dismissSingle();
     setSelectedId("");
     setInventoryInlineModalIndex(-1);
     setSaleConfirmationItemId("");
-    window.requestAnimationFrame(() =>
-      document.getElementById(inventoryItemToggleId(itemId))?.focus(),
-    );
+    window.requestAnimationFrame(() => {
+      const originatingCard = document.getElementById(
+        inventoryItemToggleId(itemId),
+      );
+      (originatingCard ?? document.getElementById("inventory-manager-heading"))?.focus();
+    });
   }
 
   function toggleLoadoutTeam(team: "T" | "CT") {
@@ -518,20 +524,19 @@ export function InventoryManager({
   }
 
   function toggleSelectionMode() {
-    if (pending || bulkSelling || bulkLocking || selectionDisabled || interactionDisabled) return;
+    if (pending || bulkSelling || bulkLocking || crateOpening.busy) return;
     const next = !selectionMode;
-    if (next) onInteractionStart?.();
-    if (controlledSelectionMode === undefined) setInternalSelectionMode(next);
-    onSelectionModeChange?.(next);
+    setInternalSelectionMode(next);
     if (!next) setBulkSelectedIds(new Set());
     setBulkSaleConfirming(false);
+    crateOpening.dismissSingle();
     setSelectedId("");
     setInventoryInlineModalIndex(-1);
     setSaleConfirmationItemId("");
   }
 
   function toggleBulkItem(item: EconomyItemView) {
-    if (bulkSelling || bulkLocking || interactionDisabled) return;
+    if (bulkSelling || bulkLocking || crateOpening.busy) return;
     if (!canSelectForLock(item)) {
       setNotice({
         type: "error",
@@ -572,6 +577,7 @@ export function InventoryManager({
   }
 
   function changeInventoryPage(page: number) {
+    crateOpening.dismissSingle();
     setInventoryPage(page);
     setSelectedId("");
     setInventoryInlineModalIndex(-1);
@@ -579,7 +585,7 @@ export function InventoryManager({
   }
 
   async function bulkSellItems() {
-    if (!bulkSellableItems.length || bulkSelling || bulkLocking || interactionDisabled) return;
+    if (!bulkSellableItems.length || bulkSelling || bulkLocking || crateOpening.busy) return;
     if (!bulkSaleConfirming) {
       setBulkSaleConfirming(true);
       return;
@@ -652,9 +658,7 @@ export function InventoryManager({
           `${soldIds.length} ${soldIds.length === 1 ? "item" : "items"} sold for ${formatTokens(payoutTokens)} Tokens.`,
       });
       const keepSelectionMode = unsoldIds.length > 0;
-      if (controlledSelectionMode === undefined)
-        setInternalSelectionMode(keepSelectionMode);
-      onSelectionModeChange?.(keepSelectionMode);
+      setInternalSelectionMode(keepSelectionMode);
     } catch (error) {
       setNotice({
         type: "error",
@@ -670,7 +674,7 @@ export function InventoryManager({
   }
 
   function updateSaleLocks(itemIds: string[], saleLocked: boolean) {
-    if (!itemIds.length || pending || bulkSelling || bulkLocking || interactionDisabled) return;
+    if (!itemIds.length || pending || bulkSelling || bulkLocking || crateOpening.busy) return;
     const requestVersion = ++saleLockRequestVersionRef.current;
     setSaleLockOverrides((current) => beginSaleLockOverrides(
       current,
@@ -727,7 +731,7 @@ export function InventoryManager({
     payload: Record<string, unknown>,
     success: string,
   ) {
-    if (!selected || interactionDisabled) return;
+    if (!selected || crateOpening.busy) return;
     let requestId: string | undefined;
     if (path === "/api/economy/items/vip/activate") {
       if (vipActivationRequestRef.current?.itemId !== selected.id) {
@@ -770,13 +774,13 @@ export function InventoryManager({
   }
 
   return (
-    <section className="inventory-manager" aria-label="Inventory manager" aria-busy={pending || bulkSelling || bulkLocking || interactionDisabled}>
+    <section className="inventory-manager" aria-label="Inventory manager" aria-busy={pending || bulkSelling || bulkLocking || crateOpening.busy}>
       <div className="content-grid">
         <div className="panel">
           <p className="eyebrow">
             <ShieldCheck aria-hidden="true" /> Token inventory
           </p>
-          <h2>Every item you own, in one place.</h2>
+          <h2 id="inventory-manager-heading" tabIndex={-1}>Every item you own, in one place.</h2>
           <p className="empty-copy">
             Browse, search, equip, name, and customize eligible items. Changes
             are checked against your owned item instance before the server
@@ -806,12 +810,14 @@ export function InventoryManager({
             onValueChange={setQuery}
             placeholder="Name, rarity, tag, or item type"
             autoComplete="off"
+            disabled={inventoryInteractionBusy}
           />
           <label htmlFor="inventory-sort">
             Sort by
             <select
               id="inventory-sort"
               value={sort}
+              disabled={inventoryInteractionBusy}
               onChange={(event) => setSort(event.target.value as SortMode)}
             >
               <option value="newest">Newest first</option>
@@ -825,6 +831,7 @@ export function InventoryManager({
             <select
               id="inventory-type"
               value={type}
+              disabled={inventoryInteractionBusy}
               onChange={(event) => setType(event.target.value)}
             >
               <option value="all">All item types</option>
@@ -840,6 +847,7 @@ export function InventoryManager({
             <select
               id="inventory-rarity"
               value={rarity}
+              disabled={inventoryInteractionBusy}
               onChange={(event) => setRarity(event.target.value)}
             >
               <option value="all">All rarities</option>
@@ -862,6 +870,7 @@ export function InventoryManager({
             <button
               type="button"
               className="button button-secondary"
+              disabled={inventoryInteractionBusy}
               onClick={() => {
                 setQuery("");
                 setType("all");
@@ -879,7 +888,7 @@ export function InventoryManager({
         <section
           className={`panel economy-bulk-toolbar${selectionMode ? " is-active" : ""}`}
           aria-label="Inventory selection actions"
-          aria-busy={bulkSelling || bulkLocking}
+          aria-busy={inventoryInteractionBusy}
         >
           <div className="economy-bulk-toolbar-copy">
             <ListChecks aria-hidden="true" />
@@ -888,9 +897,7 @@ export function InventoryManager({
               <span>
                 {selectionMode
                   ? `${bulkSelectedItems.length.toLocaleString()} of ${MAX_BULK_SELL_ITEMS} items selected · ${bulkSellableItems.length.toLocaleString()} sellable`
-                  : selectionDisabled
-                    ? "Finish or dismiss the current crate opening before selecting inventory items."
-                    : `Select up to ${MAX_BULK_SELL_ITEMS} items to lock, unlock, or sell.`}
+                  : `Select up to ${MAX_BULK_SELL_ITEMS} items to lock, unlock, sell, or open crates.`}
               </span>
             </div>
           </div>
@@ -900,7 +907,7 @@ export function InventoryManager({
                 <button
                   type="button"
                   className="button button-quiet"
-                  disabled={interactionDisabled || bulkSelling || bulkLocking || bulkSelectedItems.length >= MAX_BULK_SELL_ITEMS || !visibleItems.some(canSelectForLock)}
+                  disabled={crateOpening.busy || bulkSelling || bulkLocking || bulkSelectedItems.length >= MAX_BULK_SELL_ITEMS || !visibleItems.some(canSelectForLock)}
                   onClick={selectSellablePage}
                 >
                   Select page
@@ -908,7 +915,7 @@ export function InventoryManager({
                 <button
                   type="button"
                   className="button button-quiet"
-                  disabled={interactionDisabled || bulkSelling || bulkLocking || !bulkSelectedItems.length}
+                  disabled={crateOpening.busy || bulkSelling || bulkLocking || !bulkSelectedItems.length}
                   onClick={() => {
                     setBulkSelectedIds(new Set());
                     setBulkSaleConfirming(false);
@@ -919,7 +926,7 @@ export function InventoryManager({
                 <button
                   type="button"
                   className="button button-secondary inventory-lock-action"
-                  disabled={interactionDisabled || bulkSelling || bulkLocking || !bulkSelectedItems.length || bulkSelectedItems.every((item) => item.saleLocked)}
+                  disabled={crateOpening.busy || bulkSelling || bulkLocking || !bulkSelectedItems.length || bulkSelectedItems.every((item) => item.saleLocked)}
                   onClick={() => updateSaleLocks(bulkSelectedItems.map((item) => item.id), true)}
                 >
                   <LockKeyhole aria-hidden="true" /> Lock selected
@@ -927,7 +934,7 @@ export function InventoryManager({
                 <button
                   type="button"
                   className="button button-secondary inventory-lock-action"
-                  disabled={interactionDisabled || bulkSelling || bulkLocking || !bulkSelectedItems.length || bulkSelectedItems.every((item) => !item.saleLocked)}
+                  disabled={crateOpening.busy || bulkSelling || bulkLocking || !bulkSelectedItems.length || bulkSelectedItems.every((item) => !item.saleLocked)}
                   onClick={() => updateSaleLocks(bulkSelectedItems.map((item) => item.id), false)}
                 >
                   <LockOpen aria-hidden="true" /> Unlock selected
@@ -935,7 +942,7 @@ export function InventoryManager({
                 <button
                   type="button"
                   className="button inventory-sell-confirm"
-                  disabled={interactionDisabled || bulkSelling || bulkLocking || !bulkSellableItems.length}
+                  disabled={crateOpening.busy || bulkSelling || bulkLocking || !bulkSellableItems.length}
                   onClick={() => void bulkSellItems()}
                 >
                   {bulkSelling ? (
@@ -952,7 +959,7 @@ export function InventoryManager({
               type="button"
               className={`button ${selectionMode ? "button-secondary" : "button-primary"}`}
               aria-pressed={selectionMode}
-              disabled={pending || bulkSelling || bulkLocking || selectionDisabled}
+              disabled={pending || bulkSelling || bulkLocking || crateOpening.busy}
               onClick={toggleSelectionMode}
             >
               <ListChecks aria-hidden="true" />
@@ -985,7 +992,7 @@ export function InventoryManager({
                   selectionControls={!selectionMode && selected?.id === item.id ? `inventory-item-modal-${item.id}` : undefined}
                   selectionId={inventoryItemToggleId(item.id)}
                   enableMarketPreview
-                  disabled={bulkSelling || bulkLocking || interactionDisabled}
+                  disabled={bulkSelling || bulkLocking || crateOpening.busy}
                   className={selectionMode && !canSelectForLock(item) ? "is-selection-unavailable" : ""}
                 />
                 {!selectionMode && index === inventoryInlineModalIndex ? <div ref={setInventoryModalHost} className="inventory-inline-modal-host" aria-live="polite" /> : null}
@@ -1002,11 +1009,11 @@ export function InventoryManager({
             page={visibleInventoryPage}
             pageSize={INVENTORY_PAGE_SIZE}
             totalItems={filtered.length}
-            disabled={pending || bulkSelling}
+            disabled={inventoryInteractionBusy}
             label="Inventory pages"
             onPageChange={changeInventoryPage}
           />
-          {!selectionMode && !interactionDisabled && inventoryModalHost && selected ? createPortal(
+          {!selectionMode && inventoryModalHost && selected ? createPortal(
           <section
             id={`inventory-item-modal-${selected.id}`}
             data-ui="item-modal"
@@ -1018,7 +1025,7 @@ export function InventoryManager({
                   <p className="eyebrow"><Sword aria-hidden="true" /> Item management</p>
                   <h3>{selected.displayName}</h3>
                 </div>
-                <button type="button" className="button button-quiet crate-inline-modal-close" onClick={() => closeInventoryItem(selected.id)} disabled={pending} aria-label={`Close ${selected.displayName} item management`}>
+                <button type="button" className="button button-quiet crate-inline-modal-close" onClick={() => closeInventoryItem(selected.id)} disabled={inventoryInteractionBusy} aria-label={`Close ${selected.displayName} item management`}>
                   <X aria-hidden="true" /> Close
                 </button>
               </header>
@@ -1034,7 +1041,7 @@ export function InventoryManager({
                       <p className="inventory-detail-description">{selected.description}</p>
                     ) : null}
                     <div className="tag-list inventory-detail-tags" aria-label="Item details">
-                      <span className="tag">{humanize(selected.state)}</span>
+                      <span className="tag">{selectedConsumedByOpening ? "Opened" : humanize(selected.state)}</span>
                       {selected.floatValue !== null ? <span className="tag">Float {selected.floatValue.toFixed(6)}</span> : null}
                       {selected.seed !== null ? <span className="tag">Seed {selected.seed}</span> : null}
                       {selected.equippedSlots.map((slot) => <span key={slot} className="tag tag-vip">Equipped: {humanize(slot)}</span>)}
@@ -1042,6 +1049,12 @@ export function InventoryManager({
                     </div>
                   </div>
                 </div>
+                {isOpenableInventoryCrate(selected) ? (
+                  <InventorySingleCrateOpening
+                    crate={selected}
+                    controller={crateOpening}
+                  />
+                ) : null}
                 <div className="inventory-management-loadout">
                 {selectedVipMembership ? (
                   <fieldset className="form-panel inventory-vip-activation">
@@ -1174,7 +1187,9 @@ export function InventoryManager({
                       </button>
                     </div>
                   </fieldset>
-                ) : !selectedVipMembership && !selectedProfileTheme ? (
+                ) : !selectedVipMembership &&
+                  !selectedProfileTheme &&
+                  !isOpenableInventoryCrate(selected) ? (
                   <p className="empty-copy">
                     This item is kept in your inventory and cannot be equipped
                     in a loadout slot.
@@ -1386,7 +1401,7 @@ export function InventoryManager({
                     <button
                       type="button"
                       className="button button-secondary inventory-lock-action"
-                      disabled={pending || bulkLocking || !canSelectForLock(selected)}
+                      disabled={inventoryInteractionBusy || selectedConsumedByOpening || !canSelectForLock(selected)}
                       onClick={() => updateSaleLocks([selected.id], !selected.saleLocked)}
                     >
                       {selected.saleLocked ? <LockOpen aria-hidden="true" /> : <LockKeyhole aria-hidden="true" />}
@@ -1446,7 +1461,7 @@ export function InventoryManager({
                             <button
                               type="button"
                               className="button inventory-sell-confirm"
-                              disabled={pending}
+                              disabled={inventoryInteractionBusy}
                               onClick={() =>
                                 runAction(
                                   "/api/economy/items/sell",
@@ -1464,7 +1479,7 @@ export function InventoryManager({
                             <button
                               type="button"
                               className="button button-secondary"
-                              disabled={pending}
+                              disabled={inventoryInteractionBusy}
                               onClick={() => setSaleConfirmationItemId("")}
                             >
                               Cancel
@@ -1474,7 +1489,7 @@ export function InventoryManager({
                           <button
                             type="button"
                             className="button inventory-sell-start"
-                            disabled={pending}
+                            disabled={inventoryInteractionBusy}
                             onClick={() => setSaleConfirmationItemId(selected.id)}
                           >
                             <Coins aria-hidden="true" /> {salePriceIsKnown

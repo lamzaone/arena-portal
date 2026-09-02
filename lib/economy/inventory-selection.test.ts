@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   activeConsumedItemIds,
   crateOnlySelection,
+  inventoryItemsDuringCrateOpening,
   isOpenableInventoryCrate,
   inventoryWorkflowAccess,
   nextInventorySelectionOwner,
@@ -259,6 +260,29 @@ test("a retained result stays consumed after the refreshed inventory drops it", 
       "opened-crate",
     ),
     ["opened-crate", "owned-crate"],
+  );
+});
+
+test("committed crates disappear except for the retained single reveal", () => {
+  const first = { id: "crate-1" };
+  const second = { id: "crate-2" };
+  const third = { id: "skin-1" };
+  assert.deepEqual(
+    inventoryItemsDuringCrateOpening(
+      [first, second, third],
+      new Set([first.id, second.id]),
+      first,
+      0,
+    ),
+    [first, third],
+  );
+  assert.deepEqual(
+    inventoryItemsDuringCrateOpening(
+      [first, second, third],
+      new Set([first.id, second.id]),
+      null,
+    ),
+    [third],
   );
 });
 
