@@ -261,7 +261,7 @@ export async function POST(request: Request) {
     return economyJsonSuccess({
       ...result,
       balance: result.wallet.balance,
-      message: `Item sold for ${result.payoutTokens} Tokens (${ECONOMY_SELLBACK_PERCENT_LABEL} of its ${result.marketPriceTokens}-Token portal market price).`,
+      message: `Item sold for ${result.payoutTokens} Tokens (${ECONOMY_SELLBACK_PERCENT_LABEL} of its ${result.sellbackBasisTokens}-Token sellback basis; current portal market price: ${result.marketPriceTokens} Tokens).`,
     });
   } catch (error) {
     return economyMutationFailure(error);

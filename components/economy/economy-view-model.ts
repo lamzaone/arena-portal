@@ -3,6 +3,7 @@ import {
   economyRarityRankClass,
 } from "@/lib/economy/item-taxonomy";
 import { economyItemDisplayName } from "@/lib/economy/item-display-name";
+import { resolveEconomySellback } from "@/lib/economy/sellback";
 
 export type EconomyItemView = {
   id: string;
@@ -16,6 +17,11 @@ export type EconomyItemView = {
   saleLocked: boolean;
   marketHashName: string | null;
   marketPriceTokens: number | null;
+  sellbackStatus: "resolved" | "unpriced" | "rejected";
+  sellbackBasisTokens: number | null;
+  recordedPurchasePriceTokens: number | null;
+  sellbackPayoutTokens: number | null;
+  sellbackPayoutCappedAtRecordedPurchasePrice: boolean;
   marketBasePriceTokens: number | null;
   marketPriceEuroCents: number | null;
   marketBasePriceEuroCents: number | null;
@@ -328,6 +334,18 @@ export function toEconomyItem(value: unknown): EconomyItemView {
   const discountTokens = integer(appliedDiscount?.discountTokens);
   const discountName = text(appliedDiscount?.displayName, "");
   const tradableValue = firstDefined(record, ["tradable", "isTradable"]);
+  const marketPriceTokens = number(
+    firstDefined(record, [
+      "displayPriceTokens",
+      "directPurchasePriceTokens",
+      "marketPriceTokens",
+      "priceTokens",
+      "tokenPrice",
+    ]),
+    number(firstDefined(nestedPrice, ["tokenPrice", "priceTokens"])),
+  );
+  const source = isRecord(record.source) ? record.source : {};
+  const sellback = resolveEconomySellback({ marketPriceTokens, source });
 
   return {
     id,
@@ -354,16 +372,19 @@ export function toEconomyItem(value: unknown): EconomyItemView {
           "",
         ),
       ) || null,
-    marketPriceTokens: number(
-      firstDefined(record, [
-        "displayPriceTokens",
-        "directPurchasePriceTokens",
-        "marketPriceTokens",
-        "priceTokens",
-        "tokenPrice",
-      ]),
-      number(firstDefined(nestedPrice, ["tokenPrice", "priceTokens"])),
-    ),
+    marketPriceTokens,
+    sellbackStatus: sellback.status,
+    sellbackBasisTokens:
+      sellback.status === "resolved" ? sellback.sellbackBasisTokens : null,
+    recordedPurchasePriceTokens:
+      sellback.status === "resolved"
+        ? sellback.recordedPurchasePriceTokens
+        : null,
+    sellbackPayoutTokens:
+      sellback.status === "resolved" ? sellback.payoutTokens : null,
+    sellbackPayoutCappedAtRecordedPurchasePrice:
+      sellback.status === "resolved" &&
+      sellback.payoutCappedAtRecordedPurchasePrice,
     marketBasePriceTokens: number(
       firstDefined(record, ["displayBasePriceTokens", "basePriceTokens"]),
       number(

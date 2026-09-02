@@ -50,7 +50,10 @@ import {
   normalizeMarketplaceFloatValue,
   selectMarketplacePriceFallback,
 } from "@/lib/economy/market-pricing";
-import { economySellbackPayoutTokens } from "@/lib/economy/sellback";
+import {
+  ECONOMY_SELLBACK_BASIS_POINTS,
+  resolveEconomySellback,
+} from "@/lib/economy/sellback";
 import type { VipTimedConversionKind } from "@/lib/economy/vip-membership-conversion";
 
 type StatRow = RowDataPacket & {
@@ -4270,6 +4273,8 @@ export type ResolvedEconomyMarketSalePrice = {
 export type SellEconomyItemResult = {
   itemId: string;
   marketPriceTokens: number;
+  sellbackBasisTokens: number;
+  recordedPurchasePriceTokens: number | null;
   payoutTokens: number;
   wallet: TokenWallet;
 };
@@ -4292,6 +4297,8 @@ export type SellEconomyItemsResult = {
   items: Array<{
     itemId: string;
     marketPriceTokens: number;
+    sellbackBasisTokens: number;
+    recordedPurchasePriceTokens: number | null;
     payoutTokens: number;
   }>;
   itemIds: string[];
@@ -11294,8 +11301,27 @@ export async function sellEconomyItem(
           "This item has no current market or last-known price.",
         );
       }
-      // Low-value market items still have the shared 5-Token minimum.
-      const payoutTokens = economySellbackPayoutTokens(marketPriceTokens);
+      const sellback = resolveEconomySellback({
+        marketPriceTokens,
+        source: item.source,
+      });
+      if (sellback.status === "rejected") {
+        economyError(
+          "item_unavailable",
+          "This discounted marketplace purchase is missing valid payment evidence and cannot be sold.",
+        );
+      }
+      if (sellback.status !== "resolved") {
+        economyError(
+          "price_unavailable",
+          "This item has no current market or last-known price.",
+        );
+      }
+      const {
+        sellbackBasisTokens,
+        recordedPurchasePriceTokens,
+        payoutTokens,
+      } = sellback;
 
       await applyTokenDelta({
         connection: context.connection,
@@ -11309,11 +11335,14 @@ export async function sellEconomyItem(
         lineKey: "sale:credit",
         actorSteamId: steamId,
         metadata: {
+          currentMarketPriceTokens: marketPriceTokens,
           marketPriceTokens,
+          sellbackBasisTokens,
+          recordedPurchasePriceTokens,
           marketPriceEurCents:
             marketQuote?.euroCents ?? fallbackPrice?.euroCents,
           payoutTokens,
-          sellRateBps: 1_000,
+          sellRateBps: ECONOMY_SELLBACK_BASIS_POINTS,
           priceSource: marketQuote?.source ?? fallbackPrice?.source,
           priceSourceReference:
             marketQuote?.sourceReference ?? fallbackPrice?.sourceReference,
@@ -11340,9 +11369,12 @@ export async function sellEconomyItem(
         beforeState: economyInventorySnapshot(item),
         afterState: { ...economyInventorySnapshot(item), state: "consumed" },
         metadata: {
+          currentMarketPriceTokens: marketPriceTokens,
           marketPriceTokens,
+          sellbackBasisTokens,
+          recordedPurchasePriceTokens,
           payoutTokens,
-          sellRateBps: 1_000,
+          sellRateBps: ECONOMY_SELLBACK_BASIS_POINTS,
           priceSource: marketQuote?.source ?? fallbackPrice?.source,
           priceSourceReference:
             marketQuote?.sourceReference ?? fallbackPrice?.sourceReference,
@@ -11367,7 +11399,14 @@ export async function sellEconomyItem(
           "wallet_unavailable",
           "The sale wallet was not locked.",
         );
-      return { itemId, marketPriceTokens, payoutTokens, wallet };
+      return {
+        itemId,
+        marketPriceTokens,
+        sellbackBasisTokens,
+        recordedPurchasePriceTokens,
+        payoutTokens,
+        wallet,
+      };
     },
   });
 }
@@ -11483,8 +11522,23 @@ export async function sellEconomyItems(
             "price_unavailable",
             "One or more selected items have no current market or last-known price.",
           );
-        const payoutTokens = economySellbackPayoutTokens(marketPriceTokens);
-        return { sale, item, marketPriceTokens, payoutTokens, fallbackPrice };
+        const sellback = resolveEconomySellback({
+          marketPriceTokens,
+          source: item.source,
+        });
+        if (sellback.status === "rejected") {
+          economyError(
+            "item_unavailable",
+            "One or more discounted marketplace purchases are missing valid payment evidence and cannot be sold.",
+          );
+        }
+        if (sellback.status !== "resolved") {
+          economyError(
+            "price_unavailable",
+            "One or more selected items have no current market or last-known price.",
+          );
+        }
+        return { sale, item, fallbackPrice, ...sellback };
       });
       const payoutTokens = prepared.reduce((total, sale) => {
         const next = total + sale.payoutTokens;
@@ -11509,10 +11563,13 @@ export async function sellEconomyItems(
         metadata: {
           itemCount: prepared.length,
           payoutTokens,
-          sellRateBps: 1_000,
-          items: prepared.map(({ sale, item, marketPriceTokens, payoutTokens: itemPayout, fallbackPrice }) => ({
+          sellRateBps: ECONOMY_SELLBACK_BASIS_POINTS,
+          items: prepared.map(({ sale, item, marketPriceTokens, sellbackBasisTokens, recordedPurchasePriceTokens, payoutTokens: itemPayout, fallbackPrice }) => ({
             itemId: item.id,
+            currentMarketPriceTokens: marketPriceTokens,
             marketPriceTokens,
+            sellbackBasisTokens,
+            recordedPurchasePriceTokens,
             payoutTokens: itemPayout,
             priceSource: sale.marketQuote?.source ?? fallbackPrice?.source,
             priceSourceReference:
@@ -11541,7 +11598,7 @@ export async function sellEconomyItems(
       await clearEconomyLoadoutSlots(context.connection, steamId, itemIds);
       await writeInventoryEvents(
         context.connection,
-        prepared.map(({ sale, item, marketPriceTokens, payoutTokens: itemPayout, fallbackPrice }, index) => ({
+        prepared.map(({ sale, item, marketPriceTokens, sellbackBasisTokens, recordedPurchasePriceTokens, payoutTokens: itemPayout, fallbackPrice }, index) => ({
           itemId: item.id,
           actorSteamId: steamId,
           eventType: "marketplace.sold",
@@ -11550,9 +11607,12 @@ export async function sellEconomyItems(
           beforeState: economyInventorySnapshot(item),
           afterState: { ...economyInventorySnapshot(item), state: "consumed" },
           metadata: {
+            currentMarketPriceTokens: marketPriceTokens,
             marketPriceTokens,
+            sellbackBasisTokens,
+            recordedPurchasePriceTokens,
             payoutTokens: itemPayout,
-            sellRateBps: 1_000,
+            sellRateBps: ECONOMY_SELLBACK_BASIS_POINTS,
             priceSource: sale.marketQuote?.source ?? fallbackPrice?.source,
             priceSourceReference:
               sale.marketQuote?.sourceReference ?? fallbackPrice?.sourceReference,
@@ -11573,9 +11633,11 @@ export async function sellEconomyItems(
         "sold",
         itemIds,
       );
-      const results = prepared.map(({ item, marketPriceTokens, payoutTokens }) => ({
+      const results = prepared.map(({ item, marketPriceTokens, sellbackBasisTokens, recordedPurchasePriceTokens, payoutTokens }) => ({
         itemId: item.id,
         marketPriceTokens,
+        sellbackBasisTokens,
+        recordedPurchasePriceTokens,
         payoutTokens,
       }));
       return {

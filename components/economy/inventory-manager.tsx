@@ -52,7 +52,6 @@ import { PaginationControls } from "@/components/ui/pagination-controls";
 import { SearchField } from "@/components/ui/search-field";
 import {
   ECONOMY_SELLBACK_PERCENT_LABEL,
-  economySellbackPayoutTokens,
   economySellbackUsesMinimum,
 } from "@/lib/economy/sellback";
 import {
@@ -150,6 +149,7 @@ function rowEndIndex(itemIndex: number, columns: number, itemCount: number) {
 function canBulkSellItem(item: EconomyItemView) {
   return (
     canSellInventoryItem(item) &&
+    item.sellbackStatus !== "rejected" &&
     (item.marketPriceTokens !== null || item.catalogueId !== null)
   );
 }
@@ -280,21 +280,16 @@ export function InventoryManager({
   const bulkKnownPayout = bulkSellableItems.reduce(
     (total, item) =>
       total +
-      (item.marketPriceTokens === null
-        ? 0
-        : economySellbackPayoutTokens(item.marketPriceTokens)),
+      (item.sellbackPayoutTokens ?? 0),
     0,
   );
   const bulkUnknownPriceCount = bulkSellableItems.filter(
-    (item) => item.marketPriceTokens === null,
+    (item) => item.sellbackPayoutTokens === null,
   ).length;
 
   const selected = visibleItems.find((item) => item.id === selectedId) ?? null;
   const selectedIndex = visibleItems.findIndex((item) => item.id === selectedId);
-  const selectedSalePayout =
-    selected?.marketPriceTokens !== null && selected?.marketPriceTokens !== undefined
-      ? economySellbackPayoutTokens(selected.marketPriceTokens)
-      : null;
+  const selectedSalePayout = selected?.sellbackPayoutTokens ?? null;
   const salePriceIsKnown =
     selectedSalePayout !== null && selectedSalePayout >= 1;
   // Inventory records retain a saved snapshot while the Market can show a
@@ -312,6 +307,8 @@ export function InventoryManager({
         ? "This account-bound item cannot be sold or traded."
       : selected.stickers.length
         ? "Remove the attached stickers before selling this item."
+      : selected.sellbackStatus === "rejected"
+        ? "This discounted marketplace purchase is missing valid payment evidence and cannot be sold."
       : !salePriceIsKnown && !saleCanResolveFromMarket
         ? "This item needs a current market or last-known price before it can be sold."
         : null;
@@ -1415,15 +1412,19 @@ export function InventoryManager({
                               : "Market quote"}
                           </strong>
                           <small>
-                            {salePriceIsKnown
-                              ? selected.marketPriceTokens !== null && economySellbackUsesMinimum(selected.marketPriceTokens)
-                                ? `Minimum 5-Token buyback for this ${formatTokens(selected.marketPriceTokens)}-Token market price.`
-                                : `${ECONOMY_SELLBACK_PERCENT_LABEL} of the current ${formatTokens(selected.marketPriceTokens ?? 0)}-Token market price.`
+                            {salePriceIsKnown && selected.sellbackBasisTokens !== null
+                              ? selected.sellbackPayoutCappedAtRecordedPurchasePrice
+                                ? `The 5-Token minimum is capped at your recorded ${formatTokens(selected.recordedPurchasePriceTokens ?? 0)}-Token purchase price.`
+                                : economySellbackUsesMinimum(selected.sellbackBasisTokens)
+                                  ? `Minimum 5-Token buyback for this ${formatTokens(selected.sellbackBasisTokens)}-Token sellback basis.`
+                                  : selected.recordedPurchasePriceTokens !== null
+                                    ? `${ECONOMY_SELLBACK_PERCENT_LABEL} of the lower of the current ${formatTokens(selected.marketPriceTokens ?? 0)}-Token market price and your recorded ${formatTokens(selected.recordedPurchasePriceTokens)}-Token purchase price.`
+                                    : `${ECONOMY_SELLBACK_PERCENT_LABEL} of the current ${formatTokens(selected.marketPriceTokens ?? 0)}-Token market price.`
                               : `Your final ${ECONOMY_SELLBACK_PERCENT_LABEL} payout is resolved from the same current quote shown in Market.`}
                           </small>
                         </div>
                         <p className="empty-copy">
-                          Uses the current portal Market price or its staff-set last-known price. Selling permanently removes this item from your inventory and clears it from your loadout.
+                          Uses the current portal Market price or its staff-set last-known price. Discounted marketplace purchases use the lower of that price and the recorded amount paid. Selling permanently removes this item from your inventory and clears it from your loadout.
                         </p>
                         {saleIsConfirming ? (
                           <div className="hero-actions inventory-sell-confirmation">
