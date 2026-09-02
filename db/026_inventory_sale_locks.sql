@@ -1,4 +1,5 @@
--- Run this migration against PORTAL_DATABASE_URL after 021_economy_operation_retention.sql.
+-- Run this migration against PORTAL_DATABASE_URL after
+-- 025_arena_group_commerce_bridge.sql.
 -- Sale locks are independent from the inventory lifecycle: locked items remain
 -- available for loadouts, trades, customisation, and crate opening.
 

@@ -90,7 +90,7 @@ git commit -m "feat: add owned weapon loadout grouping"
 ### Task 2: Persistent sale-lock policy and mutation
 
 **Files:**
-- Create: `db/022_inventory_sale_locks.sql`
+- Create: `db/026_inventory_sale_locks.sql`
 - Create: `lib/economy/inventory-sale-lock.ts`
 - Create: `lib/economy/inventory-sale-lock.test.ts`
 - Create: `app/api/economy/items/lock/route.ts`
@@ -146,7 +146,7 @@ Expected: PASS with locked and unlocked policy cases plus all existing suites.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add db/022_inventory_sale_locks.sql lib/data/portal-repository.ts lib/economy/inventory-sale-lock.ts lib/economy/inventory-sale-lock.test.ts components/economy/economy-view-model.ts app/api/economy/items/lock/route.ts app/api/economy/items/sell/route.ts package.json
+git add db/026_inventory_sale_locks.sql lib/data/portal-repository.ts lib/economy/inventory-sale-lock.ts lib/economy/inventory-sale-lock.test.ts components/economy/economy-view-model.ts app/api/economy/items/lock/route.ts app/api/economy/items/sell/route.ts package.json
 git commit -m "feat: add inventory sale locks"
 ```
 
