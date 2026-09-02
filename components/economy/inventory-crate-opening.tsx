@@ -864,7 +864,8 @@ export function useInventoryCrateOpening({
   return {
     busy,
     consumedItemIds,
-    retainedSingleCrate: single.reward ? single.crate : null,
+    retainedSingleCrate:
+      single.opening || single.reward || single.error ? single.crate : null,
     single,
     bulk,
     prepareSingle,
@@ -888,6 +889,7 @@ export function InventorySingleCrateOpening({
   controller: InventoryCrateOpeningController;
 }) {
   const [showDrops, setShowDrops] = useState(false);
+  const [dropLoadAttempt, setDropLoadAttempt] = useState(0);
   const { single } = controller;
   const state = single.crate?.id === crate.id ? single : initialSingleState(crate);
   const dropsId = `inventory-crate-drops-${crate.id}`;
@@ -942,7 +944,11 @@ export function InventorySingleCrateOpening({
           ) : (
             <Gift aria-hidden="true" />
           )}
-          {dropReady ? "Open crate" : "Preparing opening…"}
+          {dropReady
+            ? state.error
+              ? "Retry open"
+              : "Open crate"
+            : "Preparing opening…"}
         </button>
         <button
           type="button"
@@ -964,8 +970,21 @@ export function InventorySingleCrateOpening({
           {state.error}
         </p>
       ) : null}
+      {state.dropState.status === "error" ? (
+        <button
+          type="button"
+          className="button button-quiet"
+          onClick={() => {
+            controller.setSingleDropState(crate.id, { status: "idle" });
+            setDropLoadAttempt((attempt) => attempt + 1);
+          }}
+        >
+          <RotateCcw aria-hidden="true" /> Retry opening data
+        </button>
+      ) : null}
       <div id={dropsId} hidden={!showDrops}>
         <CrateDropPreview
+          key={`${crate.id}-${dropLoadAttempt}`}
           catalogueId={crate.catalogueId}
           onStateChange={handleDropStateChange}
         />
