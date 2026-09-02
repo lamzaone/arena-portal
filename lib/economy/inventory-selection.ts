@@ -71,6 +71,42 @@ export function remainingCrateOpeningIds(
     .flatMap((group) => [...group]);
 }
 
+export type CrateOpeningRequestGroup = {
+  crateItemIds: readonly string[];
+  idempotencyKey: string;
+};
+
+export async function runSequentialCrateOpeningGroups<
+  TGroup extends CrateOpeningRequestGroup,
+  TResponse,
+>(input: {
+  groups: readonly TGroup[];
+  startIndex: number;
+  openGroup: (group: TGroup, index: number) => Promise<TResponse>;
+  onGroupCompleted: (
+    group: TGroup,
+    response: TResponse,
+    index: number,
+  ) => void | Promise<void>;
+}) {
+  let completedGroupCount = Math.max(0, Math.trunc(input.startIndex));
+  try {
+    for (
+      let index = completedGroupCount;
+      index < input.groups.length;
+      index += 1
+    ) {
+      const group = input.groups[index];
+      const response = await input.openGroup(group, index);
+      await input.onGroupCompleted(group, response, index);
+      completedGroupCount = index + 1;
+    }
+    return { completedGroupCount, error: null };
+  } catch (error) {
+    return { completedGroupCount, error };
+  }
+}
+
 export function nextInventorySelectionOwner(
   current: InventorySelectionOwner,
   requestedOwner: Exclude<InventorySelectionOwner, null>,

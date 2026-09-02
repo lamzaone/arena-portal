@@ -9,6 +9,7 @@ import {
   nextInventorySelectionOwner,
   partitionCrateOpeningIds,
   remainingCrateOpeningIds,
+  runSequentialCrateOpeningGroups,
   withRetainedOpenedItem,
 } from "./inventory-selection.ts";
 
@@ -180,6 +181,58 @@ test("retry remainder starts with the failed group and excludes committed groups
     "crate-5",
   ]);
   assert.deepEqual(remainingCrateOpeningIds(groups, 3), []);
+});
+
+test("opening groups run sequentially and stop at the first failure", async () => {
+  const groups = [
+    { crateItemIds: ["crate-1"], idempotencyKey: "key-1" },
+    { crateItemIds: ["crate-2"], idempotencyKey: "key-2" },
+    { crateItemIds: ["crate-3"], idempotencyKey: "key-3" },
+  ];
+  const attempts: string[] = [];
+  const completed: string[] = [];
+  const failure = new Error("network lost");
+
+  const result = await runSequentialCrateOpeningGroups({
+    groups,
+    startIndex: 0,
+    openGroup: async (group) => {
+      attempts.push(group.idempotencyKey);
+      if (group.idempotencyKey === "key-2") throw failure;
+      return { receipt: group.idempotencyKey };
+    },
+    onGroupCompleted: (group, response) => {
+      completed.push(`${group.idempotencyKey}:${response.receipt}`);
+    },
+  });
+
+  assert.deepEqual(attempts, ["key-1", "key-2"]);
+  assert.deepEqual(completed, ["key-1:key-1"]);
+  assert.equal(result.completedGroupCount, 1);
+  assert.equal(result.error, failure);
+});
+
+test("retrying starts at the failed group with its original idempotency key", async () => {
+  const groups = [
+    { crateItemIds: ["crate-1"], idempotencyKey: "key-1" },
+    { crateItemIds: ["crate-2"], idempotencyKey: "key-2" },
+    { crateItemIds: ["crate-3"], idempotencyKey: "key-3" },
+  ];
+  const attempts: string[] = [];
+
+  const result = await runSequentialCrateOpeningGroups({
+    groups,
+    startIndex: 1,
+    openGroup: async (group) => {
+      attempts.push(group.idempotencyKey);
+      return group.crateItemIds[0];
+    },
+    onGroupCompleted: () => undefined,
+  });
+
+  assert.deepEqual(attempts, ["key-2", "key-3"]);
+  assert.equal(result.completedGroupCount, 3);
+  assert.equal(result.error, null);
 });
 
 test("activating one inventory selection surface replaces the other", () => {
