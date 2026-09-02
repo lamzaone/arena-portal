@@ -778,10 +778,7 @@ function MarketplaceContainerPanel({
             <ShoppingBag aria-hidden="true" /> Container market
           </p>
           <h3>{item.displayName}</h3>
-          <p>
-            Review the live server drop pool, choose an amount, then complete
-            one quantity-aware purchase.
-          </p>
+          <p>Choose an amount and buy now. Drop details are optional below.</p>
         </div>
         <button
           type="button"
@@ -791,7 +788,7 @@ function MarketplaceContainerPanel({
           <X aria-hidden="true" /> Close
         </button>
       </header>
-      <div className="crate-catalogue-purchase crate-selected-purchase">
+      <div className="crate-catalogue-purchase crate-selected-purchase market-container-purchase-layout">
         <div
           className={`market-price-hud ${priceAvailable ? "" : "is-unavailable"}`}
           aria-label={
@@ -860,42 +857,44 @@ function MarketplaceContainerPanel({
             transaction.
           </small>
         </div>
-        <button
-          type="button"
-          className="button button-primary"
-          disabled={pending || !purchaseAvailable || unaffordable}
-          aria-busy={pending}
-          onClick={() =>
-            onPurchase(item, {
-              stattrak: false,
-              quantity,
-            })
-          }
-        >
-          {pending ? (
-            <LoaderCircle className="ui-button-spinner" aria-hidden="true" />
-          ) : (
-            <ShoppingBag aria-hidden="true" />
-          )}
-          {buyLabel}
-        </button>
+        <div className="market-container-purchase-actions">
+          <button
+            type="button"
+            className="button button-primary"
+            disabled={pending || !purchaseAvailable || unaffordable}
+            aria-busy={pending}
+            onClick={() =>
+              onPurchase(item, {
+                stattrak: false,
+                quantity,
+              })
+            }
+          >
+            {pending ? (
+              <LoaderCircle className="ui-button-spinner" aria-hidden="true" />
+            ) : (
+              <ShoppingBag aria-hidden="true" />
+            )}
+            {buyLabel}
+          </button>
+          <button
+            id={dropsToggleId}
+            type="button"
+            className="button button-secondary crate-inline-drops-toggle"
+            aria-expanded={showDrops}
+            aria-controls={dropsPanelId}
+            disabled={pending}
+            onClick={toggleDrops}
+          >
+            <ChevronDown aria-hidden="true" /> {dropToggleLabel}
+          </button>
+        </div>
         {unaffordable && totalPrice !== null ? (
           <small className="crate-purchase-help" role="status">
             Need {formatTokens(totalPrice - walletBalance)} more Tokens.
           </small>
         ) : null}
       </div>
-      <button
-        id={dropsToggleId}
-        type="button"
-        className="button button-secondary market-buy-button crate-inline-drops-toggle"
-        aria-expanded={showDrops}
-        aria-controls={dropsPanelId}
-        disabled={pending}
-        onClick={toggleDrops}
-      >
-        <ChevronDown aria-hidden="true" /> {dropToggleLabel}
-      </button>
       <div
         id={dropsPanelId}
         className="crate-inline-modal-drops"
