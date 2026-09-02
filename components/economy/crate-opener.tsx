@@ -138,6 +138,10 @@ function isCrate(item: EconomyItemView) {
   return ["crate", "case", "capsule"].includes(item.itemType);
 }
 
+function ownedCrateToggleId(crateId: string) {
+  return `owned-crate-toggle-${crateId}`;
+}
+
 function cratePriceTokens(crate: EconomyCrateView) {
   return crate.priceTokens ?? crate.cratePriceTokens ?? crate.marketPriceTokens;
 }
@@ -1652,6 +1656,9 @@ export function CrateOpener({
     if (busy) return;
     setSelectedCrateId("");
     if (unboxedCrateId === crateId) clearUnboxResult();
+    window.requestAnimationFrame(() =>
+      document.getElementById(ownedCrateToggleId(crateId))?.focus(),
+    );
   }
 
   function toggleMarketCrate(catalogueId: number) {
@@ -1837,6 +1844,7 @@ export function CrateOpener({
                   onSelect={isRetainedConsumedSlot ? undefined : () => selectionMode ? toggleCrateSelection(crate) : toggleOwnedCrate(crate.id)}
                   selectionLabel={isRetainedConsumedSlot ? undefined : selectionMode ? `${bulkSelectedCrateIds.has(crate.id) ? "Remove" : "Add"} ${crate.displayName} ${bulkSelectedCrateIds.has(crate.id) ? "from" : "to"} opening selection` : `Open ${crate.displayName} options`}
                   selectionControls={!isRetainedConsumedSlot && !selectionMode && selectedCrateId === crate.id ? `crate-opening-${crate.id}` : undefined}
+                  selectionId={ownedCrateToggleId(crate.id)}
                   enableMarketPreview={!isRetainedConsumedSlot}
                   disabled={busy || isRetainedConsumedSlot}
                   className={isRetainedConsumedSlot ? "crate-consumed-slot" : openingCrateId === crate.id ? "is-opening" : ""}

@@ -21,6 +21,7 @@ type EconomyItemCardProps = {
   onSelect?: () => void;
   selectionLabel?: string;
   selectionControls?: string;
+  selectionId?: string;
   enableMarketPreview?: boolean;
   previewFloat?: number | null;
   previewOverlay?: ReactNode;
@@ -35,6 +36,7 @@ export function EconomyItemCard({
   onSelect,
   selectionLabel,
   selectionControls,
+  selectionId,
   enableMarketPreview = true,
   previewFloat = null,
   previewOverlay,
@@ -110,7 +112,7 @@ export function EconomyItemCard({
 
   if (onSelect) {
     return (
-      <button data-ui="item-card" type="button" className={`panel economy-item-card ${selected ? "is-selected" : ""} ${className}`.trim()} aria-pressed={selected} aria-expanded={selectionControls ? selected : undefined} aria-controls={selected ? selectionControls : undefined} onClick={onSelect} aria-label={selectionLabel ?? `Select ${displayName}`} disabled={disabled}>
+      <button id={selectionId} data-ui="item-card" type="button" className={`panel economy-item-card ${selected ? "is-selected" : ""} ${className}`.trim()} aria-pressed={selected} aria-expanded={selectionControls ? selected : undefined} aria-controls={selected ? selectionControls : undefined} onClick={onSelect} aria-label={selectionLabel ?? `Select ${displayName}`} disabled={disabled}>
         {content}
       </button>
     );

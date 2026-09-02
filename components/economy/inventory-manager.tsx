@@ -146,6 +146,10 @@ function rowEndIndex(itemIndex: number, columns: number, itemCount: number) {
   );
 }
 
+function inventoryItemToggleId(itemId: string) {
+  return `inventory-item-toggle-${itemId}`;
+}
+
 function canBulkSellItem(item: EconomyItemView) {
   return (
     canSellInventoryItem(item) &&
@@ -496,6 +500,15 @@ export function InventoryManager({
     );
     setSelectedTeams([]);
     setSelectedId(nextSelectedId);
+  }
+
+  function closeInventoryItem(itemId: string) {
+    setSelectedId("");
+    setInventoryInlineModalIndex(-1);
+    setSaleConfirmationItemId("");
+    window.requestAnimationFrame(() =>
+      document.getElementById(inventoryItemToggleId(itemId))?.focus(),
+    );
   }
 
   function toggleLoadoutTeam(team: "T" | "CT") {
@@ -971,6 +984,7 @@ export function InventoryManager({
                     ? `${bulkSelectedIds.has(item.id) ? "Remove" : "Add"} ${item.displayName} ${bulkSelectedIds.has(item.id) ? "from" : "to"} inventory selection`
                     : `Manage ${item.displayName}`}
                   selectionControls={!selectionMode && selected?.id === item.id ? `inventory-item-modal-${item.id}` : undefined}
+                  selectionId={inventoryItemToggleId(item.id)}
                   enableMarketPreview
                   disabled={bulkSelling || bulkLocking || interactionDisabled}
                   className={selectionMode && !canSelectForLock(item) ? "is-selection-unavailable" : ""}
@@ -1005,7 +1019,7 @@ export function InventoryManager({
                   <p className="eyebrow"><Sword aria-hidden="true" /> Item management</p>
                   <h3>{selected.displayName}</h3>
                 </div>
-                <button type="button" className="button button-quiet crate-inline-modal-close" onClick={() => { setSelectedId(""); setInventoryInlineModalIndex(-1); setSaleConfirmationItemId(""); }} disabled={pending} aria-label={`Close ${selected.displayName} item management`}>
+                <button type="button" className="button button-quiet crate-inline-modal-close" onClick={() => closeInventoryItem(selected.id)} disabled={pending} aria-label={`Close ${selected.displayName} item management`}>
                   <X aria-hidden="true" /> Close
                 </button>
               </header>
