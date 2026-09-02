@@ -1,6 +1,6 @@
 # ARENA Portal
 
-The player portal for the ARENA CS2 server: Steam sign-in, player dashboard, moderation records, appeals, tickets, and the Token Economy inventory, crates, marketplace, trades, and staff item-management flows.
+The player portal for the ARENA CS2 server: Steam sign-in, player dashboard, moderation records, appeals, tickets, and the Token Economy inventory, loadout, marketplace, trades, and staff item-management flows. Players buy crates and capsules from Market, then inspect and open owned containers from Inventory.
 
 ## Start locally
 
@@ -34,7 +34,7 @@ See [the theme system](docs/theme-system.md), [the website plan](docs/website-pl
 1. Back up the portal database and run migrations 001 through 024 against it in order. Migration 020 is required before opening Staff > Groups > Listings or publishing a membership product; migration 022 is required before source-aware VIP management or consuming VIP membership items, and migration 024 is required before renaming a connected runtime group. Keep the game database read-only unless Staff > Groups management is enabled, in which case grant only the table-scoped DML permissions listed above.
 2. Deploy the TAPPED.Inventory, GlobalChatTags, VIPCore, and Admins.Core builds (including their dependencies) and config, then restart/reload the server only after step 1 is complete.
 3. From the server console or an authorised Director/Founder account, run `!inventory_sync_catalogue`. It imports the old cosmetic catalogue and bootstraps the initial crate/capsule/drop tables.
-4. Confirm a player can run `!tokens`, earn a kill/headshot in a normal 4+ human-player match, and browse Inventory, Crates, Market, and Trades in the portal.
+4. Confirm a player can run `!tokens`, earn a kill/headshot in a normal 4+ human-player match, and browse Inventory, Loadout, Market, and Trades in the portal. Verify that Market sells crates and capsules in the chosen quantity with optional drop previews, and that owned containers show their drops and open from Inventory.
 5. Use Portal > Staff > Item management for grants, customisation, price refresh/overrides, inventory changes, stickers, and player loadouts. Exact externally assigned Founders can use Portal > Staff > Groups for identity groups, tags, badges, privileges, and catalogue rewards.
 
 No production database migration or server restart is performed by the portal application itself.
