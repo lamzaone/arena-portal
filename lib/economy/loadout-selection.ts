@@ -34,12 +34,15 @@ export function loadoutCategoryForItem(item: LoadoutItemLike): LoadoutCategoryId
 
 function supportedTeams(item: LoadoutItemLike) {
   const teams = loadoutMetadata(item).teams;
-  return Array.isArray(teams)
-    ? teams.filter((team): team is "T" | "CT" => team === "T" || team === "CT")
-    : ["T", "CT"] as const;
+  if (!Array.isArray(teams)) return ["T", "CT"] as const;
+  const validTeams = teams.filter(
+    (team): team is "T" | "CT" => team === "T" || team === "CT",
+  );
+  return validTeams.length > 0 ? validTeams : ["T", "CT"] as const;
 }
 
 export function loadoutItemSupportsTarget(item: LoadoutItemLike, target: LoadoutTeamTarget) {
+  if (loadoutCategoryForItem(item) === "agent" && target === "both") return false;
   const teams = supportedTeams(item);
   return target === "both"
     ? teams.includes("T") && teams.includes("CT")
@@ -71,7 +74,12 @@ export function loadoutSlotsForTarget(
     teams = [target];
   }
   if (category === "weapon") {
-    if (!Number.isSafeInteger(definitionIndex))
+    if (
+      typeof definitionIndex !== "number" ||
+      !Number.isSafeInteger(definitionIndex) ||
+      definitionIndex < 1 ||
+      definitionIndex > 65_535
+    )
       throw new RangeError("A weapon definition is required.");
     return teams.map((team) => ({ slotType: "weapon", team, definitionIndex: definitionIndex! }));
   }

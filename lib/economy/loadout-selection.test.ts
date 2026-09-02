@@ -39,7 +39,32 @@ test("defaults safely when nested catalogue metadata is malformed", () => {
   assert.equal(loadoutCategoryForItem(malformed), "agent");
   assert.equal(loadoutItemSupportsTarget(malformed, "T"), true);
   assert.equal(loadoutItemSupportsTarget(malformed, "CT"), true);
-  assert.equal(loadoutItemSupportsTarget(malformed, "both"), true);
+  assert.equal(loadoutItemSupportsTarget(malformed, "both"), false);
+});
+
+test("defaults absent, empty, and invalid team metadata to both teams without allowing agent both", () => {
+  const defaults = [
+    { id: "agent-absent", itemType: "agent", definitionIndex: null, displayName: "Absent", raw: {} },
+    { id: "agent-empty", itemType: "agent", definitionIndex: null, displayName: "Empty", raw: { catalogue: { metadata: { teams: [] } } } },
+    { id: "agent-invalid", itemType: "agent", definitionIndex: null, displayName: "Invalid", raw: { catalogue: { metadata: { teams: ["invalid"] } } } },
+  ] as const;
+
+  for (const item of defaults) {
+    assert.equal(loadoutItemSupportsTarget(item, "T"), true);
+    assert.equal(loadoutItemSupportsTarget(item, "CT"), true);
+    assert.equal(loadoutItemSupportsTarget(item, "both"), false);
+  }
+  assert.deepEqual(ownedItemsForLoadout(defaults, "agent", "T").map((item) => item.id), [
+    "agent-absent",
+    "agent-empty",
+    "agent-invalid",
+  ]);
+  assert.deepEqual(ownedItemsForLoadout(defaults, "agent", "CT").map((item) => item.id), [
+    "agent-absent",
+    "agent-empty",
+    "agent-invalid",
+  ]);
+  assert.deepEqual(ownedItemsForLoadout(defaults, "agent", "both"), []);
 });
 
 test("builds existing API slot payloads for weapon and cosmetic targets", () => {
@@ -51,6 +76,21 @@ test("builds existing API slot payloads for weapon and cosmetic targets", () => 
     { slotType: "knife", team: "CT" },
   ]);
   assert.throws(() => loadoutSlotsForTarget("agent", "both"), /per team/i);
+});
+
+test("accepts only weapon definitions in the API range", () => {
+  assert.deepEqual(loadoutSlotsForTarget("weapon", "T", 1), [
+    { slotType: "weapon", team: "T", definitionIndex: 1 },
+  ]);
+  assert.deepEqual(loadoutSlotsForTarget("weapon", "CT", 65_535), [
+    { slotType: "weapon", team: "CT", definitionIndex: 65_535 },
+  ]);
+  for (const definitionIndex of [0, -1, 65_536]) {
+    assert.throws(
+      () => loadoutSlotsForTarget("weapon", "T", definitionIndex),
+      /definition/i,
+    );
+  }
 });
 
 test("prefers equipped T, then equipped CT, then the first owned image item", () => {
