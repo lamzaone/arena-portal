@@ -118,6 +118,26 @@ test("rejects any marketplace purchase whose recorded payment evidence is malfor
   });
 });
 
+test("rejects marketplace purchases whose base-price evidence cannot prove discount state", () => {
+  for (const basePriceTokens of [null, 399]) {
+    const result = resolveEconomySellback({
+      marketPriceTokens: 2_000,
+      source: {
+        type: "marketplace_purchase",
+        basePriceTokens,
+        priceTokens: 400,
+        discountRuleId: null,
+        discountTokens: 0,
+      },
+    });
+
+    assert.deepEqual(result, {
+      status: "rejected",
+      reason: "invalid_marketplace_purchase",
+    });
+  }
+});
+
 test("allows a fully discounted marketplace purchase to sell for zero Tokens", () => {
   const result = resolveEconomySellback({
     marketPriceTokens: 2_000,

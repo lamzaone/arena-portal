@@ -1426,7 +1426,9 @@ export function InventoryManager({
                           </strong>
                           <small>
                             {salePriceIsKnown && selected.sellbackBasisTokens !== null
-                              ? selected.sellbackPayoutCappedAtRecordedPurchasePrice
+                              ? selectedSalePayout === 0 && selected.recordedPurchasePriceTokens === 0
+                                ? "This item was fully discounted; its estimated buyback payout is 0 Tokens."
+                              : selected.sellbackPayoutCappedAtRecordedPurchasePrice
                                 ? `The 5-Token minimum is capped at your recorded ${formatTokens(selected.recordedPurchasePriceTokens ?? 0)}-Token purchase price.`
                                 : economySellbackUsesMinimum(selected.sellbackBasisTokens)
                                   ? `Minimum 5-Token buyback for this ${formatTokens(selected.sellbackBasisTokens)}-Token sellback basis.`

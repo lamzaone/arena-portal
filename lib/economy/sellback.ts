@@ -75,7 +75,12 @@ export function resolveEconomySellback({
   // A marketplace purchase must always carry the immutable per-item amount
   // paid. Without it, we cannot prove that a damaged source was undiscounted,
   // so falling back to the live price would recreate the arbitrage path.
-  if (marketplacePurchase && recordedPurchasePriceTokens === null) {
+  if (
+    marketplacePurchase &&
+    (recordedPurchasePriceTokens === null ||
+      recordedBasePriceTokens === null ||
+      recordedBasePriceTokens < recordedPurchasePriceTokens)
+  ) {
     return {
       status: "rejected",
       reason: "invalid_marketplace_purchase",
