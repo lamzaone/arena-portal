@@ -15,7 +15,6 @@ import {
   X,
 } from "lucide-react";
 import {
-  Fragment,
   useEffect,
   useMemo,
   useRef,
@@ -696,7 +695,7 @@ function MarketplaceContainerCard({
           type="button"
           className="button button-secondary market-buy-button crate-inline-drops-toggle"
           aria-expanded={expanded}
-          aria-controls={marketContainerPanelId(item)}
+          aria-controls={expanded ? marketContainerPanelId(item) : undefined}
           disabled={item.catalogueId === null}
           onClick={onToggle}
         >
@@ -1184,9 +1183,11 @@ export function MarketplaceBrowser({
 
       {items.length ? (
         <div ref={marketGridRef} className="feature-grid market-item-grid">
-          {items.map((item, index) => (
-            <Fragment key={`${item.catalogueId ?? item.id}-${item.displayName}`}>
+          {items.flatMap((item, index) => {
+            const itemKey = `${item.catalogueId ?? item.id}-${item.displayName}`;
+            const listing = (
               <MarketplaceListing
+                key={`listing-${itemKey}`}
                 item={item}
                 pending={
                   item.catalogueId !== null &&
@@ -1201,21 +1202,24 @@ export function MarketplaceBrowser({
                 onContainerToggle={() => toggleContainer(item)}
                 onPurchase={purchase}
               />
-              {index === containerPanelInsertionIndex && selectedContainer ? (
-                <MarketplaceContainerPanel
-                  key={selectedContainer.catalogueId ?? selectedContainer.id}
-                  item={selectedContainer}
-                  pending={
-                    selectedContainer.catalogueId !== null &&
-                    pendingPurchaseIds.has(selectedContainer.catalogueId)
-                  }
-                  walletBalance={walletView.balance}
-                  onPurchase={purchase}
-                  onClose={closeContainerPanel}
-                />
-              ) : null}
-            </Fragment>
-          ))}
+            );
+            return index === containerPanelInsertionIndex && selectedContainer
+              ? [
+                  listing,
+                  <MarketplaceContainerPanel
+                    key={`container-panel-${selectedContainer.catalogueId ?? selectedContainer.id}`}
+                    item={selectedContainer}
+                    pending={
+                      selectedContainer.catalogueId !== null &&
+                      pendingPurchaseIds.has(selectedContainer.catalogueId)
+                    }
+                    walletBalance={walletView.balance}
+                    onPurchase={purchase}
+                    onClose={closeContainerPanel}
+                  />,
+                ]
+              : [listing];
+          })}
         </div>
       ) : (
         <EconomyEmptyState
