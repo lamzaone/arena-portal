@@ -1,0 +1,1 @@
+{"nodes": [{"id": "readme", "label": "ARENA Portal README", "file_type": "document", "source_file": "README.md"}], "edges": [], "hyperedges": [{"id": "vip_identity_system", "label": "VIP and Identity Management", "nodes": ["docs_vip_perks", "db_arena_readme", "readme"], "relation": "form", "confidence": "EXTRACTED", "confidence_score": 0.9, "source_file": "README.md"}]}

@@ -1,0 +1,70 @@
+{
+  "generated_at": "2026-09-02T22:32:41.165137+00:00",
+  "nodes": {
+    "lib_data_portal_repository_purchaseeconomyitem": {
+      "code_fingerprint": "2b4c39006fb8e866aab35ae92e512594336b3635e71f34710c4b3b7c5528ffec",
+      "label": "purchaseEconomyItem()",
+      "last": "2026-09-02T16:40:35.877929+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-02T16:40:35.877929+00:00",
+          "outcome": "useful",
+          "q": "Items bought for a discount should be sold relative to their buying price, then audit the full site UI/UX."
+        }
+      ],
+      "score": 0.994366647,
+      "source_file": "lib/data/portal-repository.ts",
+      "status": "tentative",
+      "uses": 1
+    },
+    "lib_data_portal_repository_selleconomyitem": {
+      "code_fingerprint": "2b4c39006fb8e866aab35ae92e512594336b3635e71f34710c4b3b7c5528ffec",
+      "label": "sellEconomyItem()",
+      "last": "2026-09-02T16:40:35.877929+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-02T16:40:35.877929+00:00",
+          "outcome": "useful",
+          "q": "Items bought for a discount should be sold relative to their buying price, then audit the full site UI/UX."
+        }
+      ],
+      "score": 0.994366647,
+      "source_file": "lib/data/portal-repository.ts",
+      "status": "tentative",
+      "uses": 1
+    },
+    "lib_data_portal_repository_selleconomyitems": {
+      "code_fingerprint": "2b4c39006fb8e866aab35ae92e512594336b3635e71f34710c4b3b7c5528ffec",
+      "label": "sellEconomyItems()",
+      "last": "2026-09-02T16:40:35.877929+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-02T16:40:35.877929+00:00",
+          "outcome": "useful",
+          "q": "Items bought for a discount should be sold relative to their buying price, then audit the full site UI/UX."
+        }
+      ],
+      "score": 0.994366647,
+      "source_file": "lib/data/portal-repository.ts",
+      "status": "tentative",
+      "uses": 1
+    },
+    "lib_economy_sellback_economysellbackpayouttokens": {
+      "code_fingerprint": "98193cff192c2617dd33e8e3b042437c19f84c1442f4e157079303d8a44717f9",
+      "label": "economySellbackPayoutTokens()",
+      "last": "2026-09-02T16:40:35.877929+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-02T16:40:35.877929+00:00",
+          "outcome": "useful",
+          "q": "Items bought for a discount should be sold relative to their buying price, then audit the full site UI/UX."
+        }
+      ],
+      "score": 0.994366647,
+      "source_file": "lib/economy/sellback.ts",
+      "status": "tentative",
+      "uses": 1
+    }
+  },
+  "version": 1
+}
