@@ -68,6 +68,10 @@ import {
   cratePurchaseTotal,
   MAX_CRATE_PURCHASE_QUANTITY,
 } from "@/lib/economy/crate-presentation";
+import {
+  activeConsumedItemIds,
+  withRetainedOpenedItem,
+} from "@/lib/economy/inventory-selection";
 
 type CrateOpenerProps = {
   crates: unknown;
@@ -75,6 +79,10 @@ type CrateOpenerProps = {
   wallet: unknown;
   csrf: string;
   mode?: "full" | "owned";
+  selectionMode?: boolean;
+  onSelectionModeChange?: (active: boolean) => void;
+  onOwnedInteraction?: () => void;
+  onOwnedOpeningChange?: (active: boolean) => void;
 };
 
 type CatalogueTypeFilter = "all" | "crate" | "capsule";
@@ -806,6 +814,10 @@ export function CrateOpener({
   wallet,
   csrf,
   mode = "full",
+  selectionMode: controlledSelectionMode,
+  onSelectionModeChange,
+  onOwnedInteraction,
+  onOwnedOpeningChange,
 }: CrateOpenerProps) {
   const ownedOnly = mode === "owned";
   const router = useRouter();
@@ -822,24 +834,29 @@ export function CrateOpener({
   );
   const [retainedOpenedCrate, setRetainedOpenedCrate] =
     useState<EconomyItemView | null>(null);
+  const [retainedOpenedCrateIndex, setRetainedOpenedCrateIndex] = useState(0);
   const ownedCrates = useMemo(
     () => inventoryCrates.filter((crate) => !consumedCrateIds.has(crate.id)),
     [consumedCrateIds, inventoryCrates],
   );
   const displayedOwnedCrates = useMemo(
-    () =>
+    () => withRetainedOpenedItem(
       inventoryCrates.filter(
         (crate) =>
           !consumedCrateIds.has(crate.id) ||
           crate.id === retainedOpenedCrate?.id,
       ),
-    [consumedCrateIds, inventoryCrates, retainedOpenedCrate?.id],
+      retainedOpenedCrate,
+      retainedOpenedCrateIndex,
+    ),
+    [consumedCrateIds, inventoryCrates, retainedOpenedCrate, retainedOpenedCrateIndex],
   );
   const walletView = useMemo(() => economyWallet(wallet), [wallet]);
   const [activeTab, setActiveTab] = useState<CrateTab>("owned");
   const [ownedPage, setOwnedPage] = useState(1);
   const [selectedCrateId, setSelectedCrateId] = useState("");
-  const [selectionMode, setSelectionMode] = useState(false);
+  const [internalSelectionMode, setInternalSelectionMode] = useState(false);
+  const selectionMode = controlledSelectionMode ?? internalSelectionMode;
   const [bulkSelectedCrateIds, setBulkSelectedCrateIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -879,7 +896,7 @@ export function CrateOpener({
   const revealComplete = useRef<(() => void) | null>(null);
   const reelAudio = useRef<AudioContext | null>(null);
   const reelTickCount = useRef(0);
-  const refreshAfterUnbox = useRef(false);
+  const refreshAfterBulkOpen = useRef(false);
   const ownedGridRef = useRef<HTMLDivElement | null>(null);
   const [ownedGridColumns, setOwnedGridColumns] = useState(1);
   const marketGridRef = useRef<HTMLDivElement | null>(null);
@@ -1074,18 +1091,14 @@ export function CrateOpener({
 
   useEffect(() => {
     setConsumedCrateIds((current) => {
-      let changed = false;
-      const next = new Set<string>();
-      for (const crateId of current) {
-        if (inventoryCrates.some((crate) => crate.id === crateId)) {
-          next.add(crateId);
-        } else {
-          changed = true;
-        }
-      }
-      return changed ? next : current;
+      const next = new Set(activeConsumedItemIds(
+        current,
+        new Set(inventoryCrates.map((crate) => crate.id)),
+        retainedOpenedCrate?.id ?? null,
+      ));
+      return next.size === current.size ? current : next;
     });
-  }, [inventoryCrates]);
+  }, [inventoryCrates, retainedOpenedCrate?.id]);
 
   useEffect(() => {
     if (
@@ -1095,6 +1108,31 @@ export function CrateOpener({
       setSelectedMarketCatalogueId(null);
     }
   }, [catalogueItems, selectedMarketCatalogueId]);
+
+  useEffect(() => {
+    if (selectionMode) return;
+    setBulkSelectedCrateIds(new Set());
+    setBulkOpenConfirming(false);
+  }, [selectionMode]);
+
+  useEffect(() => {
+    if (!ownedOnly) return;
+    onOwnedOpeningChange?.(
+      busy || unboxed !== null || bulkOpeningRows.length > 0,
+    );
+  }, [bulkOpeningRows.length, busy, onOwnedOpeningChange, ownedOnly, unboxed]);
+
+  useEffect(() => {
+    if (
+      !refreshAfterBulkOpen.current ||
+      !bulkOpeningRows.length ||
+      bulkOpeningRows.some((row) => row.preparing || row.opening !== null)
+    ) {
+      return;
+    }
+    refreshAfterBulkOpen.current = false;
+    router.refresh();
+  }, [bulkOpeningRows, router]);
 
   useEffect(() => {
     const grid = ownedGridRef.current;
@@ -1231,6 +1269,7 @@ export function CrateOpener({
       return;
     }
     const crate = selectedOwnedCrate;
+    onOwnedInteraction?.();
     const dropsForOpening = [...dropState.drops];
     prepareReelAudio();
     setNotice(null);
@@ -1245,10 +1284,12 @@ export function CrateOpener({
     });
     setActiveAction("open");
     void (async () => {
+      let openingCommitted = false;
       try {
         const result = await postEconomyAction("/api/economy/crates/open", csrf, {
           crateItemId: crate.id,
         });
+        openingCommitted = true;
         const resultItem = result.item ? toEconomyItem(result.item) : null;
         if (!resultItem || (!resultItem.id && resultItem.displayName === "Unnamed item"))
           throw new Error("The crate opened, but its reward could not be displayed. Reload Inventory to view it.");
@@ -1263,6 +1304,9 @@ export function CrateOpener({
         // The reward payload is now safely available to present. Remove the
         // consumed crate from the owned collection before the reveal begins,
         // while retaining its opener context so the animation stays mounted.
+        setRetainedOpenedCrateIndex(
+          Math.max(0, inventoryCrates.findIndex((item) => item.id === crate.id)),
+        );
         setRetainedOpenedCrate(crate);
         setConsumedCrateIds((current) => {
           const next = new Set(current);
@@ -1312,8 +1356,9 @@ export function CrateOpener({
         // Keep the consumed crate card mounted until the player closes or
         // switches this opener. That preserves the reel and result in one
         // continuous panel instead of letting a refresh remove it mid-reveal.
-        refreshAfterUnbox.current = true;
+        router.refresh();
       } catch (error) {
+        if (openingCommitted) router.refresh();
         setNotice({
           type: "error",
           text:
@@ -1383,13 +1428,18 @@ export function CrateOpener({
     });
   }
 
+  function changeSelectionMode(active: boolean) {
+    if (controlledSelectionMode === undefined) setInternalSelectionMode(active);
+    onSelectionModeChange?.(active);
+    if (!active) {
+      setBulkSelectedCrateIds(new Set());
+      setBulkOpenConfirming(false);
+    }
+  }
+
   function toggleCrateSelectionMode() {
     if (busy) return;
-    setSelectionMode((current) => {
-      const next = !current;
-      if (!next) setBulkSelectedCrateIds(new Set());
-      return next;
-    });
+    changeSelectionMode(!selectionMode);
     setBulkOpenConfirming(false);
     setSelectedCrateId("");
     clearUnboxResult();
@@ -1433,7 +1483,6 @@ export function CrateOpener({
     setBulkOpeningRows(initialRows);
     setBulkOpenConfirming(false);
     setBulkSelectedCrateIds(new Set());
-    setSelectionMode(false);
     setActiveAction("bulk-open");
     try {
       const result = await postEconomyAction(
@@ -1442,6 +1491,7 @@ export function CrateOpener({
         { crateItemIds },
         requestId,
       );
+      refreshAfterBulkOpen.current = true;
       const dropsByCatalogueId = new Map<number, CrateDrop[]>();
       for (const rawPool of result.dropPools ?? []) {
         if (!isRecord(rawPool)) continue;
@@ -1560,10 +1610,6 @@ export function CrateOpener({
     setUnboxedCrateId(null);
     setUnboxMessage(null);
     setRetainedOpenedCrate(null);
-    if (refreshAfterUnbox.current) {
-      refreshAfterUnbox.current = false;
-      router.refresh();
-    }
   }
 
   function syncOwnedGridColumns() {
@@ -1577,6 +1623,7 @@ export function CrateOpener({
 
   function toggleOwnedCrate(crateId: string) {
     if (busy) return;
+    onOwnedInteraction?.();
     syncOwnedGridColumns();
     const nextCrateId = selectedCrateId === crateId ? "" : crateId;
     setSelectedCrateId(nextCrateId);
@@ -1606,13 +1653,16 @@ export function CrateOpener({
   function changeCrateTab(tab: CrateTab) {
     if (busy || tab === activeTab) return;
     if (tab !== "owned") {
-      setSelectionMode(false);
-      setBulkSelectedCrateIds(new Set());
-      setBulkOpenConfirming(false);
+      changeSelectionMode(false);
       setSelectedCrateId("");
       clearUnboxResult();
     }
     setActiveTab(tab);
+  }
+
+  function dismissBulkOpeningResults() {
+    setBulkOpeningRows([]);
+    changeSelectionMode(false);
   }
 
   function buyCrate(crate: EconomyCrateView, quantity: number) {
@@ -1740,7 +1790,7 @@ export function CrateOpener({
           <BulkCrateOpeningRows
             rows={bulkOpeningRows}
             onRevealComplete={completeBulkReveal}
-            onDismiss={() => setBulkOpeningRows([])}
+            onDismiss={dismissBulkOpeningResults}
           />
 
           {displayedOwnedCrates.length ? <>

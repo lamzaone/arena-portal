@@ -65,6 +65,9 @@ type InventoryManagerProps = {
   loadout: unknown;
   wallet: unknown;
   csrf: string;
+  selectionMode?: boolean;
+  onSelectionModeChange?: (active: boolean) => void;
+  selectionDisabled?: boolean;
 };
 
 type SortMode = "newest" | "name" | "rarity" | "float";
@@ -147,6 +150,9 @@ export function InventoryManager({
   loadout,
   wallet,
   csrf,
+  selectionMode: controlledSelectionMode,
+  onSelectionModeChange,
+  selectionDisabled = false,
 }: InventoryManagerProps) {
   const router = useRouter();
   const inventoryItems = useMemo(() => economyItems(inventory), [inventory]);
@@ -171,7 +177,8 @@ export function InventoryManager({
   const [sort, setSort] = useState<SortMode>("newest");
   const [inventoryPage, setInventoryPage] = useState(1);
   const [selectedId, setSelectedId] = useState("");
-  const [selectionMode, setSelectionMode] = useState(false);
+  const [internalSelectionMode, setInternalSelectionMode] = useState(false);
+  const selectionMode = controlledSelectionMode ?? internalSelectionMode;
   const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -406,6 +413,18 @@ export function InventoryManager({
   }, [inventoryItems]);
 
   useEffect(() => {
+    if (selectionMode) return;
+    setBulkSelectedIds(new Set());
+    setBulkSaleConfirming(false);
+  }, [selectionMode]);
+
+  useEffect(() => {
+    if (!selectionDisabled || !selectionMode) return;
+    if (controlledSelectionMode === undefined) setInternalSelectionMode(false);
+    onSelectionModeChange?.(false);
+  }, [controlledSelectionMode, onSelectionModeChange, selectionDisabled, selectionMode]);
+
+  useEffect(() => {
     const grid = inventoryGridRef.current;
     if (!grid) return;
 
@@ -457,12 +476,11 @@ export function InventoryManager({
   }
 
   function toggleSelectionMode() {
-    if (pending || bulkSelling || bulkLocking) return;
-    setSelectionMode((current) => {
-      const next = !current;
-      if (!next) setBulkSelectedIds(new Set());
-      return next;
-    });
+    if (pending || bulkSelling || bulkLocking || selectionDisabled) return;
+    const next = !selectionMode;
+    if (controlledSelectionMode === undefined) setInternalSelectionMode(next);
+    onSelectionModeChange?.(next);
+    if (!next) setBulkSelectedIds(new Set());
     setBulkSaleConfirming(false);
     setSelectedId("");
     setInventoryInlineModalIndex(-1);
@@ -590,7 +608,10 @@ export function InventoryManager({
           result.message ||
           `${soldIds.length} ${soldIds.length === 1 ? "item" : "items"} sold for ${formatTokens(payoutTokens)} Tokens.`,
       });
-      setSelectionMode(unsoldIds.length > 0);
+      const keepSelectionMode = unsoldIds.length > 0;
+      if (controlledSelectionMode === undefined)
+        setInternalSelectionMode(keepSelectionMode);
+      onSelectionModeChange?.(keepSelectionMode);
     } catch (error) {
       setNotice({
         type: "error",
@@ -810,7 +831,9 @@ export function InventoryManager({
               <span>
                 {selectionMode
                   ? `${bulkSelectedItems.length.toLocaleString()} of ${MAX_BULK_SELL_ITEMS} items selected · ${bulkSellableItems.length.toLocaleString()} sellable`
-                  : `Select up to ${MAX_BULK_SELL_ITEMS} items to lock, unlock, or sell.`}
+                  : selectionDisabled
+                    ? "Finish or dismiss the current crate opening before selecting inventory items."
+                    : `Select up to ${MAX_BULK_SELL_ITEMS} items to lock, unlock, or sell.`}
               </span>
             </div>
           </div>
@@ -872,7 +895,7 @@ export function InventoryManager({
               type="button"
               className={`button ${selectionMode ? "button-secondary" : "button-primary"}`}
               aria-pressed={selectionMode}
-              disabled={pending || bulkSelling || bulkLocking}
+              disabled={pending || bulkSelling || bulkLocking || selectionDisabled}
               onClick={toggleSelectionMode}
             >
               <ListChecks aria-hidden="true" />

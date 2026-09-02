@@ -1,7 +1,6 @@
 import { Archive } from "lucide-react";
 
-import { InventoryManager } from "@/components/economy/inventory-manager";
-import { CrateOpener } from "@/components/economy/crate-opener";
+import { InventoryWorkspace } from "@/components/economy/inventory-workspace";
 import { SignInRequired } from "@/components/sign-in-required";
 import { PageHeading } from "@/components/ui/page-heading";
 import { PortalShell } from "@/components/ui/portal-shell";
@@ -22,7 +21,6 @@ export default async function InventoryPage() {
 
   return <PortalShell authenticated className="tapped-page">
     <PageHeading eyebrow={<><Archive aria-hidden="true" /> Player economy</>} title="Inventory" description="Manage and protect your owned items, then inspect and open your crates without leaving Inventory." />
-    <InventoryManager inventory={inventory} loadout={loadout} wallet={wallet} csrf={csrf} />
-    <CrateOpener mode="owned" crates={[]} inventory={inventory} wallet={wallet} csrf={csrf} />
+    <InventoryWorkspace inventory={inventory} loadout={loadout} wallet={wallet} csrf={csrf} />
   </PortalShell>;
 }
