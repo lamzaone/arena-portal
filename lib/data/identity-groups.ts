@@ -2107,7 +2107,7 @@ async function getEffectiveIdentityUnsafe(input: {
               "LEFT JOIN portal_identity_player_tag_preferences AS preferences ON preferences.steam_id = ? AND preferences.tag_id = tags.id " +
               "WHERE links.group_id IN (" +
               groupPlaceholders +
-              ") ORDER BY identity_group.profile_priority DESC, links.sort_order, tags.id",
+              ") ORDER BY CASE WHEN identity_group.source_type = 'vipcore' THEN 0 ELSE 1 END, links.sort_order, identity_group.profile_priority DESC, tags.id",
             [steamId, ...groupIds],
           )
         : Promise.resolve([[], []] as unknown as [IdentityTagRow[], unknown]),
