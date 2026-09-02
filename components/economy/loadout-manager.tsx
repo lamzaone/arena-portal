@@ -138,13 +138,12 @@ export function EconomyLoadoutManager({
         <span className="loadout-manager-count">{weaponGroups.length} weapons</span>
       </header>
 
-      <div className="loadout-category-tabs" role="tablist" aria-label="Weapon categories">
+      <div className="loadout-category-tabs" role="group" aria-label="Weapon categories">
         {categories.map((category) => (
           <button
             key={category.id}
             type="button"
-            role="tab"
-            aria-selected={selectedCategory === category.id}
+            aria-pressed={selectedCategory === category.id}
             className={selectedCategory === category.id ? "active" : ""}
             onClick={() => {
               setActiveCategory(category.id);
@@ -162,12 +161,14 @@ export function EconomyLoadoutManager({
           const currentT = slotItem(loadout, group.definitionIndex, "T");
           const currentCT = slotItem(loadout, group.definitionIndex, "CT");
           const panelId = `loadout-picker-${group.definitionIndex}`;
+          const triggerId = `loadout-weapon-trigger-${group.definitionIndex}`;
           const expanded = expandedDefinitionIndex === group.definitionIndex;
 
           return (
             <article key={group.definitionIndex} className={`loadout-weapon-card ${expanded ? "is-expanded" : ""}`}>
               <button
                 type="button"
+                id={triggerId}
                 className="loadout-weapon-summary"
                 aria-expanded={expanded}
                 aria-controls={panelId}
@@ -193,8 +194,13 @@ export function EconomyLoadoutManager({
                 })}
               </div>
 
-              {expanded ? (
-                <div id={panelId} className="loadout-picker" aria-label={`${weaponLabel(representative)} owned finishes`}>
+              <div
+                id={panelId}
+                className="loadout-picker"
+                role="region"
+                aria-labelledby={triggerId}
+                hidden={!expanded}
+              >
                   <div className="loadout-picker-heading">
                     <div>
                       <h3>Owned finishes</h3>
@@ -244,8 +250,7 @@ export function EconomyLoadoutManager({
                       );
                     })}
                   </div>
-                </div>
-              ) : null}
+              </div>
             </article>
           );
         })}
