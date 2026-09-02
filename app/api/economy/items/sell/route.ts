@@ -23,6 +23,7 @@ import {
   stringArrayField,
   textField,
 } from "@/lib/economy/request";
+import { canSellInventoryItem } from "@/lib/economy/inventory-sale-lock";
 import { ECONOMY_SELLBACK_PERCENT_LABEL } from "@/lib/economy/sellback";
 
 function metadataFloat(
@@ -55,11 +56,8 @@ export async function POST(request: Request) {
       );
       const quoteItems = items.filter(
         (item) =>
-          item.state === "available" &&
-          item.tradable &&
-          item.stickers.length === 0 &&
+          canSellInventoryItem(item) &&
           item.catalogue &&
-          item.catalogueId !== null &&
           (!item.stattrak || isStattrakMarketplaceItem(item.itemType)),
       );
       const fallbacks = await getCachedMarketplaceVariantFallbacks(
@@ -201,7 +199,9 @@ export async function POST(request: Request) {
                 : null,
           })
         : null;
-    const [quote] = catalogue &&
+    const [quote] = item &&
+      canSellInventoryItem(item) &&
+      catalogue &&
       (!item.stattrak || isStattrakMarketplaceItem(item.itemType))
       ? await getMarketplacePriceQuotes([
           {

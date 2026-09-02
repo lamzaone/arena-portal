@@ -13,6 +13,7 @@ export type EconomyItemView = {
   rarity: string;
   rarityRank: number;
   tradable: boolean;
+  saleLocked: boolean;
   marketHashName: string | null;
   marketPriceTokens: number | null;
   marketBasePriceTokens: number | null;
@@ -344,6 +345,7 @@ export function toEconomyItem(value: unknown): EconomyItemView {
     rarity: rarityName(rarityRank),
     rarityRank,
     tradable: tradableValue === undefined ? true : bool(tradableValue),
+    saleLocked: bool(firstDefined(record, ["saleLocked", "sale_locked"])),
     marketHashName:
       text(
         firstDefined(record, ["marketHashName", "market_hash_name"]),

@@ -3983,6 +3983,7 @@ export type EconomyInventoryItem = {
   nametag: string | null;
   rarityRank: number;
   tradable: boolean;
+  saleLocked: boolean;
   state: EconomyItemState;
   attributes: Record<string, unknown>;
   source: Record<string, unknown>;
@@ -4230,6 +4231,18 @@ export type EquipProfileThemeItemResult = {
   themeId: number;
   themeKey: string;
   displayName: string;
+};
+
+export type SetEconomyInventorySaleLockInput = {
+  steamId: string;
+  itemIds: string[];
+  saleLocked: boolean;
+  idempotencyKey: string;
+};
+
+export type SetEconomyInventorySaleLockResult = {
+  itemIds: string[];
+  saleLocked: boolean;
 };
 
 export type SellEconomyItemInput = {
@@ -5001,6 +5014,7 @@ type EconomyInventoryRow = RowDataPacket & {
   nametag: string | null;
   rarity_rank: number | string;
   tradable: number | boolean;
+  sale_locked: number | boolean;
   state: string;
   attributes: unknown;
   source: unknown;
@@ -6105,6 +6119,7 @@ function toEconomyInventoryItem(
     nametag: row.nametag ? String(row.nametag) : null,
     rarityRank,
     tradable: economyBoolean(row.tradable),
+    saleLocked: economyBoolean(row.sale_locked),
     state: economyItemState(String(row.state)),
     attributes,
     source: economyRecord(row.source),
@@ -6744,7 +6759,7 @@ const economyCrateSelect =
   "INNER JOIN portal_loot_tables AS l ON l.container_catalogue_id = c.id AND l.table_type = 'container' AND l.enabled = TRUE ";
 
 const economyInventorySelect =
-  "SELECT i.id, i.owner_steam_id, i.catalogue_id, i.item_type, i.definition_index, i.paintkit, i.seed, i.float_value, i.stattrak, i.stattrak_count, i.nametag, i.rarity_rank, i.tradable, i.state, i.attributes, i.source, i.acquired_at, i.consumed_at, i.updated_at, " +
+  "SELECT i.id, i.owner_steam_id, i.catalogue_id, i.item_type, i.definition_index, i.paintkit, i.seed, i.float_value, i.stattrak, i.stattrak_count, i.nametag, i.rarity_rank, i.tradable, i.sale_locked, i.state, i.attributes, i.source, i.acquired_at, i.consumed_at, i.updated_at, " +
   "c.catalogue_key, c.market_hash_name, c.display_name, c.rarity_rank AS catalogue_rarity_rank, c.metadata AS catalogue_metadata, c.enabled AS catalogue_enabled, " +
   "p.id AS price_id, p.market_price_eur_cents, p.token_price, p.price_source, p.source_reference, p.observed_at " +
   "FROM portal_inventory_items AS i " +
@@ -9293,6 +9308,7 @@ function economyInventorySnapshot(item: EconomyInventoryItem) {
   return {
     ownerSteamId: item.ownerSteamId,
     tradable: item.tradable,
+    saleLocked: item.saleLocked,
     state: item.state,
     seed: item.seed,
     floatValue: item.floatValue,
@@ -11136,6 +11152,71 @@ export async function equipProfileThemeItem(
   });
 }
 
+export async function setEconomyInventorySaleLock(
+  input: SetEconomyInventorySaleLockInput,
+): Promise<SetEconomyInventorySaleLockResult> {
+  const steamId = economySteamId(input.steamId);
+  if (!Array.isArray(input.itemIds) || input.itemIds.length < 1 || input.itemIds.length > 50) {
+    economyError("invalid_input", "Choose between 1 and 50 inventory items.");
+  }
+  if (typeof input.saleLocked !== "boolean") {
+    economyError("invalid_input", "Choose whether to lock the selected items from sale.");
+  }
+  const itemIds = [
+    ...new Set(input.itemIds.map((itemId) => economyItemId(itemId))),
+  ].sort((left, right) => left.localeCompare(right));
+  const saleLocked = input.saleLocked;
+  return runEconomyMutation({
+    operationName: "inventory.sale-lock.set",
+    actorSteamId: steamId,
+    idempotencyKey: input.idempotencyKey,
+    request: { itemIds, saleLocked },
+    work: async (context) => {
+      const lockedItems = await lockEconomyInventoryItems(
+        context.connection,
+        itemIds,
+      );
+      const items = itemIds.map((itemId) => {
+        const item = lockedItems.get(itemId);
+        if (!item) economyError("item_not_found", "That inventory item does not exist.");
+        return item;
+      });
+      if (items.some((item) => item.ownerSteamId !== steamId)) {
+        economyError(
+          "ownership_required",
+          "One or more selected items are not in your inventory.",
+        );
+      }
+      const changedItems = items.filter((item) => item.saleLocked !== saleLocked);
+      if (changedItems.length) {
+        const placeholders = changedItems.map(() => "?").join(", ");
+        await context.connection.execute(
+          "UPDATE portal_inventory_items SET sale_locked = ? WHERE owner_steam_id = ? AND id IN (" +
+            placeholders +
+            ") AND sale_locked <> ?",
+          [saleLocked, steamId, ...changedItems.map((item) => item.id), saleLocked],
+        );
+        await writeInventoryEvents(
+          context.connection,
+          changedItems.map((item, index) => ({
+            itemId: item.id,
+            actorSteamId: steamId,
+            eventType: saleLocked
+              ? "inventory.sale-locked"
+              : "inventory.sale-unlocked",
+            idempotencyKey: context.idempotencyKey,
+            lineKey: `sale-lock:${index}`,
+            beforeState: economyInventorySnapshot(item),
+            afterState: { ...economyInventorySnapshot(item), saleLocked },
+            metadata: { saleLocked },
+          })),
+        );
+      }
+      return { itemIds: changedItems.map((item) => item.id), saleLocked };
+    },
+  });
+}
+
 export async function sellEconomyItem(
   input: SellEconomyItemInput,
 ): Promise<SellEconomyItemResult> {
@@ -11160,6 +11241,12 @@ export async function sellEconomyItem(
         economyError(
           "ownership_required",
           "That item is not available to sell from your inventory.",
+        );
+      }
+      if (item.saleLocked) {
+        economyError(
+          "item_unavailable",
+          "This item is locked from sale. Unlock it before selling.",
         );
       }
       if (!item.tradable) {
@@ -11358,6 +11445,11 @@ export async function sellEconomyItems(
             "One or more items are no longer available in your inventory.",
           );
         }
+        if (item.saleLocked)
+          economyError(
+            "item_unavailable",
+            "One or more selected items are locked from sale. Unlock them before selling.",
+          );
         if (!item.tradable)
           economyError(
             "item_not_tradable",
