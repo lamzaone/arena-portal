@@ -4276,6 +4276,7 @@ export type SellEconomyItemResult = {
   sellbackBasisTokens: number;
   recordedPurchasePriceTokens: number | null;
   payoutTokens: number;
+  payoutCappedAtRecordedPurchasePrice: boolean;
   wallet: TokenWallet;
 };
 
@@ -4300,6 +4301,7 @@ export type SellEconomyItemsResult = {
     sellbackBasisTokens: number;
     recordedPurchasePriceTokens: number | null;
     payoutTokens: number;
+    payoutCappedAtRecordedPurchasePrice: boolean;
   }>;
   itemIds: string[];
   payoutTokens: number;
@@ -11321,39 +11323,49 @@ export async function sellEconomyItem(
         sellbackBasisTokens,
         recordedPurchasePriceTokens,
         payoutTokens,
+        payoutCappedAtRecordedPurchasePrice,
       } = sellback;
 
-      await applyTokenDelta({
-        connection: context.connection,
-        wallets,
-        steamId,
-        delta: payoutTokens,
-        reason: "marketplace.sale",
-        referenceType: "inventory-item",
-        referenceId: itemId,
-        idempotencyKey: context.idempotencyKey,
-        lineKey: "sale:credit",
-        actorSteamId: steamId,
-        metadata: {
-          currentMarketPriceTokens: marketPriceTokens,
-          marketPriceTokens,
-          sellbackBasisTokens,
-          recordedPurchasePriceTokens,
-          marketPriceEurCents:
-            marketQuote?.euroCents ?? fallbackPrice?.euroCents,
-          payoutTokens,
-          sellRateBps: ECONOMY_SELLBACK_BASIS_POINTS,
-          priceSource: marketQuote?.source ?? fallbackPrice?.source,
-          priceSourceReference:
-            marketQuote?.sourceReference ?? fallbackPrice?.sourceReference,
-          floatValue: marketQuote?.floatValue ?? item.floatValue,
-          seed: marketQuote?.seed ?? item.seed,
-          floatDiscountBps: marketQuote?.floatDiscountBps ?? null,
-          priceFromFallback: marketQuote?.fromFallback ?? false,
-          priceFallbackStale: marketQuote?.fallbackStale ?? false,
-          priceFallbackObservedAt: marketQuote?.fallbackObservedAt ?? null,
-        },
-      });
+      let wallet = wallets.get(steamId);
+      if (!wallet)
+        economyError(
+          "wallet_unavailable",
+          "The sale wallet was not locked.",
+        );
+      if (payoutTokens > 0) {
+        wallet = await applyTokenDelta({
+          connection: context.connection,
+          wallets,
+          steamId,
+          delta: payoutTokens,
+          reason: "marketplace.sale",
+          referenceType: "inventory-item",
+          referenceId: itemId,
+          idempotencyKey: context.idempotencyKey,
+          lineKey: "sale:credit",
+          actorSteamId: steamId,
+          metadata: {
+            currentMarketPriceTokens: marketPriceTokens,
+            marketPriceTokens,
+            sellbackBasisTokens,
+            recordedPurchasePriceTokens,
+            payoutTokens,
+            payoutCappedAtRecordedPurchasePrice,
+            marketPriceEurCents:
+              marketQuote?.euroCents ?? fallbackPrice?.euroCents,
+            sellRateBps: ECONOMY_SELLBACK_BASIS_POINTS,
+            priceSource: marketQuote?.source ?? fallbackPrice?.source,
+            priceSourceReference:
+              marketQuote?.sourceReference ?? fallbackPrice?.sourceReference,
+            floatValue: marketQuote?.floatValue ?? item.floatValue,
+            seed: marketQuote?.seed ?? item.seed,
+            floatDiscountBps: marketQuote?.floatDiscountBps ?? null,
+            priceFromFallback: marketQuote?.fromFallback ?? false,
+            priceFallbackStale: marketQuote?.fallbackStale ?? false,
+            priceFallbackObservedAt: marketQuote?.fallbackObservedAt ?? null,
+          },
+        });
+      }
       await context.connection.execute(
         "UPDATE portal_inventory_items SET state = 'consumed', consumed_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_steam_id = ? AND state = 'available'",
         [itemId, steamId],
@@ -11374,6 +11386,7 @@ export async function sellEconomyItem(
           sellbackBasisTokens,
           recordedPurchasePriceTokens,
           payoutTokens,
+          payoutCappedAtRecordedPurchasePrice,
           sellRateBps: ECONOMY_SELLBACK_BASIS_POINTS,
           priceSource: marketQuote?.source ?? fallbackPrice?.source,
           priceSourceReference:
@@ -11393,18 +11406,13 @@ export async function sellEconomyItem(
         "sold",
         [itemId],
       );
-      const wallet = wallets.get(steamId);
-      if (!wallet)
-        economyError(
-          "wallet_unavailable",
-          "The sale wallet was not locked.",
-        );
       return {
         itemId,
         marketPriceTokens,
         sellbackBasisTokens,
         recordedPurchasePriceTokens,
         payoutTokens,
+        payoutCappedAtRecordedPurchasePrice,
         wallet,
       };
     },
@@ -11546,31 +11554,39 @@ export async function sellEconomyItems(
           economyError("token_limit", "The token balance limit was reached.");
         return next;
       }, 0);
-      const wallet = await applyTokenDelta({
-        connection: context.connection,
-        wallets,
-        steamId,
-        delta: payoutTokens,
-        reason: "marketplace.sale",
-        referenceType: "inventory-batch",
-        referenceId: economyChildIdempotencyKey(
-          context.idempotencyKey,
-          "bulk-sale",
-        ),
-        idempotencyKey: context.idempotencyKey,
-        lineKey: "sale:credit",
-        actorSteamId: steamId,
-        metadata: {
-          itemCount: prepared.length,
-          payoutTokens,
-          sellRateBps: ECONOMY_SELLBACK_BASIS_POINTS,
-          items: prepared.map(({ sale, item, marketPriceTokens, sellbackBasisTokens, recordedPurchasePriceTokens, payoutTokens: itemPayout, fallbackPrice }) => ({
+      let wallet = wallets.get(steamId);
+      if (!wallet)
+        economyError(
+          "wallet_unavailable",
+          "The sale wallet was not locked.",
+        );
+      if (payoutTokens > 0) {
+        wallet = await applyTokenDelta({
+          connection: context.connection,
+          wallets,
+          steamId,
+          delta: payoutTokens,
+          reason: "marketplace.sale",
+          referenceType: "inventory-batch",
+          referenceId: economyChildIdempotencyKey(
+            context.idempotencyKey,
+            "bulk-sale",
+          ),
+          idempotencyKey: context.idempotencyKey,
+          lineKey: "sale:credit",
+          actorSteamId: steamId,
+          metadata: {
+            itemCount: prepared.length,
+            payoutTokens,
+            sellRateBps: ECONOMY_SELLBACK_BASIS_POINTS,
+            items: prepared.map(({ sale, item, marketPriceTokens, sellbackBasisTokens, recordedPurchasePriceTokens, payoutTokens: itemPayout, payoutCappedAtRecordedPurchasePrice, fallbackPrice }) => ({
             itemId: item.id,
             currentMarketPriceTokens: marketPriceTokens,
             marketPriceTokens,
             sellbackBasisTokens,
             recordedPurchasePriceTokens,
             payoutTokens: itemPayout,
+            payoutCappedAtRecordedPurchasePrice,
             priceSource: sale.marketQuote?.source ?? fallbackPrice?.source,
             priceSourceReference:
               sale.marketQuote?.sourceReference ?? fallbackPrice?.sourceReference,
@@ -11581,9 +11597,10 @@ export async function sellEconomyItems(
             priceFallbackStale: sale.marketQuote?.fallbackStale ?? false,
             priceFallbackObservedAt:
               sale.marketQuote?.fallbackObservedAt ?? null,
-          })),
-        },
-      });
+            })),
+          },
+        });
+      }
       const [consumed] = await context.connection.execute<ResultSetHeader>(
         "UPDATE portal_inventory_items SET state = 'consumed', consumed_at = CURRENT_TIMESTAMP WHERE owner_steam_id = ? AND state = 'available' AND id IN (" +
           placeholders +
@@ -11598,7 +11615,7 @@ export async function sellEconomyItems(
       await clearEconomyLoadoutSlots(context.connection, steamId, itemIds);
       await writeInventoryEvents(
         context.connection,
-        prepared.map(({ sale, item, marketPriceTokens, sellbackBasisTokens, recordedPurchasePriceTokens, payoutTokens: itemPayout, fallbackPrice }, index) => ({
+        prepared.map(({ sale, item, marketPriceTokens, sellbackBasisTokens, recordedPurchasePriceTokens, payoutTokens: itemPayout, payoutCappedAtRecordedPurchasePrice, fallbackPrice }, index) => ({
           itemId: item.id,
           actorSteamId: steamId,
           eventType: "marketplace.sold",
@@ -11612,6 +11629,7 @@ export async function sellEconomyItems(
             sellbackBasisTokens,
             recordedPurchasePriceTokens,
             payoutTokens: itemPayout,
+            payoutCappedAtRecordedPurchasePrice,
             sellRateBps: ECONOMY_SELLBACK_BASIS_POINTS,
             priceSource: sale.marketQuote?.source ?? fallbackPrice?.source,
             priceSourceReference:
@@ -11633,12 +11651,13 @@ export async function sellEconomyItems(
         "sold",
         itemIds,
       );
-      const results = prepared.map(({ item, marketPriceTokens, sellbackBasisTokens, recordedPurchasePriceTokens, payoutTokens }) => ({
+      const results = prepared.map(({ item, marketPriceTokens, sellbackBasisTokens, recordedPurchasePriceTokens, payoutTokens, payoutCappedAtRecordedPurchasePrice }) => ({
         itemId: item.id,
         marketPriceTokens,
         sellbackBasisTokens,
         recordedPurchasePriceTokens,
         payoutTokens,
+        payoutCappedAtRecordedPurchasePrice,
       }));
       return {
         items: results,

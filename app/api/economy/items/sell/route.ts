@@ -24,7 +24,7 @@ import {
   textField,
 } from "@/lib/economy/request";
 import { canSellInventoryItem } from "@/lib/economy/inventory-sale-lock";
-import { ECONOMY_SELLBACK_PERCENT_LABEL } from "@/lib/economy/sellback";
+import { economySellbackSaleMessage } from "@/lib/economy/sellback";
 
 function metadataFloat(
   metadata: Record<string, unknown>,
@@ -261,7 +261,7 @@ export async function POST(request: Request) {
     return economyJsonSuccess({
       ...result,
       balance: result.wallet.balance,
-      message: `Item sold for ${result.payoutTokens} Tokens (${ECONOMY_SELLBACK_PERCENT_LABEL} of its ${result.sellbackBasisTokens}-Token sellback basis; current portal market price: ${result.marketPriceTokens} Tokens).`,
+      message: economySellbackSaleMessage(result),
     });
   } catch (error) {
     return economyMutationFailure(error);

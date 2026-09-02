@@ -1419,7 +1419,7 @@ export function InventoryManager({
                     ) : (
                       <>
                         <div className="inventory-sell-price">
-                          <span>Current buyback payout</span>
+                          <span>Estimated buyback payout</span>
                           <strong>
                             {salePriceIsKnown
                               ? `${formatTokens(selectedSalePayout)} Tokens`
@@ -1434,11 +1434,11 @@ export function InventoryManager({
                                   : selected.recordedPurchasePriceTokens !== null
                                     ? `${ECONOMY_SELLBACK_PERCENT_LABEL} of the lower of the current ${formatTokens(selected.marketPriceTokens ?? 0)}-Token market price and your recorded ${formatTokens(selected.recordedPurchasePriceTokens)}-Token purchase price.`
                                     : `${ECONOMY_SELLBACK_PERCENT_LABEL} of the current ${formatTokens(selected.marketPriceTokens ?? 0)}-Token market price.`
-                              : `Your final ${ECONOMY_SELLBACK_PERCENT_LABEL} payout is resolved from the same current quote shown in Market.`}
+                              : `Your final payout is resolved server-side from a fresh market quote when you sell.`}
                           </small>
                         </div>
                         <p className="empty-copy">
-                          Uses the current portal Market price or its staff-set last-known price. Discounted marketplace purchases use the lower of that price and the recorded amount paid. Selling permanently removes this item from your inventory and clears it from your loadout.
+                          This is an estimate from the displayed portal Market price or staff-set last-known price; the server resolves the final quote when you sell. Discounted marketplace purchases use the lower of that final price and the recorded amount paid. Selling permanently removes this item from your inventory and clears it from your loadout.
                         </p>
                         {saleIsConfirming ? (
                           <div className="hero-actions inventory-sell-confirmation">
@@ -1457,7 +1457,7 @@ export function InventoryManager({
                               <Coins aria-hidden="true" /> {pending
                                 ? "Selling…"
                                 : salePriceIsKnown
-                                  ? `Confirm sale for ${formatTokens(selectedSalePayout)} Tokens`
+                                  ? `Confirm sale (estimate ${formatTokens(selectedSalePayout)} Tokens)`
                                   : "Confirm sale at market price"}
                             </button>
                             <button
@@ -1477,7 +1477,7 @@ export function InventoryManager({
                             onClick={() => setSaleConfirmationItemId(selected.id)}
                           >
                             <Coins aria-hidden="true" /> {salePriceIsKnown
-                              ? `Sell for ${formatTokens(selectedSalePayout)} Tokens`
+                              ? `Sell (estimate ${formatTokens(selectedSalePayout)} Tokens)`
                               : "Sell at market price"}
                           </button>
                         )}

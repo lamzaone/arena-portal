@@ -19,6 +19,18 @@ export type EconomySellbackResolution =
       reason: "invalid_discounted_marketplace_purchase";
     };
 
+type EconomySellbackSaleMessageInput = {
+  marketPriceTokens: number;
+  sellbackBasisTokens: number;
+  recordedPurchasePriceTokens: number | null;
+  payoutTokens: number;
+  payoutCappedAtRecordedPurchasePrice: boolean;
+};
+
+function formatSellbackTokens(tokens: number) {
+  return new Intl.NumberFormat("en-US").format(tokens);
+}
+
 function tokenAmount(value: unknown) {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
     ? value
@@ -98,6 +110,25 @@ export function resolveEconomySellback({
     payoutCappedAtRecordedPurchasePrice:
       appearsDiscounted && payoutTokens < uncappedPayoutTokens,
   };
+}
+
+export function economySellbackSaleMessage(
+  input: EconomySellbackSaleMessageInput,
+) {
+  const payoutTokens = formatSellbackTokens(input.payoutTokens);
+  if (input.payoutTokens === 0 && input.recordedPurchasePriceTokens === 0) {
+    return "Item sold for 0 Tokens (the recorded discounted purchase price was 0 Tokens).";
+  }
+  if (
+    input.payoutCappedAtRecordedPurchasePrice &&
+    input.recordedPurchasePriceTokens !== null
+  ) {
+    return `Item sold for ${payoutTokens} Tokens (buyback capped at its recorded ${formatSellbackTokens(input.recordedPurchasePriceTokens)}-Token purchase price).`;
+  }
+  if (economySellbackUsesMinimum(input.sellbackBasisTokens)) {
+    return `Item sold for ${payoutTokens} Tokens (minimum buyback for its ${formatSellbackTokens(input.sellbackBasisTokens)}-Token sellback basis).`;
+  }
+  return `Item sold for ${payoutTokens} Tokens (${ECONOMY_SELLBACK_PERCENT_LABEL} of its ${formatSellbackTokens(input.sellbackBasisTokens)}-Token sellback basis; current portal market price: ${formatSellbackTokens(input.marketPriceTokens)} Tokens).`;
 }
 
 export function economySellbackPayoutTokens(marketPriceTokens: number) {
