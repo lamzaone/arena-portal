@@ -55,6 +55,20 @@ export type OwnedWeaponSkinGroup<T extends WeaponItemLike = WeaponItemLike> = {
   items: T[];
 };
 
+export type LoadoutTeamSelection = "T" | "CT" | "both";
+
+export function loadoutSlots(
+  definitionIndex: number,
+  team: LoadoutTeamSelection,
+) {
+  const teams = team === "both" ? (["T", "CT"] as const) : [team];
+  return teams.map((selectedTeam) => ({
+    slotType: "weapon" as const,
+    team: selectedTeam,
+    definitionIndex,
+  }));
+}
+
 export function ownedWeaponSkins<T extends WeaponItemLike>(
   items: T[],
 ): OwnedWeaponSkinGroup<T>[] {

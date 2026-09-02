@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  loadoutSlots,
   ownedWeaponSkins,
   weaponCategoryForDefinition,
 } from "./weapon-categories.ts";
@@ -14,6 +15,16 @@ test("groups representative CS2 definitions", () => {
   assert.equal(weaponCategoryForDefinition(35), "shotguns");
   assert.equal(weaponCategoryForDefinition(28), "lmgs");
   assert.equal(weaponCategoryForDefinition(65_535), "other");
+});
+
+test("builds one slot for T and two slots for Both", () => {
+  assert.deepEqual(loadoutSlots(7, "T"), [
+    { slotType: "weapon", team: "T", definitionIndex: 7 },
+  ]);
+  assert.deepEqual(loadoutSlots(7, "both"), [
+    { slotType: "weapon", team: "T", definitionIndex: 7 },
+    { slotType: "weapon", team: "CT", definitionIndex: 7 },
+  ]);
 });
 
 test("groups only owned weapon skins with a definition index", () => {
