@@ -29,3 +29,13 @@ export function activeConsumedItemIds(
     (itemId) => inventoryIds.has(itemId) || itemId === retainedId,
   );
 }
+
+export function inventoryWorkflowAccess(input: {
+  crateInteractionActive: boolean;
+  inventoryMutationActive: boolean;
+}) {
+  return {
+    inventoryDisabled: input.crateInteractionActive,
+    cratesDisabled: input.inventoryMutationActive,
+  };
+}

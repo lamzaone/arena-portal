@@ -68,6 +68,10 @@ type InventoryManagerProps = {
   selectionMode?: boolean;
   onSelectionModeChange?: (active: boolean) => void;
   selectionDisabled?: boolean;
+  interactionDisabled?: boolean;
+  interactionResetKey?: number;
+  onInteractionStart?: () => void;
+  onMutationActiveChange?: (active: boolean) => void;
 };
 
 type SortMode = "newest" | "name" | "rarity" | "float";
@@ -153,6 +157,10 @@ export function InventoryManager({
   selectionMode: controlledSelectionMode,
   onSelectionModeChange,
   selectionDisabled = false,
+  interactionDisabled = false,
+  interactionResetKey = 0,
+  onInteractionStart,
+  onMutationActiveChange,
 }: InventoryManagerProps) {
   const router = useRouter();
   const inventoryItems = useMemo(() => economyItems(inventory), [inventory]);
@@ -425,6 +433,20 @@ export function InventoryManager({
   }, [controlledSelectionMode, onSelectionModeChange, selectionDisabled, selectionMode]);
 
   useEffect(() => {
+    onMutationActiveChange?.(pending || bulkSelling || bulkLocking);
+  }, [bulkLocking, bulkSelling, onMutationActiveChange, pending]);
+
+  useEffect(() => {
+    if (!interactionDisabled && interactionResetKey === 0) return;
+    setSelectedId("");
+    setInventoryInlineModalIndex(-1);
+    setSaleConfirmationItemId("");
+    setBulkSelectedIds(new Set());
+    setBulkSaleConfirming(false);
+    if (controlledSelectionMode === undefined) setInternalSelectionMode(false);
+  }, [controlledSelectionMode, interactionDisabled, interactionResetKey]);
+
+  useEffect(() => {
     const grid = inventoryGridRef.current;
     if (!grid) return;
 
@@ -448,9 +470,11 @@ export function InventoryManager({
   }, [selectedIndex, visibleItems.length]);
 
   function selectInventoryItem(itemId: string) {
+    if (interactionDisabled) return;
     const grid = inventoryGridRef.current;
     const columns = grid ? gridColumnCount(grid) : inventoryGridColumns;
     const nextSelectedId = selectedId === itemId ? "" : itemId;
+    if (nextSelectedId) onInteractionStart?.();
 
     setInventoryGridColumns(columns);
     if (!nextSelectedId) {
@@ -476,8 +500,9 @@ export function InventoryManager({
   }
 
   function toggleSelectionMode() {
-    if (pending || bulkSelling || bulkLocking || selectionDisabled) return;
+    if (pending || bulkSelling || bulkLocking || selectionDisabled || interactionDisabled) return;
     const next = !selectionMode;
+    if (next) onInteractionStart?.();
     if (controlledSelectionMode === undefined) setInternalSelectionMode(next);
     onSelectionModeChange?.(next);
     if (!next) setBulkSelectedIds(new Set());
@@ -488,7 +513,7 @@ export function InventoryManager({
   }
 
   function toggleBulkItem(item: EconomyItemView) {
-    if (bulkSelling || bulkLocking) return;
+    if (bulkSelling || bulkLocking || interactionDisabled) return;
     if (!canSelectForLock(item)) {
       setNotice({
         type: "error",
@@ -536,7 +561,7 @@ export function InventoryManager({
   }
 
   async function bulkSellItems() {
-    if (!bulkSellableItems.length || bulkSelling || bulkLocking) return;
+    if (!bulkSellableItems.length || bulkSelling || bulkLocking || interactionDisabled) return;
     if (!bulkSaleConfirming) {
       setBulkSaleConfirming(true);
       return;
@@ -627,7 +652,7 @@ export function InventoryManager({
   }
 
   function updateSaleLocks(itemIds: string[], saleLocked: boolean) {
-    if (!itemIds.length || pending || bulkSelling || bulkLocking) return;
+    if (!itemIds.length || pending || bulkSelling || bulkLocking || interactionDisabled) return;
     setBulkSaleConfirming(false);
     setBulkLocking(true);
     setNotice(null);
@@ -670,7 +695,7 @@ export function InventoryManager({
     payload: Record<string, unknown>,
     success: string,
   ) {
-    if (!selected) return;
+    if (!selected || interactionDisabled) return;
     let requestId: string | undefined;
     if (path === "/api/economy/items/vip/activate") {
       if (vipActivationRequestRef.current?.itemId !== selected.id) {
@@ -713,7 +738,7 @@ export function InventoryManager({
   }
 
   return (
-    <section className="inventory-manager" aria-label="Inventory manager">
+    <section className="inventory-manager" aria-label="Inventory manager" aria-busy={pending || bulkSelling || bulkLocking || interactionDisabled}>
       <div className="content-grid">
         <div className="panel">
           <p className="eyebrow">
@@ -843,7 +868,7 @@ export function InventoryManager({
                 <button
                   type="button"
                   className="button button-quiet"
-                  disabled={bulkSelling || bulkLocking || bulkSelectedItems.length >= MAX_BULK_SELL_ITEMS || !visibleItems.some(canSelectForLock)}
+                  disabled={interactionDisabled || bulkSelling || bulkLocking || bulkSelectedItems.length >= MAX_BULK_SELL_ITEMS || !visibleItems.some(canSelectForLock)}
                   onClick={selectSellablePage}
                 >
                   Select page
@@ -851,7 +876,7 @@ export function InventoryManager({
                 <button
                   type="button"
                   className="button button-quiet"
-                  disabled={bulkSelling || bulkLocking || !bulkSelectedItems.length}
+                  disabled={interactionDisabled || bulkSelling || bulkLocking || !bulkSelectedItems.length}
                   onClick={() => {
                     setBulkSelectedIds(new Set());
                     setBulkSaleConfirming(false);
@@ -862,7 +887,7 @@ export function InventoryManager({
                 <button
                   type="button"
                   className="button button-secondary inventory-lock-action"
-                  disabled={bulkSelling || bulkLocking || !bulkSelectedItems.length || bulkSelectedItems.every((item) => item.saleLocked)}
+                  disabled={interactionDisabled || bulkSelling || bulkLocking || !bulkSelectedItems.length || bulkSelectedItems.every((item) => item.saleLocked)}
                   onClick={() => updateSaleLocks(bulkSelectedItems.map((item) => item.id), true)}
                 >
                   <LockKeyhole aria-hidden="true" /> Lock selected
@@ -870,7 +895,7 @@ export function InventoryManager({
                 <button
                   type="button"
                   className="button button-secondary inventory-lock-action"
-                  disabled={bulkSelling || bulkLocking || !bulkSelectedItems.length || bulkSelectedItems.every((item) => !item.saleLocked)}
+                  disabled={interactionDisabled || bulkSelling || bulkLocking || !bulkSelectedItems.length || bulkSelectedItems.every((item) => !item.saleLocked)}
                   onClick={() => updateSaleLocks(bulkSelectedItems.map((item) => item.id), false)}
                 >
                   <LockOpen aria-hidden="true" /> Unlock selected
@@ -878,7 +903,7 @@ export function InventoryManager({
                 <button
                   type="button"
                   className="button inventory-sell-confirm"
-                  disabled={bulkSelling || bulkLocking || !bulkSellableItems.length}
+                  disabled={interactionDisabled || bulkSelling || bulkLocking || !bulkSellableItems.length}
                   onClick={() => void bulkSellItems()}
                 >
                   {bulkSelling ? (
@@ -927,7 +952,7 @@ export function InventoryManager({
                     : `Manage ${item.displayName}`}
                   selectionControls={!selectionMode && selected?.id === item.id ? `inventory-item-modal-${item.id}` : undefined}
                   enableMarketPreview
-                  disabled={bulkSelling || bulkLocking}
+                  disabled={bulkSelling || bulkLocking || interactionDisabled}
                   className={selectionMode && !canSelectForLock(item) ? "is-selection-unavailable" : ""}
                 />
                 {!selectionMode && index === inventoryInlineModalIndex ? <div ref={setInventoryModalHost} className="inventory-inline-modal-host" aria-live="polite" /> : null}
@@ -948,7 +973,7 @@ export function InventoryManager({
             label="Inventory pages"
             onPageChange={changeInventoryPage}
           />
-          {!selectionMode && inventoryModalHost && selected ? createPortal(
+          {!selectionMode && !interactionDisabled && inventoryModalHost && selected ? createPortal(
           <section
             id={`inventory-item-modal-${selected.id}`}
             data-ui="item-modal"

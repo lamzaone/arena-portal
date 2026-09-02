@@ -83,6 +83,8 @@ type CrateOpenerProps = {
   onSelectionModeChange?: (active: boolean) => void;
   onOwnedInteraction?: () => void;
   onOwnedOpeningChange?: (active: boolean) => void;
+  interactionDisabled?: boolean;
+  interactionResetKey?: number;
 };
 
 type CatalogueTypeFilter = "all" | "crate" | "capsule";
@@ -818,6 +820,8 @@ export function CrateOpener({
   onSelectionModeChange,
   onOwnedInteraction,
   onOwnedOpeningChange,
+  interactionDisabled = false,
+  interactionResetKey = 0,
 }: CrateOpenerProps) {
   const ownedOnly = mode === "owned";
   const router = useRouter();
@@ -936,7 +940,8 @@ export function CrateOpener({
   const bulkAnimating = bulkOpeningRows.some(
     (row) => row.preparing || row.opening !== null,
   );
-  const busy = pending || activeAction !== null || bulkAnimating;
+  const localBusy = pending || activeAction !== null || bulkAnimating;
+  const busy = localBusy || interactionDisabled;
   const openingCrateId = opening?.crate.id ?? null;
   const selectedVisibleCrateIndex = visibleOwnedCrates.findIndex(
     (item) => item.id === selectedCrateId,
@@ -1118,9 +1123,18 @@ export function CrateOpener({
   useEffect(() => {
     if (!ownedOnly) return;
     onOwnedOpeningChange?.(
-      busy || unboxed !== null || bulkOpeningRows.length > 0,
+      localBusy || unboxed !== null || bulkOpeningRows.length > 0,
     );
-  }, [bulkOpeningRows.length, busy, onOwnedOpeningChange, ownedOnly, unboxed]);
+  }, [bulkOpeningRows.length, localBusy, onOwnedOpeningChange, ownedOnly, unboxed]);
+
+  useEffect(() => {
+    if (!interactionDisabled && interactionResetKey === 0) return;
+    setSelectedCrateId("");
+    setBulkSelectedCrateIds(new Set());
+    setBulkOpenConfirming(false);
+    if (controlledSelectionMode === undefined) setInternalSelectionMode(false);
+    clearUnboxResult();
+  }, [interactionDisabled, interactionResetKey]);
 
   useEffect(() => {
     if (
@@ -1284,12 +1298,10 @@ export function CrateOpener({
     });
     setActiveAction("open");
     void (async () => {
-      let openingCommitted = false;
       try {
         const result = await postEconomyAction("/api/economy/crates/open", csrf, {
           crateItemId: crate.id,
         });
-        openingCommitted = true;
         const resultItem = result.item ? toEconomyItem(result.item) : null;
         if (!resultItem || (!resultItem.id && resultItem.displayName === "Unnamed item"))
           throw new Error("The crate opened, but its reward could not be displayed. Reload Inventory to view it.");
@@ -1358,7 +1370,9 @@ export function CrateOpener({
         // continuous panel instead of letting a refresh remove it mid-reveal.
         router.refresh();
       } catch (error) {
-        if (openingCommitted) router.refresh();
+        // A lost response can hide a committed server transaction. Refresh
+        // authoritatively on every failure while preserving this notice.
+        router.refresh();
         setNotice({
           type: "error",
           text:
@@ -1439,6 +1453,7 @@ export function CrateOpener({
 
   function toggleCrateSelectionMode() {
     if (busy) return;
+    if (!selectionMode) onOwnedInteraction?.();
     changeSelectionMode(!selectionMode);
     setBulkOpenConfirming(false);
     setSelectedCrateId("");
@@ -1600,6 +1615,9 @@ export function CrateOpener({
         })),
       );
       setNotice({ type: "error", text: message });
+      // Network ambiguity can occur after the atomic open commits. Keep the
+      // error rows visible, but reconcile both Inventory surfaces now.
+      router.refresh();
     } finally {
       setActiveAction(null);
     }
@@ -1709,7 +1727,7 @@ export function CrateOpener({
   }
 
   return (
-    <section className={ownedOnly ? "inventory-owned-crates" : undefined} aria-label={ownedOnly ? "Owned crate opening" : "Crate opening"}>
+    <section className={ownedOnly ? "inventory-owned-crates" : undefined} aria-label={ownedOnly ? "Owned crate opening" : "Crate opening"} aria-busy={busy}>
       {!ownedOnly ? <div className="content-grid">
         <div className="panel">
           <p className="eyebrow">
@@ -1739,7 +1757,7 @@ export function CrateOpener({
           {!ownedOnly ? <div className="crate-tabs" role="tablist" aria-label="Crate source">
             <button id="crate-owned-tab" type="button" role="tab" aria-controls="crate-owned-panel" aria-selected={activeTab === "owned"} className={activeTab === "owned" ? "active" : ""} disabled={busy} onClick={() => changeCrateTab("owned")}><Gift aria-hidden="true" /> Owned <span>{ownedCrates.length}</span></button>
             <button id="crate-market-tab" type="button" role="tab" aria-controls="crate-market-panel" aria-selected={activeTab === "market"} className={activeTab === "market" ? "active" : ""} disabled={busy} onClick={() => changeCrateTab("market")}><ShoppingBag aria-hidden="true" /> Market <span>{crateCatalogue.length}</span></button>
-          </div> : <span className="tag">{ownedCrates.length} owned</span>}
+          </div> : <span className="tag" role={interactionDisabled ? "status" : undefined}>{interactionDisabled ? "Inventory update in progress" : `${ownedCrates.length} owned`}</span>}
         </div>
 
         {ownedOnly || activeTab === "owned" ? <>

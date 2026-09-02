@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   activeConsumedItemIds,
+  inventoryWorkflowAccess,
   nextInventorySelectionOwner,
   withRetainedOpenedItem,
 } from "./inventory-selection.ts";
@@ -10,6 +11,17 @@ import {
 test("activating one inventory selection surface replaces the other", () => {
   assert.equal(nextInventorySelectionOwner("crates", "inventory", true), "inventory");
   assert.equal(nextInventorySelectionOwner("inventory", "crates", true), "crates");
+});
+
+test("workflow access disables only the surface opposite an active interaction", () => {
+  assert.deepEqual(
+    inventoryWorkflowAccess({ crateInteractionActive: true, inventoryMutationActive: false }),
+    { inventoryDisabled: true, cratesDisabled: false },
+  );
+  assert.deepEqual(
+    inventoryWorkflowAccess({ crateInteractionActive: false, inventoryMutationActive: true }),
+    { inventoryDisabled: false, cratesDisabled: true },
+  );
 });
 
 test("a retained result stays consumed after the refreshed inventory drops it", () => {
