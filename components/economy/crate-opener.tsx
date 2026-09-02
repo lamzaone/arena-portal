@@ -3,8 +3,6 @@
 import {
   Box,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Gift,
   ListChecks,
   LoaderCircle,
@@ -33,6 +31,12 @@ import {
   EconomyItemCard,
 } from "@/components/economy/economy-item-card";
 import {
+  CrateDropPreview,
+  economyCrateDropStateFromResponse,
+  type EconomyCrateDrop as CrateDrop,
+  type EconomyCrateDropState as CrateDropState,
+} from "@/components/economy/crate-drop-preview";
+import {
   createEconomyIdempotencyKey,
   postEconomyAction,
 } from "@/components/economy/economy-request";
@@ -58,6 +62,12 @@ import {
   ECONOMY_RARITY_RANKS,
   ECONOMY_SPECIAL_RARITY_RANK,
 } from "@/lib/economy/item-taxonomy";
+import {
+  canAffordCratePurchase,
+  clampCrateQuantity,
+  cratePurchaseTotal,
+  MAX_CRATE_PURCHASE_QUANTITY,
+} from "@/lib/economy/crate-presentation";
 
 type CrateOpenerProps = {
   crates: unknown;
@@ -70,19 +80,6 @@ type CatalogueTypeFilter = "all" | "crate" | "capsule";
 type CataloguePriceFilter = "all" | "priced" | "affordable" | "unpriced";
 type CatalogueSort = "catalogue" | "price-asc" | "price-desc" | "name" | "rarity";
 type CrateTab = "owned" | "market";
-type CrateDrop = {
-  item: EconomyItemView;
-  lootEntryId: number;
-  weight: number;
-  minFloat: number | null;
-  maxFloat: number | null;
-  stattrakChanceBps: number;
-};
-type CrateDropState =
-  | { status: "idle" }
-  | { status: "loading" }
-  | { status: "ready"; totalWeight: number; drops: CrateDrop[] }
-  | { status: "unavailable"; message: string };
 type OpeningState =
   // The server is authoritative for the roll. Keep a weighted filler reel
   // moving while its transaction is in flight; it intentionally has no
@@ -115,8 +112,6 @@ type BulkOpeningRow = {
 
 const CATALOGUE_PAGE_SIZE = 50;
 const OWNED_CRATE_PAGE_SIZE = 30;
-const DROP_PAGE_SIZE = 50;
-const MAX_CRATE_PURCHASE_QUANTITY = 50;
 const MAX_BULK_OPEN_CRATES = 10;
 const FINAL_REEL_DURATION_MS = 4_800;
 const REDUCED_MOTION_FINAL_REEL_DURATION_MS = 1_500;
@@ -172,11 +167,6 @@ function priceSourceLabel(source: string | null) {
   }
 }
 
-function clampPurchaseQuantity(value: number) {
-  if (!Number.isFinite(value)) return 1;
-  return Math.max(1, Math.min(MAX_CRATE_PURCHASE_QUANTITY, Math.trunc(value)));
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -200,43 +190,6 @@ function crateLootPresentation(item: EconomyItemView): EconomyItemView {
     rarityRank: 6,
     rarity: rarityName(6),
   };
-}
-
-function crateDropStateFromResponse(value: unknown): CrateDropState {
-  if (!isRecord(value))
-    return { status: "unavailable", message: "Crate odds are unavailable." };
-  const totalWeight = finiteNumber(value.totalWeight, 0) ?? 0;
-  const rawDrops = Array.isArray(value.drops) ? value.drops : [];
-  const drops = rawDrops.flatMap((entry) => {
-    if (!isRecord(entry) || !isRecord(entry.catalogue)) return [];
-    const weight = finiteNumber(entry.weight, 0) ?? 0;
-    const lootEntryId = finiteNumber(entry.lootEntryId, 0) ?? 0;
-    if (!Number.isSafeInteger(lootEntryId) || weight <= 0) return [];
-    return [
-      {
-        item: crateLootPresentation(toEconomyItem(entry.catalogue)),
-        lootEntryId,
-        weight,
-        minFloat: finiteNumber(entry.minFloat),
-        maxFloat: finiteNumber(entry.maxFloat),
-        stattrakChanceBps: finiteNumber(entry.stattrakChanceBps, 0) ?? 0,
-      },
-    ];
-  });
-  if (!totalWeight || !drops.length)
-    return { status: "unavailable", message: "This crate has no enabled drops." };
-  return { status: "ready", totalWeight, drops };
-}
-
-function crateDropRate(drop: CrateDrop, totalWeight: number) {
-  return (drop.weight / totalWeight) * 100;
-}
-
-function formatDropRate(drop: CrateDrop, totalWeight: number) {
-  return new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: crateDropRate(drop, totalWeight) < 0.1 ? 3 : 2,
-    minimumFractionDigits: crateDropRate(drop, totalWeight) < 1 ? 2 : 0,
-  }).format(crateDropRate(drop, totalWeight));
 }
 
 function dropHeadline(rarityRank: number) {
@@ -338,8 +291,11 @@ function CratePurchaseControls({
   const basePriceTokens = crate.marketBasePriceTokens;
   const canRefreshPrice = Boolean(crate.marketHashName);
   const hasCatalogueEntry = crate.catalogueId !== null;
-  const totalPriceTokens = priceTokens === null ? null : priceTokens * quantity;
-  const unaffordable = totalPriceTokens !== null && totalPriceTokens > walletBalance;
+  const totalPriceTokens =
+    priceTokens === null ? null : cratePurchaseTotal(priceTokens, quantity);
+  const unaffordable =
+    priceTokens !== null &&
+    !canAffordCratePurchase(walletBalance, priceTokens, quantity);
   const priceAvailable = priceTokens !== null;
   const purchaseAvailable = hasCatalogueEntry && (priceAvailable || canRefreshPrice);
   const priceDetail = !priceAvailable
@@ -407,7 +363,7 @@ function CratePurchaseControls({
             value={quantity}
             disabled={pending}
             aria-label="Crates to buy"
-            onChange={(event) => onQuantityChange(clampPurchaseQuantity(Number(event.target.value)))}
+            onChange={(event) => onQuantityChange(clampCrateQuantity(event.target.value))}
           />
           <button
             type="button"
@@ -435,102 +391,6 @@ function CratePurchaseControls({
       ) : null}
     </div>
   );
-}
-
-function LegacyCrateDropOdds({ state }: { state: CrateDropState }) {
-  if (state.status === "idle") return null;
-  if (state.status === "loading") {
-    return <div className="crate-odds-loading" aria-live="polite"><LoaderCircle aria-hidden="true" /><span>Loading possible drops and their rates…</span></div>;
-  }
-  if (state.status === "unavailable") {
-    return <p className="crate-odds-unavailable">{state.message}</p>;
-  }
-  return <section className="crate-drop-odds" aria-label="Possible crate drops">
-    <header><div><p className="eyebrow"><Trophy aria-hidden="true" /> Verified crate odds</p><h3>Possible drops</h3></div><span>{state.drops.length} outcomes</span></header>
-    <p className="empty-copy">Rates are calculated from the active server loot-table weights. Opening remains a server-side random roll.</p>
-    <div className="crate-drop-grid">
-      {state.drops.map((drop) => <article key={drop.lootEntryId} className={`crate-drop-card ${rarityRankClass(drop.item.rarityRank)}`}>
-        <MarketplaceItemPreview item={drop.item} enableMarketPreview />
-        <div><span className={rarityClass(drop.item.rarityRank)}>{drop.item.rarity}</span><h4>{drop.item.displayName}</h4><strong>{formatDropRate(drop, state.totalWeight)}%</strong><small>{formatTokens(drop.weight)} of {formatTokens(state.totalWeight)} weight</small>{drop.stattrakChanceBps ? <small>StatTrak chance {(drop.stattrakChanceBps / 100).toFixed(2)}%</small> : null}</div>
-      </article>)}
-    </div>
-  </section>;
-}
-
-function CrateDropOdds({ state }: { state: CrateDropState }) {
-  if (state.status === "idle") return null;
-  if (state.status === "loading") {
-    return <div className="crate-odds-loading" aria-live="polite"><LoaderCircle aria-hidden="true" /><span>Loading possible drops and their rates...</span></div>;
-  }
-  if (state.status === "unavailable") {
-    return <p className="crate-odds-unavailable">{state.message}</p>;
-  }
-  return <CrateDropOddsReady totalWeight={state.totalWeight} drops={state.drops} />;
-}
-
-function CrateDropOddsReady({
-  totalWeight,
-  drops,
-}: {
-  totalWeight: number;
-  drops: CrateDrop[];
-}) {
-  const [rarityFilter, setRarityFilter] = useState("all");
-  const [query, setQuery] = useState("");
-  const [page, setPage] = useState(1);
-  const queryTerms = useMemo(
-    () => normalizedText(query).split(" ").filter(Boolean),
-    [query],
-  );
-  const rarityGroups = useMemo(
-    () => [3, 4, 5, 6, 7].map((rank) => {
-      const matching = drops.filter((drop) => drop.item.rarityRank === rank);
-      const weight = matching.reduce((total, drop) => total + drop.weight, 0);
-      return { rank, count: matching.length, weight };
-    }),
-    [drops],
-  );
-  const filteredDrops = useMemo(
-    () => drops
-      .filter((drop) => rarityFilter === "all" || drop.item.rarityRank === Number(rarityFilter))
-      .filter((drop) => !queryTerms.length || queryTerms.every((term) => normalizedText([
-        drop.item.displayName,
-        drop.item.marketHashName ?? "",
-        drop.item.itemType,
-        drop.item.rarity,
-      ].join(" ")).includes(term)))
-      .sort((left, right) =>
-        right.item.rarityRank - left.item.rarityRank ||
-        left.item.displayName.localeCompare(right.item.displayName) ||
-        left.lootEntryId - right.lootEntryId),
-    [drops, queryTerms, rarityFilter],
-  );
-  const pageCount = Math.max(1, Math.ceil(filteredDrops.length / DROP_PAGE_SIZE));
-  const visiblePage = Math.min(page, pageCount);
-  const pageStart = (visiblePage - 1) * DROP_PAGE_SIZE;
-  const visibleDrops = filteredDrops.slice(pageStart, pageStart + DROP_PAGE_SIZE);
-
-  useEffect(() => setPage(1), [query, rarityFilter]);
-
-  return <section className="crate-drop-odds" aria-label="Possible crate drops">
-    <header><div><p className="eyebrow"><Trophy aria-hidden="true" /> Verified crate odds</p><h3>Possible drops</h3></div><span>{drops.length.toLocaleString()} outcomes</span></header>
-    <p className="empty-copy">These are the active server entries. Select a rarity or search a finish to browse the full pool; displayed percentages are the actual per-item chance.</p>
-    <div className="crate-drop-tier-tabs" role="tablist" aria-label="Filter crate drops by rarity">
-      <button type="button" role="tab" aria-selected={rarityFilter === "all"} className={rarityFilter === "all" ? "active" : ""} onClick={() => setRarityFilter("all")}>All <span>100%</span></button>
-      {rarityGroups.map((group) => <button key={group.rank} type="button" role="tab" aria-selected={rarityFilter === String(group.rank)} className={`${rarityRankClass(group.rank)} ${rarityFilter === String(group.rank) ? "active" : ""}`} onClick={() => setRarityFilter(String(group.rank))} disabled={group.count === 0}><span>{rarityName(group.rank)}</span><small>{((group.weight / totalWeight) * 100).toFixed(2)}%</small></button>)}
-    </div>
-    <div className="crate-drop-toolbar">
-      <SearchField id="crate-drop-search" label="Search this crate" value={query} onValueChange={setQuery} placeholder="Butterfly, Fade, AK-47…" autoComplete="off" />
-      <p aria-live="polite">{filteredDrops.length ? `Showing ${pageStart + 1}-${Math.min(pageStart + visibleDrops.length, filteredDrops.length)} of ${filteredDrops.length.toLocaleString()} drops` : "No drops match this filter"}</p>
-    </div>
-    {visibleDrops.length ? <div className="crate-drop-grid">
-      {visibleDrops.map((drop) => <article key={drop.lootEntryId} className={`crate-drop-card ${rarityRankClass(drop.item.rarityRank)}`}>
-        <MarketplaceItemPreview item={drop.item} enableMarketPreview floatValue={drop.minFloat ?? drop.item.minFloat} />
-        <div><span className={rarityClass(drop.item.rarityRank)}>{drop.item.rarity}</span><h4>{drop.item.displayName}</h4><strong>{formatDropRate(drop, totalWeight)}%</strong><small>{formatTokens(drop.weight)} of {formatTokens(totalWeight)} weight</small>{drop.minFloat !== null || drop.maxFloat !== null ? <small>Float {(drop.minFloat ?? drop.maxFloat ?? 0).toFixed(2)} - {(drop.maxFloat ?? drop.minFloat ?? 1).toFixed(2)}</small> : null}{drop.stattrakChanceBps ? <small>StatTrak chance {(drop.stattrakChanceBps / 100).toFixed(2)}%</small> : null}</div>
-      </article>)}
-    </div> : <p className="crate-odds-unavailable">No possible drops match this filter.</p>}
-    {filteredDrops.length > DROP_PAGE_SIZE ? <nav className="crate-drop-pagination" aria-label="Crate drop pages"><button type="button" className="button button-secondary" disabled={visiblePage <= 1} onClick={() => setPage(visiblePage - 1)}><ChevronLeft aria-hidden="true" /> Previous</button><span>Page {visiblePage} of {pageCount}</span><button type="button" className="button button-secondary" disabled={visiblePage >= pageCount} onClick={() => setPage(visiblePage + 1)}>Next <ChevronRight aria-hidden="true" /></button></nav> : null}
-  </section>;
 }
 
 function CrateOpeningAnimation({
@@ -724,7 +584,7 @@ function OwnedCrateInlineOpener({
               <small>
                 {dropState.status === "loading"
                   ? "Loading the active drop pool..."
-                  : dropState.status === "unavailable"
+                  : dropState.status === "empty" || dropState.status === "error"
                     ? "Drop odds are unavailable right now."
                     : "Opening is verified server-side."}
               </small>
@@ -732,7 +592,7 @@ function OwnedCrateInlineOpener({
           </div>
           {showDrops ? (
             <div id={dropsId} className="crate-inline-modal-drops">
-              <CrateDropOdds state={dropState} />
+              <CrateDropPreview state={dropState} />
             </div>
           ) : null}
         </>
@@ -889,7 +749,7 @@ function MarketCrateInlineOpener({
         </button>
       </div>
     </div>
-    {showDrops ? <div id={dropsId} className="crate-inline-modal-drops"><CrateDropOdds state={dropState} /></div> : null}
+    {showDrops ? <div id={dropsId} className="crate-inline-modal-drops"><CrateDropPreview state={dropState} /></div> : null}
   </section>;
 }
 
@@ -1291,7 +1151,7 @@ export function CrateOpener({
             : "Crate odds are unavailable.";
           throw new Error(message);
         }
-        return crateDropStateFromResponse(body);
+        return economyCrateDropStateFromResponse(body);
       })
       .then((state) => {
         if (!controller.signal.aborted) setDropState(state);
@@ -1299,7 +1159,7 @@ export function CrateOpener({
       .catch((error) => {
         if (controller.signal.aborted) return;
         setDropState({
-          status: "unavailable",
+          status: "error",
           message:
             error instanceof Error
               ? error.message
@@ -1584,7 +1444,7 @@ export function CrateOpener({
         if (!isRecord(rawPool)) continue;
         const catalogueId = finiteNumber(rawPool.containerCatalogueId);
         if (catalogueId === null || !Number.isSafeInteger(catalogueId)) continue;
-        const state = crateDropStateFromResponse(rawPool);
+        const state = economyCrateDropStateFromResponse(rawPool);
         if (state.status === "ready")
           dropsByCatalogueId.set(catalogueId, state.drops);
       }
@@ -1931,7 +1791,7 @@ export function CrateOpener({
           {catalogueItems.length ? <div ref={marketGridRef} id="crate-market-panel" className="feature-grid crate-catalogue-grid crate-market-grid" role="tabpanel" aria-labelledby="crate-market-tab">
             {catalogueItems.map((crate, index) => <Fragment key={`${crate.catalogueId ?? crate.id}-${crate.displayName}`}>
               <EconomyItemCard item={crate} selected={selectedMarketCatalogueId === crate.catalogueId} onSelect={() => { if (crate.catalogueId !== null) toggleMarketCrate(crate.catalogueId); }} selectionLabel={`Select ${crate.displayName} to inspect its drops and price`} selectionControls={selectedMarketCatalogueId === crate.catalogueId ? `crate-market-opening-${crate.catalogueId ?? crate.id}` : undefined} enableMarketPreview />
-              {index === marketInlineOpenerIndex && selectedMarketCrate ? <MarketCrateInlineOpener crate={selectedMarketCrate} dropState={dropState} busy={busy} purchasing={activeAction === "purchase"} quantity={purchaseQuantity} walletBalance={walletView.balance} onQuantityChange={(quantity) => setPurchaseQuantity(clampPurchaseQuantity(quantity))} onPurchase={() => buyCrate(selectedMarketCrate, purchaseQuantity)} onClose={() => setSelectedMarketCatalogueId(null)} /> : null}
+              {index === marketInlineOpenerIndex && selectedMarketCrate ? <MarketCrateInlineOpener crate={selectedMarketCrate} dropState={dropState} busy={busy} purchasing={activeAction === "purchase"} quantity={purchaseQuantity} walletBalance={walletView.balance} onQuantityChange={(quantity) => setPurchaseQuantity(clampCrateQuantity(quantity))} onPurchase={() => buyCrate(selectedMarketCrate, purchaseQuantity)} onClose={() => setSelectedMarketCatalogueId(null)} /> : null}
             </Fragment>)}
           </div> : <div id="crate-market-panel" role="tabpanel" aria-labelledby="crate-market-tab"><EconomyEmptyState title="No crates match these filters" description="Try a shorter search, another price state, or clear the current filters." icon={<Search aria-hidden="true" />} /></div>}
           <PaginationControls page={visibleCataloguePage} pageSize={CATALOGUE_PAGE_SIZE} totalItems={filteredCatalogue.length} disabled={busy} label="Crate marketplace pages" onPageChange={setCataloguePage} />

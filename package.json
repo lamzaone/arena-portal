@@ -8,10 +8,11 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "migrate:arena-groups": "node scripts/migrate-arena-group-authority.mjs",
-    "test": "npm run test:vip && npm run test:scope && npm run test:database && npm run test:loadout && npm run test:inventory-lock",
+    "test": "npm run test:vip && npm run test:scope && npm run test:database && npm run test:loadout && npm run test:inventory-lock && npm run test:crates",
     "test:vip": "node --experimental-strip-types --test lib/economy/vip-membership-conversion.test.ts lib/economy/vip-activation-state.test.ts",
     "test:loadout": "node --experimental-strip-types --test lib/economy/weapon-categories.test.ts",
     "test:inventory-lock": "node --experimental-strip-types --test lib/economy/inventory-sale-lock.test.ts",
+    "test:crates": "node --experimental-strip-types --test lib/economy/crate-presentation.test.ts",
     "test:scope": "node --test lib/data/arena-scope-resolution.test.mjs",
     "test:database": "node --experimental-strip-types --test lib/data/mysql-utc-session.test.ts"
   },
