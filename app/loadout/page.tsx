@@ -14,7 +14,7 @@ export default async function LoadoutPage() {
     return (
       <SignInRequired
         title="Your Skin Loadout"
-        description="Sign in with Steam to choose the owned weapon finishes used by each team."
+        description="Sign in with Steam to choose the owned cosmetics—weapons, knives, gloves, and Agents—used by each team."
       />
     );
   }
@@ -29,7 +29,7 @@ export default async function LoadoutPage() {
       <PageHeading
         eyebrow={<><Crosshair aria-hidden="true" /> Player economy</>}
         title="Loadout"
-        description="Choose which owned weapon finish your Terrorist and Counter-Terrorist teams take into the server."
+        description="Choose which owned cosmetics—weapons, knives, gloves, and Agents—your Terrorist and Counter-Terrorist teams take into the server."
       />
       <EconomyLoadoutManager
         inventory={inventory}

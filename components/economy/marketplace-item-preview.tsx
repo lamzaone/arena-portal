@@ -2,6 +2,7 @@
 
 import {
   Box,
+  Hand,
   ImageOff,
   LoaderCircle,
   Music2,
@@ -108,6 +109,7 @@ function previewImageUrlsFromResponse(body: unknown) {
 
 function fallbackIcon(itemType: string) {
   if (itemType === "knife") return Sword;
+  if (itemType === "glove") return Hand;
   if (itemType === "sticker") return Sticker;
   if (itemType === "agent") return UserRound;
   if (itemType === "music_kit") return Music2;
