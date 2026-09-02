@@ -22,14 +22,25 @@ function loadoutMetadata(item: LoadoutItemLike) {
   return record(catalogue?.metadata) ?? record(item.raw?.attributes) ?? {};
 }
 
+function validWeaponDefinitionIndex(value: number | null): value is number {
+  return typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= 1 &&
+    value <= 65_535;
+}
+
 export function loadoutCategoryForItem(item: LoadoutItemLike): LoadoutCategoryId | null {
   const explicit = loadoutMetadata(item).loadoutCategory;
-  if (["weapon", "knife", "glove", "agent"].includes(String(explicit)))
-    return explicit as LoadoutCategoryId;
-  if (item.itemType === "skin" || item.itemType === "weapon") return "weapon";
-  if (item.itemType === "knife" || item.itemType === "glove" || item.itemType === "agent")
-    return item.itemType;
-  return null;
+  const category = ["weapon", "knife", "glove", "agent"].includes(String(explicit))
+    ? explicit as LoadoutCategoryId
+    : item.itemType === "skin" || item.itemType === "weapon"
+      ? "weapon"
+      : item.itemType === "knife" || item.itemType === "glove" || item.itemType === "agent"
+        ? item.itemType
+        : null;
+  return category === "weapon" && !validWeaponDefinitionIndex(item.definitionIndex)
+    ? null
+    : category;
 }
 
 function supportedTeams(item: LoadoutItemLike) {
@@ -38,7 +49,7 @@ function supportedTeams(item: LoadoutItemLike) {
   const validTeams = teams.filter(
     (team): team is "T" | "CT" => team === "T" || team === "CT",
   );
-  return validTeams.length > 0 ? validTeams : ["T", "CT"] as const;
+  return validTeams;
 }
 
 export function loadoutItemSupportsTarget(item: LoadoutItemLike, target: LoadoutTeamTarget) {
@@ -60,6 +71,38 @@ export function ownedItemsForLoadout<T extends LoadoutItemLike>(
   );
 }
 
+const NO_OWNERSHIP_MESSAGES: Record<LoadoutCategoryId, string> = {
+  weapon: "You do not own a weapon finish in this class yet.",
+  knife: "You do not own a knife yet.",
+  glove: "You do not own gloves yet.",
+  agent: "You do not own an Agent for this team yet.",
+};
+
+export function loadoutChoiceEmptyMessage(
+  category: LoadoutCategoryId,
+  target: LoadoutTeamTarget,
+  hasOwnedChoices: boolean,
+) {
+  if (!hasOwnedChoices) return NO_OWNERSHIP_MESSAGES[category];
+  const choiceLabel: Record<LoadoutCategoryId, string> = {
+    weapon: "finishes for this weapon",
+    knife: "knives",
+    glove: "gloves",
+    agent: "Agents",
+  };
+  return `None of your owned ${choiceLabel[category]} support ${target === "both" ? "both teams" : target}.`;
+}
+
+export function weaponLoadoutCardAccessibleLabel(
+  weaponName: string,
+  ownedFinishCount: number,
+  equippedTFinish: string,
+  equippedCTFinish: string,
+) {
+  const finishLabel = ownedFinishCount === 1 ? "finish" : "finishes";
+  return `Choose ${weaponName}, ${ownedFinishCount} owned ${finishLabel}. Current T finish: ${equippedTFinish}. Current CT finish: ${equippedCTFinish}.`;
+}
+
 export function loadoutSlotsForTarget(
   category: LoadoutCategoryId,
   target: LoadoutTeamTarget,
@@ -75,10 +118,7 @@ export function loadoutSlotsForTarget(
   }
   if (category === "weapon") {
     if (
-      typeof definitionIndex !== "number" ||
-      !Number.isSafeInteger(definitionIndex) ||
-      definitionIndex < 1 ||
-      definitionIndex > 65_535
+      !validWeaponDefinitionIndex(definitionIndex ?? null)
     )
       throw new RangeError("A weapon definition is required.");
     return teams.map((team) => ({ slotType: "weapon", team, definitionIndex: definitionIndex! }));

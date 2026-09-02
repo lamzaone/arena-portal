@@ -24,10 +24,12 @@ import { EconomyActionRequestError, postEconomyAction } from "@/components/econo
 import { PortalToast, type PortalToastVariant } from "@/components/success-toast";
 import type { EconomyInventoryPage, EconomyLoadoutSlot } from "@/lib/data/portal-repository";
 import {
+  loadoutChoiceEmptyMessage,
   loadoutItemSupportsTarget,
   loadoutSlotsForTarget,
   ownedItemsForLoadout,
   representativeLoadoutItem,
+  weaponLoadoutCardAccessibleLabel,
   type LoadoutCategoryId,
   type LoadoutTeamTarget,
 } from "@/lib/economy/loadout-selection";
@@ -54,13 +56,6 @@ const LOADOUT_CATEGORIES = [
 
 const TEAM_TARGETS = ["T", "CT", "both"] as const;
 const TEAMS = ["T", "CT"] as const;
-
-const EMPTY_MESSAGES: Record<LoadoutCategoryId, string> = {
-  weapon: "You do not own a weapon finish in this class yet.",
-  knife: "You do not own a knife yet.",
-  glove: "You do not own gloves yet.",
-  agent: "You do not own an Agent for this team yet.",
-};
 
 function slotItem(
   loadout: EconomyLoadoutSlot[],
@@ -134,10 +129,6 @@ export function EconomyLoadoutManager({
     () => ownedItemsForLoadout(availableItems, activeCategory),
     [activeCategory, availableItems],
   );
-  const compatibleItems = useMemo(
-    () => ownedItemsForLoadout(availableItems, activeCategory, teamTarget),
-    [activeCategory, availableItems, teamTarget],
-  );
   const weaponGroups = useMemo(
     () => ownedWeaponSkins(ownedItemsForLoadout(availableItems, "weapon")),
     [availableItems],
@@ -157,9 +148,12 @@ export function EconomyLoadoutManager({
   const selectedWeaponGroup = selectedDefinitionIndex === null
     ? null
     : weaponGroups.find((group) => group.definitionIndex === selectedDefinitionIndex) ?? null;
-  const choiceItems = activeCategory === "weapon"
-    ? compatibleItems.filter((item) => item.definitionIndex === selectedDefinitionIndex)
-    : compatibleItems;
+  const ownedChoiceItems = activeCategory === "weapon"
+    ? categoryItems.filter((item) => item.definitionIndex === selectedDefinitionIndex)
+    : categoryItems;
+  const choiceItems = ownedChoiceItems.filter((item) =>
+    loadoutItemSupportsTarget(item, teamTarget),
+  );
   const selectedItem = choiceItems.find((item) => item.id === selectedItemId) ?? null;
 
   function chooseCategory(category: LoadoutCategoryId) {
@@ -211,12 +205,12 @@ export function EconomyLoadoutManager({
     definitionIndex?: number,
     itemId?: string,
   ) {
-    const slots = loadoutSlotsForTarget(category, team, definitionIndex);
     const actionKey = [action, category, definitionIndex ?? "global", team, itemId ?? "clear"].join("-");
     setPendingAction(actionKey);
     setNotice(null);
     startTransition(async () => {
       try {
+        const slots = loadoutSlotsForTarget(category, team, definitionIndex);
         const result = await postEconomyAction(
           action === "equip" ? "/api/economy/loadout/equip" : "/api/economy/loadout/clear",
           csrf,
@@ -347,7 +341,12 @@ export function EconomyLoadoutManager({
                         key={group.definitionIndex}
                         type="button"
                         className={`loadout-weapon-card ${selected ? "is-selected" : ""}`}
-                        aria-label={`Choose ${name}, ${group.items.length} owned ${group.items.length === 1 ? "finish" : "finishes"}`}
+                        aria-label={weaponLoadoutCardAccessibleLabel(
+                          name,
+                          group.items.length,
+                          currentT?.item?.displayName ?? "Default",
+                          currentCT?.item?.displayName ?? "Default",
+                        )}
                         aria-pressed={selected}
                         disabled={isPending}
                         onClick={() => chooseWeaponDefinition(group.definitionIndex)}
@@ -372,7 +371,7 @@ export function EconomyLoadoutManager({
                   })}
                 </div>
               ) : (
-                <LoadoutEmptyState message={EMPTY_MESSAGES.weapon} />
+                <LoadoutEmptyState message={loadoutChoiceEmptyMessage("weapon", teamTarget, false)} />
               )}
             </>
           ) : (
@@ -424,7 +423,7 @@ export function EconomyLoadoutManager({
           {activeCategory === "weapon" && selectedDefinitionIndex === null ? (
             displayedWeaponGroups.length > 0
               ? <p className="loadout-selection-prompt">Choose a weapon above to see its owned finishes.</p>
-              : <LoadoutEmptyState message={EMPTY_MESSAGES.weapon} />
+              : <LoadoutEmptyState message={loadoutChoiceEmptyMessage("weapon", teamTarget, false)} />
           ) : choiceItems.length > 0 ? (
             <div className="loadout-choice-grid">
               {choiceItems.map((item) => {
@@ -456,13 +455,19 @@ export function EconomyLoadoutManager({
               })}
             </div>
           ) : (
-            <LoadoutEmptyState message={EMPTY_MESSAGES[activeCategory]} />
+            <LoadoutEmptyState
+              message={loadoutChoiceEmptyMessage(
+                activeCategory,
+                teamTarget,
+                ownedChoiceItems.length > 0,
+              )}
+            />
           )}
 
           <div className="loadout-action-bar">
             <button
               type="button"
-              className="button"
+              className="button button-primary"
               disabled={isPending || !selectedItem || (activeCategory === "weapon" && selectedDefinitionIndex === null)}
               onClick={() => {
                 if (!selectedItem) return;

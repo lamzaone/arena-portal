@@ -47,3 +47,19 @@ test("keeps legacy weapons and sorts groups and owned instances by display name"
     [[7, ["ak-redline", "ak-zebra"]], [16, ["m4-printstream"]]],
   );
 });
+
+test("excludes definitions outside the loadout API range from groups and counts", () => {
+  const groups = ownedWeaponSkins([
+    { id: "lower", itemType: "skin", definitionIndex: 1, displayName: "A lower boundary" },
+    { id: "upper", itemType: "skin", definitionIndex: 65_535, displayName: "B upper boundary" },
+    { id: "zero", itemType: "skin", definitionIndex: 0, displayName: "C zero" },
+    { id: "negative", itemType: "skin", definitionIndex: -1, displayName: "D negative" },
+    { id: "too-high", itemType: "skin", definitionIndex: 65_536, displayName: "E too high" },
+  ]);
+
+  assert.deepEqual(
+    groups.map((group) => [group.definitionIndex, group.items.map((item) => item.id)]),
+    [[1, ["lower"]], [65_535, ["upper"]]],
+  );
+  assert.equal(groups.reduce((count, group) => count + group.items.length, 0), 2);
+});

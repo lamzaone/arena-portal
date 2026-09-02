@@ -77,7 +77,9 @@ export function ownedWeaponSkins<T extends WeaponItemLike>(
     if (
       (item.itemType !== "skin" && item.itemType !== "weapon") ||
       item.definitionIndex === null ||
-      !Number.isSafeInteger(item.definitionIndex)
+      !Number.isSafeInteger(item.definitionIndex) ||
+      item.definitionIndex < 1 ||
+      item.definitionIndex > 65_535
     ) {
       continue;
     }
