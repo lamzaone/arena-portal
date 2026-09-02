@@ -1656,9 +1656,14 @@ export function CrateOpener({
     if (busy) return;
     setSelectedCrateId("");
     if (unboxedCrateId === crateId) clearUnboxResult();
-    window.requestAnimationFrame(() =>
-      document.getElementById(ownedCrateToggleId(crateId))?.focus(),
-    );
+    window.requestAnimationFrame(() => {
+      const originatingCard = document.getElementById(
+        ownedCrateToggleId(crateId),
+      );
+      // A successfully opened crate is removed when its result is dismissed,
+      // so return to the section heading when there is no originating card.
+      (originatingCard ?? document.getElementById("crate-browser-heading"))?.focus();
+    });
   }
 
   function toggleMarketCrate(catalogueId: number) {
@@ -1760,7 +1765,7 @@ export function CrateOpener({
 
       <section className="history-section crate-picker-section" aria-labelledby="crate-browser-heading">
         <div className="section-heading compact crate-browser-heading">
-          <div><p className="eyebrow"><Box aria-hidden="true" /> Crate inventory</p><h2 id="crate-browser-heading">{ownedOnly ? "Open owned crates and capsules" : "Select, inspect, then open or buy"}</h2><p>{ownedOnly ? "Inspect the server-verified possible drops, then open one container or select several for a multi-open." : "Every container shows its live price and server-verified possible drops before you commit."}</p></div>
+          <div><p className="eyebrow"><Box aria-hidden="true" /> Crate inventory</p><h2 id="crate-browser-heading" tabIndex={-1}>{ownedOnly ? "Open owned crates and capsules" : "Select, inspect, then open or buy"}</h2><p>{ownedOnly ? "Inspect the server-verified possible drops, then open one container or select several for a multi-open." : "Every container shows its live price and server-verified possible drops before you commit."}</p></div>
           {!ownedOnly ? <div className="crate-tabs" role="tablist" aria-label="Crate source">
             <button id="crate-owned-tab" type="button" role="tab" aria-controls="crate-owned-panel" aria-selected={activeTab === "owned"} className={activeTab === "owned" ? "active" : ""} disabled={busy} onClick={() => changeCrateTab("owned")}><Gift aria-hidden="true" /> Owned <span>{ownedCrates.length}</span></button>
             <button id="crate-market-tab" type="button" role="tab" aria-controls="crate-market-panel" aria-selected={activeTab === "market"} className={activeTab === "market" ? "active" : ""} disabled={busy} onClick={() => changeCrateTab("market")}><ShoppingBag aria-hidden="true" /> Market <span>{crateCatalogue.length}</span></button>

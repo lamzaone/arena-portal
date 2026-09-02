@@ -16,7 +16,7 @@ export type EconomySellbackResolution =
   | { status: "unpriced" }
   | {
       status: "rejected";
-      reason: "invalid_discounted_marketplace_purchase";
+      reason: "invalid_marketplace_purchase";
     };
 
 type EconomySellbackSaleMessageInput = {
@@ -72,12 +72,13 @@ export function resolveEconomySellback({
       isDiscountEvidence(source?.discountPercentageBps) ||
       isDiscountEvidence(source?.discountFixedTokens));
 
-  // Do not let a damaged discounted purchase source fall back to the live
-  // price. That could recreate the very profit path this policy closes.
-  if (appearsDiscounted && recordedPurchasePriceTokens === null) {
+  // A marketplace purchase must always carry the immutable per-item amount
+  // paid. Without it, we cannot prove that a damaged source was undiscounted,
+  // so falling back to the live price would recreate the arbitrage path.
+  if (marketplacePurchase && recordedPurchasePriceTokens === null) {
     return {
       status: "rejected",
-      reason: "invalid_discounted_marketplace_purchase",
+      reason: "invalid_marketplace_purchase",
     };
   }
   if (

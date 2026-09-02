@@ -96,7 +96,25 @@ test("rejects a discounted marketplace purchase without valid recorded payment e
 
   assert.deepEqual(result, {
     status: "rejected",
-    reason: "invalid_discounted_marketplace_purchase",
+    reason: "invalid_marketplace_purchase",
+  });
+});
+
+test("rejects any marketplace purchase whose recorded payment evidence is malformed", () => {
+  const result = resolveEconomySellback({
+    marketPriceTokens: 2_000,
+    source: {
+      type: "marketplace_purchase",
+      basePriceTokens: 2_000,
+      priceTokens: null,
+      discountRuleId: null,
+      discountTokens: 0,
+    },
+  });
+
+  assert.deepEqual(result, {
+    status: "rejected",
+    reason: "invalid_marketplace_purchase",
   });
 });
 

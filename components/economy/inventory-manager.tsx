@@ -294,8 +294,7 @@ export function InventoryManager({
   const selected = visibleItems.find((item) => item.id === selectedId) ?? null;
   const selectedIndex = visibleItems.findIndex((item) => item.id === selectedId);
   const selectedSalePayout = selected?.sellbackPayoutTokens ?? null;
-  const salePriceIsKnown =
-    selectedSalePayout !== null && selectedSalePayout >= 1;
+  const salePriceIsKnown = selectedSalePayout !== null;
   // Inventory records retain a saved snapshot while the Market can show a
   // fresher public quote. The server resolves that current quote on sale.
   const saleCanResolveFromMarket =
@@ -312,7 +311,7 @@ export function InventoryManager({
       : selected.stickers.length
         ? "Remove the attached stickers before selling this item."
       : selected.sellbackStatus === "rejected"
-        ? "This discounted marketplace purchase is missing valid payment evidence and cannot be sold."
+        ? "This marketplace purchase is missing valid payment evidence and cannot be sold."
       : !salePriceIsKnown && !saleCanResolveFromMarket
         ? "This item needs a current market or last-known price before it can be sold."
         : null;

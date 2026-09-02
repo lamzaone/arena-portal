@@ -11310,7 +11310,7 @@ export async function sellEconomyItem(
       if (sellback.status === "rejected") {
         economyError(
           "item_unavailable",
-          "This discounted marketplace purchase is missing valid payment evidence and cannot be sold.",
+          "This marketplace purchase is missing valid payment evidence and cannot be sold.",
         );
       }
       if (sellback.status !== "resolved") {
@@ -11537,7 +11537,7 @@ export async function sellEconomyItems(
         if (sellback.status === "rejected") {
           economyError(
             "item_unavailable",
-            "One or more discounted marketplace purchases are missing valid payment evidence and cannot be sold.",
+            "One or more marketplace purchases are missing valid payment evidence and cannot be sold.",
           );
         }
         if (sellback.status !== "resolved") {
