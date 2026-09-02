@@ -117,7 +117,7 @@ export function partitionCrateOpeningIds(itemIds: readonly string[]) {
 
 Implement `crateOnlySelection` by iterating selected IDs in `Set` insertion order, resolving each ID from the current item map, and returning `{ status: "empty" | "mixed" | "ready", crates }`. Treat a missing/stale selected ID as mixed. Implement `remainingCrateOpeningIds` by flattening groups starting at `completedGroupCount`.
 
-Remove `InventorySelectionOwner`, `nextInventorySelectionOwner`, and `inventoryWorkflowAccess`; their two-surface coordination is obsolete. Preserve `withRetainedOpenedItem` and `activeConsumedItemIds` for the integrated opening lifecycle.
+Preserve the existing dual-surface exports temporarily so the current `InventoryWorkspace` still compiles. Task 3 removes `InventorySelectionOwner`, `nextInventorySelectionOwner`, and `inventoryWorkflowAccess` after the duplicate surface is disconnected. Preserve `withRetainedOpenedItem` and `activeConsumedItemIds` for the integrated opening lifecycle.
 
 - [ ] **Step 4: Add edge-case assertions and verify GREEN**
 
@@ -303,6 +303,8 @@ export function InventoryWorkspace(props: InventoryWorkspaceProps) {
 ```
 
 Remove imports and calls to `CrateOpener`, `inventoryWorkflowAccess`, and `nextInventorySelectionOwner`.
+
+After the workspace no longer consumes them, remove `InventorySelectionOwner`, `nextInventorySelectionOwner`, and `inventoryWorkflowAccess` plus their obsolete tests from `lib/economy/inventory-selection.ts` and `lib/economy/inventory-selection.test.ts`.
 
 - [ ] **Step 4: Verify single opening and existing inventory actions**
 
