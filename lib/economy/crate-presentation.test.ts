@@ -7,6 +7,7 @@ import {
   crateDropStateFromResponse,
   cratePurchaseTotal,
   formatCrateDropRate,
+  inlinePanelInsertionIndex,
   sortCrateDrops,
 } from "./crate-presentation.ts";
 
@@ -31,6 +32,15 @@ test("clamps quantities and calculates safe totals", () => {
     ),
     false,
   );
+});
+
+test("inserts an expanded panel after the selected visual grid row", () => {
+  assert.equal(inlinePanelInsertionIndex(0, 8, 4), 3);
+  assert.equal(inlinePanelInsertionIndex(2, 8, 4), 3);
+  assert.equal(inlinePanelInsertionIndex(4, 8, 4), 7);
+  assert.equal(inlinePanelInsertionIndex(6, 7, 4), 6);
+  assert.equal(inlinePanelInsertionIndex(3, 8, 1), 3);
+  assert.equal(inlinePanelInsertionIndex(-1, 8, 4), null);
 });
 
 test("rejects malformed drop responses and distinguishes an empty pool", () => {

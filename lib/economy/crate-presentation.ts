@@ -78,6 +78,27 @@ export function canAffordCratePurchase(
   );
 }
 
+export function inlinePanelInsertionIndex(
+  selectedIndex: number,
+  itemCount: number,
+  columnCount: number,
+): number | null {
+  if (
+    !Number.isSafeInteger(selectedIndex) ||
+    !Number.isSafeInteger(itemCount) ||
+    itemCount < 1 ||
+    selectedIndex < 0 ||
+    selectedIndex >= itemCount
+  ) {
+    return null;
+  }
+  const columns =
+    Number.isSafeInteger(columnCount) && columnCount > 0 ? columnCount : 1;
+  const rowEnd =
+    Math.floor(selectedIndex / columns) * columns + columns - 1;
+  return Math.min(itemCount - 1, rowEnd);
+}
+
 export function crateDropStateFromResponse<TCatalogue = Record<string, unknown>>(
   value: unknown,
   catalogueFromResponse: (

@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  Fragment,
   useEffect,
   useMemo,
   useRef,
@@ -55,6 +56,7 @@ import {
   canAffordCratePurchase,
   clampCrateQuantity,
   cratePurchaseTotal,
+  inlinePanelInsertionIndex,
   MAX_CRATE_PURCHASE_QUANTITY,
 } from "@/lib/economy/crate-presentation";
 
@@ -667,25 +669,64 @@ function MarketplaceStandardListing({
   );
 }
 
-function MarketplaceContainerListing({
+function marketContainerPanelId(item: EconomyItemView) {
+  return `market-container-${item.catalogueId ?? item.id}-details`;
+}
+
+function marketContainerToggleId(item: EconomyItemView) {
+  return `market-container-${item.catalogueId ?? item.id}-toggle`;
+}
+
+function MarketplaceContainerCard({
+  item,
+  expanded,
+  onToggle,
+}: {
+  item: EconomyItemView;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <EconomyItemCard
+      item={item}
+      enableMarketPreview
+      actions={
+        <button
+          id={marketContainerToggleId(item)}
+          type="button"
+          className="button button-secondary market-buy-button crate-inline-drops-toggle"
+          aria-expanded={expanded}
+          aria-controls={marketContainerPanelId(item)}
+          disabled={item.catalogueId === null}
+          onClick={onToggle}
+        >
+          <ChevronDown aria-hidden="true" />
+          {expanded ? "Hide drops and purchase" : "View drops and purchase"}
+        </button>
+      }
+    />
+  );
+}
+
+function MarketplaceContainerPanel({
   item,
   pending,
   walletBalance,
   onPurchase,
+  onClose,
 }: {
   item: EconomyItemView;
   pending: boolean;
   walletBalance: number;
   onPurchase: (item: EconomyItemView, options: MarketplacePurchaseOptions) => void;
+  onClose: () => void;
 }) {
-  const toggleRef = useRef<HTMLButtonElement | null>(null);
-  const [expanded, setExpanded] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [dropState, setDropState] = useState<EconomyCrateDropState>({
     status: "idle",
   });
-  const panelId = `market-container-${item.catalogueId ?? item.id}-details`;
-  const toggleId = `market-container-${item.catalogueId ?? item.id}-toggle`;
+  const quantityId = `market-container-${item.catalogueId ?? item.id}-quantity`;
+  const quantityHelpId = `${quantityId}-help`;
   const unitPrice = item.marketPriceTokens;
   const priceAvailable =
     unitPrice !== null && Number.isSafeInteger(unitPrice) && unitPrice >= 0;
@@ -712,185 +753,172 @@ function MarketplaceContainerListing({
             ? `Refresh price & buy ${quantity}`
             : "Price pending staff";
 
-  function closePanel() {
-    setExpanded(false);
-    window.requestAnimationFrame(() => toggleRef.current?.focus());
-  }
-
   return (
-    <>
-      <EconomyItemCard
-        item={item}
-        enableMarketPreview
-        actions={
-          <button
-            ref={toggleRef}
-            id={toggleId}
-            type="button"
-            className="button button-secondary market-buy-button crate-inline-drops-toggle"
-            aria-expanded={expanded}
-            aria-controls={panelId}
-            onClick={() => setExpanded((current) => !current)}
-          >
-            <ChevronDown aria-hidden="true" />
-            {expanded ? "Hide drops and purchase" : "View drops and purchase"}
-          </button>
-        }
-      />
-      <section
-        data-ui="item-modal"
-        id={panelId}
-        className="panel crate-inline-modal crate-market-inline-modal has-drop-odds"
-        role="region"
-        aria-labelledby={toggleId}
-        hidden={!expanded}
-        style={expanded ? undefined : { display: "none" }}
-      >
-        <header className="crate-inline-modal-header">
+    <section
+      data-ui="item-modal"
+      id={marketContainerPanelId(item)}
+      className="panel crate-inline-modal crate-market-inline-modal has-drop-odds"
+      role="region"
+      aria-labelledby={marketContainerToggleId(item)}
+    >
+      <header className="crate-inline-modal-header">
+        <div>
+          <p className="eyebrow">
+            <ShoppingBag aria-hidden="true" /> Container market
+          </p>
+          <h3>{item.displayName}</h3>
+          <p>
+            Review the live server drop pool, choose an amount, then complete
+            one quantity-aware purchase.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="button button-quiet crate-inline-modal-close"
+          onClick={onClose}
+        >
+          <X aria-hidden="true" /> Close
+        </button>
+      </header>
+      <div className="crate-inline-modal-drops">
+        <CrateDropPreview
+          catalogueId={item.catalogueId}
+          onStateChange={setDropState}
+        />
+      </div>
+      <div className="crate-catalogue-purchase crate-selected-purchase">
+        <div
+          className={`market-price-hud ${priceAvailable ? "" : "is-unavailable"}`}
+          aria-label={
+            priceAvailable
+              ? `${item.displayName} costs ${formatTokens(unitPrice)} Tokens each`
+              : `${item.displayName} price unavailable`
+          }
+        >
+          <span>Container price</span>
+          <strong>
+            {priceAvailable
+              ? `${formatTokens(unitPrice)} Tokens each`
+              : "Price unavailable"}
+          </strong>
+          {priceAvailable &&
+          item.marketBasePriceTokens !== null &&
+          item.marketBasePriceTokens > unitPrice ? (
+            <del className="market-base-price">
+              Original {formatTokens(item.marketBasePriceTokens)} Tokens each
+            </del>
+          ) : null}
+          <small>
+            {priceAvailable
+              ? totalPrice === null
+                ? "Total unavailable"
+                : `${quantity} total: ${formatTokens(totalPrice)} Tokens`
+              : canRefreshPrice
+                ? "The current public price will be checked before purchase."
+                : "No public or staff price is available yet."}
+          </small>
+        </div>
+        <div className="crate-quantity-control">
+          <label htmlFor={quantityId}>Amount</label>
           <div>
-            <p className="eyebrow">
-              <ShoppingBag aria-hidden="true" /> Container market
-            </p>
-            <h3>{item.displayName}</h3>
-            <p>
-              Review the live server drop pool, choose an amount, then complete
-              one quantity-aware purchase.
-            </p>
+            <button
+              type="button"
+              aria-label="Buy one fewer container"
+              disabled={pending || quantity <= 1}
+              onClick={() => setQuantity(clampCrateQuantity(quantity - 1))}
+            >
+              <Minus aria-hidden="true" />
+            </button>
+            <input
+              id={quantityId}
+              type="number"
+              min="1"
+              max={MAX_CRATE_PURCHASE_QUANTITY}
+              value={quantity}
+              disabled={pending}
+              aria-describedby={quantityHelpId}
+              onChange={(event) =>
+                setQuantity(clampCrateQuantity(event.target.value))
+              }
+            />
+            <button
+              type="button"
+              aria-label="Buy one more container"
+              disabled={pending || quantity >= MAX_CRATE_PURCHASE_QUANTITY}
+              onClick={() => setQuantity(clampCrateQuantity(quantity + 1))}
+            >
+              <Plus aria-hidden="true" />
+            </button>
           </div>
-          <button
-            type="button"
-            className="button button-quiet crate-inline-modal-close"
-            onClick={closePanel}
-          >
-            <X aria-hidden="true" /> Close
-          </button>
-        </header>
-        {expanded ? (
-          <>
-            <div className="crate-inline-modal-drops">
-              <CrateDropPreview
-                catalogueId={item.catalogueId}
-                onStateChange={setDropState}
-              />
-            </div>
-            <div className="crate-catalogue-purchase crate-selected-purchase">
-              <div
-                className={`market-price-hud ${priceAvailable ? "" : "is-unavailable"}`}
-                aria-label={
-                  priceAvailable
-                    ? `${item.displayName} costs ${formatTokens(unitPrice)} Tokens each`
-                    : `${item.displayName} price unavailable`
-                }
-              >
-                <span>Container price</span>
-                <strong>
-                  {priceAvailable
-                    ? `${formatTokens(unitPrice)} Tokens each`
-                    : "Price unavailable"}
-                </strong>
-                {priceAvailable &&
-                item.marketBasePriceTokens !== null &&
-                item.marketBasePriceTokens > unitPrice ? (
-                  <del className="market-base-price">
-                    Original {formatTokens(item.marketBasePriceTokens)} Tokens each
-                  </del>
-                ) : null}
-                <small>
-                  {priceAvailable
-                    ? totalPrice === null
-                      ? "Total unavailable"
-                      : `${quantity} total: ${formatTokens(totalPrice)} Tokens`
-                    : canRefreshPrice
-                      ? "The current public price will be checked before purchase."
-                      : "No public or staff price is available yet."}
-                </small>
-              </div>
-              <label className="crate-quantity-control">
-                <span>Amount</span>
-                <div>
-                  <button
-                    type="button"
-                    aria-label="Buy one fewer container"
-                    disabled={pending || quantity <= 1}
-                    onClick={() => setQuantity(clampCrateQuantity(quantity - 1))}
-                  >
-                    <Minus aria-hidden="true" />
-                  </button>
-                  <input
-                    type="number"
-                    min="1"
-                    max={MAX_CRATE_PURCHASE_QUANTITY}
-                    value={quantity}
-                    disabled={pending}
-                    aria-label="Containers to buy"
-                    onChange={(event) =>
-                      setQuantity(clampCrateQuantity(event.target.value))
-                    }
-                  />
-                  <button
-                    type="button"
-                    aria-label="Buy one more container"
-                    disabled={pending || quantity >= MAX_CRATE_PURCHASE_QUANTITY}
-                    onClick={() => setQuantity(clampCrateQuantity(quantity + 1))}
-                  >
-                    <Plus aria-hidden="true" />
-                  </button>
-                </div>
-                <small>
-                  Buy up to {MAX_CRATE_PURCHASE_QUANTITY} containers in one
-                  transaction.
-                </small>
-              </label>
-              <button
-                type="button"
-                className="button button-primary"
-                disabled={pending || !purchaseAvailable || unaffordable}
-                aria-busy={pending}
-                onClick={() =>
-                  onPurchase(item, {
-                    stattrak: false,
-                    quantity,
-                  })
-                }
-              >
-                {pending ? (
-                  <LoaderCircle className="ui-button-spinner" aria-hidden="true" />
-                ) : (
-                  <ShoppingBag aria-hidden="true" />
-                )}
-                {buyLabel}
-              </button>
-              {unaffordable && totalPrice !== null ? (
-                <small className="crate-purchase-help" role="status">
-                  Need {formatTokens(totalPrice - walletBalance)} more Tokens.
-                </small>
-              ) : null}
-            </div>
-          </>
+          <small id={quantityHelpId}>
+            Buy up to {MAX_CRATE_PURCHASE_QUANTITY} containers in one
+            transaction.
+          </small>
+        </div>
+        <button
+          type="button"
+          className="button button-primary"
+          disabled={pending || !purchaseAvailable || unaffordable}
+          aria-busy={pending}
+          onClick={() =>
+            onPurchase(item, {
+              stattrak: false,
+              quantity,
+            })
+          }
+        >
+          {pending ? (
+            <LoaderCircle className="ui-button-spinner" aria-hidden="true" />
+          ) : (
+            <ShoppingBag aria-hidden="true" />
+          )}
+          {buyLabel}
+        </button>
+        {unaffordable && totalPrice !== null ? (
+          <small className="crate-purchase-help" role="status">
+            Need {formatTokens(totalPrice - walletBalance)} more Tokens.
+          </small>
         ) : null}
-      </section>
-    </>
+      </div>
+    </section>
   );
 }
 
-function MarketplaceListing(props: {
+function MarketplaceListing({
+  item,
+  pending,
+  walletBalance,
+  suggestedPurchaseFloat,
+  expanded,
+  onContainerToggle,
+  onPurchase,
+}: {
   item: EconomyItemView;
   pending: boolean;
   walletBalance: number;
   suggestedPurchaseFloat: string;
+  expanded: boolean;
+  onContainerToggle: () => void;
   onPurchase: (item: EconomyItemView, options: MarketplacePurchaseOptions) => void;
 }) {
-  if (isContainerItem(props.item)) {
+  if (isContainerItem(item)) {
     return (
-      <MarketplaceContainerListing
-        item={props.item}
-        pending={props.pending}
-        walletBalance={props.walletBalance}
-        onPurchase={props.onPurchase}
+      <MarketplaceContainerCard
+        item={item}
+        expanded={expanded}
+        onToggle={onContainerToggle}
       />
     );
   }
-  return <MarketplaceStandardListing {...props} />;
+  return (
+    <MarketplaceStandardListing
+      item={item}
+      pending={pending}
+      walletBalance={walletBalance}
+      suggestedPurchaseFloat={suggestedPurchaseFloat}
+      onPurchase={onPurchase}
+    />
+  );
 }
 
 export function MarketplaceBrowser({
@@ -915,6 +943,10 @@ export function MarketplaceBrowser({
   const [pendingPurchaseIds, setPendingPurchaseIds] = useState<ReadonlySet<number>>(
     () => new Set<number>(),
   );
+  const marketGridRef = useRef<HTMLDivElement | null>(null);
+  const [marketGridColumns, setMarketGridColumns] = useState(1);
+  const [selectedContainerCatalogueId, setSelectedContainerCatalogueId] =
+    useState<number | null>(null);
   const pageCount = Math.max(
     1,
     Math.ceil(pagination.total / pagination.pageSize),
@@ -926,6 +958,19 @@ export function MarketplaceBrowser({
     ? Math.min(pagination.total, firstResult + items.length - 1)
     : 0;
   const pageLinks = paginationPages(pageCount, pagination.page);
+  const selectedContainerIndex =
+    selectedContainerCatalogueId === null
+      ? -1
+      : items.findIndex(
+          (item) => item.catalogueId === selectedContainerCatalogueId,
+        );
+  const selectedContainer =
+    selectedContainerIndex < 0 ? null : items[selectedContainerIndex];
+  const containerPanelInsertionIndex = inlinePanelInsertionIndex(
+    selectedContainerIndex,
+    items.length,
+    marketGridColumns,
+  );
   // Browsing by a float range only filters catalogue entries; it does not
   // silently change the exact float a player is about to buy. Each card starts
   // on its server-quoted default and lets the player select a specific float.
@@ -942,11 +987,52 @@ export function MarketplaceBrowser({
     filters.rarity,
   ]);
 
+  useEffect(() => {
+    const grid = marketGridRef.current;
+    if (!grid) return;
+    const syncColumns = () => {
+      const columns = getComputedStyle(grid)
+        .gridTemplateColumns
+        .split(/\s+/)
+        .filter(Boolean).length;
+      setMarketGridColumns(Math.max(1, columns));
+    };
+    syncColumns();
+    const observer = new ResizeObserver(syncColumns);
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, [items.length]);
+
+  useEffect(() => {
+    if (
+      selectedContainerCatalogueId !== null &&
+      selectedContainerIndex < 0
+    ) {
+      setSelectedContainerCatalogueId(null);
+    }
+  }, [selectedContainerCatalogueId, selectedContainerIndex]);
+
   function updateDraft<K extends keyof MarketplaceFilters>(
     key: K,
     value: MarketplaceFilters[K],
   ) {
     setDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  function toggleContainer(item: EconomyItemView) {
+    if (item.catalogueId === null) return;
+    setSelectedContainerCatalogueId((current) =>
+      current === item.catalogueId ? null : item.catalogueId,
+    );
+  }
+
+  function closeContainerPanel() {
+    if (!selectedContainer) return;
+    const toggleId = marketContainerToggleId(selectedContainer);
+    setSelectedContainerCatalogueId(null);
+    window.requestAnimationFrame(() =>
+      document.getElementById(toggleId)?.focus(),
+    );
   }
 
   async function purchase(
@@ -1097,19 +1183,38 @@ export function MarketplaceBrowser({
       </SearchNavigationForm>
 
       {items.length ? (
-        <div className="feature-grid market-item-grid">
-          {items.map((item) => (
-            <MarketplaceListing
-              key={`${item.catalogueId ?? item.id}-${item.displayName}`}
-              item={item}
-              pending={
-                item.catalogueId !== null &&
-                pendingPurchaseIds.has(item.catalogueId)
-              }
-              walletBalance={walletView.balance}
-              suggestedPurchaseFloat={suggestedPurchaseFloat}
-              onPurchase={purchase}
-            />
+        <div ref={marketGridRef} className="feature-grid market-item-grid">
+          {items.map((item, index) => (
+            <Fragment key={`${item.catalogueId ?? item.id}-${item.displayName}`}>
+              <MarketplaceListing
+                item={item}
+                pending={
+                  item.catalogueId !== null &&
+                  pendingPurchaseIds.has(item.catalogueId)
+                }
+                walletBalance={walletView.balance}
+                suggestedPurchaseFloat={suggestedPurchaseFloat}
+                expanded={
+                  item.catalogueId !== null &&
+                  item.catalogueId === selectedContainerCatalogueId
+                }
+                onContainerToggle={() => toggleContainer(item)}
+                onPurchase={purchase}
+              />
+              {index === containerPanelInsertionIndex && selectedContainer ? (
+                <MarketplaceContainerPanel
+                  key={selectedContainer.catalogueId ?? selectedContainer.id}
+                  item={selectedContainer}
+                  pending={
+                    selectedContainer.catalogueId !== null &&
+                    pendingPurchaseIds.has(selectedContainer.catalogueId)
+                  }
+                  walletBalance={walletView.balance}
+                  onPurchase={purchase}
+                  onClose={closeContainerPanel}
+                />
+              ) : null}
+            </Fragment>
           ))}
         </div>
       ) : (
