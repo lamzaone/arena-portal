@@ -9,10 +9,41 @@ import {
   cratePurchaseTotal,
   formatCrateDropRate,
   inlinePanelInsertionIndex,
+  marketContainerModalPresentation,
   marketplacePurchaseIntentSignature,
   retainedPurchaseRequest,
   sortCrateDrops,
 } from "./crate-presentation.ts";
+
+test("container modal uses its wide presentation only for expanded drops", () => {
+  assert.deepEqual(
+    marketContainerModalPresentation({
+      dropsExpanded: false,
+      closing: false,
+      reducedMotion: false,
+    }),
+    { phase: "open", size: "standard", exitDelayMs: 180 },
+  );
+  assert.deepEqual(
+    marketContainerModalPresentation({
+      dropsExpanded: true,
+      closing: false,
+      reducedMotion: false,
+    }),
+    { phase: "open", size: "wide", exitDelayMs: 180 },
+  );
+});
+
+test("container modal closing presentation removes delay for reduced motion", () => {
+  assert.deepEqual(
+    marketContainerModalPresentation({
+      dropsExpanded: true,
+      closing: true,
+      reducedMotion: true,
+    }),
+    { phase: "closing", size: "wide", exitDelayMs: 0 },
+  );
+});
 
 test("clamps quantities and calculates safe totals", () => {
   assert.equal(clampCrateQuantity(0), 1);

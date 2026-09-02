@@ -60,6 +60,7 @@ import {
   crateDropDisclosureLabel,
   cratePurchaseTotal,
   inlinePanelInsertionIndex,
+  marketContainerModalPresentation,
   marketplacePurchaseIntentSignature,
   MAX_CRATE_PURCHASE_QUANTITY,
   retainedPurchaseRequest,
@@ -726,12 +727,14 @@ function MarketplaceContainerPanel({
   item,
   pending,
   walletBalance,
+  closing,
   onPurchase,
   onClose,
 }: {
   item: EconomyItemView;
   pending: boolean;
   walletBalance: number;
+  closing: boolean;
   onPurchase: (item: EconomyItemView, options: MarketplacePurchaseOptions) => void;
   onClose: () => void;
 }) {
@@ -771,6 +774,11 @@ function MarketplaceContainerPanel({
     showDrops,
     dropState.status === "ready" ? dropState.drops.length : null,
   );
+  const modalPresentation = marketContainerModalPresentation({
+    dropsExpanded: showDrops,
+    closing,
+    reducedMotion: false,
+  });
 
   function toggleDrops() {
     const next = !showDrops;
@@ -781,10 +789,15 @@ function MarketplaceContainerPanel({
   return (
     <section
       data-ui="item-modal"
+      data-motion={modalPresentation.phase}
+      data-size={modalPresentation.size}
       id={marketContainerPanelId(item)}
-      className="panel crate-inline-modal crate-market-inline-modal has-drop-odds"
+      className={`panel crate-inline-modal crate-market-inline-modal${
+        modalPresentation.size === "wide" ? " has-drop-odds" : ""
+      }${modalPresentation.phase === "closing" ? " is-closing" : ""}`}
       role="region"
       aria-labelledby={marketContainerToggleId(item)}
+      inert={closing}
     >
       <header className="crate-inline-modal-header">
         <div>
@@ -803,37 +816,6 @@ function MarketplaceContainerPanel({
         </button>
       </header>
       <div className="crate-catalogue-purchase crate-selected-purchase market-container-purchase-layout">
-        <div
-          className={`market-price-hud ${priceAvailable ? "" : "is-unavailable"}`}
-          aria-label={
-            priceAvailable
-              ? `${item.displayName} costs ${formatTokens(unitPrice)} Tokens each`
-              : `${item.displayName} price unavailable`
-          }
-        >
-          <span>Container price</span>
-          <strong>
-            {priceAvailable
-              ? `${formatTokens(unitPrice)} Tokens each`
-              : "Price unavailable"}
-          </strong>
-          {priceAvailable &&
-          item.marketBasePriceTokens !== null &&
-          item.marketBasePriceTokens > unitPrice ? (
-            <del className="market-base-price">
-              Original {formatTokens(item.marketBasePriceTokens)} Tokens each
-            </del>
-          ) : null}
-          <small>
-            {priceAvailable
-              ? totalPrice === null
-                ? "Total unavailable"
-                : `${quantity} total: ${formatTokens(totalPrice)} Tokens`
-              : canRefreshPrice
-                ? "The current public price will be checked before purchase."
-                : "No public or staff price is available yet."}
-          </small>
-        </div>
         <div className="crate-quantity-control">
           <label htmlFor={quantityId}>Amount</label>
           <div>
@@ -994,6 +976,9 @@ export function MarketplaceBrowser({
   const [marketGridColumns, setMarketGridColumns] = useState(1);
   const [selectedContainerCatalogueId, setSelectedContainerCatalogueId] =
     useState<number | null>(null);
+  const [closingContainerCatalogueId, setClosingContainerCatalogueId] =
+    useState<number | null>(null);
+  const containerCloseTimerRef = useRef<number | null>(null);
   const pageCount = Math.max(
     1,
     Math.ceil(pagination.total / pagination.pageSize),
@@ -1055,9 +1040,22 @@ export function MarketplaceBrowser({
       selectedContainerCatalogueId !== null &&
       selectedContainerIndex < 0
     ) {
+      if (containerCloseTimerRef.current !== null) {
+        window.clearTimeout(containerCloseTimerRef.current);
+        containerCloseTimerRef.current = null;
+      }
+      setClosingContainerCatalogueId(null);
       setSelectedContainerCatalogueId(null);
     }
   }, [selectedContainerCatalogueId, selectedContainerIndex]);
+
+  useEffect(
+    () => () => {
+      if (containerCloseTimerRef.current !== null)
+        window.clearTimeout(containerCloseTimerRef.current);
+    },
+    [],
+  );
 
   function updateDraft<K extends keyof MarketplaceFilters>(
     key: K,
@@ -1068,18 +1066,58 @@ export function MarketplaceBrowser({
 
   function toggleContainer(item: EconomyItemView) {
     if (item.catalogueId === null) return;
-    setSelectedContainerCatalogueId((current) =>
-      current === item.catalogueId ? null : item.catalogueId,
-    );
+    if (selectedContainerCatalogueId === item.catalogueId) {
+      closeContainerPanel(item);
+      return;
+    }
+    if (containerCloseTimerRef.current !== null) {
+      window.clearTimeout(containerCloseTimerRef.current);
+      containerCloseTimerRef.current = null;
+    }
+    setClosingContainerCatalogueId(null);
+    setSelectedContainerCatalogueId(item.catalogueId);
   }
 
-  function closeContainerPanel() {
-    if (!selectedContainer) return;
-    const toggleId = marketContainerToggleId(selectedContainer);
-    setSelectedContainerCatalogueId(null);
-    window.requestAnimationFrame(() =>
-      document.getElementById(toggleId)?.focus(),
-    );
+  function closeContainerPanel(
+    item: EconomyItemView | null = selectedContainer,
+  ) {
+    if (
+      !item ||
+      item.catalogueId === null ||
+      closingContainerCatalogueId !== null
+    ) {
+      return;
+    }
+    const catalogueId = item.catalogueId;
+    const toggleId = marketContainerToggleId(item);
+    const reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const { exitDelayMs } = marketContainerModalPresentation({
+      dropsExpanded: false,
+      closing: true,
+      reducedMotion,
+    });
+    setClosingContainerCatalogueId(catalogueId);
+
+    const finishClosing = () => {
+      containerCloseTimerRef.current = null;
+      setSelectedContainerCatalogueId((current) =>
+        current === catalogueId ? null : current,
+      );
+      setClosingContainerCatalogueId((current) =>
+        current === catalogueId ? null : current,
+      );
+      window.requestAnimationFrame(() =>
+        document.getElementById(toggleId)?.focus(),
+      );
+    };
+    if (exitDelayMs === 0) finishClosing();
+    else
+      containerCloseTimerRef.current = window.setTimeout(
+        finishClosing,
+        exitDelayMs,
+      );
   }
 
   async function purchase(
@@ -1279,8 +1317,13 @@ export function MarketplaceBrowser({
                       pendingPurchaseIds.has(selectedContainer.catalogueId)
                     }
                     walletBalance={walletView.balance}
+                    closing={
+                      selectedContainer.catalogueId !== null &&
+                      selectedContainer.catalogueId ===
+                        closingContainerCatalogueId
+                    }
                     onPurchase={purchase}
-                    onClose={closeContainerPanel}
+                    onClose={() => closeContainerPanel()}
                   />,
                 ]
               : [listing];

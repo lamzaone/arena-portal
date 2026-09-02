@@ -615,10 +615,10 @@ code { padding: 2px 4px; border-radius: 4px; color: #fecdd3; background: rgba(22
 .crate-tabs svg { width: 14px; height: 14px; }
 .crate-tabs span { display: inline-grid; min-width: 18px; height: 18px; place-items: center; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; font-size: 9px; font-variant-numeric: tabular-nums; }
 .crate-selected-purchase { gap: 12px; }
-.market-container-purchase-layout { grid-template-columns: minmax(0, 1fr) minmax(220px, .55fr); align-items: stretch; max-width: 820px; }
-.market-container-purchase-actions { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.market-container-purchase-layout { grid-template-columns: minmax(0, 1fr); align-items: stretch; justify-self: center; width: min(100%, 560px); max-width: none; }
+.market-container-purchase-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: 9px; }
 .market-container-purchase-actions .button { min-width: 0; min-height: 42px; margin: 0; padding: 9px 12px; font-size: 11px; line-height: 1.2; }
-.market-container-purchase-layout > .crate-purchase-help { grid-column: 1 / -1; text-align: left; }
+.market-container-purchase-layout > .crate-purchase-help { text-align: left; }
 .crate-quantity-control { display: grid; gap: 6px; color: #d7b0b7; font-size: 10px; font-weight: 800; letter-spacing: .065em; text-transform: uppercase; }
 .crate-quantity-control > div { display: grid; grid-template-columns: 38px minmax(0, 1fr) 38px; overflow: hidden; border: 1px solid rgba(255,113,133,.39); border-radius: 5px; background: rgba(7,2,4,.78); }
 .crate-quantity-control button { display: grid; place-items: center; border: 0; color: #f5cdd4; background: rgba(225,29,72,.14); cursor: pointer; transition: color .18s ease, background-color .18s ease; }
@@ -695,7 +695,9 @@ code { padding: 2px 4px; border-radius: 4px; color: #fecdd3; background: rgba(22
 @keyframes crate-opening-roll { from { transform: translate(var(--reel-start-offset), -50%); } to { transform: translate(var(--reel-final-offset), -50%); } }
 @keyframes crate-opening-roll-await { from { transform: translate(var(--reel-start-offset), -50%); } to { transform: translate(var(--reel-loop-offset), -50%); } }
 @keyframes crate-odds-spin { to { transform: rotate(360deg); } }
-@keyframes crate-inline-modal-reveal { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes crate-inline-modal-reveal { from { opacity: 0; transform: translateY(-10px) scale(.986); filter: saturate(.72); } to { opacity: 1; transform: translateY(0) scale(1); filter: saturate(1); } }
+@keyframes crate-inline-modal-dismiss { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(-7px) scale(.992); } }
+@keyframes crate-inline-drops-reveal { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 900px) { .crate-browser-heading { align-items: stretch; flex-direction: column; }.crate-tabs { align-self: flex-start; }.crate-drop-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); } }
 @media (max-width: 1080px) { .crate-opening-stage .crate-selected-purchase, .crate-opening-stage .crate-opening-animation { grid-column: 1 / -1; }.crate-opening-stage .crate-selected-purchase .button { grid-column: auto; } }
 @media (max-width: 900px) { .crate-inline-modal-overview { grid-template-columns: minmax(190px, .4fr) minmax(0, 1fr); }.crate-inline-modal-actions, .crate-market-inline-modal .crate-catalogue-purchase { grid-column: 1 / -1; }.crate-inline-modal-actions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }.crate-inline-modal-actions small { grid-column: 1 / -1; } }
@@ -2004,6 +2006,21 @@ main,
   padding: var(--economy-modal-padding);
 }
 
+.crate-inline-modal {
+  transition:
+    width 320ms cubic-bezier(.22, 1, .36, 1),
+    border-color 220ms ease,
+    box-shadow 220ms ease;
+}
+.crate-inline-modal.is-closing {
+  pointer-events: none;
+  animation: crate-inline-modal-dismiss 180ms cubic-bezier(.4, 0, 1, 1) both;
+}
+.crate-market-inline-modal[data-size="wide"] > .crate-inline-modal-drops {
+  transform-origin: top center;
+  animation: crate-inline-drops-reveal 260ms cubic-bezier(.22, 1, .36, 1) 45ms both;
+}
+
 /* These small panels share one rhythm without forcing matching heights or
    introducing unused vertical space when their content is naturally shorter. */
 .inventory-inline-modal .inventory-detail-hero,
@@ -2063,6 +2080,15 @@ main,
   /* Item, loadout, and sell are equal-width cells; Customize deliberately owns
      the complete next row for its three compact form cards. */
   .inventory-management-workspace { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crate-inline-modal,
+  .crate-inline-modal.is-closing,
+  .crate-market-inline-modal[data-size="wide"] > .crate-inline-modal-drops {
+    transition: none;
+    animation: none;
+  }
 }
 
 /* Stable shared UI primitives. Static navigation and page copy remain visible

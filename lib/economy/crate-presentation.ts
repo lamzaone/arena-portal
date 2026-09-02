@@ -16,6 +16,22 @@ export type CrateDropState<TCatalogue = Record<string, unknown>> =
   | { status: "empty"; message: string }
   | { status: "error"; message: string };
 
+const MARKET_CONTAINER_MODAL_EXIT_DELAY_MS = 180;
+
+export function marketContainerModalPresentation(input: {
+  dropsExpanded: boolean;
+  closing: boolean;
+  reducedMotion: boolean;
+}) {
+  return {
+    phase: input.closing ? ("closing" as const) : ("open" as const),
+    size: input.dropsExpanded ? ("wide" as const) : ("standard" as const),
+    exitDelayMs: input.reducedMotion
+      ? 0
+      : MARKET_CONTAINER_MODAL_EXIT_DELAY_MS,
+  };
+}
+
 type DropCataloguePresentation = {
   displayName?: string;
   rarityRank?: number;
