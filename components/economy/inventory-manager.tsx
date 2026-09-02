@@ -934,7 +934,7 @@ export function InventoryManager({
               <strong>{selectionMode ? "Selection mode" : "Bulk actions"}</strong>
               <span>
                 {selectionMode
-                  ? `${bulkSelectedItems.length.toLocaleString()} of ${MAX_BULK_SELL_ITEMS} items selected · ${bulkSellableItems.length.toLocaleString()} sellable`
+                  ? `${bulkSelectedItems.length.toLocaleString()} of ${MAX_BULK_SELL_ITEMS} items selected · ${bulkSellableItems.length.toLocaleString()} sellable${bulkCrateSelection.status === "ready" ? ` · ${bulkOpenableCrates.length.toLocaleString()} openable` : bulkSelectedItems.length ? " · opening requires crates only" : ""}`
                   : `Select up to ${MAX_BULK_SELL_ITEMS} items to lock, unlock, sell, or open crates.`}
               </span>
             </div>

@@ -2,12 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  activeConsumedItemIds,
   crateOnlySelection,
   inventoryItemsDuringCrateOpening,
   isOpenableInventoryCrate,
-  inventoryWorkflowAccess,
-  nextInventorySelectionOwner,
   partitionCrateOpeningIds,
   remainingCrateOpeningIds,
   runSequentialCrateOpeningGroups,
@@ -236,33 +233,6 @@ test("retrying starts at the failed group with its original idempotency key", as
   assert.equal(result.error, null);
 });
 
-test("activating one inventory selection surface replaces the other", () => {
-  assert.equal(nextInventorySelectionOwner("crates", "inventory", true), "inventory");
-  assert.equal(nextInventorySelectionOwner("inventory", "crates", true), "crates");
-});
-
-test("workflow access disables only the surface opposite an active interaction", () => {
-  assert.deepEqual(
-    inventoryWorkflowAccess({ crateInteractionActive: true, inventoryMutationActive: false }),
-    { inventoryDisabled: true, cratesDisabled: false },
-  );
-  assert.deepEqual(
-    inventoryWorkflowAccess({ crateInteractionActive: false, inventoryMutationActive: true }),
-    { inventoryDisabled: false, cratesDisabled: true },
-  );
-});
-
-test("a retained result stays consumed after the refreshed inventory drops it", () => {
-  assert.deepEqual(
-    activeConsumedItemIds(
-      ["opened-crate", "stale-crate", "owned-crate"],
-      new Set(["owned-crate"]),
-      "opened-crate",
-    ),
-    ["opened-crate", "owned-crate"],
-  );
-});
-
 test("committed crates disappear except for the retained single reveal", () => {
   const first = { id: "crate-1" };
   const second = { id: "crate-2" };
@@ -284,11 +254,6 @@ test("committed crates disappear except for the retained single reveal", () => {
     ),
     [third],
   );
-});
-
-test("a stale exit cannot clear the newly active selection surface", () => {
-  assert.equal(nextInventorySelectionOwner("crates", "inventory", false), "crates");
-  assert.equal(nextInventorySelectionOwner("inventory", "inventory", false), null);
 });
 
 test("a refreshed inventory keeps the opened item mounted for its result", () => {

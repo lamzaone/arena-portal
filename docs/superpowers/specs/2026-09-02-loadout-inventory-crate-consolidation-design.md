@@ -62,7 +62,7 @@ The Market remains the only catalogue-purchase surface. Crate and capsule cards 
 
 Non-container Market cards retain their existing float, StatTrak, quote, and purchase behavior.
 
-Inventory becomes the only crate-opening surface. Owned crate and capsule cards expand in the inventory grid to show the verified possible drops and odds before opening. The existing single-opening reveal, bulk selection/opening limit, result presentation, and idempotent open API are preserved. General inventory filters and pagination continue to work around the expanded crate controls.
+Inventory becomes the only crate-opening surface. Owned crate and capsule cards expand in the inventory grid to show the verified possible drops and odds before opening. The existing single-opening reveal, result presentation, and idempotent open API are preserved. The integrated Inventory flow coordinates selections of up to 50 containers through bounded ten-container API requests as specified in `2026-09-03-inventory-crate-opening-integration-design.md`. General inventory filters and pagination continue to work around the expanded crate controls.
 
 The account navbar removes **Crates**, adds **Loadout** immediately after **Inventory**, and keeps the remaining tabs in their current order. `/crates` performs a server redirect to `/inventory`; no independent Crates interface remains.
 
@@ -148,4 +148,4 @@ Final verification runs the focused tests red-to-green, the complete `npm test` 
 - Changing trade eligibility for sale-locked items.
 - Preventing a sale-locked crate from being opened.
 - Adding keys or key purchases for crates.
-- Changing loot odds, pricing sources, sellback percentage, or crate-opening limits.
+- Changing loot odds, pricing sources, sellback percentage, or the server's ten-container atomic request limit. The player-facing 50-container orchestration is specified separately in `2026-09-03-inventory-crate-opening-integration-design.md`.

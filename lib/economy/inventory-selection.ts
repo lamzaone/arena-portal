@@ -1,5 +1,3 @@
-export type InventorySelectionOwner = "inventory" | "crates" | null;
-
 type OpenableInventoryItem = {
   id: string;
   itemType: string;
@@ -107,15 +105,6 @@ export async function runSequentialCrateOpeningGroups<
   }
 }
 
-export function nextInventorySelectionOwner(
-  current: InventorySelectionOwner,
-  requestedOwner: Exclude<InventorySelectionOwner, null>,
-  active: boolean,
-): InventorySelectionOwner {
-  if (active) return requestedOwner;
-  return current === requestedOwner ? null : current;
-}
-
 export function withRetainedOpenedItem<T extends { id: string }>(
   items: readonly T[],
   retained: T | null,
@@ -141,24 +130,4 @@ export function inventoryItemsDuringCrateOpening<T extends { id: string }>(
     retainedItem,
     retainedIndex,
   );
-}
-
-export function activeConsumedItemIds(
-  currentIds: Iterable<string>,
-  inventoryIds: ReadonlySet<string>,
-  retainedId: string | null,
-): string[] {
-  return [...currentIds].filter(
-    (itemId) => inventoryIds.has(itemId) || itemId === retainedId,
-  );
-}
-
-export function inventoryWorkflowAccess(input: {
-  crateInteractionActive: boolean;
-  inventoryMutationActive: boolean;
-}) {
-  return {
-    inventoryDisabled: input.crateInteractionActive,
-    cratesDisabled: input.inventoryMutationActive,
-  };
 }

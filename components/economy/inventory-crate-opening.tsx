@@ -458,6 +458,7 @@ export function useInventoryCrateOpening({
   const singleRevealTimer = useRef<number | null>(null);
   const completeSingleRef = useRef<(() => void) | null>(null);
   const bulkDelayTimer = useRef<number | null>(null);
+  const completeBulkDelayRef = useRef<(() => void) | null>(null);
   const reelAudio = useRef<AudioContext | null>(null);
   const reelTickCount = useRef(0);
 
@@ -724,12 +725,23 @@ export function useInventoryCrateOpening({
             ),
           }));
           await new Promise<void>((resolve) => {
+            let finished = false;
+            const finish = () => {
+              if (finished) return;
+              finished = true;
+              if (bulkDelayTimer.current !== null) {
+                window.clearTimeout(bulkDelayTimer.current);
+                bulkDelayTimer.current = null;
+              }
+              completeBulkDelayRef.current = null;
+              resolve();
+            };
+            completeBulkDelayRef.current = finish;
             bulkDelayTimer.current = window.setTimeout(
-              resolve,
+              finish,
               revealDuration() + 400,
             );
           });
-          bulkDelayTimer.current = null;
           const completedCount = session.groups
             .slice(0, index + 1)
             .reduce((total, completedGroup) => total + completedGroup.crateItemIds.length, 0);
@@ -852,9 +864,8 @@ export function useInventoryCrateOpening({
     () => () => {
       if (singleRevealTimer.current !== null)
         window.clearTimeout(singleRevealTimer.current);
-      if (bulkDelayTimer.current !== null)
-        window.clearTimeout(bulkDelayTimer.current);
       completeSingleRef.current?.();
+      completeBulkDelayRef.current?.();
       if (reelAudio.current && reelAudio.current.state !== "closed")
         void reelAudio.current.close();
     },
@@ -1015,7 +1026,7 @@ export function InventoryBulkCrateOpeningResults({
       aria-busy={session.status === "running"}
     >
       <header className="crate-bulk-openings-heading">
-        <div>
+        <div aria-live="polite" aria-atomic="true">
           <p className="eyebrow">
             <Gift aria-hidden="true" /> Multi-open station
           </p>
