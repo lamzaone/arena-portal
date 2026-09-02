@@ -146,7 +146,7 @@ button { cursor: pointer; }
 
 .main-nav { display: flex; align-items: center; gap: 28px; margin-left: auto; color: var(--muted); font-size: 14px; font-weight: 600; }
 .main-nav a { transition: color .18s ease; }
-.main-nav a:hover, .main-nav a:focus-visible { color: var(--text); }
+.main-nav a:hover, .main-nav a:focus-visible, .main-nav a.active { color: var(--text); }
 .header-account { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 5px 8px 5px 5px; border: 1px solid transparent; border-radius: 7px; transition: border-color .18s ease, background-color .18s ease; }
 .header-account:hover, .header-account:focus-visible { border-color: var(--border); background: rgba(225,29,72,.1); }
 .header-account img, .header-account-avatar-fallback { display: grid; flex: 0 0 auto; width: 32px; height: 32px; place-items: center; border: 1px solid rgba(255,113,133,.48); border-radius: 50%; background: linear-gradient(145deg, #721226, #160307); object-fit: cover; }
@@ -231,7 +231,7 @@ code { padding: 2px 4px; border-radius: 4px; color: #fecdd3; background: rgba(22
 
 /* TAPPED.RO public landing experience */
 .tapped-page .shell { width: calc(100% - var(--shell-gutter)); max-width: none; }
-.tapped-page .brand { font-size: 14px; letter-spacing: .12em; }.tapped-page .brand-mark { width: 30px; height: 30px; }.tapped-page .main-nav { margin-left: auto; margin-right: 16px; gap: 25px; font-size: 12px; letter-spacing: .04em; }.tapped-page .main-nav a { position: relative; }.tapped-page .main-nav a::after { content: ""; position: absolute; right: 0; bottom: -7px; left: 0; height: 1px; background: var(--purple-bright); transform: scaleX(0); transform-origin: right; transition: transform .2s ease; }.tapped-page .main-nav a:hover::after, .tapped-page .main-nav a:focus-visible::after { transform: scaleX(1); transform-origin: left; }
+.tapped-page .brand { font-size: 14px; letter-spacing: .12em; }.tapped-page .brand-mark { width: 30px; height: 30px; }.tapped-page .main-nav { margin-left: auto; margin-right: 16px; gap: 25px; font-size: 12px; letter-spacing: .04em; }.tapped-page .main-nav a { position: relative; }.tapped-page .main-nav a::after { content: ""; position: absolute; right: 0; bottom: -7px; left: 0; height: 1px; background: var(--purple-bright); transform: scaleX(0); transform-origin: right; transition: transform .2s ease; }.tapped-page .main-nav a:hover::after, .tapped-page .main-nav a:focus-visible::after, .tapped-page .main-nav a.active::after { transform: scaleX(1); transform-origin: left; }
 
 .tapped-hero { display: grid; grid-template-columns: minmax(0, 1.02fr) minmax(420px, .98fr); gap: 46px; align-items: center; min-height: 630px; padding: 74px 5px 82px; }
 .tapped-hero .hero-copy { max-width: 645px; }.tapped-kicker { display: flex; align-items: center; gap: 9px; margin: 0 0 17px; color: #ff93a4; font-family: var(--font-body); font-size: 10px; font-weight: 700; letter-spacing: .17em; text-transform: uppercase; }.tapped-kicker > svg { width: 15px; height: 15px; }.tapped-kicker i, .tapped-footer i { width: 3px; height: 3px; border-radius: 50%; background: #ff7185; }.live-line { width: 29px; height: 1px; background: #ff7185; box-shadow: 0 0 10px #ff3355; }
@@ -1285,7 +1285,7 @@ main,
 .mobile-nav[open] > nav { display: grid; }
 .mobile-nav nav a { padding: 9px 10px; border-radius: 4px; color: var(--muted); font-size: 12px; font-weight: 700; }
 .mobile-nav nav a:hover,
-.mobile-nav nav a:focus-visible { color: var(--text); background: rgba(225, 29, 72, .15); outline: 0; }
+.mobile-nav nav a:focus-visible, .mobile-nav nav a.active { color: var(--text); background: rgba(225, 29, 72, .15); outline: 0; }
 
 .account-nav {
   gap: 4px;

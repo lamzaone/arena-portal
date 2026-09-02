@@ -579,7 +579,8 @@ body:has(.player-profile-page[data-theme-owner="profile"].profile-theme-beta-tes
 }
 
 .site-header[data-theme="beta_tester"][data-theme-surface~="global"] :is(.main-nav a, .mobile-nav nav a):hover,
-.site-header[data-theme="beta_tester"][data-theme-surface~="global"] :is(.main-nav a, .mobile-nav nav a):focus-visible {
+.site-header[data-theme="beta_tester"][data-theme-surface~="global"] :is(.main-nav a, .mobile-nav nav a):focus-visible,
+.site-header[data-theme="beta_tester"][data-theme-surface~="global"] :is(.main-nav a, .mobile-nav nav a).active {
   color: var(--beta-yellow);
   background-color: rgba(56, 189, 248, .1);
 }

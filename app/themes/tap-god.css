@@ -694,7 +694,8 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
 .site-header[data-theme="tap_god"][data-theme-surface~="global"] :is(.main-nav a, .mobile-nav nav a) { color: var(--tap-muted); }
 
 .site-header[data-theme="tap_god"][data-theme-surface~="global"] :is(.main-nav a, .mobile-nav nav a):hover,
-.site-header[data-theme="tap_god"][data-theme-surface~="global"] :is(.main-nav a, .mobile-nav nav a):focus-visible {
+.site-header[data-theme="tap_god"][data-theme-surface~="global"] :is(.main-nav a, .mobile-nav nav a):focus-visible,
+.site-header[data-theme="tap_god"][data-theme-surface~="global"] :is(.main-nav a, .mobile-nav nav a).active {
   color: var(--tap-hot);
   background-color: rgba(255, 23, 68, .2);
   box-shadow: inset 0 -2px 0 var(--tap-red), 0 0 14px rgba(255, 23, 68, .22);
