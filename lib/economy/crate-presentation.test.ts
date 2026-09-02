@@ -9,6 +9,8 @@ import {
   cratePurchaseTotal,
   formatCrateDropRate,
   inlinePanelInsertionIndex,
+  marketplacePurchaseIntentSignature,
+  retainedPurchaseRequest,
   sortCrateDrops,
 } from "./crate-presentation.ts";
 
@@ -51,6 +53,78 @@ test("labels the nested drop disclosure without exposing drops by default", () =
     "Show 1,234 possible drops",
   );
   assert.equal(crateDropDisclosureLabel(true, 1_234), "Hide possible drops");
+});
+
+test("normalizes every market purchase intent field", () => {
+  const standardSignature = marketplacePurchaseIntentSignature(42, {
+    stattrak: false,
+    floatValue: 0.15000001,
+  });
+  assert.equal(
+    standardSignature,
+    marketplacePurchaseIntentSignature(42, {
+      stattrak: false,
+      floatValue: 0.15,
+      quantity: 1,
+    }),
+  );
+  assert.notEqual(
+    standardSignature,
+    marketplacePurchaseIntentSignature(42, {
+      stattrak: false,
+      floatValue: 0.16,
+    }),
+  );
+  assert.notEqual(
+    standardSignature,
+    marketplacePurchaseIntentSignature(42, {
+      stattrak: true,
+      floatValue: 0.15,
+    }),
+  );
+  assert.notEqual(
+    standardSignature,
+    marketplacePurchaseIntentSignature(43, {
+      stattrak: false,
+      floatValue: 0.15,
+    }),
+  );
+
+  const oneContainer = marketplacePurchaseIntentSignature(42, {
+    stattrak: false,
+    quantity: 1,
+  });
+  assert.notEqual(
+    oneContainer,
+    marketplacePurchaseIntentSignature(42, {
+      stattrak: false,
+      quantity: 2,
+    }),
+  );
+});
+
+test("retains a retry key until the purchase intent changes", () => {
+  const signature = marketplacePurchaseIntentSignature(42, {
+    stattrak: false,
+    quantity: 2,
+  });
+  let generated = 0;
+  const createKey = () => `request-${++generated}`;
+  const first = retainedPurchaseRequest(null, signature, createKey);
+  const retry = retainedPurchaseRequest(first, signature, createKey);
+  const changed = retainedPurchaseRequest(
+    retry,
+    marketplacePurchaseIntentSignature(42, {
+      stattrak: false,
+      quantity: 3,
+    }),
+    createKey,
+  );
+
+  assert.equal(retry, first);
+  assert.equal(retry.idempotencyKey, "request-1");
+  assert.equal(changed.idempotencyKey, "request-2");
+  assert.equal(generated, 2);
 });
 
 test("rejects malformed drop responses and distinguishes an empty pool", () => {

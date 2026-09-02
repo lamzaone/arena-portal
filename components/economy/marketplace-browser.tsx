@@ -29,7 +29,10 @@ import {
   CrateDropPreview,
   type EconomyCrateDropState,
 } from "@/components/economy/crate-drop-preview";
-import { postEconomyAction } from "@/components/economy/economy-request";
+import {
+  createEconomyIdempotencyKey,
+  postEconomyAction,
+} from "@/components/economy/economy-request";
 import {
   economyCatalogueItems,
   economyWallet,
@@ -57,7 +60,10 @@ import {
   crateDropDisclosureLabel,
   cratePurchaseTotal,
   inlinePanelInsertionIndex,
+  marketplacePurchaseIntentSignature,
   MAX_CRATE_PURCHASE_QUANTITY,
+  retainedPurchaseRequest,
+  type RetainedPurchaseRequest,
 } from "@/lib/economy/crate-presentation";
 
 const DEFAULT_MARKET_FLOAT = 0.15;
@@ -978,6 +984,9 @@ export function MarketplaceBrowser({
     text: string;
   } | null>(null);
   const pendingPurchaseIdsRef = useRef(new Set<number>());
+  const purchaseRequestRefs = useRef(
+    new Map<number, RetainedPurchaseRequest>(),
+  );
   const [pendingPurchaseIds, setPendingPurchaseIds] = useState<ReadonlySet<number>>(
     () => new Set<number>(),
   );
@@ -1080,6 +1089,16 @@ export function MarketplaceBrowser({
     if (!item.catalogueId) return;
     const catalogueId = item.catalogueId;
     if (pendingPurchaseIdsRef.current.has(catalogueId)) return;
+    const signature = marketplacePurchaseIntentSignature(
+      catalogueId,
+      options,
+    );
+    const request = retainedPurchaseRequest(
+      purchaseRequestRefs.current.get(catalogueId) ?? null,
+      signature,
+      createEconomyIdempotencyKey,
+    );
+    purchaseRequestRefs.current.set(catalogueId, request);
     pendingPurchaseIdsRef.current.add(catalogueId);
     setPendingPurchaseIds(new Set(pendingPurchaseIdsRef.current));
     setNotice(null);
@@ -1097,7 +1116,14 @@ export function MarketplaceBrowser({
             ? {}
             : { quantity: clampCrateQuantity(options.quantity) }),
         },
+        request.idempotencyKey,
       );
+      if (
+        purchaseRequestRefs.current.get(catalogueId)?.idempotencyKey ===
+        request.idempotencyKey
+      ) {
+        purchaseRequestRefs.current.delete(catalogueId);
+      }
       setNotice({
         type: "success",
         text:

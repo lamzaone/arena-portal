@@ -109,6 +109,46 @@ export function crateDropDisclosureLabel(
     : "Show possible drops";
 }
 
+export type MarketplacePurchaseIntentOptions = {
+  quantity?: unknown;
+  floatValue?: number;
+  stattrak: boolean;
+};
+
+export type RetainedPurchaseRequest = {
+  signature: string;
+  idempotencyKey: string;
+};
+
+export function marketplacePurchaseIntentSignature(
+  catalogueId: number,
+  options: MarketplacePurchaseIntentOptions,
+) {
+  const floatValue =
+    options.floatValue === undefined
+      ? null
+      : Number.isFinite(options.floatValue) &&
+          options.floatValue >= 0 &&
+          options.floatValue <= 1
+        ? Math.round(options.floatValue * 1_000_000) / 1_000_000
+        : `invalid:${String(options.floatValue)}`;
+  return JSON.stringify({
+    catalogueId,
+    quantity: clampCrateQuantity(options.quantity ?? 1),
+    floatValue,
+    stattrak: options.stattrak === true,
+  });
+}
+
+export function retainedPurchaseRequest(
+  current: RetainedPurchaseRequest | null,
+  signature: string,
+  createIdempotencyKey: () => string,
+): RetainedPurchaseRequest {
+  if (current?.signature === signature) return current;
+  return { signature, idempotencyKey: createIdempotencyKey() };
+}
+
 export function crateDropStateFromResponse<TCatalogue = Record<string, unknown>>(
   value: unknown,
   catalogueFromResponse: (
