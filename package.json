@@ -11,7 +11,7 @@
     "test": "npm run test:vip && npm run test:scope && npm run test:database && npm run test:navigation && npm run test:loadout && npm run test:inventory-lock && npm run test:inventory-selection && npm run test:crates && npm run test:sellback",
     "test:vip": "node --experimental-strip-types --test lib/economy/vip-membership-conversion.test.ts lib/economy/vip-activation-state.test.ts",
     "test:navigation": "node --experimental-strip-types --test components/primary-navigation-routes.test.ts",
-    "test:loadout": "node --experimental-strip-types --test lib/economy/weapon-categories.test.ts",
+    "test:loadout": "node --experimental-strip-types --test lib/economy/weapon-categories.test.ts lib/economy/loadout-selection.test.ts",
     "test:inventory-lock": "node --experimental-strip-types --test lib/economy/inventory-sale-lock.test.ts",
     "test:inventory-selection": "node --experimental-strip-types --test lib/economy/inventory-selection.test.ts",
     "test:crates": "node --experimental-strip-types --test lib/economy/crate-presentation.test.ts",
