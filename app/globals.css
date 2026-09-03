@@ -2080,12 +2080,13 @@ main,
   /* Item, loadout, and sell are equal-width cells; Customize deliberately owns
      the complete next row for its three compact form cards. */
   .inventory-management-workspace { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 
-  /* Containers trade the generic equal thirds for one cohesive action column
-     and a narrower sale rail. Stacking the preview and opening station uses the
-     rail's height instead of leaving two short cards stranded above dead space. */
+@media (min-width: 1024px) {
+  /* Container management is a content-led sequence rather than a permanent
+     side rail: overview, full-width opening/drop surface, then sale controls. */
   .inventory-management-workspace.is-container-layout {
-    grid-template-columns: minmax(0, 1.48fr) minmax(330px, .72fr);
+    grid-template-columns: minmax(0, 1fr);
     align-items: start;
   }
 
@@ -2108,13 +2109,52 @@ main,
   .inventory-management-workspace.is-container-layout > .inventory-management-main > .inventory-crate-opening-panel {
     grid-column: 1;
     grid-row: 2;
+    width: 100%;
+    max-width: none;
     align-self: start;
   }
 
   .inventory-management-workspace.is-container-layout > .inventory-management-aside {
+    grid-column: 1;
+    grid-row: 2;
+    grid-template-columns: minmax(280px, .48fr) minmax(0, 1.52fr);
+    gap: var(--economy-modal-gap);
+    align-self: start;
+  }
+
+  .inventory-management-workspace.is-container-layout .inventory-crate-opening-panel > div:not(.inventory-crate-opening-actions),
+  .inventory-management-workspace.is-container-layout .inventory-crate-opening-panel .crate-drop-odds {
+    width: 100%;
+    max-width: none;
+  }
+
+  .inventory-management-workspace.is-container-layout .inventory-sell-panel-body:has(.inventory-sell-price) {
+    grid-template-columns: minmax(220px, 1fr) minmax(225px, .9fr);
+    align-items: center;
+  }
+
+  .inventory-management-workspace.is-container-layout .inventory-sell-panel-body > .empty-copy {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin: 0;
+  }
+
+  .inventory-management-workspace.is-container-layout .inventory-sell-panel-body > :is(.inventory-sell-start, .inventory-sell-confirmation) {
     grid-column: 2;
     grid-row: 1;
-    align-self: start;
+    align-self: stretch;
+  }
+}
+
+@media (min-width: 1200px) {
+  .inventory-management-workspace.is-container-layout .inventory-sell-panel-body:has(.inventory-sell-price) {
+    grid-template-columns: minmax(220px, .72fr) minmax(0, 1fr) minmax(225px, .7fr);
+  }
+
+  .inventory-management-workspace.is-container-layout .inventory-sell-panel-body > .empty-copy,
+  .inventory-management-workspace.is-container-layout .inventory-sell-panel-body > :is(.inventory-sell-start, .inventory-sell-confirmation) {
+    grid-column: auto;
+    grid-row: auto;
   }
 }
 
