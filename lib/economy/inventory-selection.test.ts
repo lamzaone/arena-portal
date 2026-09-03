@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   crateOnlySelection,
+  inventoryManagementLayout,
   inventoryItemsDuringCrateOpening,
   isOpenableInventoryCrate,
   partitionCrateOpeningIds,
@@ -73,6 +74,29 @@ test("only available catalogued crates and capsules can be opened", () => {
       catalogueId: null,
     }),
     false,
+  );
+});
+
+test("crate and capsule items use the compact container management layout", () => {
+  assert.equal(
+    inventoryManagementLayout(inventoryCrate("crate")),
+    "container",
+  );
+  assert.equal(
+    inventoryManagementLayout(
+      inventoryCrate("locked-capsule", "capsule", { saleLocked: true }),
+    ),
+    "container",
+  );
+  assert.equal(
+    inventoryManagementLayout(inventoryCrate("skin", "skin")),
+    "standard",
+  );
+  assert.equal(
+    inventoryManagementLayout(
+      inventoryCrate("reserved-crate", "crate", { state: "reserved" }),
+    ),
+    "standard",
   );
 });
 

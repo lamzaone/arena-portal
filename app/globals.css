@@ -2080,6 +2080,42 @@ main,
   /* Item, loadout, and sell are equal-width cells; Customize deliberately owns
      the complete next row for its three compact form cards. */
   .inventory-management-workspace { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+  /* Containers trade the generic equal thirds for one cohesive action column
+     and a narrower sale rail. Stacking the preview and opening station uses the
+     rail's height instead of leaving two short cards stranded above dead space. */
+  .inventory-management-workspace.is-container-layout {
+    grid-template-columns: minmax(0, 1.48fr) minmax(330px, .72fr);
+    align-items: start;
+  }
+
+  .inventory-management-workspace.is-container-layout > .inventory-management-main {
+    display: grid;
+    grid-column: 1;
+    grid-row: 1;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--economy-modal-gap);
+    align-items: start;
+  }
+
+  .inventory-management-workspace.is-container-layout > .inventory-management-main > .inventory-detail-hero {
+    grid-column: 1;
+    grid-row: 1;
+    grid-template-columns: minmax(210px, 240px) minmax(0, 1fr);
+    align-self: start;
+  }
+
+  .inventory-management-workspace.is-container-layout > .inventory-management-main > .inventory-crate-opening-panel {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: start;
+  }
+
+  .inventory-management-workspace.is-container-layout > .inventory-management-aside {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

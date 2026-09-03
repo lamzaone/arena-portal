@@ -58,6 +58,7 @@ import { PaginationControls } from "@/components/ui/pagination-controls";
 import { SearchField } from "@/components/ui/search-field";
 import {
   crateOnlySelection,
+  inventoryManagementLayout,
   inventoryItemsDuringCrateOpening,
   isOpenableInventoryCrate,
 } from "@/lib/economy/inventory-selection";
@@ -308,6 +309,9 @@ export function InventoryManager({
   ).length;
 
   const selected = visibleItems.find((item) => item.id === selectedId) ?? null;
+  const selectedManagementLayout = selected
+    ? inventoryManagementLayout(selected)
+    : "standard";
   const selectedIndex = visibleItems.findIndex((item) => item.id === selectedId);
   const selectedConsumedByOpening =
     selected !== null && crateOpening.consumedItemIds.has(selected.id);
@@ -1097,7 +1101,10 @@ export function InventoryManager({
                   <X aria-hidden="true" /> Close
                 </button>
               </header>
-              <div className="inventory-management-workspace">
+              <div
+                className={`inventory-management-workspace is-${selectedManagementLayout}-layout`}
+                data-layout={selectedManagementLayout}
+              >
                 <div className="inventory-management-main">
                 <div className="inventory-detail-hero">
                   <MarketplaceItemPreview item={selected} enableMarketPreview />

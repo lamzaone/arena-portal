@@ -5,6 +5,12 @@ type OpenableInventoryItem = {
   catalogueId: number | null;
 };
 
+export function inventoryManagementLayout(
+  item: OpenableInventoryItem,
+): "container" | "standard" {
+  return isOpenableInventoryCrate(item) ? "container" : "standard";
+}
+
 export const MAX_INVENTORY_CRATE_OPEN_SELECTION = 50;
 export const MAX_CRATES_PER_OPEN_REQUEST = 10;
 

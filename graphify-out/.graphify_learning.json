@@ -1,6 +1,38 @@
 {
-  "generated_at": "2026-09-02T22:32:41.165137+00:00",
+  "generated_at": "2026-09-02T23:48:35.426837+00:00",
   "nodes": {
+    "components_economy_crate_drop_preview": {
+      "code_fingerprint": "1d2e2d1c872d8612b36c2102c2d2007296fe9d48b5a9ada8f47c1a3f00b573b4",
+      "label": "crate-drop-preview.tsx",
+      "last": "2026-09-02T23:31:28.741128+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-02T23:31:28.741128+00:00",
+          "outcome": "useful",
+          "q": "in market, for crates, remove the Container price square. Keep the amount selector, and the 2 buttons stacked on eachother. Widen the modal if needed, when expanding possible drops"
+        }
+      ],
+      "score": 0.999725484,
+      "source_file": "components/economy/crate-drop-preview.tsx",
+      "status": "tentative",
+      "uses": 1
+    },
+    "components_economy_marketplace_browser": {
+      "code_fingerprint": "9c922158952d717918b64e7405f1c3c86b4c055278fc69a3d94cf2087a84fcaa",
+      "label": "marketplace-browser.tsx",
+      "last": "2026-09-02T23:31:28.741128+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-02T23:31:28.741128+00:00",
+          "outcome": "useful",
+          "q": "in market, for crates, remove the Container price square. Keep the amount selector, and the 2 buttons stacked on eachother. Widen the modal if needed, when expanding possible drops"
+        }
+      ],
+      "score": 0.999725484,
+      "source_file": "components/economy/marketplace-browser.tsx",
+      "status": "tentative",
+      "uses": 1
+    },
     "lib_data_portal_repository_purchaseeconomyitem": {
       "code_fingerprint": "2b4c39006fb8e866aab35ae92e512594336b3635e71f34710c4b3b7c5528ffec",
       "label": "purchaseEconomyItem()",
@@ -12,7 +44,7 @@
           "q": "Items bought for a discount should be sold relative to their buying price, then audit the full site UI/UX."
         }
       ],
-      "score": 0.994366647,
+      "score": 0.993156354,
       "source_file": "lib/data/portal-repository.ts",
       "status": "tentative",
       "uses": 1
@@ -28,7 +60,7 @@
           "q": "Items bought for a discount should be sold relative to their buying price, then audit the full site UI/UX."
         }
       ],
-      "score": 0.994366647,
+      "score": 0.993156354,
       "source_file": "lib/data/portal-repository.ts",
       "status": "tentative",
       "uses": 1
@@ -44,8 +76,24 @@
           "q": "Items bought for a discount should be sold relative to their buying price, then audit the full site UI/UX."
         }
       ],
-      "score": 0.994366647,
+      "score": 0.993156354,
       "source_file": "lib/data/portal-repository.ts",
+      "status": "tentative",
+      "uses": 1
+    },
+    "lib_economy_inventory_selection_crateonlyselection": {
+      "code_fingerprint": "6f745774693ec6e0bf70b91b206d0c94999d9395c6b994f9d7b476398a755d2d",
+      "label": "crateOnlySelection",
+      "last": "2026-09-02T23:21:16.129525+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-02T23:21:16.129525+00:00",
+          "outcome": "useful",
+          "q": "How does Inventory open more than ten selected crates while retaining one selection owner?"
+        }
+      ],
+      "score": 0.999561719,
+      "source_file": "lib/economy/inventory-selection.ts",
       "status": "tentative",
       "uses": 1
     },
@@ -60,7 +108,7 @@
           "q": "Items bought for a discount should be sold relative to their buying price, then audit the full site UI/UX."
         }
       ],
-      "score": 0.994366647,
+      "score": 0.993156354,
       "source_file": "lib/economy/sellback.ts",
       "status": "tentative",
       "uses": 1
