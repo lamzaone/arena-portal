@@ -44,6 +44,14 @@ CREATE TABLE IF NOT EXISTS portal_token_ledger (
   CONSTRAINT portal_token_ledger_balance_nonnegative CHECK (balance_after >= 0)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS portal_arena_wager_sessions (
+  server_id VARCHAR(80) NOT NULL,
+  owner_session_id VARCHAR(64) NOT NULL,
+  heartbeat_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (server_id, owner_session_id),
+  KEY portal_arena_wager_sessions_heartbeat (heartbeat_at)
+) ENGINE=InnoDB;
+
 -- Durable two-player Token wagers opened by game-server features. Financial
 -- changes remain in the immutable ledger; this row is the idempotent state
 -- machine that prevents a wager from being paid or refunded twice.
