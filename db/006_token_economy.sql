@@ -44,6 +44,37 @@ CREATE TABLE IF NOT EXISTS portal_token_ledger (
   CONSTRAINT portal_token_ledger_balance_nonnegative CHECK (balance_after >= 0)
 ) ENGINE=InnoDB;
 
+-- Durable two-player Token wagers opened by game-server features. Financial
+-- changes remain in the immutable ledger; this row is the idempotent state
+-- machine that prevents a wager from being paid or refunded twice.
+CREATE TABLE IF NOT EXISTS portal_token_wagers (
+  wager_id VARCHAR(96) NOT NULL,
+  game_kind ENUM('duel', 'barbut') NOT NULL,
+  challenger_steam_id VARCHAR(17) NOT NULL,
+  opponent_steam_id VARCHAR(17) NOT NULL,
+  stake BIGINT UNSIGNED NOT NULL,
+  pot BIGINT UNSIGNED NOT NULL,
+  status ENUM('open', 'settled', 'cancelled') NOT NULL,
+  winner_steam_id VARCHAR(17) NULL,
+  metadata JSON NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resolved_at TIMESTAMP NULL,
+  PRIMARY KEY (wager_id),
+  KEY portal_token_wagers_challenger_status (challenger_steam_id, status, created_at),
+  KEY portal_token_wagers_opponent_status (opponent_steam_id, status, created_at),
+  CONSTRAINT portal_token_wagers_stake_positive CHECK (stake > 0),
+  CONSTRAINT portal_token_wagers_pot_matches_stake CHECK (pot = stake * 2),
+  CONSTRAINT portal_token_wagers_players_distinct CHECK (challenger_steam_id <> opponent_steam_id),
+  CONSTRAINT portal_token_wagers_winner_participant CHECK (
+    winner_steam_id IS NULL OR winner_steam_id IN (challenger_steam_id, opponent_steam_id)
+  ),
+  CONSTRAINT portal_token_wagers_status_shape CHECK (
+    (status = 'open' AND winner_steam_id IS NULL AND resolved_at IS NULL) OR
+    (status = 'settled' AND winner_steam_id IS NOT NULL AND resolved_at IS NOT NULL) OR
+    (status = 'cancelled' AND winner_steam_id IS NULL AND resolved_at IS NOT NULL)
+  )
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS portal_economy_operations (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   operation_name VARCHAR(80) NOT NULL,
