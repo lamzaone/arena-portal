@@ -32,6 +32,15 @@ type SnapshotRow = RowDataPacket & {
 
 class DatabaseTimeoutError extends Error {}
 
+type RepositoryOptions = {
+  databaseTimeoutMs?: number;
+};
+
+type ManagedConnection = {
+  connection: PoolConnection;
+  discarded: boolean;
+};
+
 function epoch(value: string): number {
   return Date.parse(value);
 }
@@ -52,19 +61,37 @@ function safeTableName(tableName: string): string {
   return tableName;
 }
 
-async function acquireConnection(pool: Pool): Promise<PoolConnection> {
+function requestedDatabaseTimeout(options: RepositoryOptions): number {
+  const timeout = options.databaseTimeoutMs ?? DATABASE_TIMEOUT_MS;
+  if (!Number.isSafeInteger(timeout) || timeout <= 0) {
+    throw new Error("databaseTimeoutMs must be a positive integer.");
+  }
+  return timeout;
+}
+
+function discardConnection(state: ManagedConnection): void {
+  if (state.discarded) return;
+  state.discarded = true;
+  state.connection.destroy();
+}
+
+async function acquireConnection(pool: Pool, timeoutMs: number): Promise<ManagedConnection> {
   const acquisition = pool.getConnection();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await Promise.race([
+    const connection = await Promise.race([
       acquisition,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new DatabaseTimeoutError("Database connection timed out.")), DATABASE_TIMEOUT_MS);
+        timer = setTimeout(() => reject(new DatabaseTimeoutError("Database connection timed out.")), timeoutMs);
       }),
     ]);
+    return { connection, discarded: false };
   } catch (error) {
     if (error instanceof DatabaseTimeoutError) {
-      void acquisition.then((connection) => connection.release(), () => undefined);
+      // An acquisition that finishes after its caller has timed out may hand us
+      // a connection with commands queued by a previous request. Do not put
+      // that uncertain connection back into the pool.
+      void acquisition.then((connection) => connection.destroy(), () => undefined);
     }
     throw error;
   } finally {
@@ -72,8 +99,34 @@ async function acquireConnection(pool: Pool): Promise<PoolConnection> {
   }
 }
 
-async function query<T extends RowDataPacket[]>(connection: PoolConnection, sql: string, values: unknown[] = []) {
-  return connection.query<T>({ sql, values, timeout: DATABASE_TIMEOUT_MS });
+async function query<T extends RowDataPacket[]>(
+  state: ManagedConnection,
+  sql: string,
+  values: unknown[],
+  timeoutMs: number,
+) {
+  if (state.discarded) throw new DatabaseTimeoutError("Database connection was discarded.");
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const operation = state.connection.query<T>({ sql, values, timeout: timeoutMs });
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new DatabaseTimeoutError("Database query timed out."));
+          discardConnection(state);
+        }, timeoutMs);
+      }),
+    ]);
+  } catch (error) {
+    if (databaseCode(error) === "PROTOCOL_SEQUENCE_TIMEOUT") {
+      discardConnection(state);
+      throw new DatabaseTimeoutError("Database query timed out.", { cause: error });
+    }
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function databaseCode(error: unknown): string | null {
@@ -134,25 +187,31 @@ function rowOrder(row: SnapshotRow): HeartbeatOrder {
   };
 }
 
-async function saveAttempt(pool: Pool, tableName: string, heartbeat: Heartbeat): Promise<boolean> {
-  const connection = await acquireConnection(pool);
+async function saveAttempt(
+  pool: Pool,
+  tableName: string,
+  heartbeat: Heartbeat,
+  timeoutMs: number,
+): Promise<boolean> {
+  const state = await acquireConnection(pool, timeoutMs);
   let transactionStarted = false;
   try {
-    await query(connection, "SET SESSION innodb_lock_wait_timeout = 5");
-    await query(connection, "START TRANSACTION");
+    await query(state, "SET SESSION innodb_lock_wait_timeout = 5", [], timeoutMs);
+    await query(state, "START TRANSACTION", [], timeoutMs);
     transactionStarted = true;
     const [rows] = await query<SnapshotRow[]>(
-      connection,
+      state,
       `SELECT server_id, session_id, session_started_at, sequence, captured_at, map,
               max_players, players, bots, roster, received_at
          FROM ${tableName}
         WHERE server_id = ?
-        FOR UPDATE`,
+       FOR UPDATE`,
       [heartbeat.serverId],
+      timeoutMs,
     );
 
     if (rows[0] && !shouldAcceptHeartbeat(rowOrder(rows[0]), heartbeat)) {
-      await query(connection, "COMMIT");
+      await query(state, "COMMIT", [], timeoutMs);
       transactionStarted = false;
       return false;
     }
@@ -171,43 +230,50 @@ async function saveAttempt(pool: Pool, tableName: string, heartbeat: Heartbeat):
     ];
     if (rows[0]) {
       await query(
-        connection,
+        state,
         `UPDATE ${tableName}
             SET session_id = ?, session_started_at = ?, sequence = ?, captured_at = ?, map = ?,
                 max_players = ?, players = ?, bots = ?, roster = ?, received_at = UTC_TIMESTAMP(3)
           WHERE server_id = ?`,
         [values[1], values[2], values[3], values[4], values[5], values[6], values[7], values[8], values[9], values[0]],
+        timeoutMs,
       );
     } else {
       await query(
-        connection,
+        state,
         `INSERT INTO ${tableName}
           (server_id, session_id, session_started_at, sequence, captured_at, map,
            max_players, players, bots, roster, received_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(3))`,
         values,
+        timeoutMs,
       );
     }
-    await query(connection, "COMMIT");
+    await query(state, "COMMIT", [], timeoutMs);
     transactionStarted = false;
     return true;
   } catch (error) {
-    if (transactionStarted) {
-      await query(connection, "ROLLBACK").catch(() => undefined);
+    if (transactionStarted && !state.discarded) {
+      await query(state, "ROLLBACK", [], timeoutMs).catch(() => undefined);
     }
     throw error;
   } finally {
-    connection.release();
+    if (!state.discarded) state.connection.release();
   }
 }
 
-export function createServerLinkRepository(pool: Pool, requestedTableName = SNAPSHOT_TABLE) {
+export function createServerLinkRepository(
+  pool: Pool,
+  requestedTableName = SNAPSHOT_TABLE,
+  options: RepositoryOptions = {},
+) {
   const tableName = safeTableName(requestedTableName);
+  const timeoutMs = requestedDatabaseTimeout(options);
   return {
     async save(heartbeat: Heartbeat): Promise<boolean> {
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
-          return await saveAttempt(pool, tableName, heartbeat);
+          return await saveAttempt(pool, tableName, heartbeat, timeoutMs);
         } catch (error) {
           const code = databaseCode(error);
           if (attempt === 2 || !code || !RETRYABLE_DATABASE_ERRORS.has(code)) throw error;
@@ -217,20 +283,21 @@ export function createServerLinkRepository(pool: Pool, requestedTableName = SNAP
     },
 
     async get(serverId: string): Promise<StoredHeartbeat | null> {
-      const connection = await acquireConnection(pool);
+      const state = await acquireConnection(pool, timeoutMs);
       try {
         const [rows] = await query<SnapshotRow[]>(
-          connection,
+          state,
           `SELECT server_id, session_id, session_started_at, sequence, captured_at, map,
                   max_players, players, bots, roster, received_at
              FROM ${tableName}
             WHERE server_id = ?
             LIMIT 1`,
           [serverId],
+          timeoutMs,
         );
         return rows[0] ? storedHeartbeat(rows[0]) : null;
       } finally {
-        connection.release();
+        if (!state.discarded) state.connection.release();
       }
     },
   };

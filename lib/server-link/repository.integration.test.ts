@@ -99,3 +99,72 @@ test("locked persistence rejects replay without refreshing database receipt time
     await pool.end();
   }
 });
+
+test("a timed-out row lock is discarded and the pool serves a later operation", {
+  skip: databaseUrl ? false : "SERVER_LINK_TEST_DATABASE_URL is not configured",
+}, async () => {
+  assert.ok(databaseUrl);
+  const pool = mysql.createPool({
+    uri: databaseUrl,
+    connectionLimit: 1,
+    timezone: "Z",
+    supportBigNumbers: true,
+    bigNumberStrings: true,
+  });
+  const blocker = await mysql.createConnection({ uri: databaseUrl, timezone: "Z" });
+  const tableName = `portal_server_link_snapshots_test_timeout_${process.pid}_${Date.now().toString(36)}`;
+  assert.match(tableName, /^portal_server_link_snapshots_test_[a-z0-9_]+$/);
+  let unblockTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const heartbeat: Heartbeat = {
+    version: 1,
+    serverId: "623e4567-e89b-42d3-a456-426614174000",
+    sessionId: "723e4567-e89b-42d3-a456-426614174000",
+    sessionStartedAt: "2026-09-05T11:00:00.000Z",
+    sequence: 1,
+    capturedAt: "2026-09-05T11:59:55.000Z",
+    map: "de_mirage",
+    maxPlayers: 12,
+    players: 0,
+    bots: 0,
+    roster: [],
+  };
+
+  try {
+    await pool.query(`CREATE TABLE ${tableName} (
+      server_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY,
+      session_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+      session_started_at DATETIME(3) NOT NULL,
+      sequence BIGINT UNSIGNED NOT NULL,
+      captured_at DATETIME(3) NOT NULL,
+      map VARCHAR(128) NULL,
+      max_players TINYINT UNSIGNED NOT NULL,
+      players TINYINT UNSIGNED NOT NULL,
+      bots TINYINT UNSIGNED NOT NULL,
+      roster JSON NOT NULL,
+      received_at DATETIME(3) NOT NULL
+    ) ENGINE = InnoDB`);
+    const setupRepository = createServerLinkRepository(pool, tableName);
+    assert.equal(await setupRepository.save(heartbeat), true);
+
+    await blocker.beginTransaction();
+    await blocker.query(`SELECT server_id FROM ${tableName} WHERE server_id = ? FOR UPDATE`, [heartbeat.serverId]);
+    unblockTimer = setTimeout(() => void blocker.rollback(), 1_500);
+
+    const repository = createServerLinkRepository(pool, tableName, { databaseTimeoutMs: 200 });
+    await assert.rejects(
+      repository.save({ ...heartbeat, sequence: 2, capturedAt: "2026-09-05T11:59:56.000Z" }),
+      /Database query timed out/,
+    );
+
+    const followUpStartedAt = Date.now();
+    assert.equal(await repository.get("823e4567-e89b-42d3-a456-426614174000"), null);
+    assert.ok(Date.now() - followUpStartedAt < 1_000, "replacement connection should not wait behind the timed-out command");
+  } finally {
+    if (unblockTimer) clearTimeout(unblockTimer);
+    await blocker.rollback().catch(() => undefined);
+    await pool.query(`DROP TABLE IF EXISTS ${tableName}`);
+    await blocker.end();
+    await pool.end();
+  }
+});
