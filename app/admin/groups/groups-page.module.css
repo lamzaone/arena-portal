@@ -14,7 +14,7 @@
 
 .syncForm > span {
   color: var(--theme-text-subtle);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -54,7 +54,7 @@
 
 .catalogueStatus span {
   color: var(--theme-text-subtle);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -69,7 +69,7 @@
 
 .controlLabel {
   color: var(--theme-text-subtle);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -98,7 +98,7 @@
   border: 1px solid var(--theme-border);
   color: var(--theme-text-muted);
   background: var(--theme-control-bg);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 850;
   letter-spacing: 0.08em;
   line-height: 1;
@@ -126,7 +126,7 @@
 .groupKey {
   overflow: hidden;
   color: var(--theme-text-subtle);
-  font-size: 9px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -140,7 +140,7 @@
   padding: 13px 16px;
   color: var(--theme-text-muted);
   cursor: pointer;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.06em;
   list-style-position: inside;
@@ -194,7 +194,7 @@
 
 .externalDefinitionHeading > span {
   color: var(--theme-text-subtle);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -217,7 +217,7 @@
 .definitionFacts dt,
 .definitionLists > div > strong {
   color: var(--theme-text-subtle);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 850;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -228,7 +228,7 @@
   margin: 0;
   overflow: hidden;
   color: var(--theme-text-muted);
-  font-size: 10px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -261,7 +261,7 @@
   border: 1px solid color-mix(in srgb, var(--theme-accent-soft) 28%, var(--theme-border));
   color: var(--theme-text-muted);
   background: color-mix(in srgb, var(--theme-accent-soft) 8%, transparent);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .definitionLists code {
@@ -271,7 +271,7 @@
 .definitionLists p {
   margin: 0;
   color: var(--theme-text-subtle);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .relationshipForm.relationshipForm {
@@ -293,7 +293,7 @@
   min-width: 0;
   gap: 6px;
   color: var(--theme-text-muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -350,12 +350,12 @@
 
 .relationshipRow strong {
   color: var(--theme-text);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .relationshipRow code {
   color: var(--theme-text-subtle);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .searchableCatalogue {
@@ -395,7 +395,7 @@
 }
 
 .resultCount span {
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -434,13 +434,13 @@
 
 .privilegeIdentity code {
   color: var(--theme-text-subtle);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .privilegeIdentity small {
   overflow: hidden;
   color: var(--theme-text-subtle);
-  font-size: 8px;
+  font-size: 11px;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -469,7 +469,7 @@
   grid-template-columns: minmax(170px, 1.05fr) minmax(150px, 0.9fr) minmax(190px, 1.1fr) minmax(92px, 0.46fr) minmax(92px, 0.46fr) auto;
 }
 
-@media (max-width: 830px) {
+@container staff-content (max-width: 830px) {
   .relationshipForm.relationshipForm,
   .privilegeEditor.privilegeEditor {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -489,7 +489,7 @@
   }
 }
 
-@media (max-width: 520px) {
+@container staff-content (max-width: 520px) {
   .catalogueStatus,
   .definitionFacts,
   .definitionLists,
@@ -553,7 +553,7 @@
 
 .groupWorkspace {
   display: grid;
-  grid-template-columns: minmax(330px, 0.36fr) minmax(0, 1fr);
+  grid-template-columns: minmax(400px, 0.36fr) minmax(0, 1fr);
   min-height: 400px;
   overflow: clip;
   border: 1px solid var(--theme-border);
@@ -595,7 +595,7 @@
 }
 
 .navigatorHeading span {
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 850;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -884,12 +884,13 @@
   margin: 0;
   padding: 18px 12px;
   color: var(--theme-text-subtle);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.5;
 }
 
 .groupWorkspacePanels {
   min-width: 0;
+  container: staff-content / inline-size;
   background: color-mix(in srgb, var(--theme-page-bg) 26%, transparent);
 }
 
@@ -914,7 +915,7 @@
 
 .groupWorkspaceEmpty span {
   max-width: 390px;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.5;
 }
 
@@ -926,6 +927,7 @@
 .groupWorkspacePanels :global(.staff-group-card) {
   min-height: 100%;
 }
+
 
 .groupWorkspacePanels :global(.staff-group-card) {
   margin: 0;
@@ -954,7 +956,7 @@
   max-width: 680px;
   margin: 0;
   color: var(--theme-text-muted);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.5;
 }
 
@@ -1045,7 +1047,7 @@
   max-width: 520px;
   margin: 0;
   color: var(--theme-text-muted);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.55;
 }
 
@@ -1077,7 +1079,7 @@
   min-height: 220px;
   tab-size: 2;
   font-family: var(--font-mono, ui-monospace, "Cascadia Code", Consolas, monospace);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.55;
 }
 
@@ -1087,7 +1089,7 @@
   border: 1px solid color-mix(in srgb, var(--theme-accent-strong) 36%, var(--theme-border));
   color: var(--theme-text-muted);
   background: color-mix(in srgb, var(--theme-accent-strong) 8%, var(--theme-surface));
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.55;
 }
 
@@ -1183,7 +1185,7 @@
   max-width: 760px;
   margin: 0;
   color: var(--theme-text-muted);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.5;
 }
 
@@ -1222,7 +1224,7 @@
 
 .presentationHeading span {
   color: var(--theme-accent-soft);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 850;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -1240,7 +1242,7 @@
   max-width: 460px;
   margin: 0;
   color: var(--theme-text-subtle);
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.5;
   text-align: right;
 }
@@ -1259,7 +1261,7 @@
 .formSection legend {
   padding: 0 6px;
   color: var(--theme-text);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 850;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -1268,7 +1270,7 @@
 .formSection > p {
   margin: 0 0 5px;
   color: var(--theme-text-subtle);
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.5;
 }
 
@@ -1335,7 +1337,7 @@
 
 .groupDetails > summary small {
   color: var(--theme-text-subtle);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.035em;
   text-transform: none;
@@ -1406,7 +1408,7 @@
 
 .managementHeading p {
   color: var(--theme-text-subtle);
-  font-size: 8px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -1421,7 +1423,7 @@
   color: var(--theme-text-muted);
   background: var(--theme-control-bg);
   font-family: var(--font-display);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .managementBody {
@@ -1461,7 +1463,7 @@
   margin: 0;
   padding: 12px 14px;
   color: var(--theme-text-subtle);
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1.5;
 }
 
@@ -1524,7 +1526,7 @@
   border-radius: calc(var(--theme-radius) - 2px);
   color: var(--theme-text-muted);
   background: var(--theme-control-bg);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.055em;
   text-transform: uppercase;
@@ -1549,20 +1551,20 @@
   min-width: 0;
   gap: 2px;
   color: var(--theme-text-muted);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .rewardRow strong {
   overflow: hidden;
   color: var(--theme-text);
-  font-size: 10px;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .rewardRow small {
   color: var(--theme-text-subtle);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .directAwardGrid {
@@ -1605,7 +1607,7 @@
 
 .directAwardHeading span {
   color: var(--theme-text-subtle);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .subsectionHeading {
@@ -1628,7 +1630,7 @@
 
 .subsectionHeading strong {
   color: var(--theme-text);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.045em;
   text-transform: uppercase;
 }
@@ -1636,7 +1638,7 @@
 .subsectionHeading span,
 .subsectionHeading small {
   color: var(--theme-text-subtle);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .subsectionHeading small {
@@ -1747,9 +1749,9 @@
   color: var(--theme-accent-soft);
 }
 
-@media (max-width: 1080px) {
+@container staff-content (max-width: 1200px) {
   .groupWorkspace {
-    grid-template-columns: minmax(310px, 0.35fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .groupCardHeader,
@@ -1789,7 +1791,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@container staff-content (max-width: 1200px) {
   .groupWorkspace {
     grid-template-columns: 1fr;
   }
@@ -1826,7 +1828,7 @@
   }
 }
 
-@media (max-width: 540px) {
+@container staff-content (max-width: 540px) {
   .formGrid,
   .badgeFormGrid,
   .rewardOptions,

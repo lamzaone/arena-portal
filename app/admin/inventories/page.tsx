@@ -235,14 +235,14 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
   });
 
   return (
-    <PortalShell authenticated className="staff-page economy-admin-page">
+    <PortalShell authenticated className="staff-page economy-admin-page" navigation={<StaffSubmenu access={access} active="inventories" />}>
         <AdminPageHeader
           id="player-inventories-title"
           title="Player inventories"
           description="Find a player by display name or SteamID64, then inspect their live wallet, loadout, and paged item inventory without leaving the staff workspace."
           access={access}
         />
-        <StaffSubmenu access={access} active="inventories" />
+
         {notice ? <PortalToast message={notice} /> : null}
         {error ? <PortalToast variant="danger" message={error} /> : null}
         <section className="staff-inventories-layout">

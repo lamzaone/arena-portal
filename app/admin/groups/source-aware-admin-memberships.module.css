@@ -439,7 +439,7 @@
   line-height: 1.45;
 }
 
-@media (max-width: 1240px) {
+@container staff-content (max-width: 1240px) {
   .record {
     grid-template-columns: minmax(210px, 0.85fr) minmax(300px, 1.15fr) minmax(270px, 1fr);
   }
@@ -460,7 +460,7 @@
   }
 }
 
-@media (max-width: 900px) {
+@container staff-content (max-width: 900px) {
   .header {
     align-items: flex-start;
     flex-direction: column;
@@ -496,7 +496,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@container staff-content (max-width: 640px) {
   .header,
   .playerHeader,
   .record {

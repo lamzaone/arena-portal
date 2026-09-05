@@ -41,10 +41,10 @@
   border-radius: 4px;
   background: #121318;
 }
-.previewLabel { display: flex; align-items: center; gap: 7px; color: #bcbcc8; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.previewLabel { display: flex; align-items: center; gap: 7px; color: #bcbcc8; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .previewLabel svg { width: 13px; height: 13px; }
 .preview p { margin: 10px 0 8px; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
-.preview > small { display: block; color: #adadb9; font-size: 10px; line-height: 1.5; }
+.preview > small { display: block; color: #adadb9; font-size: 11px; line-height: 1.5; }
 .colorFields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }
 .picker { min-width: 0; margin: 0; padding: 0; border: 0; }
 .picker legend { margin-bottom: 8px; padding: 0; }
@@ -54,7 +54,7 @@
 .picker summary::-webkit-details-marker { display: none; }
 .picker summary > span { display: grid; min-width: 0; gap: 4px; }
 .picker summary strong { color: var(--theme-text); font-size: 12px; }
-.picker summary code { color: var(--theme-text-muted); font-size: 10px; overflow-wrap: anywhere; }
+.picker summary code { color: var(--theme-text-muted); font-size: 11px; overflow-wrap: anywhere; }
 .swatch { display: block; flex: 0 0 18px; width: 18px; height: 18px; border: 1px solid #ffffff50; border-radius: 50%; box-shadow: 0 0 0 3px #00000020; }
 .chevron { width: 15px; height: 15px; margin-left: auto; flex-shrink: 0; color: var(--theme-text-muted); }
 .picker details[open] .chevron { transform: rotate(180deg); }
@@ -62,8 +62,8 @@
 .option { position: relative; min-width: 0; cursor: pointer; }
 .option input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .optionFace { display: flex; min-height: 48px; align-items: center; gap: 8px; padding: 7px; border: 1px solid transparent; border-radius: 4px; }
-.optionFace > span { min-width: 0; color: var(--theme-text); font-size: 10px; overflow-wrap: anywhere; }
-.optionFace small { display: block; margin-top: 3px; color: var(--theme-text-muted); font-size: 9px; font-weight: 400; }
+.optionFace > span { min-width: 0; color: var(--theme-text); font-size: 11px; overflow-wrap: anywhere; }
+.optionFace small { display: block; margin-top: 3px; color: var(--theme-text-muted); font-size: 11px; font-weight: 400; }
 .optionFace .swatch { width: 13px; height: 13px; flex-basis: 13px; }
 .optionFace svg { width: 12px; height: 12px; flex-shrink: 0; margin-left: auto; color: var(--theme-accent); }
 .option:hover .optionFace { background: color-mix(in srgb, var(--theme-accent) 8%, transparent); }
@@ -74,8 +74,8 @@
 .footer button { min-height: 44px; margin-left: auto; }
 .tagKey { color: var(--theme-text-muted); font-size: 12px; overflow-wrap: anywhere; }
 .intro { color: var(--theme-text-muted); font-size: 12px; line-height: 1.7; margin-bottom: 18px; }
-@media (max-width: 1000px) { .palette { grid-template-columns: 1fr; } }
-@media (max-width: 680px) {
+@container staff-content (max-width: 1000px) { .palette { grid-template-columns: 1fr; } }
+@container staff-content (max-width: 680px) {
   .presentation, .colorFields { grid-template-columns: 1fr; }
   .palette { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

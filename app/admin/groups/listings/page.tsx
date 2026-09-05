@@ -254,16 +254,15 @@ export default async function GroupListingsPage({
     }
   }
 
-
   return (
-    <PortalShell authenticated className={`staff-page ${styles.page}`}>
+    <PortalShell authenticated className={`staff-page ${styles.page}`} navigation={<StaffSubmenu access={access} active="groups" />}>
       <AdminPageHeader
         id="group-listings-title"
         title="Group listings"
         description="Publish any connected group as an inventory-backed EUR donation or Token-market item, and manage standalone VIP perk offers from one compact workspace."
         access={access}
       />
-      <StaffSubmenu access={access} active="groups" />
+
       <GroupAdminNav activeKey="listings" />
       <SectionNav activeKey={activeView} ariaLabel="Shop listing catalogues" dense items={views.map((entry) => ({ key: entry.id, href: `/admin/groups/listings?view=${entry.id}`, label: entry.label, icon: entry.icon }))} />
 

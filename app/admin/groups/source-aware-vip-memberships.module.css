@@ -577,7 +577,7 @@
   background: var(--theme-success-surface);
 }
 
-@media (max-width: 1180px) {
+@container staff-content (max-width: 1180px) {
   .record {
     grid-template-columns: minmax(180px, 0.8fr) minmax(210px, 1fr) minmax(250px, 1.15fr);
   }
@@ -598,7 +598,7 @@
   }
 }
 
-@media (max-width: 860px) {
+@container staff-content (max-width: 860px) {
   .header {
     align-items: flex-start;
     flex-direction: column;
@@ -634,7 +634,7 @@
   }
 }
 
-@media (max-width: 620px) {
+@container staff-content (max-width: 620px) {
   .header,
   .playerHeader,
   .record,

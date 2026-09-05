@@ -1,7 +1,7 @@
 .page {
   --listing-accent: var(--theme-accent-soft);
   --listing-positive: color-mix(in srgb, var(--theme-accent-soft) 58%, var(--theme-text));
-  --listing-warning: color-mix(in srgb, #f2aa55 72%, var(--theme-text));
+  --listing-warning: color-mix(in srgb, var(--theme-warning) 72%, var(--theme-text));
 }
 
 .subsectionHeading {
