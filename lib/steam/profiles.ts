@@ -1,5 +1,7 @@
 import "server-only";
 
+import { uniqueIndividualSteamIds } from "./steam-id";
+
 export type SteamProfile = {
   steamId: string;
   name: string;
@@ -26,7 +28,7 @@ type CompleteSteamPlayer = {
 };
 
 export async function getSteamProfiles(steamIds: string[]) {
-  const uniqueIds = [...new Set(steamIds.filter((steamId) => /^7656119\d{10}$/.test(steamId)))].slice(0, 100);
+  const uniqueIds = uniqueIndividualSteamIds(steamIds);
   const apiKey = process.env.STEAM_WEB_API_KEY;
   if (!apiKey || !uniqueIds.length) return new Map<string, SteamProfile>();
 

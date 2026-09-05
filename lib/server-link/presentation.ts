@@ -1,13 +1,10 @@
 import type { PublicStatus, RosterPlayer } from "./protocol.ts";
+import { isIndividualSteamId64 } from "../steam/steam-id.ts";
 
-const STEAM_ID64_MIN = 76_561_197_960_265_728n;
-const STEAM_ID64_MAX = STEAM_ID64_MIN + 0xffff_ffffn;
 const LOST_AFTER_MS = 45_000;
 
 export function playerLinks(steamId: string): { portal: string; steam: string } | null {
-  if (!/^\d{17}$/.test(steamId)) return null;
-  const numeric = BigInt(steamId);
-  if (numeric < STEAM_ID64_MIN || numeric > STEAM_ID64_MAX) return null;
+  if (!isIndividualSteamId64(steamId)) return null;
   return {
     portal: `/players/${steamId}`,
     steam: `https://steamcommunity.com/profiles/${steamId}`,

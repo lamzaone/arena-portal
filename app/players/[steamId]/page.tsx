@@ -9,6 +9,7 @@ import { getPlayerDashboard, getPlayerProfileInventoryPage, getPlayerProfileThem
 import { getEffectiveIdentity, reconcileIdentityGroupRewards } from "@/lib/data/identity-groups";
 import { resolvePlayerIdentities } from "@/lib/player-identities";
 import { getSteamProfiles } from "@/lib/steam/profiles";
+import { isIndividualSteamId64 } from "@/lib/steam/steam-id";
 
 type PlayerProfilePageProps = {
   params: Promise<{ steamId: string }>;
@@ -17,7 +18,7 @@ type PlayerProfilePageProps = {
 
 export default async function PublicPlayerProfilePage({ params, searchParams }: PlayerProfilePageProps) {
   const [{ steamId }, query] = await Promise.all([params, searchParams]);
-  if (!/^7656119\d{10}$/.test(steamId)) notFound();
+  if (!isIndividualSteamId64(steamId)) notFound();
 
   const session = await getSession();
   const isOwnProfile = session?.steamId === steamId;
