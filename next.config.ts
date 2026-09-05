@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  ...(process.env.ARENA_STANDALONE === "true" ? { output: "standalone" as const } : {}),
   poweredByHeader: false,
   async headers() {
     return [

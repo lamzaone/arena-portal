@@ -17,7 +17,22 @@ External identity bootstrap resolves the installed Swiftly tree automatically wh
 
 For local testing with `http://localhost`, the session cookie is deliberately non-secure. Any public deployment must use an `https://` `SITE_URL`; its session cookie is always marked `Secure`.
 
-## Cloudflare Workers deployment
+## FreakHosting deployment
+
+For automatic deployments on Git pushes, follow
+[FreakHosting CI/CD](docs/freakhosting-cicd.md). GitHub Actions tests and builds a
+Linux runtime bundle, then uploads, restarts and checks the app over SSH. This
+keeps dependency installation and compilation off the shared hosting account.
+
+For a manual source deployment:
+
+Run the frontend and backend together as one Node.js application. Use Node 24,
+`npm ci --include=dev`, `npm run build:hosting`, and `npm run start:hosting`.
+In the Enhance panel, enable Automatic mode and proxy the whole website to port
+3000. See [the FreakHosting deployment guide](docs/freakhosting-deployment.md)
+for upload, environment variables, database access, verification, and DNS cutover.
+
+## Cloudflare Workers deployment (alternative)
 
 See [the Cloudflare build and deployment instructions](cloudflare/README.md).
 Workers Builds must run `npm run build:cloudflare` before

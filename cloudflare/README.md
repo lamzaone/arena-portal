@@ -34,7 +34,7 @@ Install dependencies with `npm ci`. In Cloudflare Workers Builds, set:
 the `.open-next/assets` and `.open-next/worker.js` required by Wrangler.
 `build:cloudflare` runs OpenNext, which invokes the Next.js build and then adapts
 its output for Workers. `deploy:cloudflare` deploys that output and populates
-the configured R2 cache. To build and deploy locally, use `npm run deploy`.
+the configured R2 cache. To build and deploy locally, use `npm run release:cloudflare`.
 
 On Windows, the build first runs `scripts/prepare-opennext-windows.mjs` to
 normalize traced paths in the installed OpenNext adapter (upstream

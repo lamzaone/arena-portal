@@ -7,6 +7,10 @@ node_modules/
 .dev.vars.*
 .env
 .env.local
+.env.*
+!.env.example
+!.env.production.example
+dist/
 npm-debug.log*
 
 # Ignore the accidental empty repository nested inside this checkout.

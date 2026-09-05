@@ -2,13 +2,19 @@
   "name": "arena-portal",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22.14.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:hosting": "node scripts/build-hosting.mjs",
+    "build:release": "node scripts/build-hosting.mjs --standalone",
     "build:cloudflare": "node scripts/prepare-opennext-windows.mjs && opennextjs-cloudflare build",
     "deploy:cloudflare": "opennextjs-cloudflare deploy",
-    "deploy": "npm run build:cloudflare && npm run deploy:cloudflare",
+    "release:cloudflare": "npm run build:cloudflare && npm run deploy:cloudflare",
     "start": "next start",
+    "start:hosting": "next start --hostname 0.0.0.0",
     "typecheck": "tsc --noEmit",
     "migrate:arena-groups": "node scripts/migrate-arena-group-authority.mjs",
     "test": "npm run test:health && npm run test:seo && npm run test:vip && npm run test:scope && npm run test:database && npm run test:navigation && npm run test:loadout && npm run test:inventory-lock && npm run test:inventory-selection && npm run test:crates && npm run test:sellback && npm run test:chat-colors && npm run test:steam && npm run test:server-status && npm run test:player-identities",
