@@ -69,6 +69,10 @@ scoped membership on session/profile reads, Settings reads/writes, and inventory
 equip. Passive expiry therefore hides an invalid selection even before the next
 inventory reconciliation. These checks never grant, revoke or restore items;
 the existing reward lifecycle remains responsible for inventory changes.
+Founder reward memberships are read from native Admins.Core assignments on the
+configured server, using the same reader as reward backfills. Founder is
+deliberately excluded from the Arena membership projection; that projection
+cannot prove or replace a native Founder assignment.
 
 `npm run test:themes` covers surface fallbacks, progression, existing-theme
 compatibility, expiry, revocation, permanent grants and both equip paths. The

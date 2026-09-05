@@ -20,11 +20,19 @@ type RankThemeEntitlementRow = RowDataPacket & {
   trade_policy: string | null;
   reward_enabled: number | boolean | null;
   group_enabled: number | boolean | null;
+  group_source_type: string | null;
+  group_external_key: string | null;
 };
+
+function isNativeFounderReward(row: RankThemeEntitlementRow) {
+  return row.group_source_type === "admins_core" &&
+    row.group_external_key?.trim().toLocaleLowerCase("en-US") === "founder";
+}
 
 /**
  * Available inventory proves ownership; a membership-bound reward also needs
- * its live Arena membership. This read never reconciles or restores inventory.
+ * its live membership. Founder is verified through native Admins.Core; other
+ * groups use Arena authority. This read never reconciles or restores inventory.
  * Reward associations are configured by staff: a theme name is not a rank
  * permission, and direct/permanent inventory grants remain usable.
  *
@@ -55,7 +63,8 @@ export async function getAuthorizedProfileThemeItemIds(
       const [rows] = await executor.query<RankThemeEntitlementRow[]>(
         "SELECT item.id AS item_id, item.owner_steam_id AS steam_id, theme.theme_key, item.tradable, " +
           "award.reward_id, award.steam_id AS award_steam_id, award.entitlement_active, " +
-          "reward.group_id, reward.trade_policy, reward.enabled AS reward_enabled, identity_group.enabled AS group_enabled " +
+          "reward.group_id, reward.trade_policy, reward.enabled AS reward_enabled, identity_group.enabled AS group_enabled, " +
+          "identity_group.source_type AS group_source_type, identity_group.external_key AS group_external_key " +
           "FROM portal_inventory_items AS item " +
           "INNER JOIN portal_economy_catalogue AS catalogue ON catalogue.id = item.catalogue_id AND catalogue.enabled = TRUE " +
           "INNER JOIN portal_profile_themes AS theme ON theme.catalogue_id = item.catalogue_id AND theme.enabled = TRUE " +
@@ -79,17 +88,31 @@ export async function getAuthorizedProfileThemeItemIds(
         }
       }
     }
-    if (boundRows.length) {
+    const arenaRows = boundRows.filter((row) => !isNativeFounderReward(row));
+    if (arenaRows.length) {
       const { getArenaAuthorityMembershipsForPlayers } = await import("@/lib/data/identity-groups");
       const authority = await getArenaAuthorityMembershipsForPlayers(
-        [...new Set(boundRows.map((row) => row.steam_id))],
+        [...new Set(arenaRows.map((row) => row.steam_id))],
       );
       if (authority.available) {
-        for (const row of boundRows) {
+        for (const row of arenaRows) {
           if (authority.membershipsBySteamId.get(row.steam_id)?.has(Number(row.group_id))) {
             authorized.add(row.item_id);
           }
         }
+      }
+    }
+    const founderRows = boundRows.filter(isNativeFounderReward);
+    if (founderRows.length) {
+      // Reuse the same scoped native membership reader as reward backfills.
+      // Founder is intentionally excluded from the Arena projection: neither
+      // an Arena row nor the displayed badge can prove this membership.
+      const { getExternalIdentityGroupMemberSteamIds } = await import("@/lib/data/portal-repository");
+      const founders = new Set(await getExternalIdentityGroupMemberSteamIds({
+        sourceType: "admins_core", externalKey: "Founder",
+      }));
+      for (const row of founderRows) {
+        if (founders.has(row.steam_id)) authorized.add(row.item_id);
       }
     }
   } catch {

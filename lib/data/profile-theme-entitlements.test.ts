@@ -12,6 +12,7 @@ import type { Pool } from "mysql2/promise";
 // This does not validate MySQL migrations, locking, or cross-database atomicity.
 const db = new DatabaseSync(":memory:");
 let authorityAvailable = true;
+let nativeAdminsAvailable = true;
 let queryCount = 0;
 function sqliteSql(sql: string) {
   return sql.replaceAll("CURRENT_TIMESTAMP(6)", "CURRENT_TIMESTAMP")
@@ -24,6 +25,7 @@ const executor = {
   async query(sql: string, values: unknown[] = []) {
     queryCount += 1;
     if (!authorityAvailable && sql.includes("arena_")) throw new Error("offline");
+    if (!nativeAdminsAvailable && sql.includes("FROM admins")) throw new Error("admins offline");
     return [db.prepare(sqliteSql(sql))
       .all(...values as Array<string | number | null>), []];
   },
@@ -59,7 +61,7 @@ registerHooks({
     };
     if (specifier === "@/lib/data/staff-vip-memberships") return { url: "data:text/javascript,export class StaffVipMembershipError extends Error {}", shortCircuit: true };
     if (specifier === "@/lib/data/vip-membership-activation-saga") return { url: "data:text/javascript,export async function activateVipMembershipItemWithSaga(){}", shortCircuit: true };
-    if (specifier === "@/lib/auth/session") return { url: "data:text/javascript,export async function getSession(){return null}", shortCircuit: true };
+    if (specifier === "@/lib/auth/session") return { url: "data:text/javascript,export async function getSession(){return null} export function verifyEconomyActionToken(){return false}", shortCircuit: true };
     if (specifier.startsWith("@/")) {
       const url = sourceModuleUrl(resolve(specifier.slice(2)));
       if (url) return { url, shortCircuit: true };
@@ -74,6 +76,8 @@ registerHooks({
 const { getAuthorizedProfileThemeItemIds } = await import("./profile-theme-entitlements.ts");
 await import("./identity-groups.ts");
 const { getPlayerSettings, getPlayerProfileThemeKeys, getPortalSession, updatePlayerSettings, equipProfileThemeItem } = await import("./portal-repository.ts");
+const { configuredGameServerGuid } = await import("../admin/server-scope.ts");
+const { economyMutationFailure } = await import("../economy/request.ts");
 
 const player = "76561198000000001";
 const other = "76561198000000002";
@@ -83,6 +87,7 @@ const moderator = { steamId: player, itemId: "moderator-item", themeKey: "modera
 
 db.exec(`
   CREATE TABLE portal_identity_groups (id INTEGER PRIMARY KEY, group_key TEXT, enabled INTEGER);
+  CREATE TABLE admins (Id INTEGER PRIMARY KEY, SteamId64 TEXT, Username TEXT, Permissions TEXT, Groups TEXT, Immunity INTEGER, Servers TEXT);
   CREATE TABLE portal_economy_catalogue (id INTEGER PRIMARY KEY, catalogue_key TEXT, enabled INTEGER);
   CREATE TABLE portal_profile_themes (id INTEGER PRIMARY KEY, catalogue_id INTEGER, theme_key TEXT, enabled INTEGER, display_name TEXT DEFAULT 'Theme', description TEXT DEFAULT 'Test theme', preview_image_url TEXT);
   CREATE TABLE portal_inventory_items (id TEXT PRIMARY KEY, owner_steam_id TEXT, catalogue_id INTEGER, item_type TEXT, state TEXT, tradable INTEGER);
@@ -102,11 +107,13 @@ db.exec(`
   CREATE TABLE portal_economy_operations (id INTEGER PRIMARY KEY, operation_name TEXT, idempotency_key TEXT UNIQUE, actor_steam_id TEXT, request_hash TEXT, status TEXT DEFAULT 'pending', result_json TEXT, completed_at TEXT);
   CREATE TABLE portal_economy_catalogue_prices (id INTEGER PRIMARY KEY, catalogue_id INTEGER, is_current INTEGER, market_price_eur_cents INTEGER, token_price INTEGER, price_source TEXT, source_reference TEXT, observed_at TEXT);
 `);
+db.exec("ALTER TABLE portal_identity_groups ADD COLUMN source_type TEXT DEFAULT 'custom'; ALTER TABLE portal_identity_groups ADD COLUMN external_key TEXT");
 for (const column of ["definition_index INTEGER", "paintkit INTEGER", "seed INTEGER", "float_value REAL", "stattrak INTEGER DEFAULT 0", "stattrak_count INTEGER DEFAULT 0", "nametag TEXT", "rarity_rank INTEGER DEFAULT 8", "sale_locked INTEGER DEFAULT 0", "attributes TEXT DEFAULT '{}'", "source TEXT DEFAULT '{}'", "acquired_at TEXT DEFAULT '2026-01-01'", "consumed_at TEXT", "updated_at TEXT DEFAULT '2026-01-01'"]) db.exec(`ALTER TABLE portal_inventory_items ADD COLUMN ${column}`);
 for (const column of ["market_hash_name TEXT", "item_type TEXT DEFAULT 'profile_theme'", "definition_index INTEGER", "paintkit INTEGER", "rarity_rank INTEGER DEFAULT 8", "display_name TEXT DEFAULT 'Theme'", "metadata TEXT DEFAULT '{}'", "created_at TEXT DEFAULT '2026-01-01'", "updated_at TEXT DEFAULT '2026-01-01'"]) db.exec(`ALTER TABLE portal_economy_catalogue ADD COLUMN ${column}`);
 
 function reset() {
   authorityAvailable = true;
+  nativeAdminsAvailable = true;
   queryCount = 0;
   for (const table of db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all()) {
     db.exec(`DELETE FROM ${table.name}`);
@@ -114,7 +121,7 @@ function reset() {
   db.exec("INSERT INTO arena_scopes VALUES (1, 'global', 1, NULL, 0), (2, 'server', 1, 'other-server', 999)");
   const ranks = [[1, "vip_silver", "vipcore.silver", "vip", 10, "silver-item"], [2, "vip_gold", "vipcore.gold", "vip", 20, "gold-item"], [3, "moderator", "admins_core.guardian", "admin", 20, "moderator-item"]] as const;
   for (const [id, key, group, type, rank, item] of ranks) {
-    db.prepare("INSERT INTO portal_identity_groups VALUES (?, ?, 1)").run(id, group);
+    db.prepare("INSERT INTO portal_identity_groups (id, group_key, enabled) VALUES (?, ?, 1)").run(id, group);
     db.prepare("INSERT INTO portal_economy_catalogue (id, catalogue_key, enabled) VALUES (?, ?, 1)").run(id, `arena:membership:profile_theme:${key}`);
     db.prepare("INSERT INTO portal_profile_themes (id, catalogue_id, theme_key, enabled) VALUES (?, ?, ?, 1)").run(id, id, key);
     db.prepare("INSERT INTO portal_inventory_items (id, owner_steam_id, catalogue_id, item_type, state, tradable) VALUES (?, ?, ?, 'profile_theme', 'available', 0)").run(item, player, id);
@@ -264,4 +271,65 @@ test("active bound and direct grants equip successfully through both write paths
     assert.equal(equipped.themeKey, "vip_silver");
     assert.equal((await getPlayerSettings(player)).inventoryVisibility, "private");
   }
+});
+
+function founderReward() {
+  db.exec("INSERT INTO portal_identity_groups (id, group_key, enabled, source_type, external_key) VALUES (4, 'admins_core.founder', 1, 'admins_core', 'Founder'); UPDATE portal_identity_group_rewards SET group_id = 4 WHERE id = 1");
+  db.prepare("INSERT INTO admins VALUES (1, ?, 'Founder player', '[]', '[\"Founder\"]', 100, ?)").run(player, JSON.stringify([configuredGameServerGuid()]));
+}
+
+test("Founder rewards use their native Admins.Core membership for equip and profile reads", async () => {
+  reset();
+  founderReward();
+  // Founder has no Arena membership: its authority deliberately stays native.
+  assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver])], [silver.itemId]);
+  const itemId = "11111111-1111-4111-8111-111111111111";
+  db.prepare("UPDATE portal_inventory_items SET id = ? WHERE id = ?").run(itemId, silver.itemId);
+  db.prepare("UPDATE portal_identity_group_reward_awards SET item_id = ? WHERE item_id = ?").run(itemId, silver.itemId);
+  const equipped = await equipProfileThemeItem({ steamId: player, itemId, idempotencyKey: "native-founder-equip:test" });
+  assert.equal(equipped.themeKey, "vip_silver");
+  assert.equal((await getPlayerSettings(player)).activeTheme?.key, "vip_silver");
+  assert.equal((await getPlayerProfileThemeKeys([player])).get(player), "vip_silver");
+  assert.equal((await updatePlayerSettings({ steamId: player, inventoryVisibility: "private", activeThemeItemId: itemId })).activeThemeItemId, itemId);
+});
+
+test("Founder rewards never trust another server, player, or a portal-only Founder membership", async () => {
+  for (const mutation of [
+    "UPDATE admins SET Servers = '[\"other-server\"]'",
+    `UPDATE admins SET SteamId64 = '${other}'`,
+    "UPDATE admins SET Groups = '[\"Owner\"]'",
+    "DELETE FROM admins",
+    "UPDATE portal_identity_group_rewards SET enabled = 0",
+    "UPDATE portal_inventory_items SET state = 'revoked'",
+  ]) {
+    reset();
+    founderReward();
+    assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver])], [silver.itemId]);
+    // A projected Founder membership must not substitute for native authority.
+    db.exec("INSERT INTO arena_groups VALUES (4, 4, 'admin', NULL, 100, 1, 'Founder'); INSERT INTO arena_group_scopes VALUES (4, 1, 1, NULL)");
+    membership(4);
+    db.exec(mutation);
+    assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver])], [], mutation);
+  }
+});
+
+test("membership sources fail independently and Founder revocation takes effect immediately", async () => {
+  reset();
+  founderReward();
+  authorityAvailable = false;
+  assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver])], [silver.itemId]);
+  authorityAvailable = true;
+  membership(3);
+  nativeAdminsAvailable = false;
+  assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver, moderator])], [moderator.itemId]);
+  nativeAdminsAvailable = true;
+  db.exec("UPDATE admins SET Groups = '[]'");
+  assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver])], []);
+});
+
+test("an unavailable theme returns an actionable conflict instead of a generic server error", async () => {
+  const message = "That profile theme is not available on your account.";
+  const response = economyMutationFailure(Object.assign(new Error(message), { code: "theme_not_owned" }));
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { ok: false, message });
 });
