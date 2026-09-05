@@ -33,6 +33,7 @@ test("locked persistence rejects replay without refreshing database receipt time
       max_players TINYINT UNSIGNED NOT NULL,
       players TINYINT UNSIGNED NOT NULL,
       bots TINYINT UNSIGNED NOT NULL,
+      time_left_seconds INT UNSIGNED NULL,
       roster JSON NOT NULL,
       received_at DATETIME(3) NOT NULL
     ) ENGINE = InnoDB`);
@@ -49,12 +50,15 @@ test("locked persistence rejects replay without refreshing database receipt time
       maxPlayers: 12,
       players: 1,
       bots: 0,
-      roster: [{ steamId: "76561198000000001", name: "Ada" }],
+      timeLeftSeconds: 125,
+      roster: [{ steamId: "76561198000000001", name: "Ada", connectedSeconds: 90, score: 12 }],
     };
 
     assert.equal(await repository.save(heartbeat), true);
     const first = await repository.get(heartbeat.serverId);
     assert.ok(first);
+    assert.equal(first.heartbeat.timeLeftSeconds, 125);
+    assert.deepEqual(first.heartbeat.roster, heartbeat.roster);
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(await repository.save(heartbeat), false);
     const replayed = await repository.get(heartbeat.serverId);
@@ -141,6 +145,7 @@ test("a timed-out row lock is discarded and the pool serves a later operation", 
       max_players TINYINT UNSIGNED NOT NULL,
       players TINYINT UNSIGNED NOT NULL,
       bots TINYINT UNSIGNED NOT NULL,
+      time_left_seconds INT UNSIGNED NULL,
       roster JSON NOT NULL,
       received_at DATETIME(3) NOT NULL
     ) ENGINE = InnoDB`);

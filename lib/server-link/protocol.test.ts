@@ -26,6 +26,32 @@ function validHeartbeat(): Heartbeat {
   };
 }
 
+test("map time is optional for older senders and validated when supplied", () => {
+  assert.equal(validateHeartbeat(validHeartbeat(), SERVER_ID, NOW).timeLeftSeconds, null);
+  assert.equal(validateHeartbeat({ ...validHeartbeat(), timeLeftSeconds: 125 }, SERVER_ID, NOW).timeLeftSeconds, 125);
+  for (const value of [-1, 1.5, "120", Infinity]) {
+    assert.throws(() => validateHeartbeat({ ...validHeartbeat(), timeLeftSeconds: value }, SERVER_ID, NOW), /timeLeftSeconds/);
+  }
+});
+
+test("player session time and score survive validation and public projection", () => {
+  const input = validHeartbeat();
+  input.roster[0] = { ...input.roster[0], connectedSeconds: 90, score: -2 };
+  const heartbeat = validateHeartbeat(input, SERVER_ID, NOW);
+  assert.equal(heartbeat.roster[0].score, -2);
+  assert.equal(toPublicStatus(heartbeat, NOW, NOW).roster[0].connectedSeconds, 95);
+  assert.throws(() => validateHeartbeat({ ...input, roster: [{ ...input.roster[0], connectedSeconds: -1 }] }, SERVER_ID, NOW), /connectedSeconds/);
+  assert.throws(() => validateHeartbeat({ ...input, roster: [{ ...input.roster[0], score: 1.5 }] }, SERVER_ID, NOW), /score/);
+});
+
+test("public map time accounts for capture age, clamps at zero, and hides stale timers", () => {
+  const heartbeat = { ...validHeartbeat(), timeLeftSeconds: 125 };
+  assert.equal(toPublicStatus(heartbeat, NOW, NOW).timeLeftSeconds, 120);
+  assert.equal(toPublicStatus({ ...heartbeat, timeLeftSeconds: 2 }, NOW, NOW).timeLeftSeconds, 0);
+  assert.equal(toPublicStatus(heartbeat, NOW - 46_000, NOW).timeLeftSeconds, null);
+  assert.equal(toPublicStatus({ ...heartbeat, players: 0, bots: 0, roster: [] }, NOW, NOW).timeLeftSeconds, 125);
+});
+
 test("validation rejects a human count that disagrees with the roster", () => {
   assert.throws(
     () => validateHeartbeat({ ...validHeartbeat(), players: 2 }, SERVER_ID, NOW),

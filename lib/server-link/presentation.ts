@@ -3,6 +3,25 @@ import { isIndividualSteamId64 } from "../steam/steam-id.ts";
 
 const LOST_AFTER_MS = 45_000;
 
+export function formatTimeLeft(status: PublicStatus | null, receivedAt: number, now: number): string {
+  if (status?.state !== "online" || status.timeLeftSeconds == null) return "—";
+  const elapsed = (status.players ?? 0) + status.bots > 0
+    ? Math.floor(Math.max(0, now - receivedAt) / 1_000)
+    : 0;
+  const seconds = Math.max(0, status.timeLeftSeconds - elapsed);
+  return formatSessionTime(seconds);
+}
+
+export function formatSessionTime(seconds: number | null | undefined): string {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return "—";
+  seconds = Math.floor(seconds);
+  const minutes = Math.floor(seconds / 60);
+  const tail = String(seconds % 60).padStart(2, "0");
+  return minutes >= 60
+    ? `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}:${tail}`
+    : `${minutes}:${tail}`;
+}
+
 export function playerLinks(steamId: string): { portal: string; steam: string } | null {
   if (!isIndividualSteamId64(steamId)) return null;
   return {

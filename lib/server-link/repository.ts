@@ -26,6 +26,7 @@ type SnapshotRow = RowDataPacket & {
   max_players: number;
   players: number;
   bots: number;
+  time_left_seconds: number | null;
   roster: string | RosterPlayer[];
   received_at: Date;
 };
@@ -155,6 +156,9 @@ function roster(value: string | RosterPlayer[]): RosterPlayer[] {
     return {
       steamId: (player as Record<string, string>).steamId,
       name: (player as Record<string, string>).name,
+      ...(Number.isSafeInteger(player.connectedSeconds) && player.connectedSeconds >= 0
+        ? { connectedSeconds: player.connectedSeconds as number } : {}),
+      ...(Number.isSafeInteger(player.score) ? { score: player.score as number } : {}),
     };
   });
 }
@@ -172,6 +176,7 @@ function storedHeartbeat(row: SnapshotRow): StoredHeartbeat {
       maxPlayers: row.max_players,
       players: row.players,
       bots: row.bots,
+      timeLeftSeconds: row.time_left_seconds ?? null,
       roster: roster(row.roster),
     },
     receivedAt: iso(row.received_at),
@@ -202,7 +207,7 @@ async function saveAttempt(
     const [rows] = await query<SnapshotRow[]>(
       state,
       `SELECT server_id, session_id, session_started_at, sequence, captured_at, map,
-              max_players, players, bots, roster, received_at
+              max_players, players, bots, time_left_seconds, roster, received_at
          FROM ${tableName}
         WHERE server_id = ?
        FOR UPDATE`,
@@ -227,15 +232,16 @@ async function saveAttempt(
       heartbeat.players,
       heartbeat.bots,
       JSON.stringify(heartbeat.roster),
+      heartbeat.timeLeftSeconds ?? null,
     ];
     if (rows[0]) {
       await query(
         state,
         `UPDATE ${tableName}
             SET session_id = ?, session_started_at = ?, sequence = ?, captured_at = ?, map = ?,
-                max_players = ?, players = ?, bots = ?, roster = ?, received_at = UTC_TIMESTAMP(3)
+                max_players = ?, players = ?, bots = ?, roster = ?, time_left_seconds = ?, received_at = UTC_TIMESTAMP(3)
           WHERE server_id = ?`,
-        [values[1], values[2], values[3], values[4], values[5], values[6], values[7], values[8], values[9], values[0]],
+        [values[1], values[2], values[3], values[4], values[5], values[6], values[7], values[8], values[9], values[10], values[0]],
         timeoutMs,
       );
     } else {
@@ -243,8 +249,8 @@ async function saveAttempt(
         state,
         `INSERT INTO ${tableName}
           (server_id, session_id, session_started_at, sequence, captured_at, map,
-           max_players, players, bots, roster, received_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(3))`,
+           max_players, players, bots, roster, time_left_seconds, received_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(3))`,
         values,
         timeoutMs,
       );
@@ -288,7 +294,7 @@ export function createServerLinkRepository(
         const [rows] = await query<SnapshotRow[]>(
           state,
           `SELECT server_id, session_id, session_started_at, sequence, captured_at, map,
-                  max_players, players, bots, roster, received_at
+                  max_players, players, bots, time_left_seconds, roster, received_at
              FROM ${tableName}
             WHERE server_id = ?
             LIMIT 1`,

@@ -1,6 +1,8 @@
 export type RosterPlayer = {
   steamId: string;
   name: string;
+  connectedSeconds?: number | null;
+  score?: number | null;
 };
 
 export type Heartbeat = {
@@ -14,6 +16,7 @@ export type Heartbeat = {
   maxPlayers: number;
   players: number;
   bots: number;
+  timeLeftSeconds?: number | null;
   roster: RosterPlayer[];
 };
 
@@ -23,6 +26,7 @@ export type PublicStatus = {
   maxPlayers: number | null;
   map: string | null;
   bots: number;
+  timeLeftSeconds?: number | null;
   roster: RosterPlayer[];
   checkedAt: string;
   lastSeenAt: string | null;
@@ -125,6 +129,9 @@ export function validateHeartbeat(value: unknown, serverId: string, now: number)
   const bots = boundedInteger(input.bots, "bots", 0, MAX_CLIENTS);
   if (players + bots > maxPlayers) throw new Error("players and bots cannot exceed maxPlayers.");
   const map = boundedText(input.map, "map", true);
+  const timeLeftSeconds = input.timeLeftSeconds == null
+    ? null
+    : boundedInteger(input.timeLeftSeconds, "timeLeftSeconds", 0, 2_147_483_647);
 
   if (!Array.isArray(input.roster) || input.roster.length > MAX_CLIENTS) {
     throw new Error(`roster must contain no more than ${MAX_CLIENTS} players.`);
@@ -138,6 +145,12 @@ export function validateHeartbeat(value: unknown, serverId: string, now: number)
     return {
       steamId: normalizedSteamId,
       name: boundedText(player.name, `roster[${index}].name`, false),
+      ...(player.connectedSeconds == null ? {} : {
+        connectedSeconds: boundedInteger(player.connectedSeconds, `roster[${index}].connectedSeconds`, 0, 4_294_967_295),
+      }),
+      ...(player.score == null ? {} : {
+        score: boundedInteger(player.score, `roster[${index}].score`, -2_147_483_648, 2_147_483_647),
+      }),
     };
   });
   if (roster.length !== players) throw new Error("players must equal the roster length.");
@@ -153,6 +166,7 @@ export function validateHeartbeat(value: unknown, serverId: string, now: number)
     maxPlayers,
     players,
     bots,
+    timeLeftSeconds,
     roster,
   };
 }
@@ -176,7 +190,18 @@ export function toPublicStatus(
     maxPlayers: heartbeat.maxPlayers,
     map: heartbeat.map,
     bots: heartbeat.bots,
-    roster: lost ? [] : heartbeat.roster.map((player) => ({ ...player })),
+    timeLeftSeconds: lost || heartbeat.timeLeftSeconds == null ? null : Math.max(
+      0,
+      heartbeat.timeLeftSeconds - (heartbeat.players + heartbeat.bots > 0
+        ? Math.floor(Math.max(0, now - Date.parse(heartbeat.capturedAt)) / 1_000)
+        : 0),
+    ),
+    roster: lost ? [] : heartbeat.roster.map((player) => ({
+      ...player,
+      ...(player.connectedSeconds == null ? {} : {
+        connectedSeconds: player.connectedSeconds + Math.floor(Math.max(0, now - Date.parse(heartbeat.capturedAt)) / 1_000),
+      }),
+    })),
     checkedAt: new Date(now).toISOString(),
     lastSeenAt: new Date(receivedMilliseconds).toISOString(),
   };
@@ -189,6 +214,7 @@ export function unknownPublicStatus(now: number = Date.now()): PublicStatus {
     maxPlayers: null,
     map: null,
     bots: 0,
+    timeLeftSeconds: null,
     roster: [],
     checkedAt: new Date(now).toISOString(),
     lastSeenAt: null,

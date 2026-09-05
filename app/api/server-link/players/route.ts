@@ -1,12 +1,22 @@
-import { rosterAvatarEnrichment } from "@/lib/server-link/presentation";
+import { currentRoster, trustedSteamAvatarUrl } from "@/lib/server-link/presentation";
+import { getPlayerIdentityGroupBadges } from "@/lib/data/portal-repository";
+import { resolvePlayerIdentities } from "@/lib/player-identities";
 import { getServerStatus } from "@/lib/server-status";
-import { getSteamProfiles } from "@/lib/steam/profiles";
 
 export async function GET() {
   const status = await getServerStatus();
-  const steamIds = status.state === "online" ? status.roster.map((player) => player.steamId) : [];
-  const profiles = await getSteamProfiles(steamIds);
-  return Response.json({ players: rosterAvatarEnrichment(status, profiles) }, {
+  const roster = currentRoster(status);
+  const groups = await getPlayerIdentityGroupBadges(roster.map((player) => player.steamId));
+  const identities = await resolvePlayerIdentities(roster.map((player) => ({
+    steamId: player.steamId,
+    displayName: player.name,
+    identityGroups: groups.get(player.steamId) ?? [],
+  })));
+  const players = roster.flatMap((player) => {
+    const identity = identities[player.steamId];
+    return identity ? [{ ...identity, displayName: player.name, avatarUrl: trustedSteamAvatarUrl(identity.avatarUrl) }] : [];
+  });
+  return Response.json({ players }, {
     headers: { "Cache-Control": "no-store" },
   });
 }

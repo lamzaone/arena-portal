@@ -28,6 +28,26 @@ not need to be changed or enabled for this feature.
 
 ## Observable behavior
 
+### Live terminal stats (ServerLink 1.1.0)
+
+Apply `db/028_server_link_time_left.sql` after migration 027 and before deploying
+the updated portal. Install the rebuilt `TAPPED.ServerLink` plugin to supply
+`timeLeftSeconds` and roster `connectedSeconds` / `score`. Existing plugin
+configuration and credentials remain compatible. Old senders remain accepted;
+missing stats display a dash instead of a fabricated zero.
+
+Time left uses `mp_timelimit` and the current game rules' match start time.
+Warmup, untimed maps, and unavailable game rules display a dash. Empty-server
+snapshots keep the captured game timer stationary while the server hibernates.
+Player time online is the current connection duration in seconds; score is the
+live scoreboard score, not a persistent ranking total. The portal adjusts times
+for snapshot age and updates visible clocks once per second between polls.
+
+The terminal uses semantic theme variables for Default, Beta Tester and Tap God.
+Each roster entry and floating preview belongs to the displayed player's equipped
+theme. Public identities and group badges are resolved in batches; opening a
+preview does not fetch data.
+
 The homepage loads independently from server status. Map/count/roster arrive
 without waiting for Steam avatars. Player names link to `/players/{steamId}`;
 Steam links use the public profile URL. Player IPs and private account data are

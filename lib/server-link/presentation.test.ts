@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   currentRoster,
+  formatTimeLeft,
   playerLinks,
   rosterAvatarEnrichment,
   statusAtClientTime,
@@ -19,6 +20,17 @@ const FRESH_STATUS = {
   checkedAt: "2026-09-05T12:00:05.000Z",
   lastSeenAt: "2026-09-05T12:00:00.000Z",
 };
+
+test("time left counts down locally without client clock skew and formats long maps", () => {
+  const status = { ...FRESH_STATUS, timeLeftSeconds: 125 };
+  assert.equal(formatTimeLeft(status, 1_000, 6_000), "2:00");
+  assert.equal(formatTimeLeft(status, 1_000, 999), "2:05");
+  assert.equal(formatTimeLeft({ ...status, timeLeftSeconds: 3661 }, 0, 0), "1:01:01");
+  assert.equal(formatTimeLeft({ ...status, timeLeftSeconds: 1 }, 0, 2_000), "0:00");
+  assert.equal(formatTimeLeft({ ...status, players: 0, bots: 0 }, 0, 10_000), "2:05");
+  assert.equal(formatTimeLeft({ ...status, state: "lost" }, 0, 0), "—");
+  assert.equal(formatTimeLeft(FRESH_STATUS, 0, 0), "—");
+});
 
 test("player links are derived from a valid Steam ID64", () => {
   assert.deepEqual(playerLinks("76561198319987553"), {
