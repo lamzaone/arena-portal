@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480" role="img" aria-labelledby="title desc">
+  <title id="title">MODERATOR profile theme</title>
+  <desc id="desc">the guardian's edge, staff collection, decorative effect level 2. An ARENA rank theme in #6ce5bd.</desc>
+  <defs>
+    <radialGradient id="light" cx="50%" cy="35%" r="65%"><stop stop-color="#6ce5bd" stop-opacity=".15"/><stop offset="1" stop-color="#06110f" stop-opacity="0"/></radialGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#163029"/><stop offset=".46" stop-color="#06110f"/><stop offset="1" stop-color="#163029"/></linearGradient>
+    <linearGradient id="gem" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#b2f5df" stop-opacity=".85"/><stop offset=".48" stop-color="#6ce5bd" stop-opacity=".25"/><stop offset="1" stop-color="#6ce5bd" stop-opacity=".58"/></linearGradient>
+    <linearGradient id="edge"><stop stop-color="#6ce5bd" stop-opacity="0"/><stop offset=".5" stop-color="#b2f5df"/><stop offset="1" stop-color="#6ce5bd" stop-opacity="0"/></linearGradient>
+    <pattern id="grid" width="96" height="96" patternUnits="userSpaceOnUse"><path d="M48 0H0V48" fill="none" stroke="#6ce5bd" opacity=".14"/></pattern>
+  </defs>
+  <rect width="800" height="480" fill="#06110f"/>
+  <rect width="800" height="480" fill="url(#light)"/>
+  <rect width="800" height="480" fill="url(#grid)" opacity=".46"/>
+  
+  <rect x="20.5" y="20.5" width="759" height="439" rx="8" fill="none" stroke="#6ce5bd" stroke-opacity=".18"/>
+  <path d="M40 70V40h30m660 0h30v30M40 410v30h30m660 0h30v-30" fill="none" stroke="#b2f5df" opacity=".42"/>
+  <text x="50" y="61" fill="#b2f5df" font-family="Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="3">ARENA</text>
+  <text x="750" y="61" text-anchor="end" fill="#b2f5df" opacity=".72" font-family="Arial, sans-serif" font-size="9" font-weight="700" letter-spacing="2">STAFF COLLECTION</text>
+  
+  
+  <g transform="translate(400 213)" stroke="#b2f5df" stroke-linejoin="round" stroke-linecap="round"><path d="m0-86 65 22V-1c0 36-31 63-65 84-34-21-65-48-65-84v-63Z" fill="url(#metal)" stroke-width="2"/><path d="m0-69 50 18V-1c0 28-25 51-50 68-25-17-50-40-50-68v-50Z" fill="none"/><path d="m-31-3 22 23 44-51" fill="none" stroke-width="9" stroke-linejoin="round"/><path d="M-100-57v100l23 20m177-120V43L77 63" fill="none" opacity=".6"/><path d="M-110-8h32m156 0h32" stroke-width="2"/><circle cy="-105" r="4" fill="url(#gem)"/></g>
+  <path d="M130 354H670" stroke="url(#edge)" opacity=".55"/>
+  <text x="50" y="392" fill="#b2f5df" opacity=".78" font-family="Arial, sans-serif" font-size="9" font-weight="700" letter-spacing="3">THE GUARDIAN'S EDGE</text>
+  <text x="48" y="438" fill="#f6f5fa" font-family="Arial, sans-serif" font-size="45" font-weight="800" letter-spacing="-1.3">MODERATOR</text>
+  <rect x="681" y="413" width="7" height="18" rx="1" fill="#b2f5df" opacity="0.7250000000000001"/><rect x="694" y="413" width="7" height="18" rx="1" fill="#b2f5df" opacity="1"/>
+</svg>
+

@@ -15,6 +15,7 @@ import "./themes/default.css";
 import "./themes/shared.css";
 import "./themes/beta-tester.css";
 import "./themes/tap-god.css";
+import "./themes/ranks.css";
 import "./themes/player-containers.css";
 import "./staff-workspace.css";
 import "./themes/refinements.css";

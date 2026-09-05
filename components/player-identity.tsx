@@ -6,10 +6,7 @@ import { CopyToClipboardButton } from "@/components/copy-to-clipboard-button";
 import { IdentityGroupBadgeList } from "@/components/identity-group-badge";
 import { ProfileThemeSurfaceBadge } from "@/components/profile-theme-surface-badge";
 import { ResilientRemoteImage } from "@/components/resilient-remote-image";
-import {
-  getTrustedProfileTheme,
-  getTrustedProfileThemeSurface,
-} from "@/lib/content/profile-themes";
+import { resolvePortalThemeSurface } from "@/lib/themes/registry";
 import type { PlayerIdentityData } from "@/lib/player-identities";
 import { isIndividualSteamId64 } from "@/lib/steam/steam-id";
 
@@ -55,8 +52,7 @@ export function PlayerIdentity({
   const steamId = player.steamId.trim();
   const isPlayer = isIndividualSteamId64(steamId);
   const displayName = player.displayName.trim() || (isPlayer ? steamId : "System");
-  const theme = getTrustedProfileTheme(player.profileThemeKey);
-  const themeSurface = getTrustedProfileThemeSurface(
+  const { theme, surface: themeSurface } = resolvePortalThemeSurface(
     player.profileThemeKey,
     "smallProfile",
   );
@@ -72,7 +68,7 @@ export function PlayerIdentity({
     "profile-object",
     styles.frame,
     styles[variant],
-    themeSurface?.className,
+    themeSurface.className,
   ].filter(Boolean).join(" ");
   const identityClassName = [
     "player-identity",
@@ -131,9 +127,9 @@ export function PlayerIdentity({
       className={frameClassName}
       data-player-identity-variant={variant}
       data-presence={player.presence}
-      data-theme={themeSurface ? theme.key : undefined}
+      data-theme={theme.key}
       data-theme-surface="small-profile"
-      data-profile-theme={themeSurface ? theme.key : undefined}
+      data-profile-theme={theme.key}
     >
       {isPlayer && profileLink === "identity" ? (
         <Link
@@ -155,8 +151,8 @@ export function PlayerIdentity({
       {isPlayer && hoverCard && profileLink !== "none" ? (
         <AdaptivePlayerHoverCard
           className={`player-identity-hover-card ${styles.hoverCard}`}
-          themeClassName={`leaderboard-player-row ${themeSurface?.className ?? "small-profile-theme-default"}`}
-          themeKey={themeSurface ? theme.key : "default"}
+          themeClassName={`leaderboard-player-row ${themeSurface.className}`}
+          themeKey={theme.key}
           presence={player.presence}
           ariaLabel={`${displayName}'s player profile preview`}
         >

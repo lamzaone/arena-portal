@@ -6,13 +6,15 @@ class names, components, or asset paths.
 
 ## Feature surfaces
 
-Every manifest in `lib/themes/` declares three independent surfaces:
+Every manifest in `lib/themes/` declares four independent surfaces:
 
 - `global` styles the signed-in viewer's portal shell, controls, searches,
   panels, tables, and pagination.
 - `profile` styles the full public player profile page.
 - `smallProfile` styles reusable player objects in ranking, VIP, staff, search,
   trade, case, mention, and hover-card contexts.
+- `playerContainer` styles a represented player's surrounding record, message,
+  search result, or table row independently of the viewer's theme.
 
 On a successful `/players/[steamId]` route, the viewed player is the full-page
 theme owner. Their resolved `profile` surface controls profile content and
@@ -28,7 +30,50 @@ the profile route restores the viewer's effects.
 
 Set any surface to `false` when a theme does not provide that feature. The
 renderer then uses the stable ARENA default for that surface. The default theme
-must always define all three surfaces.
+must always define all four surfaces.
+
+## VIP and staff themes
+
+`lib/themes/ranks.ts` defines nine trusted themes. Standard and Founder have no
+new theme. All colors match the group's public badge palette at registration.
+
+| Themes | Coverage | Visual progression |
+| --- | --- | --- |
+| VIP Silver, Staff | Full profile only | Metallic details and avatar crest |
+| VIP Gold, Moderator | Full profile only | Gilded or mint highlights, shimmer or scan |
+| VIP Diamond, Administrator | All four surfaces | Facets or amber beams, illuminated player cards, ambient light |
+| VIP Ultimate, Sr. Administrator | All four surfaces | Aurora, orbital details and drifting particles |
+| Owner | All four surfaces | Crimson crown halo and layered crest |
+
+Profile-only themes resolve to an explicit default boundary for site navigation,
+compact identities and player containers, even inside another player's theme.
+Each theme owns its hover and selected shadow tokens as well as its base colors.
+
+`app/themes/ranks.css` owns the palettes, geometry and animation. The shared
+`RankThemeBackground` is decorative server-rendered markup with no animation
+JavaScript. Motion is restrained on touch devices, disabled for reduced motion,
+and decorations disappear in forced-colors mode. SVG previews live under
+`public/images/economy/profile-themes/`.
+
+Migration `db/026_rank_themes.sql` registers the nine enabled, **unlisted** items
+and matching profile themes. `marketEnabled=false` excludes them from public
+Market listing and purchase. It creates no prices, rewards, inventory grants,
+or equipped selections. Staff can find each name ending in “Theme” in Items and
+assign it through Groups & access. Choose `account_bound` for a reward that
+expires with membership; tradable rewards and direct grants retain normal
+inventory ownership behavior. No theme name implies a permission or forces a
+particular reward group.
+
+Bound rank rewards are checked against their actual awarding group's live,
+scoped membership on session/profile reads, Settings reads/writes, and inventory
+equip. Passive expiry therefore hides an invalid selection even before the next
+inventory reconciliation. These checks never grant, revoke or restore items;
+the existing reward lifecycle remains responsible for inventory changes.
+
+`npm run test:themes` covers surface fallbacks, progression, existing-theme
+compatibility, expiry, revocation, permanent grants and both equip paths. The
+entitlement tests use isolated SQLite fixtures with the real relational queries;
+they do not claim to exercise MySQL locking or cross-database atomicity.
 
 ## Add a theme
 

@@ -108,6 +108,7 @@
   --player-container-selected: linear-gradient(105deg, rgba(255, 23, 68, .32), rgba(15, 0, 4, .99));
   --player-container-shadow: inset 3px 0 0 var(--tap-red), inset 0 0 20px rgba(255, 23, 68, .08), 0 0 14px rgba(255, 23, 68, .12);
   --player-container-hover-shadow: inset 3px 0 0 var(--tap-hot), inset 0 0 28px rgba(255, 23, 68, .12), 0 0 25px rgba(255, 23, 68, .26);
+  --player-container-selected-shadow: var(--player-container-hover-shadow);
 }
 
 :is(

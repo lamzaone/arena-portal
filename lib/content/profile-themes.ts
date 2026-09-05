@@ -64,6 +64,7 @@ export function getTrustedProfileTheme(
     key: theme.key,
     displayName: theme.displayName,
     previewImageUrl: theme.previewImageUrl,
+    ...(theme.progression ? { progression: theme.progression } : {}),
     surfaces: {
       ...(global ? { global } : {}),
       profile,

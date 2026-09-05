@@ -106,6 +106,7 @@
   --player-container-selected: linear-gradient(105deg, rgba(56, 189, 248, .26), rgba(7, 24, 39, .98));
   --player-container-shadow: inset 3px 0 0 var(--beta-yellow), 0 0 12px rgba(56, 189, 248, .1);
   --player-container-hover-shadow: inset 3px 0 0 var(--beta-yellow), 0 0 22px rgba(56, 189, 248, .24);
+  --player-container-selected-shadow: var(--player-container-hover-shadow);
 }
 
 :is(

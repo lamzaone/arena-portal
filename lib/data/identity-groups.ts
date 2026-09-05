@@ -1677,7 +1677,7 @@ function preferArenaVipMembership(
  * A successful empty read is authoritative; only an unavailable pool or a
  * failed arena query permits the caller to use legacy portal memberships.
  */
-async function getArenaAuthorityMembershipsForPlayers(
+export async function getArenaAuthorityMembershipsForPlayers(
   requestedSteamIds: string[],
 ): Promise<ArenaAuthorityMembershipSnapshot> {
   const steamIds = [...new Set(requestedSteamIds.map((steamId) =>

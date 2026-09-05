@@ -11,6 +11,7 @@ import {
 
 import { normalizeVipGroup } from "@/lib/content/group-presentation";
 import { isTrustedOwnedProfileThemeKey } from "@/lib/content/profile-themes";
+import { getAuthorizedProfileThemeItemIds } from "@/lib/data/profile-theme-entitlements";
 import { isAssignedToConfiguredGameServer } from "@/lib/admin/server-scope";
 import {
   applyIdentityGroupMembershipRewards,
@@ -183,6 +184,7 @@ type PortalSessionRow = RowDataPacket & {
   steam_id: string;
   expires_at: number;
   active_theme_key: string | null;
+  active_theme_item_id: string | null;
 };
 
 type PlayerSettingsRow = RowDataPacket & {
@@ -204,6 +206,7 @@ type ProfileThemeRow = RowDataPacket & {
 type EquippedProfileThemeRow = RowDataPacket & {
   steam_id: string;
   theme_key: string;
+  inventory_item_id: string;
 };
 
 type AdminListRow = RowDataPacket & {
@@ -2655,7 +2658,7 @@ export async function getPortalSession(tokenHash: string) {
 
   try {
     const [rows] = await pool.query<PortalSessionRow[]>(
-      "SELECT s.steam_id, s.expires_at, t.theme_key AS active_theme_key " +
+      "SELECT s.steam_id, s.expires_at, t.theme_key AS active_theme_key, i.id AS active_theme_item_id " +
         "FROM portal_sessions AS s " +
         "LEFT JOIN portal_player_settings AS ps ON ps.steam_id = s.steam_id " +
         "LEFT JOIN portal_inventory_items AS i ON i.id = ps.active_theme_item_id " +
@@ -2675,10 +2678,14 @@ export async function getPortalSession(tokenHash: string) {
     const activeThemeKey = session.active_theme_key
       ? String(session.active_theme_key)
       : null;
+    const themeItemId = String(session.active_theme_item_id ?? "");
+    const authorizedThemeItems = await getAuthorizedProfileThemeItemIds(pool,
+      activeThemeKey ? [{ steamId: session.steam_id, itemId: themeItemId, themeKey: activeThemeKey }] : [],
+    );
     return {
       steamId: session.steam_id,
       expiresAt: Number(session.expires_at),
-      profileThemeKey: isTrustedOwnedProfileThemeKey(activeThemeKey)
+      profileThemeKey: isTrustedOwnedProfileThemeKey(activeThemeKey) && authorizedThemeItems.has(themeItemId)
         ? activeThemeKey
         : null,
     };
@@ -2789,8 +2796,14 @@ export async function getPlayerSettings(
       ),
     ]);
     const settings = settingsRows[0][0];
+    const authorizedThemeItems = await getAuthorizedProfileThemeItemIds(pool,
+      themeRows[0].map((theme) => ({
+        steamId, itemId: String(theme.inventory_item_id), themeKey: String(theme.theme_key),
+      })),
+    );
     const ownedThemesByKey = new Map<string, OwnedProfileTheme>();
     for (const theme of themeRows[0]
+      .filter((candidate) => authorizedThemeItems.has(String(candidate.inventory_item_id)))
       .map(toOwnedProfileTheme)
       .filter((candidate) => isTrustedOwnedProfileThemeKey(candidate.key))) {
       if (!ownedThemesByKey.has(theme.key)) ownedThemesByKey.set(theme.key, theme);
@@ -2840,7 +2853,7 @@ export async function getPlayerProfileThemeKeys(
   if (!pool) return themes;
   try {
     const [rows] = await pool.query<EquippedProfileThemeRow[]>(
-      "SELECT s.steam_id, t.theme_key FROM portal_player_settings AS s " +
+      "SELECT s.steam_id, t.theme_key, i.id AS inventory_item_id FROM portal_player_settings AS s " +
         "INNER JOIN portal_inventory_items AS i ON i.id = s.active_theme_item_id AND i.owner_steam_id = s.steam_id AND i.item_type = 'profile_theme' AND i.state = 'available' " +
         "INNER JOIN portal_profile_themes AS t ON t.id = s.active_theme_id AND t.catalogue_id = i.catalogue_id AND t.enabled = TRUE " +
         "WHERE s.steam_id IN (" +
@@ -2848,11 +2861,17 @@ export async function getPlayerProfileThemeKeys(
         ")",
       uniqueSteamIds,
     );
+    const authorizedThemeItems = await getAuthorizedProfileThemeItemIds(pool,
+      rows.map((row) => ({
+        steamId: String(row.steam_id), itemId: String(row.inventory_item_id), themeKey: String(row.theme_key),
+      })),
+    );
     for (const row of rows) {
       const steamId = String(row.steam_id);
       const key = row.theme_key ? String(row.theme_key) : null;
       if (
         requestedSteamIds.has(steamId) &&
+        authorizedThemeItems.has(String(row.inventory_item_id)) &&
         isTrustedOwnedProfileThemeKey(key)
       ) {
         themes.set(steamId, key);
@@ -2914,6 +2933,12 @@ export async function updatePlayerSettings(input: {
           "theme_not_owned",
           "That profile theme is not available on your account.",
         );
+      }
+      const authorizedThemeItems = await getAuthorizedProfileThemeItemIds(connection, [{
+        steamId, itemId: activeThemeItemId, themeKey: String(themeRows[0].theme_key),
+      }]);
+      if (!authorizedThemeItems.has(activeThemeItemId)) {
+        economyError("theme_not_owned", "That profile theme is not available on your account.");
       }
       activeThemeId = Number(themeRows[0].id);
       await connection.execute(
@@ -11126,6 +11151,12 @@ export async function equipProfileThemeItem(
       const themeId = economyNumber(theme.id, "Profile Theme ID");
       const themeKey = String(theme.theme_key);
       const displayName = String(theme.display_name);
+      const authorizedThemeItems = await getAuthorizedProfileThemeItemIds(context.connection, [{
+        steamId, itemId, themeKey,
+      }]);
+      if (!authorizedThemeItems.has(itemId)) {
+        economyError("theme_not_owned", "That profile theme is not available on your account.");
+      }
 
       await ensureEconomySteamAccount(context.connection, steamId);
       await context.connection.execute(

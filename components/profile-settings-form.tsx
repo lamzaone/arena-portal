@@ -210,10 +210,10 @@ export function ProfileSettingsForm({
           <strong>Select a theme owned by your account.</strong>
         </legend>
         <p className="empty-copy">
-          Theme manifests independently control your full profile, the portal
-          UI you see, and compact profile objects shown in rankings, tables,
-          search, and mentions. Buy one from the Market, then equip its owned
-          inventory instance here or from Inventory.
+          Choose how your profile looks. Global themes also style the site for
+          you and your player cards for everyone. Themes received as group
+          rewards stay available while the granting membership is active.
+          Equip a theme here or from Inventory.
         </p>
         <div className="settings-theme-grid">
           <label
@@ -238,13 +238,13 @@ export function ProfileSettingsForm({
             const trustedTheme = getTrustedProfileTheme(theme.key);
             const configuredTheme = getPortalTheme(theme.key);
             const themedSurfaces = [
-              configuredTheme.surfaces.profile ? "profile page" : null,
-              configuredTheme.surfaces.global ? "portal UI" : null,
+              configuredTheme.surfaces.profile ? "your profile" : null,
+              configuredTheme.surfaces.global ? "your site UI" : null,
               configuredTheme.surfaces.smallProfile
-                ? "profile mentions"
+                ? "your player mentions"
                 : null,
               configuredTheme.surfaces.playerContainer
-                ? "player-owned containers"
+                ? "your public player cards"
                 : null,
             ].filter(Boolean);
 
@@ -275,6 +275,11 @@ export function ProfileSettingsForm({
                 <span>
                   <strong>{theme.displayName}</strong>
                   <small>{theme.description}</small>
+                  {configuredTheme.progression ? (
+                    <small className="settings-theme-features">
+                      {configuredTheme.progression.features.join(" · ")}
+                    </small>
+                  ) : null}
                   {themedSurfaces.length ? (
                     <small className="settings-theme-surface-note">
                       <Trophy aria-hidden="true" /> Styles{" "}
@@ -288,8 +293,8 @@ export function ProfileSettingsForm({
         </div>
         {!initialSettings.ownedThemes.length ? (
           <p className="settings-owned-empty">
-            No additional profile themes are owned yet. Nothing needs to load
-            here until themes become available.
+            Your themes will appear here when you receive one through a VIP or
+            staff membership, or get one from the Market.
           </p>
         ) : null}
       </fieldset>

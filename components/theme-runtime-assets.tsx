@@ -1,7 +1,8 @@
-import { Crown, Zap, type LucideIcon } from "lucide-react";
+import { Crown, Gem, Medal, Shield, ShieldCheck, Sparkles, Zap, type LucideIcon } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 
 import { TapGodRainBackground } from "@/components/tap-god-rain-background";
+import { RankThemeBackground } from "@/components/rank-theme-background";
 import type {
   PortalThemeBackgroundKey,
   PortalThemeIconKey,
@@ -11,10 +12,16 @@ import type {
 const themeIcons = {
   crown: Crown,
   zap: Zap,
+  shield: Shield,
+  shieldCheck: ShieldCheck,
+  gem: Gem,
+  medal: Medal,
+  sparkles: Sparkles,
 } satisfies Record<PortalThemeIconKey, LucideIcon>;
 
 const themeBackgrounds = {
   tapGodRain: TapGodRainBackground,
+  rankAtmosphere: RankThemeBackground,
 } satisfies Record<PortalThemeBackgroundKey, ComponentType>;
 
 type ThemeIconProps = SVGProps<SVGSVGElement> & {

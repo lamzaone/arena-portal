@@ -1,6 +1,7 @@
 import { betaTesterTheme } from "@/lib/themes/beta-tester";
 import { defaultTheme } from "@/lib/themes/default";
 import { tapGodTheme } from "@/lib/themes/tap-god";
+import { rankThemes } from "@/lib/themes/ranks";
 import type {
   PortalThemeDefinition,
   PortalThemeSurface,
@@ -13,6 +14,7 @@ export const portalThemes = {
   default: defaultTheme,
   beta_tester: betaTesterTheme,
   tap_god: tapGodTheme,
+  ...rankThemes,
 } as const satisfies Record<string, PortalThemeDefinition>;
 
 export type PortalThemeKey = keyof typeof portalThemes;

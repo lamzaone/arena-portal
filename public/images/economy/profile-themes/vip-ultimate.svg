@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480" role="img" aria-labelledby="title desc">
+  <title id="title">VIP ULTIMATE profile theme</title>
+  <desc id="desc">beyond the ordinary, vip collection, decorative effect level 4. An ARENA rank theme in #b46cff.</desc>
+  <defs>
+    <radialGradient id="light" cx="50%" cy="35%" r="65%"><stop stop-color="#b46cff" stop-opacity=".25"/><stop offset="1" stop-color="#0d0719" stop-opacity="0"/></radialGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#271a3d"/><stop offset=".46" stop-color="#0d0719"/><stop offset="1" stop-color="#271a3d"/></linearGradient>
+    <linearGradient id="gem" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#e0c4ff" stop-opacity=".85"/><stop offset=".48" stop-color="#b46cff" stop-opacity=".25"/><stop offset="1" stop-color="#b46cff" stop-opacity=".58"/></linearGradient>
+    <linearGradient id="edge"><stop stop-color="#b46cff" stop-opacity="0"/><stop offset=".5" stop-color="#e0c4ff"/><stop offset="1" stop-color="#b46cff" stop-opacity="0"/></linearGradient>
+    <pattern id="grid" width="96" height="96" patternUnits="userSpaceOnUse"><path d="M48 0H0V48" fill="none" stroke="#b46cff" opacity=".14"/></pattern>
+  </defs>
+  <rect width="800" height="480" fill="#0d0719"/>
+  <rect width="800" height="480" fill="url(#light)"/>
+  <rect width="800" height="480" fill="url(#grid)" opacity=".46"/>
+  <path d="m430-40 95 175 224-63-191 158 272 50M525 135l33 95L430-40M558 230l-103 102 375-12" fill="none" stroke="#b46cff" stroke-opacity=".17"/><path d="m525 135 224-63-191 158Z" fill="#b46cff" opacity=".04"/>
+  <rect x="20.5" y="20.5" width="759" height="439" rx="8" fill="none" stroke="#b46cff" stroke-opacity=".18"/>
+  <path d="M40 70V40h30m660 0h30v30M40 410v30h30m660 0h30v-30" fill="none" stroke="#e0c4ff" opacity=".42"/>
+  <text x="50" y="61" fill="#e0c4ff" font-family="Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="3">ARENA</text>
+  <text x="750" y="61" text-anchor="end" fill="#e0c4ff" opacity=".72" font-family="Arial, sans-serif" font-size="9" font-weight="700" letter-spacing="2">VIP COLLECTION</text>
+  
+  <g fill="none" stroke="#b46cff"><ellipse cx="400" cy="211" rx="236" ry="92" transform="rotate(-22 400 211)" opacity=".3"/><ellipse cx="400" cy="211" rx="251" ry="106" transform="rotate(-22 400 211)" opacity=".11"/><circle cx="400" cy="211" r="139" stroke-dasharray="2 10" opacity=".25"/></g><g fill="#e0c4ff"><circle cx="210" cy="310" r="2"/><circle cx="595" cy="107" r="3"/><circle cx="551" cy="286" r="2"/><circle cx="273" cy="91" r="2"/></g>
+  <g transform="translate(400 213)" stroke="#e0c4ff" stroke-linejoin="round" stroke-linecap="round"><path d="m0-105 20 39 43-8-8 38 46 27-46 23 8 39-43-7L0 91-20 56l-43 7 8-39-46-23 46-27-8-38 43 8Z" fill="url(#metal)" stroke-width="1.5"/><path d="m0-76 54 38V24L0 61-54 24v-62Z" fill="url(#gem)" stroke-width="2"/><path d="m-35-25 17 12L0-42 18-13l17-12-8 49H-27Z" fill="url(#metal)" stroke-width="1.7"/><path d="M-22 33H22M-120-27-85 0l-28 21m233-48L85 0l28 21" fill="none"/><circle cy="-116" r="3" fill="url(#gem)"/><circle cy="105" r="3" fill="url(#gem)"/></g>
+  <path d="M130 354H670" stroke="url(#edge)" opacity=".55"/>
+  <text x="50" y="392" fill="#e0c4ff" opacity=".78" font-family="Arial, sans-serif" font-size="9" font-weight="700" letter-spacing="3">BEYOND THE ORDINARY</text>
+  <text x="48" y="438" fill="#f6f5fa" font-family="Arial, sans-serif" font-size="45" font-weight="800" letter-spacing="-1.3">VIP ULTIMATE</text>
+  <rect x="655" y="413" width="7" height="18" rx="1" fill="#e0c4ff" opacity="0.5875"/><rect x="668" y="413" width="7" height="18" rx="1" fill="#e0c4ff" opacity="0.7250000000000001"/><rect x="681" y="413" width="7" height="18" rx="1" fill="#e0c4ff" opacity="0.8625"/><rect x="694" y="413" width="7" height="18" rx="1" fill="#e0c4ff" opacity="1"/>
+</svg>
+

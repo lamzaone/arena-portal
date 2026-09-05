@@ -1,0 +1,607 @@
+/* Trusted membership themes. Geometry becomes richer with rank; the ARENA
+   typography, responsive layout and represented-player boundaries stay intact. */
+:is(.rank-theme-vip-silver, [data-theme="vip_silver"], .theme-background-slot[data-theme-background-theme="vip_silver"]) {
+  --rank-accent: #c8d0df;
+  --rank-bright: #e3e8f1;
+  --rank-soft: #e3e8f1;
+  --rank-bg: #080b11;
+  --rank-surface: #111720;
+  --rank-raised: #1a222e;
+  --rank-muted: #bbc4d3;
+  --rank-grid: .15;
+  --rank-light: .07;
+  --rank-beam: 0;
+  --rank-orbit: 0;
+  --rank-motes: 0;
+  --rank-halo: 0;
+}
+
+:is(.rank-theme-vip-gold, [data-theme="vip_gold"], .theme-background-slot[data-theme-background-theme="vip_gold"]) {
+  --rank-accent: #ffd34d;
+  --rank-bright: #ffe083;
+  --rank-soft: #ffe7a0;
+  --rank-bg: #100d07;
+  --rank-surface: #1a160d;
+  --rank-raised: #272014;
+  --rank-muted: #d4c8ac;
+  --rank-grid: .19;
+  --rank-light: .11;
+  --rank-beam: .12;
+  --rank-orbit: 0;
+  --rank-motes: 0;
+  --rank-halo: 0;
+}
+
+:is(.rank-theme-vip-diamond, [data-theme="vip_diamond"], .theme-background-slot[data-theme-background-theme="vip_diamond"]) {
+  --rank-accent: #58b8ff;
+  --rank-bright: #89cdff;
+  --rank-soft: #b7e2ff;
+  --rank-bg: #050e18;
+  --rank-surface: #0b1928;
+  --rank-raised: #12273b;
+  --rank-muted: #b5cada;
+  --rank-grid: .24;
+  --rank-light: .19;
+  --rank-beam: .32;
+  --rank-orbit: 0;
+  --rank-motes: 0;
+  --rank-halo: 0;
+}
+
+:is(.rank-theme-vip-ultimate, [data-theme="vip_ultimate"], .theme-background-slot[data-theme-background-theme="vip_ultimate"]) {
+  --rank-accent: #b46cff;
+  --rank-bright: #cda0ff;
+  --rank-soft: #e0c4ff;
+  --rank-bg: #0d0719;
+  --rank-surface: #180f29;
+  --rank-raised: #271a3d;
+  --rank-muted: #cbbbdc;
+  --rank-grid: .14;
+  --rank-light: .26;
+  --rank-beam: .36;
+  --rank-orbit: .3;
+  --rank-motes: .52;
+  --rank-halo: 0;
+}
+
+:is(.rank-theme-staff, [data-theme="staff"], .theme-background-slot[data-theme-background-theme="staff"]) {
+  --rank-accent: #b9bfd0;
+  --rank-bright: #d8ddeb;
+  --rank-soft: #e0e4ef;
+  --rank-bg: #090c13;
+  --rank-surface: #121722;
+  --rank-raised: #1e2532;
+  --rank-muted: #bcc3d3;
+  --rank-grid: .27;
+  --rank-light: .07;
+  --rank-beam: 0;
+  --rank-orbit: 0;
+  --rank-motes: 0;
+  --rank-halo: 0;
+}
+
+:is(.rank-theme-moderator, [data-theme="moderator"], .theme-background-slot[data-theme-background-theme="moderator"]) {
+  --rank-accent: #6ce5bd;
+  --rank-bright: #91eccf;
+  --rank-soft: #b2f5df;
+  --rank-bg: #06110f;
+  --rank-surface: #0d1e1a;
+  --rank-raised: #163029;
+  --rank-muted: #b5d1c8;
+  --rank-grid: .24;
+  --rank-light: .12;
+  --rank-beam: .15;
+  --rank-orbit: 0;
+  --rank-motes: 0;
+  --rank-halo: 0;
+}
+
+:is(.rank-theme-administrator, [data-theme="administrator"], .theme-background-slot[data-theme-background-theme="administrator"]) {
+  --rank-accent: #ffb56a;
+  --rank-bright: #ffcb96;
+  --rank-soft: #ffdfbc;
+  --rank-bg: #130d08;
+  --rank-surface: #21180f;
+  --rank-raised: #312419;
+  --rank-muted: #d6c4b2;
+  --rank-grid: .21;
+  --rank-light: .19;
+  --rank-beam: .34;
+  --rank-orbit: 0;
+  --rank-motes: 0;
+  --rank-halo: 0;
+}
+
+:is(.rank-theme-senior-administrator, [data-theme="senior_administrator"], .theme-background-slot[data-theme-background-theme="senior_administrator"]) {
+  --rank-accent: #b192ff;
+  --rank-bright: #c7b1ff;
+  --rank-soft: #dfd2ff;
+  --rank-bg: #0d0a19;
+  --rank-surface: #181329;
+  --rank-raised: #27203e;
+  --rank-muted: #c8bedf;
+  --rank-grid: .2;
+  --rank-light: .23;
+  --rank-beam: .27;
+  --rank-orbit: .4;
+  --rank-motes: .55;
+  --rank-halo: 0;
+}
+
+:is(.rank-theme-owner, [data-theme="owner"], .theme-background-slot[data-theme-background-theme="owner"]) {
+  --rank-accent: #e60000;
+  --rank-bright: #ff8585;
+  --rank-soft: #ffc4c4;
+  --rank-bg: #100406;
+  --rank-surface: #200b10;
+  --rank-raised: #33121a;
+  --rank-muted: #dfbec4;
+  --rank-grid: .24;
+  --rank-light: .34;
+  --rank-beam: .4;
+  --rank-orbit: .45;
+  --rank-motes: .64;
+  --rank-halo: .64;
+}
+
+/* Explicit data-theme selectors include navigation and badges, which do not
+   carry surface classes. Reset tokens here rather than inheriting viewer colors. */
+:is(.rank-theme, [data-theme="vip_silver"], [data-theme="vip_gold"], [data-theme="vip_diamond"], [data-theme="vip_ultimate"], [data-theme="staff"], [data-theme="moderator"], [data-theme="administrator"], [data-theme="senior_administrator"], [data-theme="owner"]) {
+  --theme-page-bg: var(--rank-bg);
+  --theme-surface: var(--rank-surface);
+  --theme-surface-raised: var(--rank-raised);
+  --theme-surface-muted: color-mix(in srgb, var(--rank-surface) 90%, transparent);
+  --theme-text: #f6f5fa;
+  --theme-text-muted: var(--rank-muted);
+  --theme-text-subtle: color-mix(in srgb, var(--rank-muted) 82%, var(--rank-bg));
+  --theme-accent: var(--rank-accent);
+  --theme-accent-strong: var(--rank-bright);
+  --theme-accent-soft: var(--rank-soft);
+  --theme-border: color-mix(in srgb, var(--rank-bright) 24%, var(--rank-surface));
+  --theme-border-strong: color-mix(in srgb, var(--rank-bright) 62%, var(--rank-surface));
+  --theme-panel: var(--theme-surface-raised);
+  --theme-panel-subtle: var(--theme-surface-muted);
+  --theme-control: var(--theme-control-bg);
+  --theme-control-bg: color-mix(in srgb, var(--rank-bg) 70%, var(--rank-surface));
+  --theme-control-focus-bg: var(--rank-raised);
+  --theme-control-hover: color-mix(in srgb, var(--rank-accent) 13%, var(--rank-surface));
+  --theme-control-radius: 6px;
+  --theme-focus-ring: var(--rank-bright);
+  --theme-focus: var(--theme-focus-ring);
+  --theme-placeholder: var(--theme-text-subtle);
+  --theme-avatar-bg: linear-gradient(145deg, var(--rank-raised), var(--rank-bg));
+  --theme-skeleton: linear-gradient(90deg, var(--rank-surface), var(--rank-raised), var(--rank-surface));
+  --theme-success: #68e5b3;
+  --theme-success-text: #a5f0cc;
+  --theme-success-border: #387e63;
+  --theme-success-surface: #102a22;
+  --theme-warning: #f4c477;
+  --theme-danger: #ff8595;
+  --theme-danger-text: #ffc0c8;
+  --theme-table-head: var(--rank-raised);
+  --theme-table-row: color-mix(in srgb, var(--rank-surface) 95%, transparent);
+  --theme-table-hover: color-mix(in srgb, var(--rank-accent) 10%, var(--rank-surface));
+  --theme-radius: 8px;
+  --theme-shadow: 0 16px 44px rgb(0 0 0 / .24), inset 0 1px 0 rgb(255 255 255 / .035);
+  --bg: var(--theme-page-bg);
+  --surface: var(--theme-surface);
+  --surface-strong: var(--theme-surface-raised);
+  --text: var(--theme-text);
+  --muted: var(--theme-text-muted);
+  --subtle: var(--theme-text-subtle);
+  --accent: var(--theme-accent);
+  --accent-bright: var(--theme-accent-strong);
+  --accent-soft: var(--theme-accent-soft);
+  --accent-text: var(--theme-accent-soft);
+  --accent-muted: var(--theme-text-muted);
+  --accent-border: var(--theme-border);
+  --accent-surface: var(--theme-control-hover);
+  --border: var(--theme-border);
+  --border-bright: var(--theme-border-strong);
+  --purple: var(--theme-accent);
+  --purple-bright: var(--theme-accent-strong);
+  --player-identity-name: var(--theme-text);
+  --player-identity-muted: var(--theme-text-muted);
+  --player-identity-accent: var(--theme-accent-soft);
+  --player-identity-hover: var(--theme-accent-strong);
+  --player-identity-card: var(--theme-surface-raised);
+  --player-container-accent: var(--theme-accent-strong);
+  --player-container-bg: linear-gradient(112deg, color-mix(in srgb, var(--rank-accent) 10%, var(--rank-surface)), var(--rank-bg) 76%);
+  --player-container-hover: linear-gradient(112deg, color-mix(in srgb, var(--rank-accent) 18%, var(--rank-surface)), var(--rank-surface) 80%);
+  --player-container-selected: linear-gradient(112deg, color-mix(in srgb, var(--rank-accent) 25%, var(--rank-raised)), var(--rank-surface));
+  --player-container-shadow: inset 3px 0 0 var(--rank-accent), inset 0 1px 0 color-mix(in srgb, var(--rank-bright) 12%, transparent);
+  --player-container-hover-shadow: inset 3px 0 0 var(--rank-bright), 0 0 20px color-mix(in srgb, var(--rank-accent) 12%, transparent);
+  --player-container-selected-shadow: inset 3px 0 0 var(--rank-bright), 0 0 0 1px var(--theme-border-strong);
+  color-scheme: dark;
+  color: var(--theme-text);
+}
+
+/* Opaque atmospheric canvas replaces the document's existing red grid. The
+   sibling wrapper owns its palette independently of html's global selection. */
+html.global-theme-rank:not(:has(.player-profile-page[data-theme-owner="profile"])) body,
+body:has(.player-profile-page[data-theme-owner="profile"].profile-theme-rank) {
+  background: #08090e;
+}
+
+html.global-theme-rank:not(:has(.player-profile-page[data-theme-owner="profile"])) body::before,
+body:has(.player-profile-page[data-theme-owner="profile"].profile-theme-rank)::before,
+html.global-theme-rank:not(:has(.player-profile-page[data-theme-owner="profile"])) .cursor-grid-background,
+body:has(.player-profile-page[data-theme-owner="profile"].profile-theme-rank) .cursor-grid-background {
+  display: none;
+}
+
+.rank-theme-backdrop {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+  background: var(--rank-bg);
+}
+
+.rank-theme-backdrop::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  opacity: var(--rank-light);
+  background:
+    radial-gradient(ellipse at 78% 10%, var(--rank-accent), transparent 58%),
+    radial-gradient(ellipse at 8% 74%, var(--rank-accent), transparent 48%);
+}
+
+.rank-backdrop-grid {
+  position: absolute;
+  inset: 0;
+  opacity: var(--rank-grid);
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--rank-accent) 22%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--rank-accent) 22%, transparent) 1px, transparent 1px);
+  background-size: 76px 76px;
+  mask-image: linear-gradient(110deg, transparent 4%, #000 75%, transparent);
+}
+
+.rank-backdrop-beam {
+  position: absolute;
+  inset: -20%;
+  opacity: var(--rank-beam);
+  background:
+    linear-gradient(124deg, transparent 44%, color-mix(in srgb, var(--rank-accent) 14%, transparent) 44.1%, transparent 54%),
+    linear-gradient(124deg, transparent 62%, color-mix(in srgb, var(--rank-bright) 40%, transparent) 62.1%, transparent 62.3%);
+}
+
+.rank-backdrop-orbit {
+  position: absolute;
+  top: -28vw;
+  right: -13vw;
+  width: 78vw;
+  height: 78vw;
+  max-width: 1150px;
+  max-height: 1150px;
+  border: 1px solid color-mix(in srgb, var(--rank-bright) 45%, transparent);
+  border-radius: 50%;
+  opacity: var(--rank-orbit);
+  transform: rotate(-24deg) scaleY(.64);
+  box-shadow: 0 0 0 28px color-mix(in srgb, var(--rank-accent) 3%, transparent), inset 0 0 80px color-mix(in srgb, var(--rank-accent) 8%, transparent);
+}
+
+.rank-backdrop-orbit::before,
+.rank-backdrop-orbit::after {
+  position: absolute;
+  inset: 8%;
+  border: 1px solid color-mix(in srgb, var(--rank-accent) 40%, transparent);
+  border-radius: inherit;
+  content: "";
+}
+
+.rank-backdrop-orbit::after { inset: -7%; border-style: dashed; opacity: .4; }
+
+.rank-backdrop-motes { position: absolute; inset: 0; opacity: var(--rank-motes); }
+.rank-backdrop-motes > i {
+  position: absolute;
+  top: 24%;
+  left: 12%;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--rank-soft);
+  box-shadow: 0 0 10px var(--rank-accent);
+}
+.rank-backdrop-motes > i:nth-child(2) { top: 68%; left: 8%; }
+.rank-backdrop-motes > i:nth-child(3) { top: 16%; left: 72%; }
+.rank-backdrop-motes > i:nth-child(4) { top: 48%; left: 90%; }
+.rank-backdrop-motes > i:nth-child(5) { top: 83%; left: 76%; }
+.rank-backdrop-motes > i:nth-child(6) { top: 38%; left: 48%; }
+
+.rank-backdrop-halo {
+  position: absolute;
+  top: -320px;
+  right: -120px;
+  width: 900px;
+  height: 900px;
+  border: 1px solid color-mix(in srgb, var(--rank-accent) 38%, transparent);
+  border-radius: 50%;
+  opacity: var(--rank-halo);
+  background: radial-gradient(circle, transparent 43%, color-mix(in srgb, var(--rank-accent) 16%, transparent) 56%, transparent 68%);
+  box-shadow: inset 0 0 0 30px color-mix(in srgb, var(--rank-accent) 3%, transparent), 0 0 90px color-mix(in srgb, var(--rank-accent) 8%, transparent);
+}
+
+[data-theme-background-theme="vip_silver"] .rank-backdrop-grid {
+  background-image: repeating-linear-gradient(0deg, transparent 0 3px, color-mix(in srgb, var(--rank-accent) 12%, transparent) 3px 4px);
+  background-size: auto;
+}
+[data-theme-background-theme="vip_gold"] .rank-backdrop-grid {
+  background-image: repeating-linear-gradient(125deg, transparent 0 128px, color-mix(in srgb, var(--rank-accent) 34%, transparent) 128px 129px, transparent 129px 138px, color-mix(in srgb, var(--rank-accent) 14%, transparent) 138px 139px);
+  background-size: auto;
+}
+[data-theme-background-theme="vip_diamond"] .rank-backdrop-grid {
+  background-image: repeating-linear-gradient(125deg, transparent 0 150px, color-mix(in srgb, var(--rank-accent) 42%, transparent) 150px 151px), repeating-linear-gradient(55deg, transparent 0 150px, color-mix(in srgb, var(--rank-accent) 24%, transparent) 150px 151px);
+  background-size: auto;
+}
+[data-theme-background-theme="moderator"] .rank-backdrop-beam {
+  background: linear-gradient(180deg, transparent 30%, color-mix(in srgb, var(--rank-accent) 12%, transparent) 40%, var(--rank-accent) 40.05%, transparent 40.2%);
+}
+[data-theme-background-theme="vip_ultimate"] .rank-backdrop-beam {
+  background: radial-gradient(ellipse at 72% 18%, color-mix(in srgb, var(--rank-soft) 28%, transparent), transparent 40%), conic-gradient(from 190deg at 68% 14%, transparent, color-mix(in srgb, var(--rank-accent) 50%, transparent) 30deg, transparent 75deg);
+}
+[data-theme-background-theme="senior_administrator"] .rank-backdrop-orbit { transform: rotate(-36deg) scaleY(.82); }
+[data-theme-background-theme="owner"] .rank-backdrop-grid { background-size: 112px 112px; }
+:is([data-theme-background-theme="vip_silver"], [data-theme-background-theme="staff"]) :is(.rank-backdrop-beam, .rank-backdrop-orbit, .rank-backdrop-motes, .rank-backdrop-halo),
+:is([data-theme-background-theme="vip_gold"], [data-theme-background-theme="moderator"], [data-theme-background-theme="vip_diamond"], [data-theme-background-theme="administrator"]) :is(.rank-backdrop-orbit, .rank-backdrop-motes, .rank-backdrop-halo),
+:is([data-theme-background-theme="vip_ultimate"], [data-theme-background-theme="senior_administrator"]) .rank-backdrop-halo { display: none; }
+
+/* The profile hero is the signature piece. All decoration is attached to
+   profile-owned geometry, never to arbitrary nested player descendants. */
+.player-profile-page.profile-theme-rank { background: transparent; }
+.player-profile-page.profile-theme-rank > .shell { position: relative; z-index: 1; }
+.player-profile-page.profile-theme-rank .public-player-hero {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius);
+  background:
+    linear-gradient(115deg, color-mix(in srgb, var(--rank-accent) 7%, transparent), transparent 60%),
+    color-mix(in srgb, var(--theme-page-bg) 89%, transparent);
+  box-shadow: var(--theme-shadow);
+}
+.player-profile-page.profile-theme-rank .public-player-hero::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(120deg, transparent 20%, color-mix(in srgb, var(--rank-bright) 5%, transparent) 46%, transparent 48%);
+}
+.player-profile-page.profile-theme-rank .public-player-hero::after {
+  position: absolute;
+  top: -1px;
+  right: 5%;
+  left: 5%;
+  height: 1px;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--rank-bright), transparent);
+  opacity: .7;
+}
+.player-profile-page.profile-theme-rank :is(.back-link, .public-player-identity .tapped-kicker) { color: var(--theme-accent-soft); }
+.player-profile-page.profile-theme-rank .public-player-identity h1 { color: var(--theme-text); text-shadow: 0 2px 20px rgb(0 0 0 / .2); }
+.player-profile-page.profile-theme-rank .public-player-avatar {
+  border-color: var(--theme-accent-strong);
+  background: var(--theme-avatar-bg);
+  box-shadow: 0 0 0 5px var(--theme-page-bg), 0 0 0 6px var(--theme-border), 0 12px 28px rgb(0 0 0 / .28);
+}
+.player-profile-page.profile-theme-rank .public-player-avatar > .public-player-avatar-fallback { color: var(--theme-accent-soft); background: var(--theme-avatar-bg); }
+.player-profile-page.profile-theme-rank .public-player-steam-identity {
+  border-color: var(--theme-border);
+  color: var(--theme-text-muted);
+  background: var(--theme-control-bg);
+}
+.player-profile-page.profile-theme-rank .public-player-steam-identity:is(:hover, :focus-visible) { color: var(--theme-text); background: var(--theme-control-hover); border-color: var(--theme-border-strong); }
+.player-profile-page.profile-theme-rank .public-rank-card {
+  border-color: var(--theme-border-strong);
+  border-radius: var(--theme-radius);
+  background: linear-gradient(130deg, color-mix(in srgb, var(--rank-accent) 12%, var(--rank-surface)), var(--rank-bg));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--rank-bright) 16%, transparent);
+}
+.player-profile-page.profile-theme-rank .public-rank-card::after { border-color: var(--theme-border); }
+.player-profile-page.profile-theme-rank .public-rank-card > span { color: var(--theme-accent-soft); }
+.player-profile-page.profile-theme-rank .public-rank-card > strong { color: var(--theme-text); }
+.player-profile-page.profile-theme-rank .public-rank-card :is(small, div > span) { color: var(--theme-text-muted); }
+.player-profile-page.profile-theme-rank .public-rank-card > div { border-color: var(--theme-border); }
+.player-profile-page.profile-theme-rank :is(.public-player-stat-grid > article, .combat-stat-grid > div) {
+  border-color: var(--theme-border);
+  border-radius: var(--theme-radius);
+  background: linear-gradient(155deg, var(--rank-surface), color-mix(in srgb, var(--rank-bg) 96%, transparent));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .025);
+}
+.player-profile-page.profile-theme-rank :is(.public-player-stat-grid > article, .combat-stat-grid > div) > span { color: var(--theme-text-muted); }
+.player-profile-page.profile-theme-rank :is(.public-player-stat-grid > article:not(.profile-points-stat), .combat-stat-grid > div) > strong { color: var(--theme-text); text-shadow: none; }
+.player-profile-page.profile-theme-rank :is(.public-player-stat-grid > article, .combat-stat-grid > div) > svg { color: var(--theme-accent-soft); opacity: .5; }
+.player-profile-page.profile-theme-rank .rank-progress { border-color: var(--theme-border); }
+.player-profile-page.profile-theme-rank .rank-progress > div:first-child { color: var(--theme-text-muted); }
+.player-profile-page.profile-theme-rank .rank-progress-track { background: var(--theme-surface-raised); }
+.player-profile-page.profile-theme-rank .rank-progress > div:first-child strong { color: var(--theme-text-muted); }
+.player-profile-page.profile-theme-rank :is(.combat-stat-grid, .hit-map-list) { border-color: var(--theme-border); background: var(--theme-border); }
+.player-profile-page.profile-theme-rank .hit-map-panel::before { background: radial-gradient(circle at 60% 45%, color-mix(in srgb, var(--theme-accent) 8%, transparent), transparent 62%); }
+.player-profile-page.profile-theme-rank :is(.hit-map-figure, .hit-map-damage) { border-color: var(--theme-border); }
+.player-profile-page.profile-theme-rank :is(.hit-map-figure figcaption, .hit-map-list span, .hit-map-list small, .hit-map-damage) { color: var(--theme-text-muted); }
+.player-profile-page.profile-theme-rank .hit-map-list > div { background: var(--theme-surface); }
+.player-profile-page.profile-theme-rank :is(.hit-map-list strong, .hit-map-damage strong) { color: var(--theme-text); }
+.player-profile-page.profile-theme-rank .hit-map-outline { stroke: var(--theme-text-subtle); }
+.player-profile-page.profile-theme-rank .hitbox { fill: color-mix(in srgb, var(--theme-accent) calc(var(--hit-intensity) * 76%), transparent); stroke: var(--theme-accent-soft); filter: none; }
+.player-profile-page.profile-theme-rank .hitbox:hover { fill: var(--theme-accent-strong); stroke: var(--theme-text); filter: none; }
+.player-profile-page.profile-theme-rank .hit-map-list span i { background: var(--theme-accent-strong); opacity: var(--hit-intensity); box-shadow: none; }
+.player-profile-page.profile-theme-rank :is(.group-role-section, .group-membership-cards > article, .profile-inventory-artwork, .profile-inventory-tooltip) { border-color: var(--theme-border); background-color: var(--theme-surface); }
+.player-profile-page.profile-theme-rank :is(.group-role-section > div > h3, .profile-inventory-tooltip > strong, .profile-inventory-empty > strong) { color: var(--theme-text); }
+.player-profile-page.profile-theme-rank :is(.group-role-section > div > small, .group-membership-cards > article > small, .identity-group-tag-summary, .group-role-empty, .profile-inventory-heading p:last-child, .profile-inventory-empty > p, .profile-inventory-tooltip small) { color: var(--theme-text-muted); }
+.player-profile-page.profile-theme-rank .profile-inventory-empty { color: var(--theme-text-muted); border-color: var(--theme-border); background: var(--theme-surface); }
+.player-profile-page.profile-theme-rank .profile-inventory-empty > svg { color: var(--theme-accent-soft); }
+.player-profile-page.profile-theme-rank :is(.settings-save-bar, .settings-theme-preview) { color: var(--theme-accent-soft); border-color: var(--theme-border); background: var(--theme-control-bg); }
+.player-profile-page.profile-theme-rank :is(.settings-theme-surface-note, .settings-theme-surface-note svg, .settings-upcoming-grid article > svg, .settings-upcoming-grid article > span) { color: var(--theme-accent-soft); }
+.settings-theme-card .settings-theme-features { margin-top: 6px; color: var(--theme-text-muted); font-size: 11px; line-height: 1.5; }
+
+/* Heraldic avatar seal sits above the presence/group badge, preserving the
+   original avatar footprint and the group badge's independent rank color. */
+.player-profile-page.profile-theme-rank .rank-avatar-mark {
+  position: absolute;
+  z-index: 2;
+  top: -16px;
+  right: -11px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--rank-bright);
+  border-radius: 8px 8px 11px 11px;
+  color: var(--rank-soft);
+  background: linear-gradient(145deg, var(--rank-raised), var(--rank-bg));
+  box-shadow: 0 3px 12px rgb(0 0 0 / .45), inset 0 1px 0 rgb(255 255 255 / .12);
+  pointer-events: none;
+}
+.player-profile-page.profile-theme-rank .rank-avatar-mark > svg { width: 19px; height: 19px; stroke-width: 1.6; }
+.rank-theme-badge,
+.rank-compact-badge.leaderboard-theme-badge {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 4px;
+  color: var(--theme-accent-soft);
+  background: linear-gradient(115deg, color-mix(in srgb, var(--rank-accent) 15%, var(--rank-bg)), var(--rank-surface));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--rank-bright) 12%, transparent);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: .075em;
+  text-transform: uppercase;
+}
+.rank-theme-badge > svg,
+.rank-compact-badge.leaderboard-theme-badge > svg { flex: 0 0 auto; width: 13px; height: 13px; color: var(--theme-accent-strong); }
+.rank-theme-badge > span,
+.rank-compact-badge.leaderboard-theme-badge > span { min-width: 0; overflow-wrap: anywhere; }
+.rank-theme-badge > small,
+.rank-compact-badge.leaderboard-theme-badge > small { padding-left: 6px; border-left: 1px solid var(--theme-border); color: var(--theme-text-muted); font-size: 8px; letter-spacing: .02em; }
+.rank-compact-badge.leaderboard-theme-badge { gap: 4px; padding: 4px 6px; font-size: 8px; }
+.rank-theme-badge[data-theme="vip_gold"] { overflow: hidden; }
+.rank-theme-badge[data-theme="vip_gold"]::after {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 25%;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent, rgb(255 239 188 / .15), transparent);
+  transform: translateX(-200%);
+}
+
+.player-profile-page.profile-theme-rank.rank-level-1 .public-player-hero::before {
+  background: repeating-linear-gradient(0deg, transparent 0 3px, color-mix(in srgb, var(--rank-bright) 2%, transparent) 3px 4px);
+}
+.player-profile-page.profile-theme-rank.rank-theme-staff .public-player-hero::before {
+  background: linear-gradient(color-mix(in srgb, var(--rank-bright) 3%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--rank-bright) 3%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.player-profile-page.profile-theme-rank.rank-level-2 .public-player-hero { border-top-color: var(--rank-bright); }
+.player-profile-page.profile-theme-rank.rank-level-2 .rank-avatar-mark { box-shadow: 0 0 0 3px var(--rank-bg), 0 0 0 4px var(--theme-border), 0 5px 15px rgb(0 0 0 / .4); }
+.player-profile-page.profile-theme-rank:is(.rank-level-3, .rank-level-4, .rank-level-5) .public-player-hero {
+  background: linear-gradient(120deg, color-mix(in srgb, var(--rank-accent) 12%, var(--rank-bg)), color-mix(in srgb, var(--rank-bg) 89%, transparent) 56%), var(--rank-bg);
+  box-shadow: var(--theme-shadow), 0 0 36px color-mix(in srgb, var(--rank-accent) 6%, transparent);
+}
+.player-profile-page.profile-theme-rank.rank-theme-vip-diamond .public-player-hero::before {
+  background: repeating-linear-gradient(125deg, transparent 0 112px, color-mix(in srgb, var(--rank-bright) 7%, transparent) 112px 113px), linear-gradient(55deg, transparent 63%, color-mix(in srgb, var(--rank-accent) 9%, transparent) 63.1%, transparent 82%);
+}
+.player-profile-page.profile-theme-rank.rank-theme-administrator .public-player-hero::before { background: linear-gradient(115deg, transparent 52%, color-mix(in srgb, var(--rank-bright) 9%, transparent) 52.2%, transparent 62%), linear-gradient(115deg, transparent 78%, color-mix(in srgb, var(--rank-accent) 8%, transparent) 78.2%, transparent 88%); }
+.player-profile-page.profile-theme-rank:is(.rank-level-3, .rank-level-4, .rank-level-5) .public-player-stat-grid > article { border-top-color: var(--theme-border-strong); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--rank-bright) 12%, transparent), 0 8px 22px rgb(0 0 0 / .12); }
+.player-profile-page.profile-theme-rank:is(.rank-level-3, .rank-level-4, .rank-level-5) .rank-avatar-mark { width: 35px; height: 35px; box-shadow: 0 0 0 3px var(--rank-bg), 0 0 0 4px var(--theme-border), 0 0 22px color-mix(in srgb, var(--rank-accent) 24%, transparent); }
+.player-profile-page.profile-theme-rank:is(.rank-level-4, .rank-level-5) .public-player-hero::before {
+  background: radial-gradient(ellipse at 78% -60%, transparent 50%, color-mix(in srgb, var(--rank-bright) 13%, transparent) 50.2%, transparent 50.6%, transparent 57%, color-mix(in srgb, var(--rank-accent) 9%, transparent) 57.2%, transparent 57.7%), radial-gradient(ellipse at 40% 0%, color-mix(in srgb, var(--rank-accent) 11%, transparent), transparent 62%);
+}
+.player-profile-page.profile-theme-rank:is(.rank-level-4, .rank-level-5) .public-player-avatar { box-shadow: 0 0 0 5px var(--rank-bg), 0 0 0 6px var(--theme-border-strong), 0 0 0 10px color-mix(in srgb, var(--rank-accent) 6%, transparent), 0 0 38px color-mix(in srgb, var(--rank-accent) 19%, transparent); }
+.player-profile-page.profile-theme-rank.rank-level-5 .rank-avatar-mark { top: -20px; right: -13px; width: 39px; height: 37px; border-radius: 4px 4px 13px 13px; border-color: var(--rank-soft); }
+.player-profile-page.profile-theme-rank.rank-level-5 .rank-avatar-mark::before { position: absolute; inset: -5px; border: 1px solid var(--rank-accent); border-radius: inherit; content: ""; }
+.player-profile-page.profile-theme-rank.rank-level-5 .public-player-hero { border-color: var(--theme-border-strong); border-top: 2px solid var(--rank-accent); }
+.player-profile-page.profile-theme-rank.rank-level-5 .public-rank-card { border-left: 2px solid var(--rank-accent); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--rank-soft) 12%, transparent), 0 0 28px color-mix(in srgb, var(--rank-accent) 9%, transparent); }
+
+/* Navigation is itself a boundary. Consume its own semantic colors so a
+   compact identity inside the header can retain a different player's theme. */
+.site-header[data-theme]:is([data-theme="vip_diamond"], [data-theme="vip_ultimate"], [data-theme="administrator"], [data-theme="senior_administrator"], [data-theme="owner"]) {
+  border-color: var(--theme-border);
+  background: color-mix(in srgb, var(--theme-page-bg) 94%, transparent);
+  box-shadow: 0 12px 36px rgb(0 0 0 / .2), inset 0 -1px 0 color-mix(in srgb, var(--theme-accent) 14%, transparent);
+}
+.site-header[data-theme]:is([data-theme="vip_diamond"], [data-theme="vip_ultimate"], [data-theme="administrator"], [data-theme="senior_administrator"], [data-theme="owner"]) .brand-mark { color: var(--theme-page-bg); background: var(--theme-accent-strong); box-shadow: 0 0 20px color-mix(in srgb, var(--theme-accent) 15%, transparent); }
+.site-header[data-theme]:is([data-theme="vip_diamond"], [data-theme="vip_ultimate"], [data-theme="administrator"], [data-theme="senior_administrator"], [data-theme="owner"]) :is(.brand-accent, .main-nav a.active, .mobile-nav nav a.active) { color: var(--theme-accent-soft); }
+.site-header[data-theme]:is([data-theme="vip_diamond"], [data-theme="vip_ultimate"], [data-theme="administrator"], [data-theme="senior_administrator"], [data-theme="owner"]) :is(.main-nav a, .mobile-nav nav a) { color: var(--theme-text-muted); }
+.site-header[data-theme]:is([data-theme="vip_diamond"], [data-theme="vip_ultimate"], [data-theme="administrator"], [data-theme="senior_administrator"], [data-theme="owner"]) :is(.main-nav a, .mobile-nav nav a):is(:hover, :focus-visible, .active) { color: var(--theme-accent-soft); background: var(--theme-control-hover); }
+
+@keyframes rank-beam-enter {
+  from { transform: translate3d(-3%, -2%, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+@keyframes rank-mote-drift {
+  0%, 100% { transform: translate3d(0, 0, 0); opacity: .4; }
+  50% { transform: translate3d(12px, -20px, 0); opacity: .85; }
+}
+@keyframes rank-halo-breathe {
+  0%, 100% { transform: scale(.98); }
+  50% { transform: scale(1.035); }
+}
+@keyframes rank-profile-polish {
+  from { opacity: .15; }
+  to { opacity: 1; }
+}
+@keyframes rank-gold-shimmer {
+  from { transform: translateX(-200%); }
+  to { transform: translateX(550%); }
+}
+@keyframes rank-scan-enter {
+  from { transform: translate3d(0, -16%, 0); opacity: 0; }
+  to { transform: translate3d(0, 5%, 0); opacity: var(--rank-beam); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .rank-backdrop-beam { animation: rank-beam-enter 4s ease-out both; }
+  [data-theme-background-theme="moderator"] .rank-backdrop-beam { animation: rank-scan-enter 7s ease-out both; }
+  .rank-theme-badge[data-theme="vip_gold"]::after { animation: rank-gold-shimmer 6s 1s ease-in-out both; }
+  :is([data-theme-background-theme="vip_ultimate"], [data-theme-background-theme="senior_administrator"], [data-theme-background-theme="owner"]) .rank-backdrop-motes > i { animation: rank-mote-drift 14s ease-in-out infinite; }
+  .rank-backdrop-motes > i:nth-child(2n) { animation-delay: -6s; animation-duration: 19s; }
+  .rank-backdrop-motes > i:nth-child(3n) { animation-delay: -10s; animation-duration: 23s; }
+  [data-theme-background-theme="owner"] .rank-backdrop-halo { animation: rank-halo-breathe 18s ease-in-out infinite; }
+  .player-profile-page.profile-theme-rank:not(.rank-level-1) .public-player-hero::before { animation: rank-profile-polish 3.5s ease-out both; }
+}
+
+@media (max-width: 640px) {
+  .rank-backdrop-grid { background-size: 96px 96px; }
+  .rank-backdrop-halo { width: 650px; height: 650px; right: -350px; top: -200px; box-shadow: none; }
+  .rank-backdrop-orbit { top: -8%; right: -70%; width: 130vw; height: 130vw; box-shadow: none; }
+  .rank-backdrop-motes > i:nth-child(n + 4) { display: none; }
+  .player-profile-page.profile-theme-rank .rank-avatar-mark { top: -13px; right: -9px; width: 27px; height: 27px; }
+  .player-profile-page.profile-theme-rank .rank-avatar-mark > svg { width: 16px; height: 16px; }
+  .player-profile-page.profile-theme-rank.rank-level-5 .rank-avatar-mark { top: -15px; width: 30px; height: 30px; }
+  .rank-theme-badge { gap: 4px; padding: 5px 7px; font-size: 8px; }
+  .rank-theme-badge > small { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce), (pointer: coarse) {
+  .rank-theme-backdrop *,
+  .rank-theme-backdrop::before,
+  .rank-theme-badge::after,
+  .player-profile-page.profile-theme-rank .public-player-hero::before { animation: none !important; }
+}
+
+@media (forced-colors: active) {
+  .rank-theme-backdrop,
+  .player-profile-page.profile-theme-rank .public-player-hero::before,
+  .player-profile-page.profile-theme-rank .public-player-hero::after,
+  .player-profile-page.profile-theme-rank .hit-map-panel::before,
+  .rank-theme-badge::after,
+  .player-profile-page.profile-theme-rank .rank-avatar-mark::before { display: none; }
+  .player-profile-page.profile-theme-rank :is(.public-player-hero, .public-rank-card, .public-player-stat-grid > article, .combat-stat-grid > div, .public-player-avatar, .rank-avatar-mark, .profile-inventory-empty),
+  .rank-theme-badge,
+  .rank-compact-badge.leaderboard-theme-badge { border-color: CanvasText; color: CanvasText; background: Canvas; box-shadow: none; text-shadow: none; }
+  .rank-theme-badge > svg,
+  .rank-compact-badge.leaderboard-theme-badge > svg,
+  .player-profile-page.profile-theme-rank :is(.public-player-stat-grid > article, .combat-stat-grid > div, [data-ui="section-nav"]) svg { color: CanvasText; opacity: 1; }
+}
