@@ -121,6 +121,9 @@ export function buildPageMetadata(pathname: keyof typeof PAGE_SEO) {
 export const rootMetadata = {
   metadataBase: canonicalUrl("/"),
   applicationName: "TAPPED.RO",
+  verification: {
+    google: "_ovwWYtmuGZdooqPWyzZZlt1ILhzVwd20R8F23ZKhuo",
+  },
   title: "TAPPED.RO",
   description:
     "The TAPPED.RO player portal for Romania's Counter-Strike 2 arena community.",
