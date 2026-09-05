@@ -1,6 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
+import { normalizeChatColor } from "@/lib/chat-colors";
 
 import {
   type Pool,
@@ -482,32 +483,12 @@ function identityColor(value: unknown, field: string) {
   return color.toLowerCase();
 }
 
-const chatColorTokens = new Set([
-  "[default]",
-  "[white]",
-  "[silver]",
-  "[grey]",
-  "[red]",
-  "[lightred]",
-  "[orange]",
-  "[gold]",
-  "[yellow]",
-  "[lime]",
-  "[green]",
-  "[blue]",
-  "[lightblue]",
-  "[purple]",
-  "[lightpurple]",
-  "[teamcolor]",
-]);
-
 function identityChatColor(value: unknown, field: string, optional = false) {
-  const color = String(value ?? "").trim().toLocaleLowerCase("en-US");
-  if (!color && optional) return null;
-  if (!chatColorTokens.has(color)) {
+  try {
+    return normalizeChatColor(value, optional);
+  } catch {
     identityError("invalid_input", `${field} is not a supported chat color.`);
   }
-  return color;
 }
 
 function identityRequestKey(value: unknown) {

@@ -80,6 +80,8 @@ import {
   type PermissionCatalogueOption,
 } from "./groups-controls";
 import styles from "./groups-page.module.css";
+import { TagColorFields } from "./tag-color-fields";
+import tagStyles from "./tag-color-fields.module.css";
 
 type GroupsPageProps = {
   searchParams: Promise<{
@@ -107,24 +109,6 @@ function groupAdminTab(value: string | undefined): GroupAdminTab {
     ? (value as GroupAdminTab)
     : "connected";
 }
-
-const chatColors = [
-  "[default]",
-  "[white]",
-  "[silver]",
-  "[red]",
-  "[lightred]",
-  "[orange]",
-  "[gold]",
-  "[yellow]",
-  "[lime]",
-  "[green]",
-  "[blue]",
-  "[lightblue]",
-  "[purple]",
-  "[lightpurple]",
-  "[teamcolor]",
-];
 
 const noticeMessages: Record<string, string> = {
   "group-created": "Custom group created.",
@@ -1212,17 +1196,26 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
 
         {activeTab === "tags" ? <section id="tag-definitions" className="staff-record-section">
           <div className="staff-section-heading"><div><p className="tapped-kicker"><Tags aria-hidden="true" /> GlobalChatTags</p><h2>Tag definitions</h2></div><span>{snapshot.tags.length} tags</span></div>
-          <form className="staff-management-form" action="/api/admin/groups" method="post">
+          <p className={tagStyles.intro}>Choose from the full in-game palette. Open a color to see its swatches and aliases; the preview updates as you edit. Team color is available for player names.</p>
+          <form className={tagStyles.form} action="/api/admin/groups" method="post">
             <MutationFields csrf={csrf} action="tag-create" />
             <label>Stable key<input name="tagKey" pattern="[a-z0-9][a-z0-9._:-]{0,63}" required placeholder="group.beta" /></label>
-            <label>Tag text<input name="tagText" maxLength={64} required placeholder="[BETA]" /></label>
-            <label>Tag color<select name="colorToken" defaultValue="[gold]">{chatColors.map((color) => <option key={color}>{color}</option>)}</select></label>
-            <label>Name color<select name="nameColorToken" defaultValue=""><option value="">Inherit</option>{chatColors.map((color) => <option key={color}>{color}</option>)}</select></label>
-            <label>Message color<select name="messageColorToken" defaultValue=""><option value="">Inherit</option>{chatColors.map((color) => <option key={color}>{color}</option>)}</select></label>
-            <button className="button button-primary" type="submit">Create tag</button>
+            <TagColorFields />
+            <div className={tagStyles.footer}><button className="button button-primary" type="submit">Create tag</button></div>
           </form>
           <div className="staff-group-list">
-            {snapshot.tags.map((tag) => <form className="staff-admin-edit" action="/api/admin/groups" method="post" key={tag.id}><MutationFields csrf={csrf} action="tag-update" /><input type="hidden" name="tagId" value={tag.id} /><input name="tagText" defaultValue={tag.text} maxLength={64} required aria-label={`Text for ${tag.key}`} /><select name="colorToken" defaultValue={tag.colorToken} aria-label={`Color for ${tag.key}`}>{chatColors.map((color) => <option key={color}>{color}</option>)}</select><select name="nameColorToken" defaultValue={tag.nameColorToken ?? ""} aria-label={`Name color for ${tag.key}`}><option value="">Inherit</option>{chatColors.map((color) => <option key={color}>{color}</option>)}</select><select name="messageColorToken" defaultValue={tag.messageColorToken ?? ""} aria-label={`Message color for ${tag.key}`}><option value="">Inherit</option>{chatColors.map((color) => <option key={color}>{color}</option>)}</select><select name="enabled" defaultValue={tag.enabled ? "true" : "false"} aria-label={`Status for ${tag.key}`}><option value="true">Enabled</option><option value="false">Disabled</option></select><button className="staff-unban-button" type="submit">Save</button></form>)}
+            {snapshot.tags.map((tag) => (
+              <form className={tagStyles.form} action="/api/admin/groups" method="post" key={tag.id} aria-label={`Edit tag ${tag.key}`}>
+                <MutationFields csrf={csrf} action="tag-update" />
+                <input type="hidden" name="tagId" value={tag.id} />
+                <strong className={tagStyles.tagKey}>{tag.key}</strong>
+                <TagColorFields text={tag.text} color={tag.colorToken} nameColor={tag.nameColorToken} messageColor={tag.messageColorToken} />
+                <div className={tagStyles.footer}>
+                  <label>Status<select name="enabled" defaultValue={tag.enabled ? "true" : "false"}><option value="true">Enabled</option><option value="false">Disabled</option></select></label>
+                  <button className="staff-unban-button" type="submit">Save tag</button>
+                </div>
+              </form>
+            ))}
           </div>
         </section> : null}
 
