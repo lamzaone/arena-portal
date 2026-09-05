@@ -1,4 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server.js";
+
+import { portalRedirectUrl } from "./portal-url.ts";
 
 export type FormRedirectOptions = {
   replace?: boolean;
@@ -22,10 +24,7 @@ export function formActionRedirect(
   destination: URL | string,
   options: FormRedirectOptions = {},
 ) {
-  const url =
-    destination instanceof URL
-      ? destination
-      : new URL(destination, request.url);
+  const url = portalRedirectUrl(request.url, destination);
 
   if (isProgressiveFormRequest(request)) {
     return NextResponse.json({
