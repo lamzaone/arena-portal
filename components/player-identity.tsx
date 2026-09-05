@@ -11,6 +11,7 @@ import {
   getTrustedProfileThemeSurface,
 } from "@/lib/content/profile-themes";
 import type { PlayerIdentityData } from "@/lib/player-identities";
+import { isIndividualSteamId64 } from "@/lib/steam/steam-id";
 
 import styles from "@/components/player-identity.module.css";
 
@@ -27,8 +28,6 @@ export type PlayerIdentityProps = {
   /** Controls whether profile navigation lives on the identity, hover card, or neither. */
   profileLink?: "identity" | "hover-card" | "none";
 };
-
-const steamId64Pattern = /^7656119\d{10}$/;
 
 function avatarInitial(name: string) {
   return name.trim().slice(0, 1).toUpperCase() || "?";
@@ -51,7 +50,7 @@ export function PlayerIdentity({
   profileLink = "identity",
 }: PlayerIdentityProps) {
   const steamId = player.steamId.trim();
-  const isPlayer = steamId64Pattern.test(steamId);
+  const isPlayer = isIndividualSteamId64(steamId);
   const displayName = player.displayName.trim() || (isPlayer ? steamId : "System");
   const theme = getTrustedProfileTheme(player.profileThemeKey);
   const themeSurface = getTrustedProfileThemeSurface(

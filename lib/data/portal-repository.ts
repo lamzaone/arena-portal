@@ -40,6 +40,7 @@ import {
   type EconomyItemType,
 } from "@/lib/economy/item-taxonomy";
 import { economyItemDisplayName } from "@/lib/economy/item-display-name";
+import { isIndividualSteamId64 } from "@/lib/steam/steam-id";
 import {
   adjustedMarketplaceEuroCents,
   deriveMarketplacePriceIdentity,
@@ -794,7 +795,7 @@ function normalizeUnixTime(value: unknown) {
 }
 
 function isSteamId(value: string) {
-  return /^7656119\d{10}$/.test(value);
+  return isIndividualSteamId64(value);
 }
 
 function toAppealBan(row: BanRow): AppealBan {
@@ -1481,7 +1482,7 @@ export async function getPublicPlayerProfile(
 
 async function getGroupMembershipsForPlayers(steamIds: string[]) {
   const uniqueSteamIds = [
-    ...new Set(steamIds.filter((steamId) => /^7656119\d{10}$/.test(steamId))),
+    ...new Set(steamIds.filter(isIndividualSteamId64)),
   ];
   const result = new Map<
     string,
@@ -1531,7 +1532,7 @@ async function getGroupMembershipsForPlayers(steamIds: string[]) {
  */
 export async function getPlayerIdentityGroupBadges(steamIds: string[]) {
   const uniqueSteamIds = [
-    ...new Set(steamIds.filter((steamId) => /^7656119\d{10}$/.test(steamId))),
+    ...new Set(steamIds.filter(isIndividualSteamId64)),
   ];
   if (!uniqueSteamIds.length) {
     return new Map<string, IdentityGroupBadgeData[]>();

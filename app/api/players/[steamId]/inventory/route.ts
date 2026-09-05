@@ -5,6 +5,7 @@ import {
   EconomyRepositoryError,
   getPlayerProfileInventoryPage,
 } from "@/lib/data/portal-repository";
+import { isIndividualSteamId64 } from "@/lib/steam/steam-id";
 
 type RouteContext = { params: Promise<{ steamId: string }> };
 
@@ -23,7 +24,7 @@ function pageNumber(value: string | null) {
 
 export async function GET(request: Request, { params }: RouteContext) {
   const { steamId } = await params;
-  if (!/^7656119\d{10}$/.test(steamId))
+  if (!isIndividualSteamId64(steamId))
     return json({ ok: false, message: "Choose a valid player." }, 400);
 
   const page = pageNumber(new URL(request.url).searchParams.get("page"));

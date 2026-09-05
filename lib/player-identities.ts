@@ -5,6 +5,7 @@ import { cache } from "react";
 import type { IdentityGroupBadgeData } from "@/lib/data/identity-groups";
 import { getPlayerProfileThemeKeys } from "@/lib/data/portal-repository";
 import { getSteamProfiles } from "@/lib/steam/profiles";
+import { isIndividualSteamId64 } from "@/lib/steam/steam-id";
 
 export type PlayerPresence = "online" | "offline" | "unknown";
 
@@ -47,7 +48,6 @@ type NormalizedPlayerIdentitySeed = {
   identityGroups: IdentityGroupBadgeData[];
 };
 
-const steamId64Pattern = /^7656119\d{10}$/;
 const steamProfileBatchSize = 100;
 
 function cleanText(value: string | null | undefined) {
@@ -66,7 +66,7 @@ function normalizeSeeds(
 
   for (const seed of seeds) {
     const steamId = seed.steamId.trim();
-    if (!steamId64Pattern.test(steamId)) continue;
+    if (!isIndividualSteamId64(steamId)) continue;
     const previous = normalized.get(steamId);
     const themeSupplied = seed.profileThemeKey !== undefined;
     const groupsSupplied = seed.identityGroups !== undefined;

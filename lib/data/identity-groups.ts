@@ -28,6 +28,7 @@ import {
   releaseIdentityCatalogueMutationLock,
 } from "@/lib/data/identity-catalogue-lock";
 import { configuredGameServerGuid } from "@/lib/admin/server-scope";
+import { isIndividualSteamId64 } from "@/lib/steam/steam-id";
 
 export type IdentityGroupSource = "custom" | "admins_core" | "vipcore";
 export type IdentityPrivilegeScope = "portal" | "game";
@@ -392,7 +393,7 @@ function requireFounder(actor: IdentityFounderActor) {
 
 function identitySteamId(value: unknown, field = "SteamID64") {
   const steamId = String(value ?? "").trim();
-  if (!/^7656119\d{10}$/.test(steamId)) {
+  if (!isIndividualSteamId64(steamId)) {
     identityError("invalid_input", `${field} is invalid.`);
   }
   return steamId;
