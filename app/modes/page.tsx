@@ -4,6 +4,9 @@ import { ArrowRight, Check, Crosshair, Shield, Sparkles, Swords } from "lucide-r
 import { PortalShell } from "@/components/ui/portal-shell";
 import { getSession } from "@/lib/auth/session";
 import { duelFlow, duelLengths, duelTypes, getArenaModes } from "@/lib/content/game-catalogue";
+import { buildPageMetadata } from "@/lib/seo/site";
+
+export const metadata = buildPageMetadata("/modes");
 
 export default async function ModesPage() {
   const [session, arenaModes] = await Promise.all([getSession(), getArenaModes()]);

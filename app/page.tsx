@@ -1,9 +1,13 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Check, Crosshair, Crown, Gamepad2, Paintbrush, ShieldCheck, Sparkles, Swords, Trophy, Zap } from "lucide-react";
 
 import { PortalShell } from "@/components/ui/portal-shell";
 import { getSession } from "@/lib/auth/session";
+import { buildHomeMetadata, buildHomeStructuredData } from "@/lib/seo/site";
 import { getServerStatus } from "@/lib/server-status";
+
+export const metadata: Metadata = buildHomeMetadata();
 
 export default async function HomePage() {
   const [session, status] = await Promise.all([getSession(), getServerStatus()]);
@@ -11,15 +15,23 @@ export default async function HomePage() {
   const connectUrl = process.env.NEXT_PUBLIC_SERVER_CONNECT_URL ?? "steam://connect/arena.tapped.ro";
   const statusLabel = status.state === "online" ? "Online" : status.state === "offline" ? "Offline" : "Status unavailable";
   const playerLabel = status.players !== null && status.maxPlayers !== null ? `${status.players} / ${status.maxPlayers}` : "—";
+  const structuredData = buildHomeStructuredData();
 
   return (
-    <PortalShell authenticated={Boolean(session)} className="home-page">
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(structuredData).replace(/</g, "\\u003c"),
+        }}
+      />
+      <PortalShell authenticated={Boolean(session)} className="home-page">
 
         <section className="tapped-hero" id="server" aria-labelledby="hero-title">
           <div className="hero-copy hero-reveal">
             <p className="tapped-kicker"><span className="live-line" /> TAPPED.RO <i /> Counter-Strike community</p>
-            <h1 id="hero-title">1v1&apos;s<br /><span>with a pulse.</span></h1>
-            <p className="tapped-lede">ARENA.TAPPED.RO is built for players who want every round to matter: instant arena fights, custom duels, rewarding ranks, and a loadout that is yours.</p>
+            <h1 id="hero-title">Romania&apos;s CS2<br /><span>arena server.</span></h1>
+            <p className="tapped-lede">TAPPED.RO is a competitive Counter-Strike 2 arena server in Romania, built for players who want every round to matter: instant ranked 1v1 fights, custom duels, monthly rewards, and personal loadouts.</p>
             <div className="hero-actions">
               <a className="button button-primary button-large" href={connectUrl}><Gamepad2 aria-hidden="true" /> Connect to ARENA <ArrowRight aria-hidden="true" /></a>
               {session ? (
@@ -30,7 +42,7 @@ export default async function HomePage() {
             </div>
             <div className="hero-meta" aria-label="Server details">
               <span><i /> {serverName}</span>
-              <span><i /> EU community server</span>
+              <span><i /> Romania · EU community</span>
               <span><i /> Ranked 1v1 focus</span>
             </div>
           </div>
@@ -45,7 +57,7 @@ export default async function HomePage() {
         </section>
 
         <section className="mode-intro" id="modes" aria-labelledby="modes-title">
-          <div className="section-title hero-reveal"><p className="tapped-kicker"><Sparkles aria-hidden="true" /> The TAPPED.RO loop</p><h2 id="modes-title">Built for the next round.</h2><p>Minimal distractions. More ways to compete. Every feature is designed to keep you in the fight.</p></div>
+          <div className="section-title hero-reveal"><p className="tapped-kicker"><Sparkles aria-hidden="true" /> The TAPPED.RO loop</p><h2 id="modes-title">Built for the next round.</h2><p>Fast CS2 1v1 rounds, custom challenges, and progression designed to keep you in the fight.</p></div>
           <div className="tapped-bento">
             <article className="bento-card bento-arena hero-reveal"><div className="bento-index">01 <span>ARENA</span></div><div className="bento-icon"><Crosshair aria-hidden="true" /></div><h3>Interactive ARENA<br />1v1 system.</h3><p>Move through a live ladder of arena duels. Win, climb, and keep the momentum.</p><Link className="bento-link" href="/modes">Explore arena modes <ArrowRight aria-hidden="true" /></Link><div className="arena-readout"><span>01</span><i /><span>02</span><i /><span>03</span><b>LIVE</b></div></article>
             <article className="bento-card bento-duels hero-reveal hero-delay-one"><div className="bento-index">02 <span>DUELS</span></div><div className="bento-icon"><Swords aria-hidden="true" /></div><h3>Make the match yours.</h3><p>Challenge anyone through custom duels with the format you want.</p><ul className="rule-list"><li><Check aria-hidden="true" /> Custom type</li><li><Check aria-hidden="true" /> Single round</li><li><Check aria-hidden="true" /> First to 10 or 20</li><li><Check aria-hidden="true" /> Infinite</li></ul><Link className="bento-link" href="/modes#duels">All duel features <ArrowRight aria-hidden="true" /></Link></article>
@@ -61,6 +73,7 @@ export default async function HomePage() {
         </section>
 
         <footer className="tapped-footer"><span>TAPPED.RO <i /> ARENA.TAPPED.RO</span><a href={connectUrl}>Connect now <ArrowRight aria-hidden="true" /></a></footer>
-    </PortalShell>
+      </PortalShell>
+    </>
   );
 }

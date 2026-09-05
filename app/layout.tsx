@@ -8,6 +8,7 @@ import {
 import { ProgressiveFormRuntime } from "@/components/ui/progressive-form-runtime";
 import { NavigationProgress } from "@/components/ui/navigation-progress";
 import { getSession } from "@/lib/auth/session";
+import { rootMetadata } from "@/lib/seo/site";
 import { resolvePortalThemeSurface } from "@/lib/themes/registry";
 import "./globals.css";
 import "./themes/default.css";
@@ -19,10 +20,7 @@ import "./themes/accessibility.css";
 import "./form-runtime.css";
 import "./navigation-progress.css";
 
-export const metadata: Metadata = {
-  title: "TAPPED.RO — ARENA.TAPPED.RO",
-  description: "The TAPPED.RO Counter-Strike community portal for ARENA 1v1s, duels, VIP, rankings, and loadouts."
-};
+export const metadata: Metadata = rootMetadata;
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const session = await getSession();

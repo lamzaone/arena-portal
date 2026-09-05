@@ -10,9 +10,12 @@ import { ThemedPlayerTableRow } from "@/components/ui/themed-player-table-row";
 import { getSession } from "@/lib/auth/session";
 import { getLevelRank } from "@/lib/content/levelranks";
 import { getLeaderboard } from "@/lib/data/portal-repository";
+import { buildPageMetadata } from "@/lib/seo/site";
 import { getSteamProfiles } from "@/lib/steam/profiles";
 
 import styles from "./ranking-search.module.css";
+
+export const metadata = buildPageMetadata("/ranking");
 
 type RankingPageProps = { searchParams: Promise<{ page?: string; q?: string }> };
 

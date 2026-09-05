@@ -46,9 +46,12 @@ import {
   convertVipDurationBetweenTierRates,
   type VipTierRate,
 } from "@/lib/economy/vip-membership-conversion";
+import { buildPageMetadata } from "@/lib/seo/site";
 import { getSteamProfiles } from "@/lib/steam/profiles";
 
 import styles from "./vip.module.css";
+
+export const metadata = buildPageMetadata("/vip");
 
 function requestUrl(listing: IdentityGroupListing) {
   return `/tickets?listing=${encodeURIComponent(String(listing.id))}`;

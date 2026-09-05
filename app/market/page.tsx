@@ -21,6 +21,9 @@ import {
   normalizeMarketplaceCategory,
 } from "@/lib/economy/market-categories";
 import { ECONOMY_MAX_RARITY_RANK } from "@/lib/economy/item-taxonomy";
+import { buildPageMetadata } from "@/lib/seo/site";
+
+export const metadata = buildPageMetadata("/market");
 
 const MARKET_PAGE_SIZE = 50;
 
