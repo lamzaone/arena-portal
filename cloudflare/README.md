@@ -8,6 +8,21 @@ session lookup previously looked like a logged-out user even with a valid cookie
 
 ## Preserve the repair on future code deployments
 
+Use Workers Paid for this server-rendered portal. Workers Free allows only
+10 ms of CPU time per HTTP request; production requests have exceeded that
+allowance across inventory, player profiles, and the home page. Workers Paid
+defaults to 30,000 ms per request. See [Cloudflare's CPU limits](https://developers.cloudflare.com/workers/platform/limits/#cpu-time)
+and [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/).
+The Workers subscription is separate from a domain's Cloudflare plan.
+
+For Error 1102, inspect the invocation outcome before changing code:
+`exceededCpu` identifies the CPU limit, while `exceededMemory` identifies memory.
+Increasing `limits.cpu_ms` requires Workers Paid; a Wrangler edit cannot raise
+the Free plan's allowance. After changing the plan or CPU limit, verify signed-in
+inventory loads and client navigation, then check fresh invocation logs.
+See [the September 5 CPU incident](../docs/cloudflare-cpu-incident-20260905.md)
+for the matching production evidence.
+
 Install dependencies with `npm ci`. In Cloudflare Workers Builds, set:
 
 - Build command: `npm run build:cloudflare`

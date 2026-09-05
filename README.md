@@ -23,6 +23,13 @@ See [the Cloudflare build and deployment instructions](cloudflare/README.md).
 Workers Builds must run `npm run build:cloudflare` before
 `npm run deploy:cloudflare`; the standard `npm run build` only generates `.next`.
 
+## Render deployment
+
+For the free Node.js web-service deployment, use the repository's `render.yaml`
+Blueprint and follow [the Render deployment guide](docs/render-deployment.md).
+The Render path uses the standard `npm run build` and `npm start` commands; it
+does not use the OpenNext Cloudflare bundle.
+
 ## Security boundaries
 
 - Steam OpenID is verified server-side before a cryptographically random HTTP-only session token is issued. Only its SHA-256 hash, SteamID64, expiry, and last-seen time are stored in the portal database.

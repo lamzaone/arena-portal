@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+services:
+  - type: web
+    name: arena-portal
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm ci && ECONOMY_PRICE_REFRESH_ENABLED=false npm run build
+    startCommand: npm start -- --hostname 0.0.0.0
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 24.14.1
+      - key: SITE_URL
+        value: https://tapped.ro
+      - key: NEXT_PUBLIC_SERVER_NAME
+        value: ARENA.TAPPED.RO
+      - key: NEXT_PUBLIC_SERVER_CONNECT_URL
+        value: steam://connect/arena.tapped.ro
+      - key: GAME_SERVER_GUID
+        value: 05eda3ad-2921-4083-adfb-2e23596c8caa
+      - key: GAME_VIP_SERVER_ID
+        value: "1"
+      - key: DATABASE_CONNECTION_LIMIT
+        value: "5"
+      - key: ECONOMY_PRICE_REFRESH_ENABLED
+        value: "true"
+      - key: ECONOMY_PRICE_REFRESH_INTERVAL_MINUTES
+        value: "60"
+      - key: SESSION_SECRET
+        sync: false
+      - key: SERVER_LINK_SECRET
+        sync: false
+      - key: GAME_DATABASE_URL
+        sync: false
+      - key: PORTAL_DATABASE_URL
+        sync: false
+      - key: STEAM_WEB_API_KEY
+        sync: false
+      - key: PORTAL_BRIDGE_ENABLED
+        sync: false
+      - key: ECONOMY_PRICE_REFRESH_SECRET
+        sync: false
+      - key: CSFLOAT_API_KEY
+        sync: false
