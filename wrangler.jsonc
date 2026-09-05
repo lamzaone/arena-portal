@@ -1,0 +1,30 @@
+{
+  "name": "arena-portal",
+  "account_id": "0467c2f41a192ba8dc575a0cf96257b1",
+  // The wrapper isolates MySQL sockets per request. Do not bypass it.
+  "main": "cloudflare/worker.mjs",
+  "compatibility_date": "2026-09-03",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "keep_vars": true,
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "images": { "binding": "IMAGES" },
+  "r2_buckets": [
+    {
+      "binding": "NEXT_INC_CACHE_R2_BUCKET",
+      "bucket_name": "arena-portal-opennext-cache"
+    }
+  ],
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "arena-portal"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

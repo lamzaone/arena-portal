@@ -1110,10 +1110,10 @@
     "semantic_hash": "cbf5fba777a8c8dd908b2a3a812d0a81"
   },
   "lib/data/database-pools.ts": {
-    "mtime": 1788202182.5386167,
-    "seen": 1788353546.5676208,
-    "ast_hash": "0f22151dace853e24cdc402c7b7a45c9",
-    "semantic_hash": "0f22151dace853e24cdc402c7b7a45c9"
+    "mtime": 1788573554.7024865,
+    "seen": 1788573846.5825927,
+    "ast_hash": "86b1511302407ebafa29f5db7c55c50b",
+    "semantic_hash": ""
   },
   "lib/data/external-group-management.ts": {
     "mtime": 1788230098.628104,
@@ -1416,10 +1416,10 @@
     "semantic_hash": "4f28624df5517a83b4b9c21a922c0d3d"
   },
   "next-env.d.ts": {
-    "mtime": 1788569688.4977095,
-    "seen": 1788569752.7959452,
-    "ast_hash": "b698cdd97fe8e3bd16dcd74899ad7cef",
-    "semantic_hash": "b698cdd97fe8e3bd16dcd74899ad7cef"
+    "mtime": 1788573487.876017,
+    "seen": 1788573846.5927331,
+    "ast_hash": "29f60a376e12bf72b67d4994fcc84214",
+    "semantic_hash": ""
   },
   "next.config.ts": {
     "mtime": 1787657314.2023857,
@@ -1428,9 +1428,9 @@
     "semantic_hash": "0ada92c2831fccecc34de535ef691e81"
   },
   "package.json": {
-    "mtime": 1788569559.087017,
-    "seen": 1788569752.7962306,
-    "ast_hash": "71dda97b5146ae134612257c5d5f9f53",
+    "mtime": 1788573813.0863333,
+    "seen": 1788573846.5928805,
+    "ast_hash": "deb4415540861001804d7f8d9197a096",
     "semantic_hash": ""
   },
   "scripts/create-logical-snapshot.mjs": {
@@ -1779,6 +1779,30 @@
     "mtime": 1788564096.3797328,
     "seen": 1788569752.8067589,
     "ast_hash": "f139de2984c2f7200906d7e8439d6262",
+    "semantic_hash": ""
+  },
+  "cloudflare/request-database-scope.mjs": {
+    "mtime": 1788573554.701488,
+    "seen": 1788573846.5677752,
+    "ast_hash": "be4af7617864e7957f142a45f2e02cd6",
+    "semantic_hash": ""
+  },
+  "cloudflare/request-database-scope.test.mjs": {
+    "mtime": 1788574101.8447127,
+    "seen": 1788574153.3117502,
+    "ast_hash": "1557fdef6dba8816f4a0c2aea6be280c",
+    "semantic_hash": ""
+  },
+  "cloudflare/worker.mjs": {
+    "mtime": 1788573554.7024865,
+    "seen": 1788573846.5677788,
+    "ast_hash": "0e4bb6a0cb31230a7a2bd71377850ad1",
+    "semantic_hash": ""
+  },
+  "cloudflare/README.md": {
+    "mtime": 1788573889.6666007,
+    "seen": 1788574153.3391669,
+    "ast_hash": "c7597432117d28642b94c00cf8f11d1e",
     "semantic_hash": ""
   }
 }

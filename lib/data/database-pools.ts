@@ -43,6 +43,8 @@ function getPool(connectionUrl: string | undefined) {
     // BIGINT columns as strings prevents mysql2 from rounding player IDs.
     supportBigNumbers: true,
     bigNumberStrings: true,
+    // Workers disallows generated result parsers (new Function/eval).
+    disableEval: true,
   });
   // The promise pool relays raw core connections through its event emitter.
   // Register on the core pool so the callback-style SET command is guaranteed
