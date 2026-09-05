@@ -21,6 +21,17 @@ the `.open-next/assets` and `.open-next/worker.js` required by Wrangler.
 its output for Workers. `deploy:cloudflare` deploys that output and populates
 the configured R2 cache. To build and deploy locally, use `npm run deploy`.
 
+On Windows, the build first runs `scripts/prepare-opennext-windows.mjs` to
+normalize traced paths in the installed OpenNext adapter (upstream
+[issue #1305](https://github.com/opennextjs/opennextjs-cloudflare/issues/1305)).
+Without this, a successful build can contain an empty chunk loader and return
+HTTP 500 on every route. The workaround is idempotent, reapplies after `npm ci`,
+does nothing on other platforms, and fails closed if the expected adapter entry
+changes. Keep `npm run build:cloudflare` as the build entry point. Smoke-test the
+generated Worker with `wrangler dev --local` before deploying; a Node build alone
+cannot catch this failure. The deployment config also records the existing
+`tapped.ro` custom domain and Smart Placement so uploads preserve those settings.
+
 After generating `.open-next/worker.js` using `npm run build:cloudflare`, use
 the repository's `wrangler.jsonc`: its `main` is `cloudflare/worker.mjs`, not
 `.open-next/worker.js`. Preserve the existing asset, R2, image, self-service,

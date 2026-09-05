@@ -2,6 +2,7 @@ node_modules/
 .next/
 .open-next/
 .wrangler/
+.tmp-serverlink-deploy/
 .dev.vars
 .dev.vars.*
 .env

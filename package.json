@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:cloudflare": "opennextjs-cloudflare build",
+    "build:cloudflare": "node scripts/prepare-opennext-windows.mjs && opennextjs-cloudflare build",
     "deploy:cloudflare": "opennextjs-cloudflare deploy",
     "deploy": "npm run build:cloudflare && npm run deploy:cloudflare",
     "start": "next start",
@@ -24,7 +24,7 @@
     "test:scope": "node --test lib/data/arena-scope-resolution.test.mjs",
     "test:steam": "node --experimental-strip-types --test lib/steam/*.test.ts",
     "test:database": "node --experimental-strip-types --test lib/data/mysql-utc-session.test.ts && npm run test:worker-database",
-    "test:worker-database": "node --test cloudflare/request-database-scope.test.mjs",
+    "test:worker-database": "node --test cloudflare/request-database-scope.test.mjs scripts/prepare-opennext-windows.test.mjs",
     "test:server-status": "node --experimental-strip-types --test lib/server-link/*.test.ts"
   },
   "dependencies": {
