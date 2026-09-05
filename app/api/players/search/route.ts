@@ -51,6 +51,7 @@ export async function GET(request: Request) {
           avatarUrl: identity?.avatarUrl ?? null,
           presence: identity?.presence ?? "unknown",
           profileThemeKey: identity?.profileThemeKey ?? null,
+          identityGroups: identity?.identityGroups ?? [],
           inventoryVisibility: player.inventoryVisibility,
         };
       }),

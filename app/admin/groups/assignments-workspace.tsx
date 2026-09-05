@@ -1408,6 +1408,7 @@ export function AssignmentsWorkspace({
       avatarUrl: identity.avatarUrl,
       presence: identity.presence,
       profileThemeKey: identity.profileThemeKey,
+      identityGroups: identity.identityGroups,
       inventoryVisibility: "private",
     })),
     [identities],

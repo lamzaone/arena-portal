@@ -603,7 +603,7 @@ export function TradeManager({
                   avatarUrl: selectedPlayer.avatarUrl,
                   presence: selectedPlayer.presence,
                   profileThemeKey: selectedPlayer.profileThemeKey,
-                  identityGroups: [],
+                  identityGroups: selectedPlayer.identityGroups,
                 }}
                 variant="compact"
               />

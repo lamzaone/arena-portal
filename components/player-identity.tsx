@@ -24,6 +24,8 @@ export type PlayerIdentityProps = {
   secondary?: ReactNode;
   showSteamId?: boolean;
   showBadges?: boolean;
+  /** Optional subset beside the name; hover previews always show every player badge. */
+  inlineBadgeGroups?: PlayerIdentityData["identityGroups"];
   hoverCard?: boolean;
   /** Controls whether profile navigation lives on the identity, hover card, or neither. */
   profileLink?: "identity" | "hover-card" | "none";
@@ -46,6 +48,7 @@ export function PlayerIdentity({
   secondary,
   showSteamId = false,
   showBadges = variant === "table",
+  inlineBadgeGroups = player.identityGroups,
   hoverCard = true,
   profileLink = "identity",
 }: PlayerIdentityProps) {
@@ -89,10 +92,10 @@ export function PlayerIdentity({
       ) : secondaryContent ? (
         <small className={`player-identity-secondary ${styles.secondary}`}>{secondaryContent}</small>
       ) : null}
-      {showBadges && player.identityGroups.length ? (
+      {showBadges && inlineBadgeGroups.length ? (
         <span className={`player-identity-badges ${styles.badges}`}>
           <IdentityGroupBadgeList
-            groups={player.identityGroups}
+            groups={inlineBadgeGroups}
             compact
           />
         </span>

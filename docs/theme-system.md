@@ -61,6 +61,11 @@ Run `npm run typecheck`, `npm run build`, and `git diff --check` before shipping
   player links.
 - Resolve visible players in one batch with `resolvePlayerIdentities`; hover
   cards render only supplied public data and make no request when opened.
+  Omitted `identityGroups` now loads all effective public group badges in that
+  batch. Pass a group array only when it is already authoritative, including an
+  intentional empty array. Keep the complete badge array in search results and
+  player identities. To show fewer badges beside a name, use `inlineBadgeGroups`;
+  this does not filter the badges inside the hover preview.
 - Keep theme-specific geometry and animation inside that theme's stylesheet.
   Respect the reduced-motion and forced-colors rules imported last from
   `app/themes/accessibility.css`.

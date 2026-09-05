@@ -949,9 +949,10 @@ export default async function VipPage({ searchParams }: VipPageProps) {
                             avatarUrl: profile?.avatarFull ?? null,
                             presence: profile?.presence ?? "unknown",
                             profileThemeKey: vip.profileThemeKey,
-                            identityGroups: customGroups,
+                            identityGroups: vip.identityGroups,
                           }}
                           variant="table"
+                          inlineBadgeGroups={customGroups}
                           showSteamId={false}
                         />
                       </td>

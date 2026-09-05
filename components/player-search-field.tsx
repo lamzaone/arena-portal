@@ -14,18 +14,12 @@ import {
 import { PlayerIdentity } from "@/components/player-identity";
 import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
 import type { PlayerIdentityData } from "@/lib/player-identities";
+import { parsePlayerSearchResults as parsePlayers, type PlayerSearchResult } from "@/lib/player-search";
 import styles from "@/components/player-search-field.module.css";
 
 export const PLAYER_SEARCH_ENDPOINT = "/api/players/search";
 
-export type PlayerSearchResult = {
-  steamId: string;
-  displayName: string;
-  avatarUrl: string | null;
-  presence: PlayerIdentityData["presence"];
-  profileThemeKey: string | null;
-  inventoryVisibility: "public" | "private";
-};
+export type { PlayerSearchResult } from "@/lib/player-search";
 
 const noLocalPlayers: readonly PlayerSearchResult[] = [];
 
@@ -60,32 +54,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function text(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
 export function isSteamId64(value: string) {
   return /^7656119\d{10}$/.test(value.trim());
-}
-
-function parsePlayers(value: unknown): PlayerSearchResult[] {
-  if (!isRecord(value) || !Array.isArray(value.players)) return [];
-  return value.players.flatMap((candidate) => {
-    if (!isRecord(candidate)) return [];
-    const steamId = text(candidate.steamId);
-    if (!isSteamId64(steamId)) return [];
-    return [{
-      steamId,
-      displayName: text(candidate.displayName) || steamId,
-      avatarUrl: text(candidate.avatarUrl) || text(candidate.avatarFull) || null,
-      presence:
-        candidate.presence === "online" || candidate.presence === "offline"
-          ? candidate.presence
-          : "unknown",
-      profileThemeKey: text(candidate.profileThemeKey) || null,
-      inventoryVisibility: candidate.inventoryVisibility === "public" ? "public" : "private",
-    }];
-  });
 }
 
 async function responseMessage(response: Response) {
@@ -114,7 +84,7 @@ function playerIdentity(player: PlayerSearchResult): PlayerIdentityData {
     avatarUrl: player.avatarUrl,
     presence: player.presence,
     profileThemeKey: player.profileThemeKey,
-    identityGroups: [],
+    identityGroups: player.identityGroups,
   };
 }
 
@@ -418,8 +388,7 @@ export function PlayerSearchField({
             player={playerIdentity(selected)}
             variant="inline"
             className={styles.selectedProfile}
-            hoverCard={false}
-            profileLink="none"
+            profileLink="hover-card"
           />
         ) : helpText ?? defaultHelp}
       </p>

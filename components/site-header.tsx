@@ -6,7 +6,7 @@ import { getAdminAccess } from "@/lib/admin/access";
 import { AccountNav } from "@/components/account-nav";
 import { PlayerIdentity } from "@/components/player-identity";
 import { PrimaryNavigation } from "@/components/primary-navigation";
-import { getSteamProfiles } from "@/lib/steam/profiles";
+import { resolvePlayerIdentities } from "@/lib/player-identities";
 import { resolvePortalThemeSurface } from "@/lib/themes/registry";
 
 type SiteHeaderProps = {
@@ -19,9 +19,12 @@ export async function SiteHeader({
   themeKey,
 }: SiteHeaderProps) {
   const session = authenticated ? await getSession() : null;
-  const steamProfile = session ? (await getSteamProfiles([session.steamId])).get(session.steamId) : null;
+  const identities = session ? await resolvePlayerIdentities([{
+    steamId: session.steamId,
+    displayName: "Steam account",
+    profileThemeKey: session.profileThemeKey,
+  }]) : {};
   const staffAccess = session ? await getAdminAccess(session.steamId) : null;
-  const displayName = steamProfile?.name ?? "Steam account";
   const effectiveThemeKey =
     themeKey === undefined ? session?.profileThemeKey : themeKey;
   const { theme: globalTheme } = resolvePortalThemeSurface(
@@ -46,14 +49,7 @@ export async function SiteHeader({
         {session ? (
           <>
             <PlayerIdentity
-              player={{
-                steamId: session.steamId,
-                displayName,
-                avatarUrl: steamProfile?.avatarFull ?? null,
-                presence: steamProfile?.presence ?? "unknown",
-                profileThemeKey: session.profileThemeKey,
-                identityGroups: [],
-              }}
+              player={identities[session.steamId]}
               variant="compact"
               className="header-account"
               secondary={session.steamId}

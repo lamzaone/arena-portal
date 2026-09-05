@@ -3,7 +3,7 @@ import "server-only";
 import { cache } from "react";
 
 import type { IdentityGroupBadgeData } from "@/lib/data/identity-groups";
-import { getPlayerProfileThemeKeys } from "@/lib/data/portal-repository";
+import { getPlayerIdentityGroupBadges, getPlayerProfileThemeKeys } from "@/lib/data/portal-repository";
 import { getSteamProfiles } from "@/lib/steam/profiles";
 import { isIndividualSteamId64 } from "@/lib/steam/steam-id";
 
@@ -34,6 +34,7 @@ export type PlayerIdentitySeed = {
    * Dense repositories such as ranking already resolve effective groups in a
    * batch. Supplying them here preserves that authoritative result without a
    * second query or an incomplete external-membership reconstruction.
+   * Omit this field to load all effective public badges automatically.
    */
   identityGroups?: readonly IdentityGroupBadgeData[];
 };
@@ -45,6 +46,7 @@ type NormalizedPlayerIdentitySeed = {
   presence: PlayerPresence | null;
   profileThemeKey: string | null;
   themeSupplied: boolean;
+  groupsSupplied: boolean;
   identityGroups: IdentityGroupBadgeData[];
 };
 
@@ -82,6 +84,7 @@ function normalizeSeeds(
         ? cleanText(seed.profileThemeKey)
         : previous?.profileThemeKey ?? null,
       themeSupplied: themeSupplied || previous?.themeSupplied === true,
+      groupsSupplied: groupsSupplied || previous?.groupsSupplied === true,
       identityGroups: groupsSupplied
         ? [...(seed.identityGroups ?? [])]
         : previous?.identityGroups ?? [],
@@ -110,7 +113,10 @@ const resolveNormalizedPlayerIdentities = cache(
     const unresolvedThemeIds = seeds
       .filter((seed) => !seed.themeSupplied)
       .map((seed) => seed.steamId);
-    const [steamProfileMaps, profileThemeKeys] = await Promise.all([
+    const unresolvedGroupIds = seeds
+      .filter((seed) => !seed.groupsSupplied)
+      .map((seed) => seed.steamId);
+    const [steamProfileMaps, profileThemeKeys, identityGroups] = await Promise.all([
       Promise.all(
         chunks(steamIds, steamProfileBatchSize).map((batch) =>
           getSteamProfiles(batch),
@@ -119,6 +125,9 @@ const resolveNormalizedPlayerIdentities = cache(
       unresolvedThemeIds.length
         ? getPlayerProfileThemeKeys(unresolvedThemeIds)
         : Promise.resolve(new Map<string, string>()),
+      unresolvedGroupIds.length
+        ? getPlayerIdentityGroupBadges(unresolvedGroupIds)
+        : Promise.resolve(new Map<string, IdentityGroupBadgeData[]>()),
     ]);
     const steamProfiles = new Map(
       steamProfileMaps.flatMap((profiles) => [...profiles.entries()]),
@@ -138,7 +147,9 @@ const resolveNormalizedPlayerIdentities = cache(
         profileThemeKey: seed.themeSupplied
           ? seed.profileThemeKey
           : profileThemeKeys.get(seed.steamId) ?? null,
-        identityGroups: seed.identityGroups,
+        identityGroups: seed.groupsSupplied
+          ? seed.identityGroups
+          : identityGroups.get(seed.steamId) ?? [],
       };
     }
     return resolved;

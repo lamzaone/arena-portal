@@ -1,5 +1,12 @@
 # ServerLink deployment — 2026-09-05
 
+Migration `028_server_link_time_left.sql` was applied to the configured portal
+database on 2026-09-05 at 04:07 UTC. The nullable unsigned `time_left_seconds`
+column was verified through `information_schema` and a read from the snapshot
+table. The prior table schema is saved at
+`D:/ARENA/.backups/server-link-time-left-2026-09-05T04-07-26-597Z/snapshot-schema-before.sql`.
+This migration did not deploy the updated portal or install the rebuilt plugin.
+
 Portal Worker version: `547524aa-9500-433c-b9f0-dad3fa672a7f`.
 The existing custom domain, Smart Placement, workers.dev URL, request-scoped
 database wrapper, and resource bindings are retained. Existing secrets were
