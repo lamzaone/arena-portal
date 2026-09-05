@@ -17,6 +17,12 @@ External identity bootstrap resolves the installed Swiftly tree automatically wh
 
 For local testing with `http://localhost`, the session cookie is deliberately non-secure. Any public deployment must use an `https://` `SITE_URL`; its session cookie is always marked `Secure`.
 
+## Cloudflare Workers deployment
+
+See [the Cloudflare build and deployment instructions](cloudflare/README.md).
+Workers Builds must run `npm run build:cloudflare` before
+`npm run deploy:cloudflare`; the standard `npm run build` only generates `.next`.
+
 ## Security boundaries
 
 - Steam OpenID is verified server-side before a cryptographically random HTTP-only session token is issued. Only its SHA-256 hash, SteamID64, expiry, and last-seen time are stored in the portal database.

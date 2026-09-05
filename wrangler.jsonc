@@ -4,7 +4,7 @@
   // The wrapper isolates MySQL sockets per request. Do not bypass it.
   "main": "cloudflare/worker.mjs",
   "compatibility_date": "2026-09-03",
-  "compatibility_flags": ["global_fetch_strictly_public"],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "keep_vars": true,
   "assets": {
     "directory": ".open-next/assets",

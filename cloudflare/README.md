@@ -8,7 +8,20 @@ session lookup previously looked like a logged-out user even with a valid cookie
 
 ## Preserve the repair on future code deployments
 
-After generating `.open-next/worker.js` using the existing OpenNext build, use
+Install dependencies with `npm ci`. In Cloudflare Workers Builds, set:
+
+- Build command: `npm run build:cloudflare`
+- Deploy command: `npm run deploy:cloudflare`
+- Root directory: the directory containing this application's `package.json`
+  (`/` when the repository contains only the portal).
+
+`npm run build` remains the standard Next.js build. It produces `.next`, not
+the `.open-next/assets` and `.open-next/worker.js` required by Wrangler.
+`build:cloudflare` runs OpenNext, which invokes the Next.js build and then adapts
+its output for Workers. `deploy:cloudflare` deploys that output and populates
+the configured R2 cache. To build and deploy locally, use `npm run deploy`.
+
+After generating `.open-next/worker.js` using `npm run build:cloudflare`, use
 the repository's `wrangler.jsonc`: its `main` is `cloudflare/worker.mjs`, not
 `.open-next/worker.js`. Preserve the existing asset, R2, image, self-service,
 secret, and Access bindings. Do not upload `.env.local` to production: it has
