@@ -2,7 +2,7 @@
 
 import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X } from "lucide-react";
+import { PortalToast } from "@/components/success-toast";
 
 import { announceNavigationStart } from "@/components/ui/navigation-progress";
 
@@ -240,18 +240,12 @@ export function ProgressiveFormRuntime() {
   const [pendingCount, setPendingCount] = useState(0);
   const [notice, setNotice] = useState<SubmissionNotice | null>(null);
   const noticeId = useRef(0);
-  const noticeTimer = useRef<number | null>(null);
 
   const showNotice = useCallback((message: string, kind: SubmissionNotice["kind"]) => {
     noticeId.current += 1;
     setNotice({ id: noticeId.current, kind, message });
-    if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
-    noticeTimer.current = window.setTimeout(() => setNotice(null), kind === "error" ? 8_000 : 5_000);
   }, []);
 
-  useEffect(() => () => {
-    if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
-  }, []);
 
   useEffect(() => {
     const inFlight = new WeakSet<HTMLFormElement>();
@@ -457,18 +451,13 @@ export function ProgressiveFormRuntime() {
         {pendingCount > 0 ? "Submitting action. Please wait." : ""}
       </p>
       {notice ? (
-        <div
-          className="progressive-form-notice"
-          data-kind={notice.kind}
-          role={notice.kind === "error" ? "alert" : "status"}
-          aria-live={notice.kind === "error" ? "assertive" : "polite"}
+        <PortalToast
           key={notice.id}
-        >
-          <span>{notice.message}</span>
-          <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss notification">
-            <X aria-hidden="true" />
-          </button>
-        </div>
+          message={notice.message}
+          variant={notice.kind === "error" ? "danger" : "success"}
+          durationMs={notice.kind === "error" ? 8_000 : 5_000}
+          onDismiss={() => setNotice((current) => current?.id === notice.id ? null : current)}
+        />
       ) : null}
     </>
   );

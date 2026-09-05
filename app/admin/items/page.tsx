@@ -415,14 +415,14 @@ export default async function AdminItemsPage({
   const discountTabHref = itemsHref("discount", tabContext);
 
   return (
-    <PortalShell authenticated className="staff-page economy-admin-page">
+    <PortalShell authenticated className="staff-page economy-admin-page" navigation={<StaffSubmenu access={access} active="items" />}>
         <AdminPageHeader
           id="item-management-title"
           title="Item management"
           description="Maintain Marketplace products and custom crate pools in separate, focused workspaces."
           access={access}
         />
-        <StaffSubmenu access={access} active="items" />
+
         {notice ? <PortalToast message={notice} /> : null}
         {error ? <PortalToast variant="danger" message={error} /> : null}
         <SectionNav

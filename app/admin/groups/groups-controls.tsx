@@ -3,7 +3,6 @@
 import {
   Children,
   Fragment,
-  type ButtonHTMLAttributes,
   type CSSProperties,
   type KeyboardEvent,
   type ReactNode,
@@ -18,6 +17,8 @@ import { ArrowDown, ArrowUp, ArrowUpDown, ChevronRight } from "lucide-react";
 import { SearchField } from "@/components/ui/search-field";
 
 import styles from "./groups-page.module.css";
+
+export { ConfirmSubmitButton } from "@/components/ui/confirm-submit-button";
 
 export type PermissionCatalogueOption = {
   id: number;
@@ -85,23 +86,6 @@ function compareGroups(
   }
   if (!difference) difference = left.id - right.id;
   return sort.direction === "ascending" ? difference : -difference;
-}
-
-export function ConfirmSubmitButton({
-  confirmation,
-  onClick,
-  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { confirmation: string }) {
-  return (
-    <button
-      {...props}
-      type="submit"
-      onClick={(event) => {
-        onClick?.(event);
-        if (!event.defaultPrevented && !window.confirm(confirmation)) event.preventDefault();
-      }}
-    />
-  );
 }
 
 function searchable(value: string) {

@@ -1,0 +1,105 @@
+/* Semantic finishing layer. These are shared UI roles, never entitlement or
+   player-identity overrides. Keep accessibility.css after this stylesheet. */
+:root {
+  --ui-ease-out: cubic-bezier(.16, 1, .3, 1);
+  --ui-ease-in: cubic-bezier(.4, 0, 1, 1);
+  --ui-motion-enter: 240ms;
+  --ui-motion-exit: 160ms;
+}
+
+:is([data-theme="default"], .global-theme-default) { --default-subtle: #b18e95; }
+:is([data-theme="beta_tester"], .global-theme-beta-tester) { --theme-text-subtle: #95b3c7; --theme-placeholder: #95b3c7; }
+:where([data-theme][data-theme-surface]) { color-scheme: dark; }
+::selection { color: var(--theme-page-bg); background: var(--theme-accent-soft); }
+.skip-link { border-color: var(--theme-accent-strong); color: var(--theme-page-bg); background: var(--theme-accent-soft); border-radius: var(--theme-radius); }
+/* Code labels in staff/catalogue tools are theme accents, not status colors. */
+:is([data-theme-surface]) code { color: var(--theme-accent-soft); background-color: var(--theme-control-hover); }
+html:has(dialog[open]) { overflow: hidden; scrollbar-gutter: stable; }
+
+:is([data-theme-surface]) :is(input, textarea)::placeholder { color: var(--theme-placeholder); opacity: 1; }
+:is([data-theme-surface]) select option { color: var(--theme-text); background: var(--theme-surface-raised); }
+:is([data-theme-surface]) :is(input[type="checkbox"], input[type="radio"]) { accent-color: var(--theme-accent-strong); }
+:is([data-theme-surface]) :is(button, summary, a, input, select, textarea) { -webkit-tap-highlight-color: transparent; }
+:is([data-theme-surface]) :is(button, summary, select, input[type="checkbox"], input[type="radio"]) { cursor: pointer; }
+:is([data-theme-surface]) :is(button, input, select, textarea):disabled { cursor: not-allowed; }
+:is([data-theme-surface]) input[type="file"]::file-selector-button {
+  padding: 8px 12px;
+  margin-right: 12px;
+  border: 0;
+  border-right: 1px solid var(--theme-border);
+  color: var(--theme-text);
+  background: var(--theme-control-hover);
+  cursor: pointer;
+  font: inherit;
+}
+
+main.staff-page :is(.staff-management-form, .staff-readonly-note, .staff-permission-note) {
+  border-color: var(--theme-border);
+  color: var(--theme-text-muted);
+  background-color: var(--theme-surface);
+}
+main.staff-page :is(.staff-readonly-note, .staff-permission-note) {
+  border-left: 3px solid var(--theme-warning);
+  background: color-mix(in srgb, var(--theme-warning) 5%, var(--theme-surface));
+  font-size: 13px;
+  line-height: 1.6;
+}
+main.staff-page :is(.staff-danger-button, .staff-unban-button) {
+  border: 1px solid var(--theme-border-strong);
+  color: var(--theme-text);
+  background: var(--theme-control-bg);
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+main.staff-page .staff-danger-button {
+  border-color: color-mix(in srgb, var(--theme-danger) 45%, var(--theme-border));
+  color: var(--theme-danger-text);
+  background: color-mix(in srgb, var(--theme-danger) 9%, var(--theme-control-bg));
+}
+main.staff-page .staff-danger-button:hover { background: color-mix(in srgb, var(--theme-danger) 20%, var(--theme-control-bg)); }
+main.staff-page .staff-unban-button:hover { background: var(--theme-control-hover); }
+main.staff-page :is(.staff-admin-edit, .staff-vip-edit, .staff-admin-read) { border-color: var(--theme-border); }
+main.staff-page :is(.staff-group-card > div:first-child, .economy-admin-edit, .staff-case-form) { border-color: var(--theme-border); }
+main.staff-page .staff-group-card > div:first-child { background: var(--theme-control-hover); }
+main.staff-page .staff-group-card h3 { color: var(--theme-text); }
+main.staff-page .staff-group-card > div > span { color: var(--theme-text-subtle); }
+
+/* Small shared settings surfaces were still fixed to the original red theme. */
+:is([data-theme-surface]) :is(.settings-choice, .settings-theme-card, .settings-upcoming-grid > *) { border-color: var(--theme-border); background: var(--theme-surface); color: var(--theme-text-muted); }
+:is([data-theme-surface]) :is(.settings-choice, .settings-theme-card, .settings-upcoming-grid) strong { color: var(--theme-text); }
+:is([data-theme-surface]) .settings-choice-icon { border-color: var(--theme-border-strong); color: var(--theme-accent-soft); background: var(--theme-control-hover); }
+:is([data-theme-surface]) :is(.settings-choice, .settings-theme-card):has(input:checked) { border-color: var(--theme-accent-strong); background: var(--theme-control-hover); box-shadow: inset 0 0 0 1px var(--theme-accent-strong); }
+
+@keyframes ui-content-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ui-popup-enter {
+  from { opacity: 0; transform: translateY(-5px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .staff-page .admin-page-header,
+  .staff-page .staff-navigation { animation: ui-content-enter 360ms var(--ui-ease-out) both; }
+  /* Use opacity only on ancestors of position:fixed or player hover cards. */
+  [data-ui="player-search"] [data-part="results"] { animation: ui-popup-enter 180ms var(--ui-ease-out) both; transform-origin: top; }
+  .staff-page details[open] > :not(summary) { animation: ui-content-enter 220ms var(--ui-ease-out); }
+}
+
+/* Progressive enhancement: unsupported browsers retain native disclosures. */
+@supports (interpolate-size: allow-keywords) and selector(details::details-content) {
+  :is(.staff-page, .profile-settings-layout) details { interpolate-size: allow-keywords; }
+  :is(.staff-page, .profile-settings-layout) details::details-content {
+    height: 0;
+    opacity: 0;
+    overflow: clip;
+    transition: height 240ms var(--ui-ease-out), opacity 180ms ease, content-visibility 240ms allow-discrete;
+  }
+  :is(.staff-page, .profile-settings-layout) details[open]::details-content { height: auto; opacity: 1; overflow: visible; }
+}
+
+@media (forced-colors: active) {
+  .staff-navigation,
+  .staff-navigation-links a { border-color: CanvasText; color: LinkText; background: Canvas; box-shadow: none; }
+  .staff-navigation-links a[aria-current="page"] { border-color: Highlight; color: HighlightText; background: Highlight; box-shadow: none; }
+}

@@ -209,6 +209,9 @@ export function InventoryManager({
   const [sort, setSort] = useState<SortMode>("newest");
   const [inventoryPage, setInventoryPage] = useState(1);
   const [selectedId, setSelectedId] = useState("");
+  const [inventoryClosing, setInventoryClosing] = useState(false);
+  const inventoryExitAnimation = useRef<Animation | null>(null);
+  const inventoryFocusReturn = useRef<string | null>(null);
   const [internalSelectionMode, setInternalSelectionMode] = useState(false);
   const selectionMode = internalSelectionMode;
   const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(
@@ -394,7 +397,16 @@ export function InventoryManager({
   const inventoryMutationBusy =
     pending || bulkSelling || bulkLocking || crateOpening.busy;
   const inventoryInteractionBlocked =
-    inventoryMutationBusy || crateOpening.bulk !== null;
+    inventoryMutationBusy || inventoryClosing || crateOpening.bulk !== null;
+
+  useEffect(() => () => inventoryExitAnimation.current?.cancel(), []);
+
+  useEffect(() => {
+    if (selectedId || inventoryClosing || !inventoryFocusReturn.current) return;
+    const card = document.getElementById(inventoryItemToggleId(inventoryFocusReturn.current));
+    (card ?? document.getElementById("inventory-manager-heading"))?.focus();
+    inventoryFocusReturn.current = null;
+  }, [selectedId, inventoryClosing]);
 
   useEffect(() => {
     setDisplayWallet(walletView);
@@ -496,10 +508,7 @@ export function InventoryManager({
 
     setInventoryGridColumns(columns);
     if (!nextSelectedId) {
-      crateOpening.dismissSingle();
-      setInventoryInlineModalIndex(-1);
-      setSaleConfirmationItemId("");
-      setSelectedId("");
+      void closeInventoryItem(itemId);
       return;
     }
 
@@ -516,18 +525,27 @@ export function InventoryManager({
     setSelectedId(nextSelectedId);
   }
 
-  function closeInventoryItem(itemId: string) {
-    if (inventoryInteractionBlocked) return;
+  async function closeInventoryItem(itemId: string) {
+    if (inventoryInteractionBlocked || inventoryExitAnimation.current) return;
+    const panel = document.getElementById(`inventory-item-modal-${itemId}`);
+    if (panel && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setInventoryClosing(true);
+      const animation = panel.animate(
+        [{ opacity: 1, transform: "translateY(0) scale(1)" }, { opacity: 0, transform: "translateY(-6px) scale(.99)" }],
+        { duration: 160, easing: "cubic-bezier(.4, 0, 1, 1)", fill: "forwards" },
+      );
+      inventoryExitAnimation.current = animation;
+      try { await animation.finished; } catch { /* Navigation cancels the reveal. */ }
+      inventoryExitAnimation.current = null;
+      setInventoryClosing(false);
+      // A route change may have removed the entire inventory in the meantime.
+      if (!panel.isConnected) return;
+    }
+    inventoryFocusReturn.current = itemId;
     crateOpening.dismissSingle();
     setSelectedId("");
     setInventoryInlineModalIndex(-1);
     setSaleConfirmationItemId("");
-    window.requestAnimationFrame(() => {
-      const originatingCard = document.getElementById(
-        inventoryItemToggleId(itemId),
-      );
-      (originatingCard ?? document.getElementById("inventory-manager-heading"))?.focus();
-    });
   }
 
   function toggleLoadoutTeam(team: "T" | "CT") {
@@ -1089,6 +1107,7 @@ export function InventoryManager({
           <section
             id={`inventory-item-modal-${selected.id}`}
             data-ui="item-modal"
+            inert={inventoryClosing}
             className="panel crate-inline-modal inventory-inline-modal"
             aria-label="Selected item controls"
           >

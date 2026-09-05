@@ -25,9 +25,9 @@ function activeRole(access: AdminHeaderAccess) {
 export function AdminAccessSummary({ access }: { access: AdminHeaderAccess }) {
   return (
     <>
-      <span>ACTIVE ROLE</span>
+      <span><ShieldCheck aria-hidden="true" /> Active role</span>
       <strong>{activeRole(access)}</strong>
-      <small>{access.displayName} | Immunity {access.immunity}</small>
+      <small>{access.displayName}<span title="Staff actions respect this immunity level">Immunity {access.immunity}</span></small>
     </>
   );
 }

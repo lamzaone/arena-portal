@@ -1048,14 +1048,14 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
     : "all";
 
   return (
-    <PortalShell authenticated className="staff-page">
+    <PortalShell authenticated className="staff-page" navigation={<StaffSubmenu access={access} active="groups" />}>
         <AdminPageHeader
           id="group-management-title"
           title="Group management"
           description="Review Admin, VIP, and custom identities in one place; authorized staff can manage assignments and Founder-owned group configuration."
           access={access}
         />
-        <StaffSubmenu access={access} active="groups" />
+
         <GroupAdminNav
           activeKey={activeTab}
           selectedGroupId={selectedGroupId}

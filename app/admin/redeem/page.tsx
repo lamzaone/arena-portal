@@ -47,14 +47,14 @@ export default async function RedeemCodeAdminPage({
     getEconomyRedeemCodes({ pageSize: 100 }),
   ]);
   return (
-    <PortalShell authenticated className="staff-page economy-admin-page">
+    <PortalShell authenticated className="staff-page economy-admin-page" navigation={<StaffSubmenu access={access} active="redeem" />}>
       <AdminPageHeader
         id="redeem-code-management-title"
         title="Redeem codes"
         description="Build a reward once, choose its global claim limit, and let every player claim that code only once from the server or portal."
         access={access}
       />
-      <StaffSubmenu access={access} active="redeem" />
+
       <RedeemCodeAdmin
         csrf={createAdminActionToken(session)}
         catalogue={catalogue.items}

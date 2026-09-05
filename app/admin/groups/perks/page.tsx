@@ -104,14 +104,14 @@ export default async function VipPerkAdminPage({ searchParams }: { searchParams:
   const csrf = createAdminActionToken(session);
 
   return (
-    <PortalShell authenticated className={`staff-page ${styles.page}`}>
+    <PortalShell authenticated className={`staff-page ${styles.page}`} navigation={<StaffSubmenu access={access} active="groups" />}>
       <AdminPageHeader
         id="vip-perk-management-title"
         title="VIP perks"
         description="Define VIPCore features once and grant them to custom groups or individual players without manufacturing a VIP membership."
         access={access}
       />
-      <StaffSubmenu access={access} active="groups" />
+
       <GroupAdminNav activeKey="perks" />
       <SectionNav
         activeKey={activeView}

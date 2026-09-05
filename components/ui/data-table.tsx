@@ -32,7 +32,13 @@ export function DataTable({
   ...tableProps
 }: DataTableProps) {
   return (
-    <div data-ui="data-table" className={classNames("leaderboard-scroll", className)}>
+    <div
+      data-ui="data-table"
+      className={classNames("leaderboard-scroll", className)}
+      tabIndex={0}
+      role="region"
+      aria-label={typeof caption === "string" ? caption : "Scrollable table"}
+    >
       <table
         {...tableProps}
         data-part="table"

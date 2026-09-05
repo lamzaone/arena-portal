@@ -69,3 +69,14 @@ Run `npm run typecheck`, `npm run build`, and `git diff --check` before shipping
 - Keep theme-specific geometry and animation inside that theme's stylesheet.
   Respect the reduced-motion and forced-colors rules imported last from
   `app/themes/accessibility.css`.
+
+Staff pages pass their authorized `StaffSubmenu` through `PortalShell.navigation`.
+The shell provides the `staff-content` size container; responsive Staff module
+rules use that container rather than the full viewport. Groups detail panels
+provide a nested container with the same name so their forms respond to the
+space left beside the group browser.
+
+Use `PortalToast` for action feedback and `ConfirmSubmitButton` for existing
+confirmation flows. Their CSS modules consume the semantic theme tokens and
+handle reduced motion. Keep `app/staff-workspace.css` and
+`app/themes/refinements.css` before the accessibility stylesheet.
