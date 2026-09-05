@@ -1,20 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Check, Crosshair, Crown, Gamepad2, Paintbrush, ShieldCheck, Sparkles, Swords, Trophy, Zap } from "lucide-react";
+import { ArrowRight, Check, Crosshair, Crown, Gamepad2, Paintbrush, ShieldCheck, Sparkles, Swords, Trophy } from "lucide-react";
 
+import { LiveServerPanel } from "@/components/live-server-panel";
 import { PortalShell } from "@/components/ui/portal-shell";
 import { getSession } from "@/lib/auth/session";
 import { buildHomeMetadata, buildHomeStructuredData } from "@/lib/seo/site";
-import { getServerStatus } from "@/lib/server-status";
 
 export const metadata: Metadata = buildHomeMetadata();
 
 export default async function HomePage() {
-  const [session, status] = await Promise.all([getSession(), getServerStatus()]);
+  const session = await getSession();
   const serverName = process.env.NEXT_PUBLIC_SERVER_NAME ?? "ARENA.TAPPED.RO";
   const connectUrl = process.env.NEXT_PUBLIC_SERVER_CONNECT_URL ?? "steam://connect/arena.tapped.ro";
-  const statusLabel = status.state === "online" ? "Online" : status.state === "offline" ? "Offline" : "Status unavailable";
-  const playerLabel = status.players !== null && status.maxPlayers !== null ? `${status.players} / ${status.maxPlayers}` : "—";
   const structuredData = buildHomeStructuredData();
 
   return (
@@ -47,13 +45,7 @@ export default async function HomePage() {
             </div>
           </div>
 
-          <aside className="arena-visual hero-reveal hero-delay" aria-label="ARENA.TAPPED.RO live overview">
-            <div className="visual-topline"><span>ARENA // LIVE TERMINAL</span><span className={`status-dot status-${status.state}`}><i />{statusLabel}</span></div>
-            <div className="visual-core" aria-hidden="true"><div className="core-ring core-ring-one" /><div className="core-ring core-ring-two" /><div className="core-diamond"><Crosshair /></div><span>1V1</span></div>
-            <div className="visual-panel visual-panel-one"><small>PLAYERS</small><strong>{playerLabel}</strong></div>
-            <div className="visual-panel visual-panel-two"><small>MAP</small><strong>{status.map ?? "Awaiting link"}</strong></div>
-            <div className="visual-bottomline"><span><Zap aria-hidden="true" /> Arena system active</span><span>ARENA.TAPPED.RO</span></div>
-          </aside>
+          <LiveServerPanel />
         </section>
 
         <section className="mode-intro" id="modes" aria-labelledby="modes-title">

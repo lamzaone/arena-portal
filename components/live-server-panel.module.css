@@ -1,0 +1,116 @@
+.panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  min-height: 520px;
+  padding: 0 20px;
+}
+
+.topline,
+.bottomline {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #a97c83;
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: .1em;
+}
+
+.topline { min-height: 46px; border-bottom: 1px solid rgba(255, 113, 133, .17); }
+.bottomline { min-height: 45px; border-top: 1px solid rgba(255, 113, 133, .17); font-family: var(--font-body); font-size: 9px; font-weight: 700; letter-spacing: .07em; }
+.bottomline span:first-child { display: inline-flex; align-items: center; gap: 6px; color: #ff9ba9; }
+.bottomline svg { width: 13px; height: 13px; }
+
+.status { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-body); font-size: 10px; letter-spacing: 0; }
+.status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.online { color: var(--green); }.online i { box-shadow: 0 0 10px var(--green); }
+.lost { color: var(--red); }.lost i { box-shadow: 0 0 8px rgba(251, 113, 133, .45); }
+.unknown { color: var(--yellow); }.unknown i { box-shadow: 0 0 8px rgba(251, 191, 36, .45); }
+
+.overview {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(142px, .8fr) minmax(190px, 1.2fr);
+  gap: 14px;
+  align-items: center;
+  min-height: 192px;
+  padding: 14px 0;
+}
+
+.core { position: relative; display: grid; width: 148px; height: 148px; place-items: center; justify-self: center; }
+.core > span { position: absolute; bottom: 2px; color: #ffadc0; font-family: var(--font-display); font-size: 9px; letter-spacing: .15em; }
+.ring { position: absolute; border: 1px solid rgba(255, 113, 133, .38); border-radius: 50%; }
+.outerRing { width: 142px; height: 142px; border-style: dashed; }
+.innerRing { width: 92px; height: 92px; border-color: rgba(255, 157, 170, .5); box-shadow: 0 0 26px rgba(225, 29, 72, .2); }
+.diamond { display: grid; width: 45px; height: 45px; place-items: center; color: #160407; background: #ff7185; box-shadow: 0 0 28px rgba(255, 75, 103, .56); transform: rotate(45deg); }
+.diamond svg { width: 22px; height: 22px; transform: rotate(-45deg); }
+
+.metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin: 0; }
+.metrics div { min-width: 0; padding: 10px 11px; border: 1px solid rgba(255, 113, 133, .22); background: rgba(14, 3, 6, .72); box-shadow: 0 8px 18px rgba(0, 0, 0, .16); }
+.metrics dt { color: #a77b82; font-family: var(--font-display); font-size: 7px; letter-spacing: .1em; text-transform: uppercase; }
+.metrics dd { margin: 3px 0 0; overflow: hidden; color: #ffdde2; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.metrics .mapValue { overflow-wrap: anywhere; line-height: 1.15; text-overflow: clip; white-space: normal; }
+
+.roster { position: relative; z-index: 2; min-height: 0; padding: 13px 0 12px; border-top: 1px solid rgba(255, 113, 133, .17); }
+.rosterHeader { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 10px; }
+.rosterHeader > div { min-width: 0; }
+.rosterHeader h2 { margin: 2px 0 0; font-family: var(--font-display); font-size: 16px; font-weight: 400; letter-spacing: -.02em; text-transform: uppercase; }
+.rosterHeader > span { flex: 0 0 auto; color: #a98189; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.liveMark { display: inline-flex; align-items: center; gap: 5px; color: #ff91a4; font-size: 8px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.liveMark svg { width: 10px; height: 10px; }
+
+.rosterList { display: grid; gap: 6px; max-height: 174px; margin: 0; padding: 0 4px 0 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: rgba(255, 113, 133, .5) rgba(20, 4, 8, .8); scrollbar-width: thin; list-style: none; }
+.rosterList li { display: grid; grid-template-columns: minmax(0, 1fr) 38px; min-height: 46px; border: 1px solid rgba(255, 113, 133, .17); background: rgba(12, 3, 5, .67); transition: border-color .18s ease, background-color .18s ease; }
+.rosterList li:hover { border-color: rgba(255, 113, 133, .42); background: rgba(53, 7, 14, .72); }
+.playerLink { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 9px; align-items: center; min-width: 0; padding: 5px 8px; }
+.avatar,
+.avatarFallback { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid rgba(255, 113, 133, .38); border-radius: 50%; background: linear-gradient(145deg, #681125, #160306); object-fit: cover; }
+.avatarFallback { color: #ffd5dc; }.avatarFallback svg { width: 16px; height: 16px; }
+.playerCopy { display: grid; min-width: 0; }
+.playerCopy strong,
+.playerCopy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.playerCopy strong { color: #ffe3e7; font-size: 11px; }
+.playerCopy small { color: #8f6b72; font-family: Consolas, "Courier New", monospace; font-size: 8px; }
+.steamLink { display: grid; width: 100%; min-height: 44px; place-items: center; color: #a98189; border-left: 1px solid rgba(255, 113, 133, .14); transition: color .18s ease, background-color .18s ease; }
+.steamLink svg { width: 14px; height: 14px; }
+.steamLink:hover { color: #ffd1d8; background: rgba(225, 29, 72, .13); }
+.playerLink:focus-visible,
+.steamLink:focus-visible { outline: 2px solid #ff9bac; outline-offset: -3px; }
+
+.emptyRoster { display: grid; min-height: 64px; margin: 0; place-items: center; padding: 12px; color: #aa858c; border: 1px dashed rgba(255, 113, 133, .23); background: rgba(11, 3, 5, .55); text-align: center; font-size: 10px; line-height: 1.5; }
+
+@media (max-width: 640px) {
+  .panel { min-height: 510px; padding: 0 13px; }
+  .topline { font-size: 8px; }
+  .overview { grid-template-columns: 112px minmax(0, 1fr); min-height: 174px; gap: 8px; }
+  .core { width: 108px; height: 108px; }
+  .outerRing { width: 106px; height: 106px; }
+  .innerRing { width: 70px; height: 70px; }
+  .diamond { width: 37px; height: 37px; }
+  .diamond svg { width: 18px; height: 18px; }
+  .metrics { gap: 5px; }
+  .metrics div { padding: 8px; }
+  .metrics dd { font-size: 10px; }
+  .rosterList { max-height: 195px; }
+}
+
+@media (max-width: 375px) {
+  .panel { min-height: 560px; }
+  .overview { grid-template-columns: 1fr; padding-top: 10px; }
+  .core { display: none; }
+  .rosterHeader { align-items: start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rosterList li,
+  .steamLink { transition: none; }
+}
+
+@media (forced-colors: active) {
+  .playerLink:focus-visible,
+  .steamLink:focus-visible { outline-color: Highlight; }
+}
