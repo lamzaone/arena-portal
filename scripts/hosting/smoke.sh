@@ -16,6 +16,17 @@ printf '%s\n' 'ECONOMY_PRICE_REFRESH_ENABLED=false' 'GAME_DATABASE_URL=' 'PORTAL
 ARENA_DEPLOY_ROOT="$stage" PORT=4319 bash "$repo_root/scripts/hosting/activate.sh" smoke
 (
   cd -- "$stage/current"
+  node --input-type=module <<'JS'
+import assert from 'node:assert/strict';
+import sharp from 'sharp';
+const bytes = await sharp({ create: { width: 640, height: 360, channels: 4,
+  background: { r: 20, g: 40, b: 60, alpha: 1 } } }).webp({ quality: 82 }).toBuffer();
+const metadata = await sharp(bytes).metadata();
+assert.equal(metadata.format, 'webp');
+assert.equal(metadata.width, 640);
+assert.equal(metadata.height, 360);
+console.log('Packaged Sharp WebP encoding passed');
+JS
   node --experimental-strip-types scripts/warm-weapon-thumbnails.mjs --help > /dev/null
 )
 printf '%s' 'persistent upload fixture' > "$stage/shared/economy-custom/ci-smoke.txt"

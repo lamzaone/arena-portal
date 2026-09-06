@@ -8,6 +8,14 @@ test -f .next/standalone/server.js || {
 stage="$(mktemp -d)"
 trap 'rm -rf -- "$stage"' EXIT
 cp -a .next/standalone/. "$stage/"
+# Native addons load libvips through the OS dynamic linker, outside Next's
+# JavaScript dependency trace. Copy the complete installed Sharp packages so
+# the release retains the matching shared libraries as well as the addon.
+mkdir -p "$stage/node_modules/@img"
+for native_package in node_modules/@img/sharp-*; do
+  [[ -d "$native_package" ]] || continue
+  cp -a "$native_package" "$stage/node_modules/@img/"
+done
 # Turbopack can trace absolute links to external packages from the build
 # workspace. Rebase them onto the traced runtime; never ship escaping links.
 python3 - "$stage" <<'PY'
