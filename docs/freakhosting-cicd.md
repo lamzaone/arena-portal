@@ -31,6 +31,16 @@ a render or waits for generation. Catalogue samples continue using normal artwor
 directly from the CDN, with the portal image proxy as fallback. The 3D inspector
 and customizer remain available, but snapshots themselves are ordinary WebP images.
 
+Renderer failures log the stage, elapsed time, weapon/finish/float/seed and up to
+eight recent asset or browser errors. URL queries and item name tags are omitted.
+An HTTP error from SkinHub's viewer is rejected before waiting for its `ready`
+message. HTTP 429 or 5xx pauses that renderer's attempts for one minute; subsequent
+inventory scans retry automatically. A 525 from `skinhub.gg/frame` indicates an
+SSL handshake failure between SkinHub's Cloudflare edge and its origin, so it
+cannot be resolved by increasing the website's render timeout. Existing snapshots
+and normal catalogue artwork remain available during that outage. A stalled paint
+wait also times out after 30 seconds and discards the browser before the next item.
+
 Automatic prewarming defaults on when `ARENA_HOSTING_ROOT` and production Node
 mode are set, as in the managed launcher. Set `WEAPON_THUMBNAIL_PREWARM_ENABLED=false`
 to pause it, or `true` to enable it locally. Hosting builds disable the worker.

@@ -9,6 +9,25 @@ import { thumbnailModelProfileDirectory } from "./thumbnail-paths.ts";
 
 type RenderState = { ready: boolean; error: string | null; item?: FrameItem };
 
+async function withTimeout<T>(work: Promise<T>, milliseconds: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([work, new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+function diagnosticUrl(value: string) {
+  // Inspect links and name tags are carried in the query. Never log them.
+  try { const url = new URL(value); return `${url.origin}${url.pathname}`.slice(0, 240); }
+  catch { return "unknown resource"; }
+}
+
+function diagnosticMessage(value: string) {
+  return value.split("\n")[0].replace(/https?:\/\/[^\s"'<>]+/g, diagnosticUrl).slice(0, 300);
+}
+
 function frameItem(item: WeaponThumbnail): FrameItem {
   // Use the same float32 placement codec as the first-navigation URL. A full
   // six-slot tuple also explicitly clears every absent sticker and charm.
@@ -39,6 +58,9 @@ export function createWeaponThumbnailRenderer(options: { assetCacheDirectory?: s
   let page: Page | undefined;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
   let lastItem: WeaponThumbnail | undefined;
+  let providerUnavailableUntil = 0;
+  let events: string[] = [];
+  const recordEvent = (value: string) => { events.push(value); if (events.length > 8) events.shift(); };
   async function close() {
     clearTimeout(idleTimer);
     if (closing) return closing;
@@ -57,6 +79,12 @@ export function createWeaponThumbnailRenderer(options: { assetCacheDirectory?: s
     close,
     async render(item: WeaponThumbnail): Promise<Buffer> {
       clearTimeout(idleTimer);
+      // An upstream outage affects every queued item. Allow the next inventory
+      // scan to retry after a short cooldown instead of opening 128 error pages.
+      if (Date.now() < providerUnavailableUntil) throw new Error("SkinHub viewer temporarily unavailable; retry after cooldown");
+      events = [];
+      const started = Date.now();
+      let stage = "browser-launch";
       try {
         // Idle shutdown is asynchronous. Reopening the same profile before it
         // releases its lock would make an otherwise valid preview fail.
@@ -81,13 +109,25 @@ export function createWeaponThumbnailRenderer(options: { assetCacheDirectory?: s
             browser = await chromium.launch(launchOptions);
             page = await browser.newPage(viewportOptions);
           }
+          page.on("response", response => {
+            if (response.status() >= 400) recordEvent(`HTTP ${response.status()} ${diagnosticUrl(response.url())}`);
+          });
+          page.on("requestfailed", request => {
+            const reason = request.failure()?.errorText ?? "request failed";
+            if (reason !== "net::ERR_ABORTED") recordEvent(`${diagnosticMessage(reason)} ${diagnosticUrl(request.url())}`);
+          });
+          page.on("pageerror", error => recordEvent(`JavaScript: ${diagnosticMessage(error.message)}`));
+          page.on("crash", () => recordEvent("Browser page crashed"));
           await page.addInitScript(() => {
             const state: RenderState = {ready:false,error:null};
             (window as unknown as { __weaponRender: RenderState }).__weaponRender = state;
             window.addEventListener("message",event=>{
               if (event.source !== window || event.origin !== location.origin || event.data?.channel !== "skinhub-viewer" || event.data?.from !== "viewer") return;
               if (event.data.v !== 2) state.error="Renderer protocol changed";
-              if (event.data.type === "error") state.error="Renderer rejected the item";
+              if (event.data.type === "error") {
+                const code = event.data.error?.code;
+                state.error="Renderer rejected the item" + (["render-failed","bad-inspect-link","bad-message","protocol-mismatch"].includes(code) ? ` (${code})` : "");
+              }
               if (event.data.type === "hello" && event.data.problems?.length) state.error="Renderer rejected an item parameter";
               if (event.data.type === "hello") state.item=event.data.state?.item;
               if (event.data.type === "ready") state.ready=true;
@@ -105,6 +145,7 @@ export function createWeaponThumbnailRenderer(options: { assetCacheDirectory?: s
           // still navigate: measured in-place updates can acknowledge them
           // before drawing or reframing.
           const reload = lastItem.paintIndex !== item.paintIndex;
+          stage = "item-update";
           await current.evaluate(({value,reload}) => {
             const state=(window as unknown as {__weaponRender: RenderState}).__weaponRender;
             state.item=undefined;
@@ -121,20 +162,30 @@ export function createWeaponThumbnailRenderer(options: { assetCacheDirectory?: s
         } else {
           // Full configuration for model/attachment changes prevents
           // an old attachment or a previous weapon from leaking into the image.
-          await current.goto(thumbnailFrameUrl(item),{waitUntil:"domcontentloaded",timeout:45000});
+          stage = "navigation";
+          const response = await current.goto(thumbnailFrameUrl(item),{waitUntil:"domcontentloaded",timeout:45000});
+          if (!response || !response.ok()) {
+            const status = response?.status();
+            if (status === 429 || (status != null && status >= 500)) providerUnavailableUntil = Date.now() + 60000;
+            throw new Error(`SkinHub viewer returned ${status ? `HTTP ${status}` : "no document"}`);
+          }
         }
+        stage = "viewer-ready";
         await current.waitForFunction(()=>{
           const state=(window as unknown as {__weaponRender:RenderState}).__weaponRender;
           return state.ready || state.error;
-        },undefined,{timeout:45000});
+        },undefined,{polling:100,timeout:45000});
         const error=await current.evaluate(()=>(window as unknown as {__weaponRender:RenderState}).__weaponRender.error);
         if (error) throw new Error(error);
+        stage = "item-identity";
         const identity=await current.evaluate(()=>(window as unknown as {__weaponRender:RenderState}).__weaponRender.item);
         if(!matchesItem(identity,expected))
           throw new Error("Renderer did not accept the requested item identity");
+        stage = "canvas-visible";
         await current.locator("canvas").waitFor({state:"visible",timeout:45000});
         // The viewer fades its canvas in after ready. A visible canvas can still
         // be partially transparent, which would make its cached image too dim.
+        stage = "canvas-opacity";
         await current.waitForFunction(finishFade=>{
           if ((window as unknown as {__weaponRender:RenderState}).__weaponRender.error) return true;
           let element: Element | null = document.querySelector("canvas");
@@ -156,9 +207,12 @@ export function createWeaponThumbnailRenderer(options: { assetCacheDirectory?: s
           return true;
         },!item.charm,{timeout:15000});
         // Ready precedes the browser's painted frame. Never cache that blank.
-        await current.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+        stage = "paint";
+        await withTimeout(current.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())))),
+          30000, "Thumbnail paint timed out");
         // Capture the composed WebGL frame directly. Playwright's screenshot
         // helper otherwise waits for unrelated external web fonts indefinitely.
+        stage = "capture";
         const cdp=await current.context().newCDPSession(current);
         let deadline: ReturnType<typeof setTimeout> | undefined;
         try {
@@ -187,8 +241,14 @@ export function createWeaponThumbnailRenderer(options: { assetCacheDirectory?: s
           return buffer;
         } finally { clearTimeout(deadline); await cdp.detach().catch(()=>{}); }
       } catch (error) {
-        await close();
-        console.warn("Weapon thumbnail render failed:",error instanceof Error ? error.message.split("\n")[0] : "unknown renderer error");
+        console.warn("Weapon thumbnail render failed:", JSON.stringify({
+          stage, elapsedMs: Date.now() - started,
+          error: error instanceof Error ? diagnosticMessage(error.message) : "unknown renderer error",
+          item: { defindex: item.defindex, paintIndex: item.paintIndex, float: item.float, seed: item.seed,
+            statTrak: item.statTrak, stickers: item.stickers?.length ?? 0, charm: item.charm?.id ?? null },
+          events,
+        }));
+        await close().catch(() => {});
         throw error;
       } finally {
         // Keep model assets and compiled shaders warm while players browse.

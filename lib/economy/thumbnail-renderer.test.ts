@@ -34,7 +34,8 @@ const painted = await sharp({ create: { width: 640, height: 360, channels: 4, ba
 
 type Frame = { png: Buffer; error?: boolean };
 type FixtureState = { captures: number; closes: number; detached: number; opacityChecks: number; profiles: string[]; closeWait?: Promise<void>;
-  navigations: number; patches: Record<string, unknown>[]; readyReset: boolean[]; corruptIdentity?: Record<string, unknown>; animations: unknown[] };
+  navigations: number; patches: Record<string, unknown>[]; readyReset: boolean[]; corruptIdentity?: Record<string, unknown>; animations: unknown[];
+  httpStatus: number; waits: number; ready: boolean; hangPaint?: () => void; onNavigate?: () => void; emitPage: (name: string, value?: unknown) => void };
 type ViewerEvent = { source: unknown; origin: string; data: Record<string, unknown> };
 type BrowserCallback = (value?: unknown) => unknown;
 
@@ -43,7 +44,9 @@ async function withFrames(
   run: (renderer: ReturnType<typeof createWeaponThumbnailRenderer>, state: FixtureState) => Promise<void>,
   options: { assetCacheDirectory?: string } = {},
 ) {
-  const state: FixtureState = { captures: 0, closes: 0, detached: 0, opacityChecks: 0, profiles: [], navigations: 0, patches: [], readyReset: [], animations: [] };
+  const listeners = new Map<string, (value?: unknown) => void>();
+  const state: FixtureState = { captures: 0, closes: 0, detached: 0, opacityChecks: 0, profiles: [], navigations: 0, patches: [], readyReset: [], animations: [],
+    httpStatus: 200, waits: 0, ready: true, emitPage: (name, value) => listeners.get(name)?.(value) };
   let viewerItem: Record<string, unknown> = {};
   let pendingReady = 0;
   let onMessage: ((event: ViewerEvent) => void) | undefined;
@@ -68,9 +71,11 @@ async function withFrames(
     data: { channel: "skinhub-viewer", v: 2, from: "viewer", ...data },
   });
   const page = {
+    on(name: string, callback: (value?: unknown) => void) { listeners.set(name, callback); },
     async addInitScript(callback: BrowserCallback) { callback(); },
     async goto(url: string) {
       state.navigations++;
+      state.onNavigate?.();
       const parameters = new URL(url).searchParams;
       const placement = readInspectUrl(parameters.get("i")!);
       viewerItem = {
@@ -81,10 +86,12 @@ async function withFrames(
         stickers: [...placement.stickers, placement.keychain].map(slot => ({ ...slot, ...(slot && "wear" in slot ? { scale: 1 } : {}) })),
       };
       emit({ type: "hello", problems: [], state: { item: { ...viewerItem, ...state.corruptIdentity } } });
-      emit({ type: "ready" });
+      if (state.ready) emit({ type: "ready" });
+      return { ok: () => state.httpStatus < 400, status: () => state.httpStatus };
     },
     async evaluate(callback: BrowserCallback, value?: unknown) { return callback(value); },
     async waitForFunction(callback: BrowserCallback, value?: unknown) {
+      state.waits++;
       for (let attempt = 0; attempt < 5; attempt++) {
         if (pendingReady && --pendingReady === 0) emit({ type: "ready" });
         if (await callback(value)) return;
@@ -129,7 +136,7 @@ async function withFrames(
     document: { querySelector: () => ({ parentElement: null, getAnimations: () => state.animations }) },
     getComputedStyle: () => ({ opacity: ++state.opacityChecks < 3 ? "0.5" : "1" }),
     location: { origin: "https://skinhub.gg" },
-    requestAnimationFrame: (callback: (timestamp: number) => void) => { callback(0); return 0; },
+    requestAnimationFrame: (callback: (timestamp: number) => void) => { if (state.hangPaint) state.hangPaint(); else callback(0); return 0; },
     KeyframeEffect: Object,
   };
   const previous = Object.fromEntries(Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -144,6 +151,84 @@ async function withFrames(
     }
   }
 }
+
+test("rejects an HTTP error page without waiting for ready and backs off an unavailable provider", async t => {
+  let clock = Date.now(); t.mock.method(Date, "now", () => clock);
+  const warnings: unknown[][] = []; t.mock.method(console, "warn", (...values: unknown[]) => warnings.push(values));
+  await withFrames([{ png: painted }], async (renderer, state) => {
+    state.httpStatus = 525;
+    await assert.rejects(renderer.render(item), /SkinHub viewer returned HTTP 525/);
+    assert.equal(state.waits, 0, "An HTTP error document can never announce viewer readiness");
+    assert.equal(state.captures, 0);
+    assert.equal(state.closes, 1);
+    await assert.rejects(renderer.render({ ...item, seed: 2 }), /temporarily unavailable/);
+    assert.equal(state.navigations, 1, "Other queued items must not immediately hammer the failing provider");
+    assert.equal(warnings.length, 1, "The outage should be logged once, not for every queued item");
+    const diagnostic = JSON.stringify(warnings[0]);
+    assert.match(diagnostic, /navigation/);
+    assert.match(diagnostic, /525/);
+    assert.match(diagnostic, /661/);
+    clock += 60001; state.httpStatus = 200;
+    await renderer.render(item);
+    assert.equal(state.captures, 1, "A later inventory scan must recover automatically");
+  });
+});
+
+test("a missing individual viewer page does not pause renders of other items", async t => {
+  t.mock.method(console, "warn", () => {});
+  await withFrames([{ png: painted }], async (renderer, state) => {
+    state.httpStatus = 404;
+    await assert.rejects(renderer.render(item), /HTTP 404/);
+    state.httpStatus = 200;
+    await renderer.render({ ...item, seed: 2 });
+    assert.equal(state.captures, 1);
+  });
+});
+
+test("a readiness failure reports the item and bounded asset errors without inspect queries or name tags", async t => {
+  const warnings: unknown[][] = []; t.mock.method(console, "warn", (...values: unknown[]) => warnings.push(values));
+  await withFrames([], async (renderer, state) => {
+    state.ready = false;
+    state.onNavigate = () => {
+      for (let index = 0; index < 12; index++) state.emitPage("response", {
+        status: () => 503, url: () => `https://cdn.skinhub.gg/model-${index}.glb?i=private-inspect&nametag=private-name`,
+      });
+      state.emitPage("requestfailed", {
+        failure: () => ({ errorText: "net::ERR_CONNECTION_RESET" }), url: () => "https://cdn.skinhub.gg/paint.vtex?token=private-token",
+      });
+      state.emitPage("pageerror", { message: "Fetch failed https://cdn.skinhub.gg/paint.vtex?token=private-token" });
+    };
+    await assert.rejects(renderer.render({ ...item, nameTag: "private-name" }));
+    const diagnostic = JSON.parse(warnings[0][1] as string);
+    assert.equal(diagnostic.stage, "viewer-ready");
+    assert.equal(diagnostic.item.defindex, 7);
+    assert.equal(diagnostic.item.seed, 661);
+    assert.equal(diagnostic.events.length, 8);
+    assert.match(JSON.stringify(diagnostic.events), /HTTP 503.*model-11/);
+    assert.match(JSON.stringify(diagnostic.events), /ERR_CONNECTION_RESET/);
+    assert.match(JSON.stringify(diagnostic.events), /JavaScript: Fetch failed/);
+    assert.doesNotMatch(JSON.stringify(warnings), /private-/);
+    assert.equal(state.captures, 0);
+  });
+});
+
+test("a stalled paint frame releases the worker without caching a previous screenshot", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  t.mock.method(console, "warn", () => {});
+  await withFrames([{ png: painted }], async (renderer, state) => {
+    let painted!: () => void;
+    const started = new Promise<void>(resolve => { painted = resolve; });
+    state.hangPaint = painted;
+    const rendered = renderer.render(item);
+    const rejected = assert.rejects(rendered, /paint.*timed out/i);
+    await started; t.mock.timers.tick(30000); await rejected;
+    assert.equal(state.captures, 0);
+    assert.equal(state.closes, 1);
+    state.hangPaint = undefined;
+    await renderer.render({ ...item, seed: 2 });
+    assert.equal(state.captures, 1);
+  });
+});
 
 test("rejects a late renderer error even when the captured frame has visible pixels", async () => {
   await withFrames([{ png: painted, error: true }], async (renderer, state) => {
