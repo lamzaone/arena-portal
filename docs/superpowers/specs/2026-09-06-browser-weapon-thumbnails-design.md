@@ -1,5 +1,8 @@
 # Browser-generated weapon thumbnails
 
+**Superseded:** The user requested normal previews again. The browser renderer
+and its proxy/cache routes were removed; this document records the prior design.
+
 ## Behavior
 
 Market and inventory cards display normal catalogue artwork immediately. Existing

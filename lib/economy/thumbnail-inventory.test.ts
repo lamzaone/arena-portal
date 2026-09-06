@@ -46,7 +46,7 @@ test('backfill reaches old items and retries queue overflow while recent customi
   f.items.length=0;f.db.prepare('UPDATE portal_inventory_items SET seed=999,updated_at=1000 WHERE id=?').run('000');
   await f.worker.runOnce();assert.equal(f.items[0].seed,999);
 });
-test('server prewarming is opt-in because browsers now render missing snapshots',()=>{
+test('legacy prewarming configuration stays disabled by default',()=>{
   assert.equal(ownedThumbnailPrewarmEnabled({}),false);
   assert.equal(ownedThumbnailPrewarmEnabled({ARENA_HOSTING_ROOT:'/home/site',NODE_ENV:'production'}),false);
   assert.equal(ownedThumbnailPrewarmEnabled({ARENA_HOSTING_ROOT:'/home/site',NODE_ENV:'production',WEAPON_THUMBNAIL_PREWARM_ENABLED:'false'}),false);

@@ -25,8 +25,6 @@ import {
 } from "@/components/economy/economy-view-model";
 import { proxiedImageUrl } from "@/lib/images/proxy-url";
 import type { WeaponPreviewSource } from "@/lib/economy/weapon-preview";
-import { thumbnailForSource, thumbnailSignature } from "@/lib/economy/weapon-thumbnail";
-import { OwnedWeaponThumbnail } from "./owned-weapon-thumbnail";
 
 type MarketplaceItemPreviewProps = {
   item: Pick<
@@ -123,13 +121,9 @@ function fallbackIcon(itemType: string) {
 }
 
 export function MarketplaceItemPreview(props: MarketplaceItemPreviewProps) {
-  const preview = useMemo(() => thumbnailForSource(props.item, props.floatValue, props.patternSeed), [props.item, props.floatValue, props.patternSeed]);
-  const fallback = <CatalogueItemPreview key={`${props.item.catalogueId}|${props.item.imageUrl}|${props.item.itemType}`} {...props} />;
-  // A real float/seed can use a saved or client-rendered snapshot. Catalogue
-  // samples without an actual configuration stay on fast normal artwork.
-  return preview && !preview.sample ? <OwnedWeaponThumbnail key={thumbnailSignature(preview.item)}
-    item={preview.item} name={props.item.displayName} rarityRank={props.item.rarityRank}
-    fallback={fallback} overlay={props.overlay} /> : fallback;
+  // All cards use normal item artwork, including owned items with a float/seed.
+  // Exact appearance is available through the explicit inspection controls.
+  return <CatalogueItemPreview key={`${props.item.catalogueId}|${props.item.imageUrl}|${props.item.itemType}`} {...props} />;
 }
 
 function CatalogueItemPreview({

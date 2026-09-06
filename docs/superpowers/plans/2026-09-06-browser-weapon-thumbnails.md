@@ -1,5 +1,8 @@
 # Browser weapon thumbnail implementation
 
+**Superseded:** Normal catalogue previews were restored at the user's request.
+The browser rendering integration was removed after the implementation below.
+
 **Goal:** Generate missing exact item images on the visitor's GPU, with reusable
 cached viewer assets and static images in the grid.
 

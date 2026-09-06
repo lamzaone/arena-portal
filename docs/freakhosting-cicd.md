@@ -17,48 +17,23 @@ together. This keeps settings such as the bundled Chromium path current on
 existing installations. CI launches the packaged browser, draws with WebGL2,
 and encodes a WebP before accepting the release archive.
 
-Owned weapons use static images of their float, seed, StatTrak, name, stickers
-and charm. Pages show normal catalogue artwork immediately and check existing
-server snapshots and locally saved browser images in parallel. A cache miss uses
-one isolated renderer on the visitor's GPU, then saves the WebP in their browser.
-Browsing never queues a server render. Images change only after the matching
-configuration's image loads; the grid and inspection/customization dialogs remain
-available while generation runs.
+Market, inventory and other item grids use normal catalogue previews. Images load
+directly from their CDN, with the portal image proxy and catalogue lookup as
+fallbacks. The page does not request generated snapshots or start browser rendering.
+Float, seed and attachments remain item details and are available in the explicit
+inspection/customization controls; catalogue thumbnails do not depict them.
 
-Public SkinHub model/texture assets are cached for everyone under
-`~/arena-portal/cache/weapon-viewer-resources` (1 GiB maximum). These files survive
-release activation and do not require Redis, a server GPU or a new service. The
-browser also caches up to 256 MiB of model/texture files and 64 MiB of generated
-images. Browser eviction or disabled storage falls back to normal fetching.
-The cached proxy runs with Node on this shared webhosting account; the GPU work
-runs in the visitor's browser. Cold downloads and shader compilation can exceed
-two seconds, so catalogue images remain visible until each exact image is ready.
-See [the implementation design](superpowers/specs/2026-09-06-browser-weapon-thumbnails-design.md)
-for cache budgets, sandbox restrictions and measured development timings.
+Automatic inventory thumbnail prewarming is disconnected from application startup,
+including when an old `WEAPON_THUMBNAIL_PREWARM_ENABLED=true` setting remains on the
+host. The browser renderer and its asset proxy routes have been removed. Existing
+generated images and model caches are no longer used by item cards.
 
-Renderer failures log the stage, elapsed time, weapon/finish/float/seed and up to
-eight recent asset or browser errors. URL queries and item name tags are omitted.
-An HTTP error from SkinHub's viewer is rejected before waiting for its `ready`
-message. HTTP 429 or 5xx pauses that renderer's attempts for one minute; subsequent
-inventory scans retry automatically. A 525 from `skinhub.gg/frame` indicates an
-SSL handshake failure between SkinHub's Cloudflare edge and its origin, so it
-cannot be resolved by increasing the website's render timeout. Existing snapshots
-and normal catalogue artwork remain available during that outage. A stalled paint
-wait also times out after 30 seconds and discards the browser before the next item.
-
-Server inventory prewarming is now opt-in. Set `WEAPON_THUMBNAIL_PREWARM_ENABLED=true`
-to scan recent and older owned items every 30 seconds and prepare shared snapshots
-independently of page visits. Set it to `false`, or leave it unset, to use browser
-generation for missing images. An existing explicit `true` setting stays enabled;
-remove it if server background rendering is no longer wanted. Hosting builds
-disable the worker. Neither mode writes inventory or pricing rows.
-
-The following manual warmup tools remain optional. Use a separate profile for a
-manual warmup while automatic prewarming is running.
+The following legacy manual rendering tools remain available for diagnostics;
+they are not needed for normal previews or page loading.
 
 Weapon model assets persist under `~/arena-portal/cache/weapon-thumbnail-assets` using a dedicated Chromium profile. Override with `WEAPON_THUMBNAIL_ASSET_CACHE_DIR`; separate concurrent portal processes need separate roots. Before startup, `npm run thumbnails:warm -- --models --profile=server` preloads all supported mesh generations without database access. The server profile must not be open during this offline preload. Ordinary inventory/catalogue warm commands use a separate profile and share the finished image cache.
 
-Weapon thumbnails also require Chromium's Linux system libraries. CI includes
+These manual rendering tools require Chromium's Linux system libraries. CI includes
 the matching headless browser in the runtime bundle; a host-provided Chromium
 can be selected with `WEAPON_THUMBNAIL_BROWSER_PATH`. Generated WebP files live
 in `~/arena-portal/cache/weapon-thumbnails`, outside release cleanup. Set

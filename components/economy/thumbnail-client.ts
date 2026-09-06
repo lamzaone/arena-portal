@@ -235,8 +235,8 @@ const client = createWeaponThumbnailClient();
 export const watchWeaponThumbnail = client.watchWeaponThumbnail;
 export const invalidateWeaponThumbnail = client.invalidateWeaponThumbnail;
 
-// This API client only reads shared snapshots. Missing images are handled by
-// the separate browser renderer without queueing work on shared hosting.
+// Legacy shared-snapshot client. Item grids use normal catalogue artwork and
+// do not mount thumbnail subscriptions.
 const snapshots = createWeaponThumbnailClient(undefined, undefined, { cacheOnly: true });
 export const watchCachedWeaponThumbnail = snapshots.watchWeaponThumbnail;
 export const invalidateCachedWeaponThumbnail = snapshots.invalidateWeaponThumbnail;
