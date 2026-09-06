@@ -235,8 +235,8 @@ const client = createWeaponThumbnailClient();
 export const watchWeaponThumbnail = client.watchWeaponThumbnail;
 export const invalidateWeaponThumbnail = client.invalidateWeaponThumbnail;
 
-// Inventory browsing reads finished snapshots only. Missing files are retried
-// quietly while the independent inventory worker prepares them.
+// This API client only reads shared snapshots. Missing images are handled by
+// the separate browser renderer without queueing work on shared hosting.
 const snapshots = createWeaponThumbnailClient(undefined, undefined, { cacheOnly: true });
 export const watchCachedWeaponThumbnail = snapshots.watchWeaponThumbnail;
 export const invalidateCachedWeaponThumbnail = snapshots.invalidateWeaponThumbnail;

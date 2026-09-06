@@ -17,19 +17,24 @@ together. This keeps settings such as the bundled Chromium path current on
 existing installations. CI launches the packaged browser, draws with WebGL2,
 and encodes a WebP before accepting the release archive.
 
-Owned weapons use saved 2D snapshots of their float, seed, StatTrak, name, stickers
-and charm. The existing Node hosting process prepares these in the background:
-it checks recent changes and a bounded batch of older inventory every 30 seconds.
-Jobs continue after players leave and reuse the persistent image cache. New items
-and configuration changes receive a different image identity; an old snapshot
-cannot be shown for a changed item. No inventory or pricing rows are written.
+Owned weapons use static images of their float, seed, StatTrak, name, stickers
+and charm. Pages show normal catalogue artwork immediately and check existing
+server snapshots and locally saved browser images in parallel. A cache miss uses
+one isolated renderer on the visitor's GPU, then saves the WebP in their browser.
+Browsing never queues a server render. Images change only after the matching
+configuration's image loads; the grid and inspection/customization dialogs remain
+available while generation runs.
 
-Pages load normal catalogue artwork immediately, then show a saved snapshot if
-available. One cache-only batch checks up to 20 images, with a one-second request
-timeout and quiet 30-second refreshes for missing snapshots. Browsing never starts
-a render or waits for generation. Catalogue samples continue using normal artwork
-directly from the CDN, with the portal image proxy as fallback. The 3D inspector
-and customizer remain available, but snapshots themselves are ordinary WebP images.
+Public SkinHub model/texture assets are cached for everyone under
+`~/arena-portal/cache/weapon-viewer-resources` (1 GiB maximum). These files survive
+release activation and do not require Redis, a server GPU or a new service. The
+browser also caches up to 256 MiB of model/texture files and 64 MiB of generated
+images. Browser eviction or disabled storage falls back to normal fetching.
+The cached proxy runs with Node on this shared webhosting account; the GPU work
+runs in the visitor's browser. Cold downloads and shader compilation can exceed
+two seconds, so catalogue images remain visible until each exact image is ready.
+See [the implementation design](superpowers/specs/2026-09-06-browser-weapon-thumbnails-design.md)
+for cache budgets, sandbox restrictions and measured development timings.
 
 Renderer failures log the stage, elapsed time, weapon/finish/float/seed and up to
 eight recent asset or browser errors. URL queries and item name tags are omitted.
@@ -41,9 +46,12 @@ cannot be resolved by increasing the website's render timeout. Existing snapshot
 and normal catalogue artwork remain available during that outage. A stalled paint
 wait also times out after 30 seconds and discards the browser before the next item.
 
-Automatic prewarming defaults on when `ARENA_HOSTING_ROOT` and production Node
-mode are set, as in the managed launcher. Set `WEAPON_THUMBNAIL_PREWARM_ENABLED=false`
-to pause it, or `true` to enable it locally. Hosting builds disable the worker.
+Server inventory prewarming is now opt-in. Set `WEAPON_THUMBNAIL_PREWARM_ENABLED=true`
+to scan recent and older owned items every 30 seconds and prepare shared snapshots
+independently of page visits. Set it to `false`, or leave it unset, to use browser
+generation for missing images. An existing explicit `true` setting stays enabled;
+remove it if server background rendering is no longer wanted. Hosting builds
+disable the worker. Neither mode writes inventory or pricing rows.
 
 The following manual warmup tools remain optional. Use a separate profile for a
 manual warmup while automatic prewarming is running.

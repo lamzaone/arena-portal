@@ -18,8 +18,7 @@ function record(value: unknown): Row {
 
 export function ownedThumbnailPrewarmEnabled(environment: Record<string, string | undefined>) {
   if (environment.NEXT_PHASE === "phase-production-build" || environment.WEAPON_THUMBNAIL_PREWARM_ENABLED === "false") return false;
-  return environment.WEAPON_THUMBNAIL_PREWARM_ENABLED === "true"
-    || Boolean(environment.ARENA_HOSTING_ROOT && environment.NODE_ENV === "production");
+  return environment.WEAPON_THUMBNAIL_PREWARM_ENABLED === "true";
 }
 
 /** The inventory is the durable work list; no job table or database writes. */

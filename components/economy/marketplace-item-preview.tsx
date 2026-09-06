@@ -125,8 +125,8 @@ function fallbackIcon(itemType: string) {
 export function MarketplaceItemPreview(props: MarketplaceItemPreviewProps) {
   const preview = useMemo(() => thumbnailForSource(props.item, props.floatValue, props.patternSeed), [props.item, props.floatValue, props.patternSeed]);
   const fallback = <CatalogueItemPreview key={`${props.item.catalogueId}|${props.item.imageUrl}|${props.item.itemType}`} {...props} />;
-  // Owned items have a real float/seed and can read their prepared snapshot.
-  // Catalogue samples stay on fast normal artwork; browsing never queues work.
+  // A real float/seed can use a saved or client-rendered snapshot. Catalogue
+  // samples without an actual configuration stay on fast normal artwork.
   return preview && !preview.sample ? <OwnedWeaponThumbnail key={thumbnailSignature(preview.item)}
     item={preview.item} name={props.item.displayName} rarityRank={props.item.rarityRank}
     fallback={fallback} overlay={props.overlay} /> : fallback;
