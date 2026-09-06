@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 
 const upperRangeSteamId = "76561200000000000";
+const ownedThemeItemId = "11111111-1111-4111-8111-111111111111";
 const projectRoot = resolve(".");
 
 type ProfileDependencyTestGlobal = typeof globalThis & {
@@ -23,12 +24,16 @@ function sourceModuleUrl(path: string): string | null {
 }
 
 (globalThis as ProfileDependencyTestGlobal).__profileDependencyPortalPool = {
-  async query(sql) {
+  async query(sql, values) {
     if (sql.includes("SELECT steam_id, inventory_visibility")) {
       return [[{ steam_id: upperRangeSteamId, inventory_visibility: "private" }], []];
     }
     if (sql.includes("SELECT s.steam_id, t.theme_key")) {
-      return [[{ steam_id: upperRangeSteamId, theme_key: "beta_tester" }], []];
+      return [[{ steam_id: upperRangeSteamId, theme_key: "beta_tester", inventory_item_id: ownedThemeItemId }], []];
+    }
+    if (sql.includes("SELECT item.id AS item_id")) {
+      assert.deepEqual(values, [ownedThemeItemId]);
+      return [[{ steam_id: upperRangeSteamId, theme_key: "beta_tester", item_id: ownedThemeItemId }], []];
     }
     throw new Error(`Unexpected profile dependency query: ${sql}`);
   },
@@ -103,7 +108,7 @@ test("upper-range public profiles reach the inventory dependency without invalid
     items: [],
     total: 0,
     page: 1,
-    pageSize: 30,
+    pageSize: 20,
   });
 });
 

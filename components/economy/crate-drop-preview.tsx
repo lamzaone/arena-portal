@@ -1,9 +1,10 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, LoaderCircle, Trophy } from "lucide-react";
+import { LoaderCircle, Trophy } from "lucide-react";
 import { useEffect, useId, useMemo, useState } from "react";
 
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
+import { PaginatedItemGrid } from "@/components/economy/item-grid";
 import {
   formatTokens,
   rarityClass,
@@ -21,7 +22,6 @@ import {
   type CrateDropState,
 } from "@/lib/economy/crate-presentation";
 
-const DROP_PAGE_SIZE = 50;
 const DISPLAYED_RARITY_RANKS = [3, 4, 5, 6, 7] as const;
 
 export type EconomyCrateDrop = CrateDrop<EconomyItemView>;
@@ -131,6 +131,7 @@ export function CrateDropPreview({
   }
   return (
     <CrateDropPreviewReady
+      key={catalogueId ?? visibleState.drops[0]?.lootEntryId}
       totalWeight={visibleState.totalWeight}
       drops={visibleState.drops}
     />
@@ -147,7 +148,6 @@ function CrateDropPreviewReady({
   const searchId = `crate-drop-search-${useId().replaceAll(":", "")}`;
   const [rarityFilter, setRarityFilter] = useState("all");
   const [query, setQuery] = useState("");
-  const [page, setPage] = useState(1);
   const queryTerms = useMemo(
     () => normalizedText(query).split(" ").filter(Boolean),
     [query],
@@ -183,13 +183,6 @@ function CrateDropPreviewReady({
       ),
     [drops, queryTerms, rarityFilter],
   );
-  const pageCount = Math.max(1, Math.ceil(filteredDrops.length / DROP_PAGE_SIZE));
-  const visiblePage = Math.min(page, pageCount);
-  const pageStart = (visiblePage - 1) * DROP_PAGE_SIZE;
-  const visibleDrops = filteredDrops.slice(pageStart, pageStart + DROP_PAGE_SIZE);
-
-  useEffect(() => setPage(1), [query, rarityFilter]);
-
   return (
     <section className="crate-drop-odds" aria-label="Possible crate drops">
       <header>
@@ -240,13 +233,13 @@ function CrateDropPreviewReady({
         />
         <p aria-live="polite">
           {filteredDrops.length
-            ? `Showing ${pageStart + 1}-${Math.min(pageStart + visibleDrops.length, filteredDrops.length)} of ${filteredDrops.length.toLocaleString()} drops`
+            ? `${filteredDrops.length.toLocaleString()} drops match this filter`
             : "No drops match this filter"}
         </p>
       </div>
-      {visibleDrops.length ? (
-        <div className="crate-drop-grid">
-          {visibleDrops.map((drop) => (
+      {filteredDrops.length ? (
+        <PaginatedItemGrid className="crate-drop-grid" label="Possible crate drops" resetKey={`${query}:${rarityFilter}`}>
+          {filteredDrops.map((drop) => (
             <article
               key={drop.lootEntryId}
               className={`crate-drop-card ${rarityRankClass(drop.item.rarityRank)}`}
@@ -279,33 +272,10 @@ function CrateDropPreviewReady({
               </div>
             </article>
           ))}
-        </div>
+        </PaginatedItemGrid>
       ) : (
         <p className="crate-odds-unavailable">No possible drops match this filter.</p>
       )}
-      {filteredDrops.length > DROP_PAGE_SIZE ? (
-        <nav className="crate-drop-pagination" aria-label="Crate drop pages">
-          <button
-            type="button"
-            className="button button-secondary"
-            disabled={visiblePage <= 1}
-            onClick={() => setPage(visiblePage - 1)}
-          >
-            <ChevronLeft aria-hidden="true" /> Previous
-          </button>
-          <span>
-            Page {visiblePage} of {pageCount}
-          </span>
-          <button
-            type="button"
-            className="button button-secondary"
-            disabled={visiblePage >= pageCount}
-            onClick={() => setPage(visiblePage + 1)}
-          >
-            Next <ChevronRight aria-hidden="true" />
-          </button>
-        </nav>
-      ) : null}
     </section>
   );
 }

@@ -40,6 +40,10 @@ jobs:
           python3 scripts/hosting/package.test.py
           python3 scripts/hosting/activate.test.py
       - run: npm run build:release
+      - name: Install thumbnail browser for the Linux runtime
+        run: npx playwright install --with-deps --only-shell chromium
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: .playwright-browsers
       - name: Package and verify production runtime
         run: |
           bash scripts/hosting/package.sh

@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
+import { PaginatedItemGrid } from "@/components/economy/item-grid";
 import { PortalToast } from "@/components/success-toast";
 import { AsyncButton } from "@/components/ui/async-button";
 import {
@@ -361,11 +362,13 @@ export function RedeemCodeAdmin({
               <span>{selectedRewards.length ? `${selectedRewards.length} selected` : "Optional when Tokens are set"}</span>
             </div>
             {selectedRewards.length ? (
-              <ul>
+              <PaginatedItemGrid as="ul" label="Selected item rewards">
                 {selectedRewards.map(({ reward, item }) => (
                   <li key={item.id}>
                     <MarketplaceItemPreview
                       item={{
+                        ...item,
+                        raw: { catalogue: item },
                         catalogueId: item.id,
                         displayName: item.displayName,
                         floatValue: null,
@@ -384,7 +387,7 @@ export function RedeemCodeAdmin({
                     </div>
                   </li>
                 ))}
-              </ul>
+              </PaginatedItemGrid>
             ) : <p>Search the catalogue below, then add cases, skins, stickers, agents, or other existing items.</p>}
           </div>
           <AsyncButton
@@ -418,18 +421,18 @@ export function RedeemCodeAdmin({
               pending={searching}
             />
           </form>
-          <div className="redeem-picker-list">
+          <PaginatedItemGrid className="redeem-picker-list" label="Catalogue rewards" resetKey={pickerQuery}>
             {pickerItems.length ? pickerItems.map((item) => {
               const selected = rewards.find((reward) => reward.catalogueId === item.id);
               return <article key={item.id} className="redeem-picker-item">
-                <MarketplaceItemPreview item={{ catalogueId: item.id, displayName: item.displayName, floatValue: null, imageUrl: item.imageUrl, itemType: item.itemType, rarityRank: item.rarityRank }} enableMarketPreview={false} />
+                <MarketplaceItemPreview item={{ ...item, raw: { catalogue: item }, catalogueId: item.id, displayName: item.displayName, floatValue: null, imageUrl: item.imageUrl, itemType: item.itemType, rarityRank: item.rarityRank }} enableMarketPreview={false} />
                 <div><span className={`rarity-rank-${item.rarityRank}`}>{item.rarityName}</span><strong>{item.displayName}</strong><small>{economyItemTypeLabel(item.itemType)} · ID {item.id}</small></div>
                 <button className="button button-secondary" type="button" onClick={() => addReward(item.id)} disabled={selected?.quantity === 50}>
                   <Plus aria-hidden="true" /> {selected ? `Add (${selected.quantity})` : "Add"}
                 </button>
               </article>;
             }) : <p className="empty-copy">No catalogue entries matched. Adjust the search and try again.</p>}
-          </div>
+          </PaginatedItemGrid>
         </aside>
       </section>
 
@@ -447,7 +450,7 @@ export function RedeemCodeAdmin({
           <p className="eyebrow"><Gift aria-hidden="true" /> Active &amp; saved campaigns</p>
           <h2>Recent redeem codes</h2>
         </div>
-        {codes.length ? <div className="redeem-code-grid">{codes.map((item) => (
+        {codes.length ? <PaginatedItemGrid className="redeem-code-grid" label="Redeem codes">{codes.map((item) => (
           <article className={`panel redeem-code-card ${item.enabled ? "is-live" : "is-paused"}`} key={item.id}>
             <header><div><span className="redeem-code-hint">{item.codeHint}</span><h3>{item.displayName}</h3></div><span className={`redeem-code-status ${item.enabled ? "" : "is-paused"}`}>{item.enabled ? "Live" : "Paused"}</span></header>
             <div className="redeem-code-meta"><span><Coins aria-hidden="true" /> {item.tokenAmount.toLocaleString()} Tokens</span><span><TicketCheck aria-hidden="true" /> {usesLabel(item)}</span></div>
@@ -464,7 +467,7 @@ export function RedeemCodeAdmin({
               {item.enabled ? "Pause code" : "Make live"}
             </AsyncButton>
           </article>
-        ))}</div> : <p className="empty-copy">No redeem campaigns have been created yet.</p>}
+        ))}</PaginatedItemGrid> : <p className="empty-copy">No redeem campaigns have been created yet.</p>}
       </section>
       {notice ? <PortalToast message={notice} onDismiss={() => setNotice(null)} /> : null}
       {error ? <PortalToast variant="danger" message={error} onDismiss={() => setError(null)} /> : null}

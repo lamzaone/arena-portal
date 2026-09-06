@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit",
     "migrate:arena-groups": "node scripts/migrate-arena-group-authority.mjs",
     "migrate:vip-scope": "node scripts/migrate-vip-scope.mjs",
-    "test": "npm run test:health && npm run test:seo && npm run test:vip && npm run test:scope && npm run test:vip-scope-migration && npm run test:database && npm run test:navigation && npm run test:loadout && npm run test:inventory-lock && npm run test:inventory-selection && npm run test:crates && npm run test:sellback && npm run test:chat-colors && npm run test:steam && npm run test:server-status && npm run test:player-identities && npm run test:themes",
+    "test": "npm run test:health && npm run test:seo && npm run test:vip && npm run test:scope && npm run test:vip-scope-migration && npm run test:database && npm run test:navigation && npm run test:loadout && npm run test:inventory-lock && npm run test:inventory-selection && npm run test:crates && npm run test:sellback && npm run test:chat-colors && npm run test:steam && npm run test:server-status && npm run test:player-identities && npm run test:themes && npm run test:thumbnails && npm run test:catalogue && npm run test:market-pricing && npm run test:item-grid",
     "test:health": "node --experimental-strip-types --test app/api/health/route.test.ts lib/form-action-response.test.ts",
     "test:player-identities": "node --experimental-strip-types --test lib/player-identities.test.ts lib/player-search.test.ts",
     "test:themes": "node --experimental-strip-types --test lib/themes/registry.test.ts && node --experimental-transform-types --test lib/data/profile-theme-entitlements.test.ts",
@@ -26,7 +26,7 @@
     "test:seo": "node --experimental-strip-types --test lib/seo/site.test.ts",
     "test:vip": "node --experimental-strip-types --test lib/economy/vip-membership-conversion.test.ts lib/economy/vip-activation-state.test.ts",
     "test:navigation": "node --experimental-strip-types --test components/primary-navigation-routes.test.ts",
-    "test:loadout": "node --experimental-strip-types --test lib/economy/weapon-categories.test.ts lib/economy/loadout-selection.test.ts lib/economy/weapon-preview.test.ts lib/economy/weapon-model.test.ts lib/economy/weapon-customization.test.ts lib/economy/preview-budget.test.ts && node --experimental-transform-types --test lib/data/weapon-customization.test.ts",
+    "test:loadout": "node --experimental-strip-types --test lib/economy/weapon-categories.test.ts lib/economy/loadout-selection.test.ts lib/economy/weapon-preview.test.ts lib/economy/weapon-model.test.ts lib/economy/weapon-customization.test.ts && node --experimental-transform-types --test lib/data/weapon-customization.test.ts",
     "test:inventory-lock": "node --experimental-strip-types --test lib/economy/inventory-sale-lock.test.ts",
     "test:inventory-selection": "node --experimental-strip-types --test lib/economy/inventory-selection.test.ts",
     "test:crates": "node --experimental-strip-types --test lib/economy/crate-presentation.test.ts",
@@ -36,7 +36,13 @@
     "test:steam": "node --experimental-strip-types --test lib/steam/*.test.ts",
     "test:database": "node --experimental-strip-types --test lib/data/mysql-utc-session.test.ts && npm run test:worker-database",
     "test:worker-database": "node --test cloudflare/request-database-scope.test.mjs scripts/prepare-opennext-windows.test.mjs",
-    "test:server-status": "node --experimental-strip-types --test lib/server-link/*.test.ts"
+    "test:server-status": "node --experimental-strip-types --test lib/server-link/*.test.ts",
+    "thumbnails:install": "playwright install chromium",
+    "thumbnails:warm": "node --experimental-strip-types scripts/warm-weapon-thumbnails.mjs",
+    "test:thumbnails": "node --experimental-strip-types --test app/api/economy/thumbnail-session.test.ts lib/economy/weapon-thumbnail.test.ts lib/economy/thumbnail-cache.test.ts lib/economy/thumbnail-http.test.ts lib/economy/thumbnail-renderer.test.ts lib/economy/thumbnail-browser.test.ts lib/economy/thumbnail-paths.test.ts components/economy/thumbnail-client.test.ts lib/economy/trade-preview.test.ts scripts/weapon-thumbnail-warmup.test.mjs",
+    "test:catalogue": "node --experimental-transform-types --test lib/data/cs2-finish-validity.test.ts && node --test scripts/cs2-catalogue-quarantine-policy.test.mjs scripts/remove-unpriced-custom-weapons-policy.test.mjs",
+    "test:market-pricing": "node --experimental-strip-types --test app/api/economy/custom-finish-routes.test.ts lib/economy/external-market-prices.test.ts lib/economy/market-pricing.test.ts lib/economy/market-selection.test.ts",
+    "test:item-grid": "node --experimental-strip-types --test lib/economy/item-grid-layout.test.ts app/api/economy/trade-partner-inventory.test.ts"
   },
   "dependencies": {
     "@skinhub/cdn": "0.3.0",
@@ -44,8 +50,10 @@
     "lucide-react": "^1.34.0",
     "mysql2": "^3.24.2",
     "next": "16.2.12",
+    "playwright": "1.63.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "sharp": "0.35.4"
   },
   "devDependencies": {
     "@opennextjs/cloudflare": "1.20.0",

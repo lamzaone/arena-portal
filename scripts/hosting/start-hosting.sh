@@ -17,4 +17,8 @@ printf '%s\n' "$$" > "$app_root/app.pid.next"
 mv -f -- "$app_root/app.pid.next" "$app_root/app.pid"
 export NODE_ENV=production HOSTNAME=0.0.0.0
 export PORT="${PORT:-3000}"
+export ARENA_HOSTING_ROOT="$app_root"
+if [[ -d "$release/.playwright-browsers" ]]; then
+  export PLAYWRIGHT_BROWSERS_PATH="$release/.playwright-browsers"
+fi
 exec node --env-file="$app_root/.env.production" "$release/server.js"

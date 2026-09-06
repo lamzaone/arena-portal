@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { EconomyEmptyState } from "@/components/economy/economy-item-card";
+import { PaginatedItemGrid, useItemGridLayout } from "@/components/economy/item-grid";
 import { postEconomyAction } from "@/components/economy/economy-request";
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
 import {
@@ -26,7 +27,6 @@ import {
   itemIsTradable,
   rarityClass,
   rarityName,
-  type EconomyItemView,
   type EconomyTradeItemView,
   type EconomyTradeView,
 } from "@/components/economy/economy-view-model";
@@ -45,6 +45,8 @@ import {
 } from "@/components/ui/search-field";
 import { economyItemTypeLabel } from "@/lib/economy/item-taxonomy";
 import { economyItemDisplayName } from "@/lib/economy/item-display-name";
+import { tradeWeaponPreviewFields } from "@/lib/economy/trade-preview";
+import { ITEM_GRID_MAX_PAGE_SIZE, normalizeItemGridPageSize } from "@/lib/economy/item-grid-layout";
 import type { PlayerIdentityData } from "@/lib/player-identities";
 
 type TradeManagerProps = {
@@ -97,6 +99,7 @@ function parsePartnerItem(value: unknown): EconomyTradeItemView | null {
   if (!id || !baseDisplayName || !itemType) return null;
   const rarityRank = Math.max(0, integer(value.rarityRank));
   const stattrak = value.stattrak === true;
+  const visual = tradeWeaponPreviewFields(value);
   return {
     id,
     catalogueId:
@@ -109,6 +112,10 @@ function parsePartnerItem(value: unknown): EconomyTradeItemView | null {
     rarityRank,
     tradable: value.tradable !== false && value.tradable !== 0,
     imageUrl: text(value.imageUrl) || null,
+    definitionIndex: visual.definitionIndex,
+    paintkit: visual.paintkit,
+    seed: visual.seed,
+    raw: { attributes: visual.attributes, stickers: visual.stickers },
     floatValue:
       value.floatValue === null || value.floatValue === undefined
         ? null
@@ -136,7 +143,7 @@ function parsePartnerInventory(value: unknown) {
         ? Math.max(0, Math.floor(rawTotal))
         : null,
     page: Math.max(1, integer(value.page, 1)),
-    pageSize: Math.max(1, integer(value.pageSize, 60)),
+    pageSize: normalizeItemGridPageSize(value.pageSize),
   };
 }
 
@@ -203,17 +210,7 @@ function TradeItemButton({
   selected,
   onToggle,
 }: {
-  item: Pick<
-    EconomyItemView,
-    | "id"
-    | "catalogueId"
-    | "displayName"
-    | "floatValue"
-    | "imageUrl"
-    | "itemType"
-    | "rarity"
-    | "rarityRank"
-  >;
+  item: EconomyTradeItemView;
   selected: boolean;
   onToggle: () => void;
 }) {
@@ -250,6 +247,7 @@ export function TradeManager({
   counterpartyIdentities,
 }: TradeManagerProps) {
   const router = useRouter();
+  const { gridProps: partnerGridProps, pageSize: partnerPageSize, measured: partnerGridMeasured } = useItemGridLayout();
   const inventoryItems = useMemo(() => economyItems(inventory), [inventory]);
   const walletView = useMemo(() => economyWallet(wallet), [wallet]);
   const tradeList = useMemo(() => economyTrades(trades), [trades]);
@@ -266,7 +264,7 @@ export function TradeManager({
     items: [],
     total: null,
     page: 1,
-    pageSize: 60,
+    pageSize: ITEM_GRID_MAX_PAGE_SIZE,
   });
   const [knownPartnerItems, setKnownPartnerItems] = useState<
     Record<string, EconomyTradeItemView>
@@ -309,14 +307,19 @@ export function TradeManager({
   );
 
   useEffect(() => {
+    setPartnerPage(1);
+  }, [partnerPageSize]);
+
+  useEffect(() => {
     if (!selectedPlayer) {
       setPartnerState("idle");
       return;
     }
+    if (!partnerGridMeasured) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setPartnerState("loading");
-      const params = new URLSearchParams({ page: String(partnerPage) });
+      const params = new URLSearchParams({ page: String(partnerPage), pageSize: String(partnerPageSize) });
       if (partnerQuery.trim()) params.set("q", partnerQuery.trim());
       void fetch(
         `/api/economy/trades/partners/${selectedPlayer.steamId}/inventory?${params.toString()}`,
@@ -335,8 +338,9 @@ export function TradeManager({
           if (controller.signal.aborted) return;
           const result = parsePartnerInventory(body);
           if (!result) throw new Error("The player inventory response was invalid.");
+          if (result.pageSize !== partnerPageSize) throw new Error("The player inventory page size did not match this view.");
           if (result.visibility === "private") {
-            setPartnerInventory({ items: [], total: null, page: 1, pageSize: 60 });
+            setPartnerInventory({ items: [], total: null, page: 1, pageSize: partnerPageSize });
             setKnownPartnerItems({});
             setRequestedItemIds([]);
             setPartnerState("private");
@@ -361,7 +365,7 @@ export function TradeManager({
         })
         .catch((error: unknown) => {
           if (controller.signal.aborted) return;
-          setPartnerInventory({ items: [], total: null, page: 1, pageSize: 60 });
+          setPartnerInventory({ items: [], total: null, page: 1, pageSize: partnerPageSize });
           setPartnerState("error");
           setNotice({
             type: "error",
@@ -377,13 +381,13 @@ export function TradeManager({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [partnerPage, partnerQuery, selectedPlayer]);
+  }, [partnerPage, partnerPageSize, partnerGridMeasured, partnerQuery, selectedPlayer]);
 
   function choosePlayer(player: TradePlayer) {
     setSelectedPlayer(player);
     setPartnerQuery("");
     setPartnerPage(1);
-    setPartnerInventory({ items: [], total: null, page: 1, pageSize: 60 });
+    setPartnerInventory({ items: [], total: null, page: 1, pageSize: partnerPageSize });
     setKnownPartnerItems({});
     setRequestedItemIds([]);
     setRequestedTokens("0");
@@ -395,7 +399,7 @@ export function TradeManager({
     if (resetSearch) setPlayerSearchKey((key) => key + 1);
     setPartnerQuery("");
     setPartnerPage(1);
-    setPartnerInventory({ items: [], total: null, page: 1, pageSize: 60 });
+    setPartnerInventory({ items: [], total: null, page: 1, pageSize: partnerPageSize });
     setKnownPartnerItems({});
     setRequestedItemIds([]);
     setRequestedTokens("0");
@@ -557,6 +561,10 @@ export function TradeManager({
     partnerInventory.total === null
       ? 1
       : Math.max(1, Math.ceil(partnerInventory.total / partnerInventory.pageSize));
+  const partnerLoading = Boolean(selectedPlayer) && (
+    partnerState === "loading" || !partnerGridMeasured ||
+    partnerState === "ready" && (partnerInventory.pageSize !== partnerPageSize || partnerInventory.page !== partnerPage)
+  );
 
   return (
     <section aria-label="Player trading">
@@ -658,7 +666,7 @@ export function TradeManager({
             />
             <div className="trade-side-scroll">
               {visibleOwnItems.length ? (
-                <div className="trade-offer-picker">
+                <PaginatedItemGrid className="trade-offer-picker" label="Your trade inventory" resetKey={ownQuery}>
                   {visibleOwnItems.map((item) => (
                     <TradeItemButton
                       key={item.id}
@@ -669,7 +677,7 @@ export function TradeManager({
                       }
                     />
                   ))}
-                </div>
+                </PaginatedItemGrid>
               ) : (
                 <div className="trade-side-empty">
                   <Coins aria-hidden="true" />
@@ -708,14 +716,14 @@ export function TradeManager({
                 }}
                 placeholder="Name, rarity, or item type"
                 autoComplete="off"
-                pending={partnerState === "loading" && Boolean(partnerQuery.trim())}
+                pending={partnerLoading && Boolean(partnerQuery.trim())}
                 disabled={partnerState === "private"}
               />
             ) : null}
             <span className="sr-only" role="status" aria-live="polite">
               {!selectedPlayer
                 ? "No trade partner selected."
-                : partnerState === "loading"
+                : partnerLoading
                   ? `Loading ${selectedPlayer.displayName}'s public inventory.`
                   : partnerState === "private"
                     ? `${selectedPlayer.displayName}'s inventory is private.`
@@ -725,14 +733,14 @@ export function TradeManager({
                         ? `${partnerInventory.total ?? partnerInventory.items.length} available items found. Page ${partnerInventory.page} of ${partnerPageCount}.`
                         : `${selectedPlayer.displayName} selected.`}
             </span>
-            <div className="trade-side-scroll" aria-busy={partnerState === "loading"}>
+            <div className="trade-side-scroll" aria-busy={partnerLoading}>
               {!selectedPlayer ? (
                 <div className="trade-side-empty">
                   <UserRound aria-hidden="true" />
                   <strong>Choose a player</strong>
                   <p>Their public tradable inventory will appear here.</p>
                 </div>
-              ) : partnerState === "loading" ? (
+              ) : partnerLoading ? (
                 <div className="trade-partner-loading" aria-label="Loading public inventory">
                   {Array.from({ length: 4 }, (_, index) => (
                     <span key={index} className="ui-skeleton-card" aria-hidden="true">
@@ -756,10 +764,16 @@ export function TradeManager({
                   <strong>Inventory unavailable</strong>
                   <p>Try choosing this player again or return in a moment.</p>
                 </div>
-              ) : partnerState === "ready" && partnerInventory.items.length ? (
-                <>
-                  <div className="trade-offer-picker">
-                    {partnerInventory.items.map((item) => (
+              ) : partnerState === "ready" && !partnerInventory.items.length ? (
+                <div className="trade-side-empty">
+                  <Coins aria-hidden="true" />
+                  <strong>No matching available items</strong>
+                  <p>This public inventory has no items matching the current filter.</p>
+                </div>
+              ) : null}
+              <div {...partnerGridProps} className="trade-offer-picker" aria-label="Other player trade inventory">
+                {selectedPlayer && partnerState === "ready" && !partnerLoading
+                  ? partnerInventory.items.slice(0, partnerPageSize).map((item) => (
                       <TradeItemButton
                         key={item.id}
                         item={item}
@@ -768,23 +782,16 @@ export function TradeManager({
                           toggleItem(item.id, requestedItemIds, setRequestedItemIds)
                         }
                       />
-                    ))}
-                  </div>
-                </>
-              ) : partnerState === "ready" ? (
-                <div className="trade-side-empty">
-                  <Coins aria-hidden="true" />
-                  <strong>No matching available items</strong>
-                  <p>This public inventory has no items matching the current filter.</p>
-                </div>
-              ) : null}
+                    ))
+                  : null}
+              </div>
               {selectedPlayer && partnerInventory.total !== null && partnerPageCount > 1 ? (
                 <nav className="trade-partner-pagination" aria-label="Other player inventory pages">
                   <button
                     type="button"
-                    aria-disabled={partnerState === "loading" || partnerInventory.page <= 1}
+                    disabled={partnerLoading || partnerInventory.page <= 1}
                     onClick={() => {
-                      if (partnerState === "loading" || partnerInventory.page <= 1) return;
+                      if (partnerLoading || partnerInventory.page <= 1) return;
                       setPartnerPage((page) => Math.max(1, page - 1));
                     }}
                   >
@@ -793,9 +800,9 @@ export function TradeManager({
                   <span>{partnerInventory.page} / {partnerPageCount}</span>
                   <button
                     type="button"
-                    aria-disabled={partnerState === "loading" || partnerInventory.page >= partnerPageCount}
+                    disabled={partnerLoading || partnerInventory.page >= partnerPageCount}
                     onClick={() => {
-                      if (partnerState === "loading" || partnerInventory.page >= partnerPageCount) return;
+                      if (partnerLoading || partnerInventory.page >= partnerPageCount) return;
                       setPartnerPage((page) => page + 1);
                     }}
                   >

@@ -14,6 +14,10 @@ trap cleanup EXIT
 cp "$repo_root/dist/freakhosting-release.tar.gz" "$stage/smoke.tar.gz"
 printf '%s\n' 'ECONOMY_PRICE_REFRESH_ENABLED=false' 'GAME_DATABASE_URL=' 'PORTAL_DATABASE_URL=' > "$stage/.env.production"
 ARENA_DEPLOY_ROOT="$stage" PORT=4319 bash "$repo_root/scripts/hosting/activate.sh" smoke
+(
+  cd -- "$stage/current"
+  node --experimental-strip-types scripts/warm-weapon-thumbnails.mjs --help > /dev/null
+)
 printf '%s' 'persistent upload fixture' > "$stage/shared/economy-custom/ci-smoke.txt"
 (
   export PORT=4319

@@ -31,6 +31,8 @@ function WeaponCustomizerReady({ item, inventory, csrf, disabled, onSaved, onBus
   const [notice, setNotice] = useState("");
   const [failed, setFailed] = useState(false);
   const [reload, setReload] = useState(0);
+  const [viewerReady, setViewerReady] = useState(false);
+  useEffect(() => { setViewerReady(false); }, [view, reload]);
   const requestRef = useRef<{ signature: string; key: string } | null>(null);
   const rawRevision = previewRecord(item.raw.attributes).attachmentRevision;
   const incomingRevision = typeof rawRevision === "number" && Number.isSafeInteger(rawRevision) ? rawRevision : 0;
@@ -111,21 +113,22 @@ function WeaponCustomizerReady({ item, inventory, csrf, disabled, onSaved, onBus
     </header>
     <div className={styles.workspace}>
       <div className={styles.stage}>
-        {/* Reconnect when changing renderer views: rapid hands/gun patches can
-            otherwise leave the hosted wrapper waiting for a superseded ready event. */}
-        <SkinViewer key={`${reload}:${view}`} item={draft} view={view} editingSlot={editingSlot}
+        {/* Keep the iframe and its loaded assets across view changes. Retry
+            increments the key only when a new renderer connection is needed. */}
+        <SkinViewer key={reload} item={draft} view={view} editingSlot={editingSlot}
           title={`${item.displayName} at float ${item.floatValue}, pattern ${item.seed}`}
-          style={{ width: "100%", height: "100%", minHeight: 340 }}
+          style={{ width: "100%", height: "100%" }}
           interactions={{ orbit: true, zoom: true, dragStickers: !locked && slots > 0 && view === "gun", dragCharm: !locked && hasCharm && view === "gun" }}
-          settings={{ quality: { renderScale: 1, shadows: true }, environment: { background: "transparent", map: "Warehouse" }, overlays: { stickerGizmo: true, charmGizmo: true, gizmoStyle: { color: "#ff7185" } } }}
-          onError={() => setFailed(true)}
+          settings={{ camera: { defaultZoom: 1 }, quality: { renderScale: 1, bloom: 0, shadows: false }, environment: { background: "transparent", map: "Warehouse" }, overlays: { stickerGizmo: true, charmGizmo: true, gizmoStyle: { color: "#ff7185", shadowColor: "#0a090b" } } }}
+          onReady={() => setViewerReady(true)}
+          onError={() => { setViewerReady(false); setFailed(true); }}
           onEditingSlotChange={(slot) => { if (!locked) setEditingSlot(slot); }}
           onChange={(changed) => { if (locked) return; setDraft((current) => mergeWeaponPlacements(current, changed)); setDirty(true); setNotice(""); }}
           loading={<div className={styles.loading}><LoaderCircle size={22} /><span>Loading your exact finish…</span></div>}
           fallback={<div className={styles.loading}><span>3D preview is unavailable. Try again or inspect in CS2.</span></div>} />
         <span className={styles.stageHint}>{view === "gun" ? "Drag to rotate · Scroll to zoom · Select an attachment to place it" : "First-person inspection"}</span>
       </div>
-      {(slots > 0 || hasCharm) && <fieldset className={styles.attachments} disabled={locked}>
+      {(slots > 0 || hasCharm) && <div className={styles.attachments}><fieldset className={styles.attachmentFields} disabled={locked || !viewerReady}>
         <legend><Sticker size={16} /> Attachments</legend>
         {Array.from({ length: slots }, (_, slot) => {
           const attached = item.stickers.find((s) => s.slot === slot);
@@ -158,7 +161,7 @@ function WeaponCustomizerReady({ item, inventory, csrf, disabled, onSaved, onBus
         </>}
         {!stickers.length && !charms.length && !item.stickers.length && !draft.charm && <p>Owned stickers and charms appear here when available.</p>}
         {hasLegacySticker && <p>Your legacy sixth sticker is preserved. This viewer shows five slots.</p>}
-      </fieldset>}
+      </fieldset></div>}
     </div>
     <div className={styles.identity}><span>Float <b>{item.floatValue}</b></span><span>Pattern <b>{item.seed}</b></span><span>StatTrak <b>{item.stattrak ? item.stattrakCount : "Off"}</b></span>{dirty && <span className={styles.unsaved}>Unsaved placement</span>}</div>
     <footer className={styles.actions}>

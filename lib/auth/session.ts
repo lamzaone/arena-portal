@@ -1,12 +1,12 @@
 import "server-only";
 
-import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { cache } from "react";
 
 import { createPortalSession, getPortalSession, revokePortalSession } from "@/lib/data/portal-repository";
+import { COOKIE_NAME, hashSessionToken as hashToken, readSessionTokenHash } from "./session-cookie";
 
-const COOKIE_NAME = "arena_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 14;
 
 export type PortalSession = {
@@ -35,10 +35,6 @@ function sign(payload: string, secret: string) {
   return createHmac("sha256", secret).update(payload).digest("base64url");
 }
 
-function hashToken(token: string) {
-  return createHash("sha256").update(token).digest("hex");
-}
-
 export async function createSessionToken(steamId: string) {
   if (!/^7656119\d{10}$/.test(steamId)) throw new Error("Invalid SteamID64.");
 
@@ -49,11 +45,8 @@ export async function createSessionToken(steamId: string) {
 }
 
 async function getSessionUncached() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
-  if (!token || token.length < 32) return null;
-
-  const tokenHash = hashToken(token);
+  const tokenHash = await readSessionTokenHash();
+  if (!tokenHash) return null;
   const storedSession = await getPortalSession(tokenHash);
   if (!storedSession || storedSession.expiresAt <= Date.now()) return null;
   return { ...storedSession, tokenHash };

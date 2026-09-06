@@ -211,8 +211,9 @@ export function ProfileSettingsForm({
         </legend>
         <p className="empty-copy">
           Choose how your profile looks. Global themes also style the site for
-          you and your player cards for everyone. Themes received as group
-          rewards stay available while the granting membership is active.
+          you and your player cards for everyone. Your selection stays saved
+          while the theme is available in your inventory. Group rewards may be
+          removed when the granting membership ends.
           Equip a theme here or from Inventory.
         </p>
         <div className="settings-theme-grid">

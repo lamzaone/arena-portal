@@ -9,9 +9,10 @@ import {
   LockKeyhole,
   PackageOpen,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
+import { useItemGridLayout } from "@/components/economy/item-grid";
 import {
   economyItems,
   rarityRankClass,
@@ -61,50 +62,65 @@ export function ProfileInventoryPreview({
   steamId,
   isOwnProfile,
 }: ProfileInventoryPreviewProps) {
-  const [inventory, setInventory] = useState(preview);
-  const [pendingPage, setPendingPage] = useState<number | null>(null);
+  return <ProfileInventoryCollection key={steamId} preview={preview} steamId={steamId} isOwnProfile={isOwnProfile} />;
+}
+
+function ProfileInventoryCollection({
+  preview,
+  steamId,
+  isOwnProfile,
+}: ProfileInventoryPreviewProps) {
+  const { gridProps, pageSize, measured } = useItemGridLayout();
+  const [collection, setCollection] = useState({ source: preview, value: preview });
+  const inventory = collection.source === preview ? collection.value : preview;
+  const [pendingRequest, setPendingRequest] = useState<{ page: number; pageSize: number } | null>(null);
+  const pendingPage = pendingRequest?.page ?? null;
   const [error, setError] = useState<string | null>(null);
-  const [failedPage, setFailedPage] = useState<number | null>(null);
-  const requestRef = useRef<AbortController | null>(null);
+  const [failedRequest, setFailedRequest] = useState<{ page: number; pageSize: number } | null>(null);
+  const requestRef = useRef<{ controller: AbortController; key: string } | null>(null);
+  const sourceRef = useRef(preview);
+  sourceRef.current = preview;
+  const anchorRef = useRef((preview.page - 1) * preview.pageSize);
+  const anchor = collection.source === preview ? anchorRef.current : (preview.page - 1) * preview.pageSize;
   const panelRef = useRef<HTMLElement | null>(null);
   const items = useMemo(() => economyItems(inventory.items), [inventory.items]);
-  const pageCount = Math.max(1, Math.ceil(inventory.total / inventory.pageSize));
-  const pageLinks = paginationPages(pageCount, inventory.page);
+  const visibleItems = items.slice(0, pageSize);
+  const pageCount = Math.max(1, Math.ceil(inventory.total / pageSize));
+  const currentPage = Math.min(pageCount, Math.floor(anchor / pageSize) + 1);
+  const pageLinks = paginationPages(pageCount, currentPage);
   const firstItem = inventory.total
     ? (inventory.page - 1) * inventory.pageSize + 1
     : 0;
   const lastItem = inventory.total
-    ? Math.min(inventory.total, firstItem + items.length - 1)
+    ? Math.min(inventory.total, firstItem + visibleItems.length - 1)
     : 0;
 
   useEffect(() => {
-    setInventory(preview);
-    setPendingPage(null);
+    requestRef.current?.controller.abort();
+    requestRef.current = null;
+    anchorRef.current = (preview.page - 1) * preview.pageSize;
+    setCollection({ source: preview, value: preview });
+    setPendingRequest(null);
     setError(null);
-    setFailedPage(null);
-    return () => requestRef.current?.abort();
+    setFailedRequest(null);
+    return () => requestRef.current?.controller.abort();
   }, [preview, steamId]);
 
-  async function loadPage(page: number) {
-    if (
-      pendingPage !== null ||
-      page === inventory.page ||
-      page < 1 ||
-      page > pageCount
-    ) {
-      return;
-    }
-
-    requestRef.current?.abort();
+  const loadPage = useCallback(async (page: number, requestedPageSize: number, scroll = true) => {
+    if (!Number.isSafeInteger(page) || page < 1) return;
+    const key = `${page}:${requestedPageSize}`;
+    if (requestRef.current?.key === key) return;
+    requestRef.current?.controller.abort();
     const controller = new AbortController();
-    requestRef.current = controller;
-    setPendingPage(page);
+    requestRef.current = { controller, key };
+    if (scroll) anchorRef.current = (page - 1) * requestedPageSize;
+    setPendingRequest({ page, pageSize: requestedPageSize });
     setError(null);
-    setFailedPage(null);
+    setFailedRequest(null);
 
     try {
       const response = await fetch(
-        `/api/players/${encodeURIComponent(steamId)}/inventory?page=${page}`,
+        `/api/players/${encodeURIComponent(steamId)}/inventory?page=${page}&pageSize=${requestedPageSize}`,
         {
           credentials: "same-origin",
           headers: { accept: "application/json" },
@@ -117,8 +133,13 @@ export function ProfileInventoryPreview({
       if (!response.ok || !result?.ok) {
         throw new Error(result?.message ?? "That inventory page could not be loaded.");
       }
-      setInventory(result);
-      requestAnimationFrame(() => {
+      if (result.page !== page || result.pageSize !== requestedPageSize || !Array.isArray(result.items) || !Number.isSafeInteger(result.total) || result.total < 0) {
+        throw new Error("The inventory returned a different page. Please try again.");
+      }
+      if (controller.signal.aborted || requestRef.current?.controller !== controller || sourceRef.current !== preview) return;
+      setCollection({ source: preview, value: result });
+      if (scroll) requestAnimationFrame(() => {
+        if (controller.signal.aborted || sourceRef.current !== preview) return;
         const reducedMotion = window.matchMedia(
           "(prefers-reduced-motion: reduce)",
         ).matches;
@@ -128,20 +149,26 @@ export function ProfileInventoryPreview({
         });
       });
     } catch (caught) {
-      if (caught instanceof DOMException && caught.name === "AbortError") return;
+      if (controller.signal.aborted || requestRef.current?.controller !== controller || sourceRef.current !== preview) return;
       setError(
         caught instanceof Error
           ? caught.message
           : "That inventory page could not be loaded.",
       );
-      setFailedPage(page);
+      setFailedRequest({ page, pageSize: requestedPageSize });
     } finally {
-      if (requestRef.current === controller) {
+      if (requestRef.current?.controller === controller) {
         requestRef.current = null;
-        setPendingPage(null);
+        setPendingRequest(null);
       }
     }
-  }
+  }, [preview, steamId]);
+
+  useEffect(() => {
+    if (!measured || !inventory.canView || (inventory.pageSize === pageSize && inventory.page === currentPage)) return;
+    if (failedRequest?.page === currentPage && failedRequest.pageSize === pageSize) return;
+    void loadPage(currentPage, pageSize, false);
+  }, [currentPage, failedRequest, inventory.canView, inventory.page, inventory.pageSize, loadPage, measured, pageSize]);
 
   return (
     <section
@@ -176,7 +203,7 @@ export function ProfileInventoryPreview({
           <button
             type="button"
             className="button button-secondary"
-            onClick={() => failedPage && void loadPage(failedPage)}
+            onClick={() => failedRequest && void loadPage(failedRequest.page, failedRequest.pageSize)}
           >
             Try again
           </button>
@@ -189,22 +216,19 @@ export function ProfileInventoryPreview({
           <strong>Private inventory</strong>
           <p>Only this player and authorised staff can browse its contents.</p>
         </div>
-      ) : pendingPage !== null ? (
+      ) : (
         <>
+          {pendingPage !== null ? (
           <span className="sr-only" role="status" aria-live="polite">
             Loading inventory page {pendingPage}.
           </span>
-          <ul className="profile-inventory-grid is-loading" aria-hidden="true">
-            {Array.from({ length: inventory.pageSize }, (_, index) => (
+          ) : null}
+          <ul {...gridProps} className={`profile-inventory-grid${pendingPage !== null ? " is-loading" : ""}`} aria-hidden={pendingPage !== null || undefined} aria-label={`Inventory page ${currentPage} of ${pageCount}`}>
+            {pendingPage !== null ? Array.from({ length: pageSize }, (_, index) => (
               <li key={index}>
                 <span className="ui-skeleton profile-inventory-artwork-placeholder" />
               </li>
-            ))}
-          </ul>
-        </>
-      ) : items.length ? (
-        <ul className="profile-inventory-grid" aria-label={`Inventory page ${inventory.page} of ${pageCount}`}>
-          {items.map((item, index) => {
+            )) : visibleItems.map((item, index) => {
             const tooltipId = `profile-inventory-item-${inventory.page}-${index}`;
             return (
               <li key={item.id} className={rarityRankClass(item.rarityRank)}>
@@ -224,23 +248,25 @@ export function ProfileInventoryPreview({
                 </button>
               </li>
             );
-          })}
-        </ul>
-      ) : (
+            })}
+          </ul>
+          {pendingPage === null && !items.length ? (
         <div className="profile-inventory-empty">
           <PackageOpen aria-hidden="true" />
           <strong>No available items yet</strong>
           <p>Owned items will appear here as soon as they enter this inventory.</p>
         </div>
+          ) : null}
+        </>
       )}
 
-      {inventory.canView && inventory.total > inventory.pageSize ? (
+      {inventory.canView && inventory.total > pageSize ? (
         <nav className="profile-inventory-pagination market-pagination" aria-label="Profile inventory pages">
           <button
             className="button button-secondary market-page-button"
             type="button"
-            disabled={inventory.page <= 1 || pendingPage !== null}
-            onClick={() => void loadPage(inventory.page - 1)}
+            disabled={currentPage <= 1 || pendingPage !== null}
+            onClick={() => void loadPage(currentPage - 1, pageSize)}
           >
             <ChevronLeft aria-hidden="true" /> Previous
           </button>
@@ -252,11 +278,11 @@ export function ProfileInventoryPreview({
                 <button
                   type="button"
                   key={page}
-                  className={`market-page-number${page === inventory.page ? " is-current" : ""}`}
-                  aria-current={page === inventory.page ? "page" : undefined}
+                  className={`market-page-number${page === currentPage ? " is-current" : ""}`}
+                  aria-current={page === currentPage ? "page" : undefined}
                   aria-label={`Inventory page ${page}`}
-                  disabled={pendingPage !== null || page === inventory.page}
-                  onClick={() => void loadPage(page)}
+                  disabled={pendingPage !== null || page === currentPage}
+                  onClick={() => void loadPage(page, pageSize)}
                 >
                   {page}
                 </button>
@@ -266,8 +292,8 @@ export function ProfileInventoryPreview({
           <button
             className="button button-secondary market-page-button"
             type="button"
-            disabled={inventory.page >= pageCount || pendingPage !== null}
-            onClick={() => void loadPage(inventory.page + 1)}
+            disabled={currentPage >= pageCount || pendingPage !== null}
+            onClick={() => void loadPage(currentPage + 1, pageSize)}
           >
             Next <ChevronRight aria-hidden="true" />
           </button>

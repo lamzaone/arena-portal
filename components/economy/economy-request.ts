@@ -3,6 +3,7 @@
 export type EconomyActionResult = {
   ok: boolean;
   message?: string;
+  code?: string;
   balance?: number;
   priceTokens?: number;
   totalPriceTokens?: number;
@@ -34,6 +35,7 @@ export class EconomyActionRequestError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    public readonly code?: string,
   ) {
     super(message);
     this.name = "EconomyActionRequestError";
@@ -69,6 +71,7 @@ export async function postEconomyAction(
     throw new EconomyActionRequestError(
       result?.message || "The economy request could not be completed. Please reload and try again.",
       response.status,
+      typeof result?.code === "string" ? result.code : undefined,
     );
   }
   return result;

@@ -14,7 +14,7 @@ import {
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
 import { PlayerSearchField } from "@/components/player-search-field";
 import { PlayerIdentity } from "@/components/player-identity";
-import { LinkPagination } from "@/components/ui/link-pagination";
+import { ServerItemGrid } from "@/components/economy/server-item-grid";
 import { SearchNavigationForm } from "@/components/ui/search-field";
 import { ServerSearchField } from "@/components/ui/server-search-field";
 import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
@@ -35,8 +35,7 @@ import { ECONOMY_ITEM_TYPES } from "@/lib/economy/item-taxonomy";
 import type { PlayerIdentityData } from "@/lib/player-identities";
 
 type Pagination = {
-  previousHref: string | null;
-  nextHref: string | null;
+  href: string;
 };
 
 type DirectoryContext = {
@@ -160,6 +159,8 @@ function ItemEditor({
     <article className="economy-admin-item staff-inventory-item">
       <MarketplaceItemPreview
         item={{
+          ...item,
+          raw: { ...item },
           catalogueId: item.catalogueId,
           displayName: item.displayName,
           floatValue: item.floatValue,
@@ -353,11 +354,6 @@ export function StaffInventoryPanel({
   inventoryFilters: InventoryFilters;
 }) {
   const availableItems = account.loadoutCandidates;
-  const hasMultiplePages = account.inventory.total > account.inventory.pageSize;
-  const inventoryPageCount = Math.max(
-    1,
-    Math.ceil(account.inventory.total / account.inventory.pageSize),
-  );
   const hasInventoryFilters = Boolean(
     inventoryFilters.query || inventoryFilters.itemType || inventoryFilters.state,
   );
@@ -424,6 +420,7 @@ export function StaffInventoryPanel({
           {directory.query ? <input type="hidden" name="q" value={directory.query} /> : null}
           {directory.page > 1 ? <input type="hidden" name="page" value={directory.page} /> : null}
           <input type="hidden" name="steamId" value={account.steamId} />
+          <input type="hidden" name="inventoryPageSize" value={account.inventory.pageSize} />
           <ServerSearchField
             id="staff-inventory-query"
             rootClassName="staff-inventory-query"
@@ -449,10 +446,12 @@ export function StaffInventoryPanel({
             </select>
           </label>
         </SearchNavigationForm>
-        {account.inventory.items.length ? (
-          <div className="economy-admin-item-grid">
+        {account.inventory.items.length || account.inventory.total > 0 ? (
+          <ServerItemGrid className="economy-admin-item-grid" label="Player inventory"
+            page={account.inventory.page} pageSize={account.inventory.pageSize} total={account.inventory.total}
+            href={pagination.href} pageParameter="inventoryPage" sizeParameter="inventoryPageSize">
             {account.inventory.items.map((item) => <ItemEditor key={item.id} item={item} steamId={account.steamId} csrf={csrf} canManage={canManage} action={mutationAction} />)}
-          </div>
+          </ServerItemGrid>
         ) : (
           <div className="staff-inventory-no-results">
             <Archive aria-hidden="true" />
@@ -460,19 +459,6 @@ export function StaffInventoryPanel({
             <p>{hasInventoryFilters ? "Clear or adjust the inventory search to see other instances." : "Grant an item to create the first inventory instance."}</p>
           </div>
         )}
-        {hasMultiplePages ? (
-          <LinkPagination
-            className="staff-inventory-pagination"
-            page={account.inventory.page}
-            totalPages={inventoryPageCount}
-            label="Inventory pages"
-            hrefForPage={(targetPage) =>
-              targetPage < account.inventory.page
-                ? pagination.previousHref!
-                : pagination.nextHref!
-            }
-          />
-        ) : null}
       </section>
       {canGrant ? (
         <StaffGrantItemForm

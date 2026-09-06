@@ -158,6 +158,27 @@ test("retains a retry key until the purchase intent changes", () => {
   assert.equal(generated, 2);
 });
 
+test("a changed pattern seed creates a new purchase request while retries retain their key", () => {
+  const options = { floatValue: 0.15, seed: 0, stattrak: false };
+  const signature = marketplacePurchaseIntentSignature(42, options);
+  const first = retainedPurchaseRequest(null, signature, () => "first-seed");
+  assert.equal(retainedPurchaseRequest(first, signature, () => "unused"), first);
+  const changed = retainedPurchaseRequest(
+    first,
+    marketplacePurchaseIntentSignature(42, { ...options, seed: 661 }),
+    () => "changed-seed",
+  );
+  assert.notEqual(changed.signature, first.signature);
+  assert.equal(changed.idempotencyKey, "changed-seed");
+});
+
+test("accepting a refreshed displayed price creates a new purchase intent", () => {
+  const options = { floatValue: 0.2, seed: 661, stattrak: false, expectedUnitPriceTokens: 900 };
+  const first = marketplacePurchaseIntentSignature(42, options);
+  assert.equal(marketplacePurchaseIntentSignature(42, { ...options }), first);
+  assert.notEqual(marketplacePurchaseIntentSignature(42, { ...options, expectedUnitPriceTokens: 950 }), first);
+});
+
 test("rejects malformed drop responses and distinguishes an empty pool", () => {
   assert.equal(crateDropStateFromResponse({ drops: [] }).status, "empty");
   assert.equal(crateDropStateFromResponse({ drops: "invalid" }).status, "error");

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getSession } from "@/lib/auth/session";
+import { normalizeItemGridPageSize } from "@/lib/economy/item-grid-layout";
 import {
   EconomyRepositoryError,
   getTradePartnerInventory,
@@ -38,6 +39,7 @@ export async function GET(request: Request, { params }: RouteContext) {
   const searchParams = new URL(request.url).searchParams;
   const query = searchParams.get("q")?.trim() ?? "";
   const page = pageNumber(searchParams.get("page"));
+  const pageSize = normalizeItemGridPageSize(searchParams.get("pageSize"));
   if (query.length > 120)
     return json({ ok: false, message: "The inventory search is too long." }, 400);
   if (page === null)
@@ -49,7 +51,7 @@ export async function GET(request: Request, { params }: RouteContext) {
     const inventory = await getTradePartnerInventory(session.steamId, steamId, {
       query: query || undefined,
       page,
-      pageSize: 48,
+      pageSize,
     });
     const response = {
       ok: true as const,

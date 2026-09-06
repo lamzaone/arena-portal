@@ -1,4 +1,7 @@
 import "server-only";
+import { cs2FinishValiditySql, getCs2Finish, getCs2PaintkitWear, isValidCs2Finish, isCs2CatalogueFinishAvailable } from "@/lib/economy/cs2-finish-catalogue";
+
+const economyReleasedFinishSql = cs2FinishValiditySql("c");
 
 import { createHash, randomInt, randomUUID } from "node:crypto";
 
@@ -41,6 +44,8 @@ import {
   type EconomyItemType,
 } from "@/lib/economy/item-taxonomy";
 import { economyItemDisplayName } from "@/lib/economy/item-display-name";
+import { tradeWeaponPreviewFields, type TradeWeaponPreviewFields } from "@/lib/economy/trade-preview";
+import { normalizeItemGridPageSize } from "@/lib/economy/item-grid-layout";
 import { parseWeaponCustomization, authorizeStickerPlacement, authorizeCharmPlacement } from "@/lib/economy/weapon-customization";
 import { nativeStickerPlacement } from "@/lib/economy/weapon-model";
 import { isIndividualSteamId64 } from "@/lib/steam/steam-id";
@@ -4126,7 +4131,7 @@ export type EconomyTradeItem = {
   item: EconomyTradeItemPreview | null;
 };
 
-export type EconomyTradeItemPreview = {
+export type EconomyTradeItemPreview = TradeWeaponPreviewFields & {
   catalogueId: number | null;
   itemType: EconomyItemType;
   displayName: string;
@@ -4185,6 +4190,8 @@ export type PurchaseEconomyItemInput = {
   // operation. Other marketplace items always remain a single purchase.
   quantity?: number;
   floatValue?: number;
+  seed?: number;
+  expectedUnitPriceTokens?: number;
   // This is created by a server route after resolving the selected exterior
   // against the public price feed. The browser never submits it.
   resolvedMarketQuote?: ResolvedMarketplacePurchaseQuote;
@@ -4195,6 +4202,8 @@ export type PurchaseEconomyItemInput = {
 };
 
 export type ResolvedMarketplacePurchaseQuote = {
+  seed?: number | null;
+  seedMatched?: boolean;
   baseEuroCents: number;
   euroCents: number;
   source: string;
@@ -6040,8 +6049,11 @@ function toEconomyCatalogueItem(
   row: EconomyCatalogueRow,
 ): EconomyCatalogueItem {
   const itemType = economyItemType(String(row.item_type));
+  const definitionIndex = economyOptionalInteger(row.definition_index, "catalogue definition index");
+  const paintkit = economyOptionalInteger(row.paintkit, "catalogue paintkit");
+  const finish = economyIsSkinLike(itemType) ? getCs2Finish(definitionIndex, paintkit) : null;
   const storedRarityRank = economyNumber(row.rarity_rank, "catalogue rarity");
-  const displayName = economyDisplayName(itemType, String(row.display_name));
+  const displayName = economyDisplayName(itemType, finish?.name ?? String(row.display_name));
   // The public CS2 catalogue is authoritative for player-facing rarity.
   const rarityRank = economyPresentationRarity(
     itemType,
@@ -6049,7 +6061,10 @@ function toEconomyCatalogueItem(
     storedRarityRank,
   );
   const price = toEconomyCataloguePrice(row);
-  const metadata = economyRecord(row.metadata);
+  const metadata = { ...economyRecord(row.metadata), customServerFinish: economyIsSkinLike(itemType) && finish === null, ...(economyIsSkinLike(itemType) ? getCs2PaintkitWear(paintkit) : {}), ...(finish ? {
+    marketBaseName: finish.name, minFloat: finish.minFloat, maxFloat: finish.maxFloat,
+    supportsStattrak: finish.supportsStattrak,
+  } : {}) };
   const floatRange = economyCatalogueFloatRange(itemType, metadata);
   const directPurchasePriceTokens = economyDirectPurchasePrice(itemType, price);
   return {
@@ -6101,6 +6116,10 @@ function toEconomyInventoryItem(
   row: EconomyInventoryRow,
 ): EconomyInventoryItem {
   const itemType = economyItemType(String(row.item_type));
+  const finish = economyIsSkinLike(itemType) ? getCs2Finish(
+    economyOptionalInteger(row.definition_index, "inventory definition index"),
+    economyOptionalInteger(row.paintkit, "inventory paintkit"),
+  ) : null;
   const attributes = economyRecord(row.attributes);
   const stattrak = economyBoolean(row.stattrak);
   const catalogueId = economyOptionalInteger(
@@ -6119,9 +6138,9 @@ function toEconomyInventoryItem(
           observed_at: row.observed_at,
         });
   const displayName = economyItemDisplayName(
-    economyDisplayName(itemType, row.display_name
+    economyDisplayName(itemType, finish?.name ?? (row.display_name
       ? String(row.display_name)
-      : economyCustomDisplayName(attributes, itemType)),
+      : economyCustomDisplayName(attributes, itemType))),
     stattrak,
     attributes.souvenir === true,
   );
@@ -6175,7 +6194,10 @@ function toEconomyInventoryItem(
             itemType,
             rarityRank: catalogueRarityRank,
             displayName,
-            metadata: economyRecord(row.catalogue_metadata),
+            metadata: { ...economyRecord(row.catalogue_metadata), customServerFinish: economyIsSkinLike(itemType) && finish === null, ...(finish ? {
+              marketBaseName: finish.name, minFloat: finish.minFloat, maxFloat: finish.maxFloat,
+              supportsStattrak: finish.supportsStattrak,
+            } : {}) },
             enabled: economyBoolean(row.catalogue_enabled),
             price,
           },
@@ -6259,6 +6281,7 @@ export function isEconomyProfileTheme(
 export function isEconomyMarketplacePurchasable(item: EconomyCatalogueItem) {
   return (
     item.enabled &&
+    isCs2CatalogueFinishAvailable(item) &&
     !disabledMarketplaceItemTypes.has(item.itemType) &&
     !economyMetadataExplicitlyFalse(item.metadata, "marketEnabled")
   );
@@ -7114,7 +7137,8 @@ export async function getEconomyCatalogue(
   const floatRange = economyFilterFloatRange(filter);
   const where: string[] = [];
   const values: unknown[] = [];
-  if (!filter.includeDisabled) where.push("c.enabled = TRUE");
+  if (!filter.includeDisabled) where.push("c.enabled = TRUE", economyReleasedFinishSql);
+  else if (filter.marketOnly) where.push(economyReleasedFinishSql);
   if (filter.marketOnly) {
     where.push("c.item_type NOT IN ('graffiti', 'patch', 'nametag', 'music_kit')");
     where.push("COALESCE(JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.marketEnabled')), 'true') IN ('true', '1')");
@@ -7267,13 +7291,14 @@ export async function getMarketplaceCatalogue(
       // Portal-managed products have an explicit staff price and no public
       // CS2 market identity. Never let a coincidentally matching item name
       // replace the listing's configured Token price.
-      fallbackOnly: economyMetadataBoolean(
+      fallbackOnly: item.metadata.customServerFinish === true || economyMetadataBoolean(
         item.metadata,
         "membershipListingManaged",
       ),
     })),
   );
   const quotedItems = catalogue.items.map((item, index) => {
+      if (item.metadata.customServerFinish === true) return item;
       const price = publicPrices[index];
       if (price) {
         const basePriceTokens = economyDirectPurchasePriceFromEuroCents(
@@ -7330,7 +7355,7 @@ export async function getEconomyCatalogueItem(
   const [rows] = await pool.query<EconomyCatalogueRow[]>(
     economyCatalogueSelect +
       "WHERE c.id = ? " +
-      (includeDisabled ? "" : "AND c.enabled = TRUE ") +
+      (includeDisabled ? "" : "AND c.enabled = TRUE AND " + economyReleasedFinishSql + " ") +
       "LIMIT 1",
     [catalogueId],
   );
@@ -7820,7 +7845,7 @@ export async function getEconomyPublicPriceRefreshCandidates(): Promise<
       "AND TRIM(JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.marketBaseName'))) <> '')" +
       ") ORDER BY c.id ASC",
   );
-  return rows.map((row) => {
+  return rows.filter((row) => !economyIsSkinLike(String(row.item_type) as EconomyItemType) || getCs2Finish(Number(row.definition_index), row.paintkit === null ? null : Number(row.paintkit))).map((row) => {
     const item = toEconomyCatalogueItem(row);
     return {
       catalogueId: item.id,
@@ -8082,9 +8107,12 @@ export async function recordAutomaticEconomyPublicPrices(
   const batchSize = 250;
   try {
     for (let offset = 0; offset < updates.length; offset += batchSize) {
-      const batch = updates.slice(offset, offset + batchSize);
+      let batch = updates.slice(offset, offset + batchSize);
       await connection.beginTransaction();
       try {
+        const locked = await lockEconomyCatalogues(connection, batch.map((update) => update.catalogueId), true);
+        batch = batch.filter((update) => locked.get(update.catalogueId)?.metadata.customServerFinish !== true);
+        if (!batch.length) { await connection.commit(); continue; }
         const cataloguePlaceholders = batch.map(() => "?").join(", ");
         await connection.execute(
           "UPDATE portal_economy_catalogue_prices SET is_current = FALSE " +
@@ -8209,6 +8237,7 @@ export async function getEconomyCrateDropPreview(
       "INNER JOIN portal_economy_catalogue AS c ON c.id = e.catalogue_id AND c.enabled = TRUE " +
       "LEFT JOIN portal_economy_catalogue_prices AS p ON p.catalogue_id = c.id AND p.is_current = TRUE " +
       "WHERE l.container_catalogue_id = ? AND l.table_type = 'container' AND l.enabled = TRUE " +
+      "AND " + economyReleasedFinishSql + " " +
       "ORDER BY " +
       economyCataloguePresentationRaritySql +
       " DESC, c.display_name ASC, e.id ASC",
@@ -8346,19 +8375,20 @@ export async function getPlayerEconomyInventory(
 
 /**
  * Returns the same newest-first inventory instances used by the Inventory
- * page in fixed 30-item profile pages. Private inventories remain visible to
+ * page in responsive pages of up to 20 items. Private inventories remain visible to
  * their owner and fail closed for every other viewer.
  */
 export async function getPlayerProfileInventoryPage(
   viewerSteamIdInput: string | null,
   playerSteamIdInput: string,
   pageInput = 1,
+  pageSizeInput = 20,
 ): Promise<PlayerProfileInventoryPage> {
   const playerSteamId = economySteamId(playerSteamIdInput, "Player Steam ID");
   const viewerSteamId = viewerSteamIdInput
     ? economySteamId(viewerSteamIdInput, "Viewer Steam ID")
     : null;
-  const paging = economyPage(pageInput, 30, 30);
+  const paging = economyPage(pageInput, normalizeItemGridPageSize(pageSizeInput), 20);
   const visibility = await getPlayerInventoryVisibility(playerSteamId);
   const canView = viewerSteamId === playerSteamId || visibility === "public";
   if (!canView) {
@@ -8631,7 +8661,7 @@ async function lockEconomyCatalogue(
   if (!row)
     economyError("catalogue_not_found", "That catalogue item does not exist.");
   const item = toEconomyCatalogueItem(row);
-  if (!allowDisabled && !item.enabled)
+  if (!allowDisabled && (!item.enabled || !isCs2CatalogueFinishAvailable(item)))
     economyError(
       "catalogue_unavailable",
       "That item is not currently available.",
@@ -8666,7 +8696,7 @@ async function lockEconomyCatalogues(
       "One or more catalogue items no longer exist.",
     );
   const items = rows.map(toEconomyCatalogueItem);
-  if (!allowDisabled && items.some((item) => !item.enabled))
+  if (!allowDisabled && items.some((item) => !item.enabled || !isCs2CatalogueFinishAvailable(item)))
     economyError(
       "catalogue_unavailable",
       "One or more catalogue items are not currently available.",
@@ -8816,7 +8846,7 @@ async function lockEconomyLootEntries(
   lootTableId: number,
 ) {
   const [rows] = await connection.query<EconomyLootEntryRow[]>(
-    "SELECT e.id, e.loot_table_id, e.catalogue_id, e.weight, e.min_float, e.max_float, e.seed_min, e.seed_max, e.stattrak_chance_bps, e.attributes, e.enabled FROM portal_loot_entries AS e INNER JOIN portal_economy_catalogue AS c ON c.id = e.catalogue_id AND c.enabled = TRUE WHERE e.loot_table_id = ? AND e.enabled = TRUE ORDER BY e.id FOR UPDATE",
+    "SELECT e.id, e.loot_table_id, e.catalogue_id, e.weight, e.min_float, e.max_float, e.seed_min, e.seed_max, e.stattrak_chance_bps, e.attributes, e.enabled FROM portal_loot_entries AS e INNER JOIN portal_economy_catalogue AS c ON c.id = e.catalogue_id AND c.enabled = TRUE WHERE e.loot_table_id = ? AND e.enabled = TRUE AND " + economyReleasedFinishSql + " ORDER BY e.id FOR UPDATE",
     [lootTableId],
   );
   if (!rows.length)
@@ -8860,7 +8890,7 @@ async function lockEconomyLootEntriesByTable(
       "FROM portal_loot_entries AS e INNER JOIN portal_economy_catalogue AS c ON c.id = e.catalogue_id AND c.enabled = TRUE " +
       "WHERE e.loot_table_id IN (" +
       placeholders +
-      ") AND e.enabled = TRUE ORDER BY e.loot_table_id, e.id FOR UPDATE",
+      ") AND e.enabled = TRUE AND " + economyReleasedFinishSql + " ORDER BY e.loot_table_id, e.id FOR UPDATE",
     ids,
   );
   const entries = rows.map((row) => ({
@@ -9023,31 +9053,10 @@ function economyEffectiveLootFloatRange(
 
   const catalogueMinimum = catalogue.minFloat ?? 0;
   const catalogueMaximum = catalogue.maxFloat ?? 1;
-  const requestedMinimum = entryMinimum ?? catalogueMinimum;
-  const requestedMaximum = entryMaximum ?? catalogueMaximum;
-  if (
-    (entryMinimum !== null && (entryMinimum < 0 || entryMinimum > 1)) ||
-    (entryMaximum !== null && (entryMaximum < 0 || entryMaximum > 1)) ||
-    (entryMinimum !== null &&
-      entryMaximum !== null &&
-      entryMinimum > entryMaximum)
-  ) {
-    economyError(
-      "loot_table_invalid",
-      "The loot table float range is invalid.",
-    );
-  }
-
-  // Imported loot tables can carry a generic 0-1 range even when the finish
-  // itself has tighter wear limits. Clamp both endpoints to the authoritative
-  // catalogue range before rolling so no crate or random drop can create an
-  // impossible float value.
-  const clampToCatalogue = (value: number) =>
-    Math.min(catalogueMaximum, Math.max(catalogueMinimum, value));
-  return {
-    minimum: Number(clampToCatalogue(requestedMinimum).toFixed(6)),
-    maximum: Number(clampToCatalogue(requestedMaximum).toFixed(6)),
-  };
+  // Drops use the finish's full legal domain; retained fixed/narrow entry
+  // ranges must not turn random rewards into a fixed sample float.
+  void entryMinimum; void entryMaximum;
+  return { minimum: catalogueMinimum, maximum: catalogueMaximum };
 }
 
 function rollEconomyFloat(minimum: number | null, maximum: number | null) {
@@ -9158,6 +9167,10 @@ async function createEconomyInventoryItem(
   const definitionIndex =
     catalogue?.definitionIndex ?? custom?.definitionIndex ?? null;
   const paintkit = catalogue?.paintkit ?? custom?.paintkit ?? null;
+  if (!isValidCs2Finish({ itemType, definitionIndex, paintkit }))
+    economyError("catalogue_unavailable", "That weapon/finish combination is not in the released CS2 catalogue.");
+  if (!isCs2CatalogueFinishAvailable({ itemType, definitionIndex, paintkit, price: catalogue?.price }))
+    economyError("price_unavailable", "Custom server finishes need a positive configured staff price.");
   const rarityRank =
     input.rarityRank === undefined
       ? catalogue?.rarityRank ?? custom?.rarityRank ?? 0
@@ -9219,6 +9232,8 @@ async function createEconomyInventoryItem(
     requested.stattrak ??
     (economyMetadataBoolean(baseMetadata, "stattrak") ||
       requestedStattrakCount > 0);
+  if (stattrak && getCs2Finish(definitionIndex, paintkit)?.supportsStattrak === false)
+    economyError("incompatible_item", "That CS2 finish does not support StatTrak.");
   if (
     !economyItemSupportsStattrak(itemType) &&
     (stattrak || requestedStattrakCount > 0)
@@ -10444,6 +10459,9 @@ export async function recordEconomyPrice(
         "INSERT INTO portal_economy_catalogue_prices (catalogue_id, market_price_eur_cents, price_source, source_reference, is_current) VALUES (?, ?, ?, ?, TRUE)",
         [catalogueId, eurCents, source, sourceReference],
       );
+      if (catalogue.metadata.customServerFinish === true && source === "staff-last-known" && sourceReference === "staff-panel" && eurCents > 0) {
+        await context.connection.execute("UPDATE portal_economy_catalogue SET enabled = TRUE WHERE id = ?", [catalogueId]);
+      }
       const [priceRows] = await context.connection.query<EconomyCatalogueRow[]>(
         "SELECT id AS price_id, market_price_eur_cents, token_price, price_source, source_reference, observed_at FROM portal_economy_catalogue_prices WHERE id = ? FOR UPDATE",
         [Number(result.insertId)],
@@ -10638,7 +10656,10 @@ function economyResolvedMarketplacePurchaseQuote(
     economyError("invalid_input", "The float price rule is invalid.");
   }
   const fallbackMetadata = economyMarketplaceFallbackMetadata(quote);
+  if (quote.seedMatched !== undefined && typeof quote.seedMatched !== "boolean") economyError("invalid_input", "The pattern quote evidence is invalid.");
   return {
+    seed: quote.seed === undefined ? undefined : economySeed(quote.seed, "Quoted seed"),
+    seedMatched: quote.seedMatched ?? false,
     baseEuroCents,
     euroCents,
     source,
@@ -10706,9 +10727,12 @@ function economyResolvedMarketSalePrice(
 function economyValidateResolvedMarketplaceQuote(input: {
   catalogue: EconomyCatalogueItem;
   requestedFloat: number;
+  requestedSeed?: number | null;
   requestedStattrak: boolean;
   quote: ResolvedMarketplacePurchaseQuote;
 }) {
+  if (input.quote.seedMatched && (input.requestedSeed === undefined || input.quote.seed !== input.requestedSeed))
+    economyError("invalid_input", "The quoted pattern does not match this item.");
   const identity = deriveMarketplacePriceIdentity({
     itemType: input.catalogue.itemType,
     displayName: input.catalogue.displayName,
@@ -10785,6 +10809,10 @@ export async function purchaseEconomyItem(
     economyError("invalid_input", "Requested StatTrak option is invalid.");
   }
   const requestedStattrak = input.stattrak ?? false;
+  const requestedSeed = input.seed === undefined ? undefined : economySeed(input.seed, "Requested seed");
+  const expectedUnitPriceTokens = input.expectedUnitPriceTokens === undefined
+    ? undefined
+    : economyAmount(input.expectedUnitPriceTokens, "Displayed unit price");
   const resolvedMarketQuote =
     input.resolvedMarketQuote === undefined
       ? undefined
@@ -10797,6 +10825,8 @@ export async function purchaseEconomyItem(
       catalogueId,
       quantity,
       floatValue: requestedFloat,
+      seed: requestedSeed,
+      ...(expectedUnitPriceTokens === undefined ? {} : { expectedUnitPriceTokens }),
       stattrak: requestedStattrak,
     },
     work: async (context) => {
@@ -10843,9 +10873,12 @@ export async function purchaseEconomyItem(
         );
       }
       const skinLike = economyIsSkinLike(catalogue.itemType);
+      if (skinLike && expectedUnitPriceTokens === undefined) {
+        economyError("invalid_input", "Load a current price before buying a skin, knife, or gloves.");
+      }
       if (
         requestedStattrak &&
-        !economyItemSupportsStattrak(catalogue.itemType)
+        (!economyItemSupportsStattrak(catalogue.itemType) || catalogue.metadata.supportsStattrak === false)
       ) {
         economyError(
           "incompatible_item",
@@ -10895,7 +10928,9 @@ export async function purchaseEconomyItem(
           "Only a skin, knife, or gloves can use a float-specific price.",
         );
       }
-      if (skinLike && !resolvedMarketQuote) {
+      const customServerFinish = catalogue.metadata.customServerFinish === true;
+      if (customServerFinish && resolvedMarketQuote) economyError("invalid_input", "Custom server finishes use the configured staff price.");
+      if (skinLike && !customServerFinish && !resolvedMarketQuote) {
         economyError(
           "price_unavailable",
           "No current float-specific public price is available for this item.",
@@ -10905,6 +10940,7 @@ export async function purchaseEconomyItem(
         economyValidateResolvedMarketplaceQuote({
           catalogue,
           requestedFloat,
+          requestedSeed,
           requestedStattrak,
           quote: resolvedMarketQuote,
         });
@@ -10938,6 +10974,12 @@ export async function purchaseEconomyItem(
       });
       const priceTokens =
         appliedDiscount?.finalPriceTokens ?? basePriceTokens;
+      if (skinLike && expectedUnitPriceTokens !== priceTokens) {
+        economyError(
+          "price_changed",
+          "The price changed. Review the refreshed quote before buying. No Tokens were spent.",
+        );
+      }
       const totalPriceTokens = priceTokens * quantity;
       if (!Number.isSafeInteger(totalPriceTokens))
         economyError("invalid_input", "The total purchase price is too large.");
@@ -11005,6 +11047,7 @@ export async function purchaseEconomyItem(
               ? { stattrak: requestedStattrak, stattrakCount: 0 }
               : {
                   floatValue: requestedFloat,
+                  seed: requestedSeed ?? randomInt(1001),
                   stattrak: requestedStattrak,
                   stattrakCount: 0,
                 },
@@ -11319,7 +11362,10 @@ export async function sellEconomyItem(
 
       // Catalogue snapshots price the standard variant. A StatTrak™ instance
       // can only use an exact resolved StatTrak™ quote, never that fallback.
-      const fallbackPrice = item.stattrak ? null : item.catalogue.price;
+      const customServerFinish = item.catalogue.metadata.customServerFinish === true;
+      if (customServerFinish && (!isCs2CatalogueFinishAvailable({ ...item, price: item.catalogue.price }) || marketQuote))
+        economyError("price_unavailable", "Custom server finishes require the current configured staff price.");
+      const fallbackPrice = item.stattrak && !customServerFinish ? null : item.catalogue.price;
       if (
         !marketQuote &&
         (!fallbackPrice || economyPriceIsLegacySteam(fallbackPrice))
@@ -11547,7 +11593,10 @@ export async function sellEconomyItems(
             "Remove attached stickers before selling the selected items.",
           );
 
-        const fallbackPrice = item.stattrak ? null : item.catalogue.price;
+        const customServerFinish = item.catalogue.metadata.customServerFinish === true;
+        if (customServerFinish && (!isCs2CatalogueFinishAvailable({ ...item, price: item.catalogue.price }) || sale.marketQuote))
+          economyError("price_unavailable", "Custom server finishes require the current configured staff price.");
+        const fallbackPrice = item.stattrak && !customServerFinish ? null : item.catalogue.price;
         if (
           !sale.marketQuote &&
           (!fallbackPrice || economyPriceIsLegacySteam(fallbackPrice))
@@ -11749,7 +11798,7 @@ export async function openEconomyCrate(
         roll.entry.maxFloat,
       );
       const stattrak =
-        economyIsSkinLike(rewardCatalogue.itemType) &&
+        rewardCatalogue.metadata.supportsStattrak === true &&
         randomInt(10_000) < roll.entry.stattrakChanceBps;
       const reward = await createEconomyInventoryItem(context.connection, {
         ownerSteamId: steamId,
@@ -11759,7 +11808,7 @@ export async function openEconomyCrate(
           rewardCatalogue.rarityRank,
         ),
         customization: {
-          seed: rollEconomyInteger(roll.entry.seedMin, roll.entry.seedMax),
+          seed: economyIsSkinLike(rewardCatalogue.itemType) ? randomInt(1001) : rollEconomyInteger(roll.entry.seedMin, roll.entry.seedMax),
           floatValue: rollEconomyFloat(
             rewardFloatRange.minimum,
             rewardFloatRange.maximum,
@@ -12270,7 +12319,7 @@ export async function openEconomyCrates(
           draft.roll.entry.maxFloat,
         );
         const stattrak =
-          economyIsSkinLike(rewardCatalogue.itemType) &&
+          rewardCatalogue.metadata.supportsStattrak === true &&
           randomInt(10_000) < draft.roll.entry.stattrakChanceBps;
         const reward = await createEconomyInventoryItem(context.connection, {
           ownerSteamId: steamId,
@@ -12280,7 +12329,7 @@ export async function openEconomyCrates(
             rewardCatalogue.rarityRank,
           ),
           customization: {
-            seed: rollEconomyInteger(
+            seed: economyIsSkinLike(rewardCatalogue.itemType) ? randomInt(1001) : rollEconomyInteger(
               draft.roll.entry.seedMin,
               draft.roll.entry.seedMax,
             ),
@@ -12487,13 +12536,13 @@ export async function awardEconomyDrop(
         roll.entry.maxFloat,
       );
       const stattrak =
-        economyIsSkinLike(catalogue.itemType) &&
+        catalogue.metadata.supportsStattrak === true &&
         randomInt(10_000) < roll.entry.stattrakChanceBps;
       const item = await createEconomyInventoryItem(context.connection, {
         ownerSteamId: steamId,
         catalogue,
         customization: {
-          seed: rollEconomyInteger(roll.entry.seedMin, roll.entry.seedMax),
+          seed: economyIsSkinLike(catalogue.itemType) ? randomInt(1001) : rollEconomyInteger(roll.entry.seedMin, roll.entry.seedMax),
           floatValue: rollEconomyFloat(
             dropFloatRange.minimum,
             dropFloatRange.maximum,
@@ -13206,6 +13255,7 @@ function toEconomyTradeItemPreview(
 ): EconomyTradeItemPreview | null {
   if (!item) return null;
   return {
+    ...tradeWeaponPreviewFields(item),
     catalogueId: item.catalogueId,
     itemType: item.itemType,
     displayName: item.displayName,

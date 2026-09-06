@@ -22,11 +22,22 @@ class PackageTests(unittest.TestCase):
                 "public/logo.svg": "image",
                 "scripts/hosting/start-hosting.sh": "launcher",
                 "scripts/hosting/package.sh": SCRIPT.read_text(),
+                ".playwright-browsers/chromium-headless/chrome": "browser",
+                "scripts/warm-weapon-thumbnails.mjs": "warmer",
+                "scripts/weapon-thumbnail-warmup.mjs": "model selection",
+                "lib/economy/weapon-thumbnail.ts": "identity",
+                "lib/economy/thumbnail-browser.ts": "browser launch options",
+                "lib/economy/thumbnail-paths.ts": "persistent cache locations",
+                ".next/standalone/node_modules/playwright/index.js": "runtime dependency",
+                "node_modules/playwright/index.js": "build dependency",
             }
             for name, content in files.items():
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(content)
+            external = root / ".next/standalone/.next/node_modules/playwright-hash"
+            external.parent.mkdir(parents=True, exist_ok=True)
+            external.symlink_to(root / "node_modules/playwright", target_is_directory=True)
             result = subprocess.run(["bash", str(root / "scripts/hosting/package.sh")],
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -35,6 +46,10 @@ class PackageTests(unittest.TestCase):
                 self.assertTrue({"server.js", ".next/BUILD_ID", ".next/static/chunks/app.js",
                                  "public/logo.svg", "start-hosting.sh"}.issubset(names))
                 self.assertFalse(any(Path(n).name.startswith(".env") for n in names))
+                self.assertTrue({".playwright-browsers/chromium-headless/chrome", "scripts/warm-weapon-thumbnails.mjs", "lib/economy/weapon-thumbnail.ts", "lib/economy/thumbnail-browser.ts"}.issubset(names))
+                self.assertTrue({"scripts/weapon-thumbnail-warmup.mjs", "lib/economy/thumbnail-paths.ts"}.issubset(names))
+                link = next(member for member in bundle.getmembers() if member.name.removeprefix("./") == ".next/node_modules/playwright-hash")
+                self.assertEqual(link.linkname, "../../node_modules/playwright")
 
 
 if __name__ == "__main__":

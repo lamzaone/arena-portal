@@ -21,11 +21,10 @@ import {
   normalizeMarketplaceCategory,
 } from "@/lib/economy/market-categories";
 import { ECONOMY_MAX_RARITY_RANK } from "@/lib/economy/item-taxonomy";
+import { normalizeItemGridPageSize } from "@/lib/economy/item-grid-layout";
 import { buildPageMetadata } from "@/lib/seo/site";
 
 export const metadata = buildPageMetadata("/market");
-
-const MARKET_PAGE_SIZE = 50;
 
 const marketDiscountCategoryLabels: Record<string, string> = {
   skin: "All weapon skins",
@@ -47,6 +46,7 @@ type MarketPageProps = {
     type?: string;
     rarity?: string;
     page?: string;
+    pageSize?: string;
   }>;
 };
 
@@ -88,7 +88,7 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
       itemTypes: itemTypes ? [...itemTypes] : undefined,
       rarityRanks: rarity === null ? undefined : [rarity],
       page: positivePage(params.page),
-      pageSize: MARKET_PAGE_SIZE,
+      pageSize: normalizeItemGridPageSize(params.pageSize),
     }),
     getActiveEconomyDiscountRules(),
   ]);

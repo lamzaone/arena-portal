@@ -18,7 +18,7 @@ import {
   Sword,
   X,
 } from "lucide-react";
-import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 
@@ -37,6 +37,7 @@ import {
   postEconomyAction,
 } from "@/components/economy/economy-request";
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
+import { useItemGridLayout } from "@/components/economy/item-grid";
 import { WeaponCustomizer } from "@/components/economy/weapon-customizer";
 import { weaponPreviewItem } from "@/lib/economy/weapon-preview";
 import {
@@ -87,7 +88,6 @@ type InventoryManagerProps = {
 
 type SortMode = "newest" | "name" | "rarity" | "float";
 
-const INVENTORY_PAGE_SIZE = 30;
 const MAX_BULK_SELL_ITEMS = 50;
 
 type LoadoutSlotInput =
@@ -237,6 +237,13 @@ export function InventoryManager({
   const [pending, startTransition] = useTransition();
   const [customizationBusy, setCustomizationBusy] = useState(false);
   const inventoryGridRef = useRef<HTMLDivElement | null>(null);
+  const { gridProps, pageSize: inventoryPageSize } = useItemGridLayout();
+  const [previousInventoryPageSize, setPreviousInventoryPageSize] = useState(inventoryPageSize);
+  const measuredGridRef = gridProps.ref;
+  const setInventoryGridRef = useCallback((node: HTMLDivElement | null) => {
+    inventoryGridRef.current = node;
+    measuredGridRef(node);
+  }, [measuredGridRef]);
   const bulkSaleRequestRef = useRef<{
     signature: string;
     idempotencyKey: string;
@@ -251,6 +258,18 @@ export function InventoryManager({
   const [inventoryGridColumns, setInventoryGridColumns] = useState(1);
   const [inventoryInlineModalIndex, setInventoryInlineModalIndex] = useState(-1);
   const [inventoryModalHost, setInventoryModalHost] = useState<HTMLDivElement | null>(null);
+  const inventoryPortalContent = useRef<HTMLDivElement | null>(null);
+  const setInventoryRowHost = useCallback((row: HTMLDivElement | null) => {
+    if (!row) return;
+    // Keep the portal target alive when a responsive row moves. Changing the
+    // target would remount the customizer and discard unsaved attachment edits.
+    if (!inventoryPortalContent.current) {
+      inventoryPortalContent.current = document.createElement("div");
+      inventoryPortalContent.current.style.display = "contents";
+      setInventoryModalHost(inventoryPortalContent.current);
+    }
+    row.appendChild(inventoryPortalContent.current);
+  }, []);
 
   const types = useMemo(
     () => [...new Set(items.map((item) => item.itemType))].sort(),
@@ -284,14 +303,22 @@ export function InventoryManager({
 
   const inventoryPageCount = Math.max(
     1,
-    Math.ceil(filtered.length / INVENTORY_PAGE_SIZE),
+    Math.ceil(filtered.length / inventoryPageSize),
   );
-  const visibleInventoryPage = Math.min(inventoryPage, inventoryPageCount);
+  let visibleInventoryPage = Math.min(inventoryPage, inventoryPageCount);
+  if (previousInventoryPageSize !== inventoryPageSize) {
+    // Reconcile before committing children so an open editor keeps its draft on resize.
+    const selectedAnchor = filtered.findIndex((item) => item.id === selectedId);
+    const anchor = selectedAnchor >= 0 ? selectedAnchor : (inventoryPage - 1) * previousInventoryPageSize;
+    visibleInventoryPage = Math.min(inventoryPageCount, Math.floor(anchor / inventoryPageSize) + 1);
+    setPreviousInventoryPageSize(inventoryPageSize);
+    setInventoryPage(visibleInventoryPage);
+  }
   const inventoryPageStart =
-    (visibleInventoryPage - 1) * INVENTORY_PAGE_SIZE;
+    (visibleInventoryPage - 1) * inventoryPageSize;
   const visibleItems = filtered.slice(
     inventoryPageStart,
-    inventoryPageStart + INVENTORY_PAGE_SIZE,
+    inventoryPageStart + inventoryPageSize,
   );
   const inventoryPageEnd = Math.min(
     filtered.length,
@@ -1072,7 +1099,7 @@ export function InventoryManager({
 
       {items.length ? (
         <div className="inventory-layout">
-          <div ref={inventoryGridRef} className="feature-grid inventory-item-grid">
+          <div {...gridProps} ref={setInventoryGridRef} className="feature-grid inventory-item-grid">
             {visibleItems.map((item, index) => (
               <Fragment key={item.id || `${item.catalogueId}-${item.displayName}`}>
                 <EconomyItemCard
@@ -1088,7 +1115,7 @@ export function InventoryManager({
                   disabled={inventoryInteractionBlocked}
                   className={selectionMode && !canSelectForLock(item) ? "is-selection-unavailable" : ""}
                 />
-                {!selectionMode && index === inventoryInlineModalIndex ? <div ref={setInventoryModalHost} className="inventory-inline-modal-host" aria-live="polite" /> : null}
+                {!selectionMode && index === inventoryInlineModalIndex ? <div ref={setInventoryRowHost} className="inventory-inline-modal-host" aria-live="polite" /> : null}
               </Fragment>
             ))}
           </div>
@@ -1100,7 +1127,7 @@ export function InventoryManager({
           ) : null}
           <PaginationControls
             page={visibleInventoryPage}
-            pageSize={INVENTORY_PAGE_SIZE}
+            pageSize={inventoryPageSize}
             totalItems={filtered.length}
             disabled={inventoryInteractionBlocked}
             label="Inventory pages"

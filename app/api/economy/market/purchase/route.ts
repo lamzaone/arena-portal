@@ -42,13 +42,11 @@ function optionalStattrak(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 
-function metadataSeed(metadata: Record<string, unknown>) {
-  for (const key of ["seed", "defaultSeed", "patternSeed"]) {
-    const value = metadata[key];
-    if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 1_000)
-      return value;
-  }
-  return undefined;
+function optionalSeed(value: unknown): number | undefined | null {
+  if (value === undefined) return undefined;
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 1_000
+    ? value
+    : null;
 }
 
 function isLegacySteamPrice(source: string | undefined) {
@@ -64,6 +62,10 @@ export async function POST(request: Request) {
       ? 1
       : integerField(context.body.quantity, 1, 50);
   const floatValue = optionalFloat(context.body.floatValue);
+  const seed = optionalSeed(context.body.seed);
+  const expectedUnitPriceTokens = context.body.expectedUnitPriceTokens === undefined
+    ? undefined
+    : integerField(context.body.expectedUnitPriceTokens, 0);
   const stattrak = optionalStattrak(context.body.stattrak);
   if (catalogueId === null)
     return economyJsonError("Choose a valid marketplace item.", 400);
@@ -71,6 +73,8 @@ export async function POST(request: Request) {
     return economyJsonError("Choose an amount between 1 and 50.", 400);
   if (floatValue === null)
     return economyJsonError("Choose a float between 0 and 1.", 400);
+  if (seed === null)
+    return economyJsonError("Choose a whole-number seed between 0 and 1000.", 400);
   if (stattrak === null)
     return economyJsonError("Choose a valid StatTrak option.", 400);
 
@@ -99,10 +103,22 @@ export async function POST(request: Request) {
       );
     }
     if (isFloatPricedMarketplaceItem(catalogue.itemType)) {
+      if (expectedUnitPriceTokens === undefined || expectedUnitPriceTokens === null) {
+        throw new EconomyRepositoryError(
+          "invalid_input",
+          "Load a current price before buying a skin, knife, or gloves.",
+        );
+      }
       if (floatValue === undefined) {
         throw new EconomyRepositoryError(
           "invalid_input",
           "Choose a float before buying a skin, knife, or gloves.",
+        );
+      }
+      if (seed === undefined) {
+        throw new EconomyRepositoryError(
+          "invalid_input",
+          "Choose a seed before buying a skin, knife, or gloves.",
         );
       }
       const minimumFloat = catalogue.minFloat ?? 0;
@@ -113,64 +129,68 @@ export async function POST(request: Request) {
           `Choose a float between ${minimumFloat.toFixed(6)} and ${maximumFloat.toFixed(6)} for this item.`,
         );
       }
-      const fallbackPrice = await getCachedMarketplaceVariantFallback({
-        catalogueId,
-        floatValue,
-        stattrak,
-        standardFallback:
-          !stattrak && catalogue.price && !isLegacySteamPrice(catalogue.price.source)
-            ? {
-                eurCents: catalogue.price.euroCents,
-                source: catalogue.price.source,
-                sourceReference: catalogue.price.sourceReference,
-              }
-            : null,
-      });
-      const [quote] = await getMarketplacePriceQuotes([
-        {
-          itemType: catalogue.itemType,
-          displayName: catalogue.displayName,
-          marketHashName: catalogue.marketHashName,
-          metadata: catalogue.metadata,
-          minFloat: catalogue.minFloat,
-          maxFloat: catalogue.maxFloat,
+      if (catalogue.metadata.customServerFinish !== true) {
+        const fallbackPrice = await getCachedMarketplaceVariantFallback({
+          catalogueId,
           floatValue,
-          seed: metadataSeed(catalogue.metadata),
           stattrak,
-          exactPatternQuote: true,
-          fallbackPrice,
-        },
-      ]);
-      if (!quote || quote.floatValue !== floatValue || !quote.wear) {
-        throw new EconomyRepositoryError(
-          "price_unavailable",
-          stattrak
-            ? "No current public StatTrak™ price matched this float."
-            : "No current public price matched this float. Ask staff to set a last-known price.",
-        );
+          standardFallback:
+            !stattrak && catalogue.price && !isLegacySteamPrice(catalogue.price.source)
+              ? {
+                  eurCents: catalogue.price.euroCents,
+                  source: catalogue.price.source,
+                  sourceReference: catalogue.price.sourceReference,
+                }
+              : null,
+        });
+        const [quote] = await getMarketplacePriceQuotes([
+          {
+            itemType: catalogue.itemType,
+            displayName: catalogue.displayName,
+            marketHashName: catalogue.marketHashName,
+            metadata: catalogue.metadata,
+            minFloat: catalogue.minFloat,
+            maxFloat: catalogue.maxFloat,
+            floatValue,
+            seed,
+            stattrak,
+            exactPatternQuote: true,
+            fallbackPrice,
+          },
+        ]);
+        if (!quote || quote.floatValue !== floatValue || quote.seed !== seed || !quote.wear) {
+          throw new EconomyRepositoryError(
+            "price_unavailable",
+            stattrak
+              ? "No current public StatTrak™ price matched this float."
+              : "No current public price matched this float. Ask staff to set a last-known price.",
+          );
+        }
+        await cacheMarketplaceVariantQuote({
+          catalogueId,
+          stattrak,
+          imageUrl: catalogue.imageUrl,
+          quote,
+        });
+        resolvedMarketQuote = {
+          baseEuroCents: quote.baseEuroCents,
+          euroCents: quote.eurCents,
+          source: quote.source,
+          sourceReference: quote.sourceReference,
+          marketHashName: quote.marketHashName,
+          marketVersion: quote.marketVersion,
+          floatValue: quote.floatValue,
+          wear: quote.wear,
+          stattrak: quote.stattrak,
+          seed: quote.seed,
+          seedMatched: quote.seedMatched,
+          floatDiscountBps: quote.floatDiscountBps,
+          pricingRule: quote.pricingRule,
+          fromFallback: quote.fromFallback,
+          fallbackStale: quote.fallbackStale,
+          fallbackObservedAt: quote.fallbackObservedAt,
+        };
       }
-      await cacheMarketplaceVariantQuote({
-        catalogueId,
-        stattrak,
-        imageUrl: catalogue.imageUrl,
-        quote,
-      });
-      resolvedMarketQuote = {
-        baseEuroCents: quote.baseEuroCents,
-        euroCents: quote.eurCents,
-        source: quote.source,
-        sourceReference: quote.sourceReference,
-        marketHashName: quote.marketHashName,
-        marketVersion: quote.marketVersion,
-        floatValue: quote.floatValue,
-        wear: quote.wear,
-        stattrak: quote.stattrak,
-        floatDiscountBps: quote.floatDiscountBps,
-        pricingRule: quote.pricingRule,
-        fromFallback: quote.fromFallback,
-        fallbackStale: quote.fallbackStale,
-        fallbackObservedAt: quote.fallbackObservedAt,
-      };
     } else if (catalogue.marketHashName) {
       const [quote] = await getMarketplacePriceQuotes([
         {
@@ -227,6 +247,10 @@ export async function POST(request: Request) {
       quantity,
       stattrak,
       ...(floatValue === undefined ? {} : { floatValue }),
+      ...(seed === undefined ? {} : { seed }),
+      ...(isFloatPricedMarketplaceItem(catalogue.itemType) && expectedUnitPriceTokens != null
+        ? { expectedUnitPriceTokens }
+        : {}),
       ...(resolvedMarketQuote === undefined ? {} : { resolvedMarketQuote }),
       idempotencyKey: context.body.idempotencyKey,
     });
@@ -243,6 +267,12 @@ export async function POST(request: Request) {
           : `${quantity} items purchased and added to your inventory.`,
     });
   } catch (error) {
+    if (error instanceof EconomyRepositoryError && error.code === "price_changed") {
+      return Response.json(
+        { ok: false, code: "price_changed", reloadQuote: true, message: error.message },
+        { status: 409 },
+      );
+    }
     return economyMutationFailure(error);
   }
 }

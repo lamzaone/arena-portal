@@ -34,6 +34,7 @@ import {
   type EconomyItemType,
 } from "@/lib/economy/item-taxonomy";
 import { resolvePlayerIdentities } from "@/lib/player-identities";
+import { normalizeItemGridPageSize } from "@/lib/economy/item-grid-layout";
 
 type AdminInventoriesPageProps = {
   searchParams: Promise<{
@@ -41,6 +42,7 @@ type AdminInventoriesPageProps = {
     page?: string;
     steamId?: string;
     inventoryPage?: string;
+    inventoryPageSize?: string;
     inventoryQ?: string;
     inventoryType?: string;
     inventoryState?: string;
@@ -86,6 +88,7 @@ function inventoriesHref({
   page,
   steamId,
   inventoryPage,
+  inventoryPageSize,
   inventoryQ,
   inventoryType,
   inventoryState,
@@ -94,6 +97,7 @@ function inventoriesHref({
   page?: number;
   steamId?: string | null;
   inventoryPage?: number;
+  inventoryPageSize?: number;
   inventoryQ?: string;
   inventoryType?: EconomyItemType | null;
   inventoryState?: EconomyItemState | null;
@@ -104,6 +108,7 @@ function inventoriesHref({
   if (steamId) params.set("steamId", steamId);
   if (inventoryPage && inventoryPage > 1)
     params.set("inventoryPage", String(inventoryPage));
+  if (inventoryPageSize) params.set("inventoryPageSize", String(inventoryPageSize));
   if (inventoryQ) params.set("inventoryQ", inventoryQ);
   if (inventoryType) params.set("inventoryType", inventoryType);
   if (inventoryState) params.set("inventoryState", inventoryState);
@@ -115,6 +120,7 @@ function inventoryMutationAction({
   query,
   page,
   inventoryPage,
+  inventoryPageSize,
   inventoryQ,
   inventoryType,
   inventoryState,
@@ -122,6 +128,7 @@ function inventoryMutationAction({
   query: string;
   page: number;
   inventoryPage: number;
+  inventoryPageSize: number;
   inventoryQ: string;
   inventoryType: EconomyItemType | null;
   inventoryState: EconomyItemState | null;
@@ -131,6 +138,7 @@ function inventoryMutationAction({
   if (page > 1) params.set("returnPage", String(page));
   if (inventoryPage > 1)
     params.set("returnInventoryPage", String(inventoryPage));
+  params.set("returnInventoryPageSize", String(inventoryPageSize));
   if (inventoryQ) params.set("returnInventoryQ", inventoryQ);
   if (inventoryType) params.set("returnInventoryType", inventoryType);
   if (inventoryState) params.set("returnInventoryState", inventoryState);
@@ -187,6 +195,7 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
   const playerPage = positivePage(params.page);
   const steamId = validSteamId(params.steamId);
   const inventoryPage = positivePage(params.inventoryPage);
+  const inventoryPageSize = normalizeItemGridPageSize(params.inventoryPageSize);
   const inventoryQ = (params.inventoryQ ?? "").trim().slice(0, 120);
   const inventoryType = validInventoryType(params.inventoryType);
   const inventoryState = validInventoryState(params.inventoryState);
@@ -195,7 +204,7 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
     steamId
       ? getStaffEconomyAccount(steamId, {
           inventoryPage,
-          inventoryPageSize: 48,
+          inventoryPageSize,
           inventoryQuery: inventoryQ || undefined,
           inventoryItemTypes: inventoryType ? [inventoryType] : undefined,
           inventoryStates: inventoryState ? [inventoryState] : undefined,
@@ -217,13 +226,12 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
   const notice = feedback(params.notice, "notice");
   const error = feedback(params.error, "error");
   const playerPageCount = Math.max(1, Math.ceil(players.total / players.pageSize));
-  const previousInventoryHref = account && account.inventory.page > 1 ? inventoriesHref({ query, page: players.page, steamId, inventoryPage: account.inventory.page - 1, inventoryQ, inventoryType, inventoryState }) : null;
-  const inventoryPageCount = account ? Math.max(1, Math.ceil(account.inventory.total / account.inventory.pageSize)) : 1;
-  const nextInventoryHref = account && account.inventory.page < inventoryPageCount ? inventoriesHref({ query, page: players.page, steamId, inventoryPage: account.inventory.page + 1, inventoryQ, inventoryType, inventoryState }) : null;
+  const inventoryHref = inventoriesHref({ query, page: players.page, steamId, inventoryPage: account?.inventory.page ?? inventoryPage, inventoryPageSize, inventoryQ, inventoryType, inventoryState });
   const mutationAction = inventoryMutationAction({
     query,
     page: players.page,
     inventoryPage: account?.inventory.page ?? inventoryPage,
+    inventoryPageSize,
     inventoryQ,
     inventoryType,
     inventoryState,
@@ -293,10 +301,10 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
                 </StaffInventoryPlayerRow>;
               }) : <div className="staff-player-empty"><Archive aria-hidden="true" /><strong>No wallet accounts found.</strong><p>Try a player name or SteamID64. Awarding Tokens or an item creates an account automatically.</p></div>}
             </div>
-            {playerPageCount > 1 ? <LinkPagination className="staff-player-pagination" page={players.page} totalPages={playerPageCount} label="Player results pages" hrefForPage={(targetPage) => inventoriesHref({ query, page: targetPage, steamId, inventoryPage, inventoryQ, inventoryType, inventoryState })} /> : null}
+            {playerPageCount > 1 ? <LinkPagination className="staff-player-pagination" page={players.page} totalPages={playerPageCount} label="Player results pages" hrefForPage={(targetPage) => inventoriesHref({ query, page: targetPage, steamId, inventoryPage, inventoryPageSize, inventoryQ, inventoryType, inventoryState })} /> : null}
           </aside>
           <div className="staff-inventory-workspace">
-            {account ? <StaffInventoryPanel account={account} playerIdentity={playerIdentities[account.steamId]} csrf={createAdminActionToken(session)} canAdjustTokens={access.canAdjustEconomyTokens} canGrant={access.canGrantEconomyItems} canManage={access.canManageEconomy} canManageLoadouts={access.canManageEconomyLoadouts} grantCatalogue={grantCatalogue?.items ?? []} mutationAction={mutationAction} pagination={{ previousHref: previousInventoryHref, nextHref: nextInventoryHref }} directory={{ query, page: players.page }} inventoryFilters={{ query: inventoryQ, itemType: inventoryType, state: inventoryState, clearHref: clearInventoryFiltersHref }} /> : <section className="panel staff-inventory-empty"><div className="staff-inventory-empty-icon"><Archive aria-hidden="true" /></div><p className="eyebrow">Select a player</p><h2>Choose an inventory to inspect.</h2><p>Search the directory by player name or SteamID64. Selecting a player opens their wallet, loadout controls, and preview-rich inventory right here.</p></section>}
+            {account ? <StaffInventoryPanel account={account} playerIdentity={playerIdentities[account.steamId]} csrf={createAdminActionToken(session)} canAdjustTokens={access.canAdjustEconomyTokens} canGrant={access.canGrantEconomyItems} canManage={access.canManageEconomy} canManageLoadouts={access.canManageEconomyLoadouts} grantCatalogue={grantCatalogue?.items ?? []} mutationAction={mutationAction} pagination={{ href: inventoryHref }} directory={{ query, page: players.page }} inventoryFilters={{ query: inventoryQ, itemType: inventoryType, state: inventoryState, clearHref: clearInventoryFiltersHref }} /> : <section className="panel staff-inventory-empty"><div className="staff-inventory-empty-icon"><Archive aria-hidden="true" /></div><p className="eyebrow">Select a player</p><h2>Choose an inventory to inspect.</h2><p>Search the directory by player name or SteamID64. Selecting a player opens their wallet, loadout controls, and preview-rich inventory right here.</p></section>}
           </div>
         </section>
     </PortalShell>

@@ -4,6 +4,7 @@ import {
 } from "@/lib/economy/item-taxonomy";
 import { economyItemDisplayName } from "@/lib/economy/item-display-name";
 import { resolveEconomySellback } from "@/lib/economy/sellback";
+import { tradeWeaponPreviewFields } from "@/lib/economy/trade-preview";
 
 export type EconomyItemView = {
   id: string;
@@ -77,6 +78,10 @@ export type EconomyTradeItemView = {
   rarityRank: number;
   tradable: boolean;
   imageUrl: string | null;
+  definitionIndex: number | null;
+  paintkit: number | null;
+  seed: number | null;
+  raw: Record<string, unknown>;
   floatValue: number | null;
   stattrak: boolean;
   stattrakCount: number;
@@ -584,6 +589,7 @@ function tradeItems(value: unknown): EconomyTradeItemView[] {
     (entry) => {
       const record = isRecord(entry) ? entry : {};
       const item = toEconomyItem(record.item ?? entry);
+      const visual = tradeWeaponPreviewFields(record.item ?? entry);
       return {
         id: text(firstDefined(record, ["itemId", "id"]), item.id),
         catalogueId: item.catalogueId,
@@ -593,6 +599,10 @@ function tradeItems(value: unknown): EconomyTradeItemView[] {
         rarityRank: item.rarityRank,
         tradable: item.tradable,
         imageUrl: item.imageUrl,
+        definitionIndex: visual.definitionIndex,
+        paintkit: visual.paintkit,
+        seed: visual.seed,
+        raw: { attributes: visual.attributes, stickers: visual.stickers },
         floatValue: item.floatValue,
         stattrak: item.stattrak,
         stattrakCount: item.stattrakCount,

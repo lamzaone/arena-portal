@@ -58,6 +58,7 @@ export async function POST(request: Request) {
         (item) =>
           canSellInventoryItem(item) &&
           item.catalogue &&
+          item.catalogue.metadata.customServerFinish !== true &&
           (!item.stattrak || isStattrakMarketplaceItem(item.itemType)),
       );
       const fallbacks = await getCachedMarketplaceVariantFallbacks(
@@ -96,12 +97,8 @@ export async function POST(request: Request) {
           floatValue: item.floatValue,
           seed: item.seed,
           stattrak: item.stattrak,
-          // A live exact float/seed lookup is the recovery path for an item
-          // that has no reusable last-known variant price. Already-priced
-          // entries remain database-only, keeping the common bulk path fast.
-          exactPatternQuote: fallbacks[index] === null,
+          exactPatternQuote: true,
           fallbackPrice: fallbacks[index],
-          fallbackOnly: fallbacks[index] !== null,
         })),
       );
       await cacheMarketplaceVariantQuotes(
@@ -183,8 +180,9 @@ export async function POST(request: Request) {
       itemId,
     );
     const catalogue = item?.catalogue;
+    const customServerFinish = catalogue?.metadata.customServerFinish === true;
     const fallbackPrice =
-      item && catalogue && item.catalogueId !== null
+      item && catalogue && item.catalogueId !== null && !customServerFinish
         ? await getCachedMarketplaceVariantFallback({
             catalogueId: item.catalogueId,
             floatValue: item.floatValue,
@@ -202,6 +200,7 @@ export async function POST(request: Request) {
     const [quote] = item &&
       canSellInventoryItem(item) &&
       catalogue &&
+      !customServerFinish &&
       (!item.stattrak || isStattrakMarketplaceItem(item.itemType))
       ? await getMarketplacePriceQuotes([
           {
@@ -227,7 +226,7 @@ export async function POST(request: Request) {
           },
         ])
       : [null];
-    if (item && item.catalogueId !== null) {
+    if (item && item.catalogueId !== null && !customServerFinish) {
       await cacheMarketplaceVariantQuote({
         catalogueId: item.catalogueId,
         stattrak: item.stattrak,

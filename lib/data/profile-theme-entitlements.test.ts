@@ -13,7 +13,6 @@ import type { Pool } from "mysql2/promise";
 const db = new DatabaseSync(":memory:");
 let authorityAvailable = true;
 let nativeAdminsAvailable = true;
-let queryCount = 0;
 function sqliteSql(sql: string) {
   return sql.replaceAll("CURRENT_TIMESTAMP(6)", "CURRENT_TIMESTAMP")
     .replaceAll(" FOR UPDATE", "")
@@ -23,7 +22,6 @@ function sqliteSql(sql: string) {
 }
 const executor = {
   async query(sql: string, values: unknown[] = []) {
-    queryCount += 1;
     if (!authorityAvailable && sql.includes("arena_")) throw new Error("offline");
     if (!nativeAdminsAvailable && sql.includes("FROM admins")) throw new Error("admins offline");
     return [db.prepare(sqliteSql(sql))
@@ -75,7 +73,7 @@ registerHooks({
 });
 const { getAuthorizedProfileThemeItemIds } = await import("./profile-theme-entitlements.ts");
 await import("./identity-groups.ts");
-const { getPlayerSettings, getPlayerProfileThemeKeys, getPortalSession, updatePlayerSettings, equipProfileThemeItem } = await import("./portal-repository.ts");
+const { createPortalSession, getPlayerSettings, getPlayerProfileThemeKeys, getPortalSession, updatePlayerSettings, equipProfileThemeItem } = await import("./portal-repository.ts");
 const { configuredGameServerGuid } = await import("../admin/server-scope.ts");
 const { economyMutationFailure } = await import("../economy/request.ts");
 
@@ -114,7 +112,6 @@ for (const column of ["market_hash_name TEXT", "item_type TEXT DEFAULT 'profile_
 function reset() {
   authorityAvailable = true;
   nativeAdminsAvailable = true;
-  queryCount = 0;
   for (const table of db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all()) {
     db.exec(`DELETE FROM ${table.name}`);
   }
@@ -136,16 +133,16 @@ function membership(groupId: number) {
   if (groupId <= 2) db.prepare("INSERT INTO arena_vip_subscriptions VALUES (?, ?, 1, 'vip', ?, 'active', '2020-01-01', NULL, 1, NULL)").run(player, groupId, `membership-${groupId}`);
 }
 
-test("account-bound themes require their awarding group's current membership", async () => {
+test("available theme inventory remains usable independently of membership tiers", async () => {
   reset();
-  assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver])], []);
+  assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver])], [silver.itemId]);
   membership(2);
-  assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver, gold])], [gold.itemId]);
+  assert.deepEqual(await getAuthorizedProfileThemeItemIds(executor, [silver, gold]), new Set([silver.itemId, gold.itemId]));
   membership(1);
-  assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver, gold])], [gold.itemId]);
+  assert.deepEqual(await getAuthorizedProfileThemeItemIds(executor, [silver, gold]), new Set([silver.itemId, gold.itemId]));
 });
 
-test("expiry, future activation, revocation, disabled scope, and subscription expiry deny stale items", async () => {
+test("membership refreshes cannot hide a selected theme that is still in inventory", async () => {
   for (const mutation of [
     "UPDATE arena_group_memberships SET expires_at = '2021-01-01'",
     "UPDATE arena_group_memberships SET starts_at = '2099-01-01'",
@@ -155,31 +152,41 @@ test("expiry, future activation, revocation, disabled scope, and subscription ex
     "UPDATE arena_scopes SET enabled = 0",
     "UPDATE arena_vip_subscriptions SET expires_at = '2021-01-01'",
     "UPDATE arena_vip_subscriptions SET status = 'revoked'",
-  ]) {
-    reset();
-    membership(1);
-    assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver])], [silver.itemId]);
-    db.exec(mutation);
-    assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver])], [], mutation);
-  }
-});
-
-test("retired reward, disabled catalogue, transfer, and independent staff revocation deny access", async () => {
-  for (const mutation of [
     "UPDATE portal_identity_group_rewards SET enabled = 0",
-    "UPDATE portal_identity_group_rewards SET catalogue_id = 2 WHERE id = 1",
     "UPDATE portal_identity_group_reward_awards SET entitlement_active = 0",
     "UPDATE portal_identity_groups SET enabled = 0",
     "UPDATE portal_economy_catalogue SET enabled = 0",
+  ]) {
+    reset();
+    membership(1);
+    equippedSilver();
+    assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver])], [silver.itemId]);
+    db.exec(mutation);
+    assert.equal((await getPortalSession("session-token"))?.profileThemeKey, "vip_silver", mutation);
+    assert.equal((await getPlayerProfileThemeKeys([player])).get(player), "vip_silver", mutation);
+    assert.equal((await getPlayerSettings(player)).activeThemeItemId, silver.itemId, mutation);
+  }
+});
+
+test("removed inventory and disabled theme definitions stop applying the selected theme", async () => {
+  for (const mutation of [
     "UPDATE portal_profile_themes SET enabled = 0",
     "UPDATE portal_inventory_items SET state = 'revoked'",
-    "UPDATE portal_inventory_items SET tradable = 1",
+    "UPDATE portal_inventory_items SET state = 'consumed'",
+    "UPDATE portal_inventory_items SET state = 'escrowed'",
+    "DELETE FROM portal_inventory_items",
     `UPDATE portal_inventory_items SET owner_steam_id = '${other}'`,
   ]) {
     reset();
     membership(1);
+    equippedSilver();
     db.exec(mutation);
     assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver])], [], mutation);
+    assert.equal((await getPortalSession("session-token"))?.profileThemeKey, null, mutation);
+    assert.equal((await getPlayerProfileThemeKeys([player])).has(player), false, mutation);
+    const settings = await getPlayerSettings(player);
+    assert.equal(settings.activeThemeItemId, null, mutation);
+    assert.deepEqual(settings.ownedThemes, [], mutation);
   }
 });
 
@@ -207,24 +214,28 @@ test("returning membership can use a restored item but never bypasses its revoke
   assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver])], [silver.itemId]);
 });
 
-test("staff themes require the player's own matching scoped membership", async () => {
+test("staff themes require the player's own inventory item", async () => {
   reset();
   membership(3);
   assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [moderator])], [moderator.itemId]);
   assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [{ ...moderator, steamId: other }])], []);
   db.exec("UPDATE arena_group_memberships SET scope_id = 2; UPDATE arena_group_scopes SET scope_id = 2");
-  assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [moderator])], []);
+  assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [moderator])], [moderator.itemId]);
 });
 
-test("authority failure hides ranks without writes and preserves independent themes", async () => {
+test("membership outages preserve themes across repeated settings, session and public reads", async () => {
   reset();
   membership(1);
-  const legacy = { steamId: other, itemId: "tap-item", themeKey: "tap_god" };
+  equippedSilver();
   authorityAvailable = false;
-  assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver, legacy])], [legacy.itemId]);
-  queryCount = 0;
-  assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [legacy])], [legacy.itemId]);
-  assert.equal(queryCount, 0);
+  nativeAdminsAvailable = false;
+  for (let read = 0; read < 3; read += 1) {
+    assert.equal((await getPortalSession("session-token"))?.profileThemeKey, "vip_silver");
+    assert.equal((await getPlayerProfileThemeKeys([player])).get(player), "vip_silver");
+    assert.equal((await getPlayerSettings(player)).activeThemeItemId, silver.itemId);
+  }
+  assert.equal(db.prepare("SELECT active_theme_item_id FROM portal_player_settings WHERE steam_id = ?").get(player)?.active_theme_item_id, silver.itemId);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM portal_audit_events").get()?.count, 0);
 });
 
 function equippedSilver() {
@@ -232,32 +243,45 @@ function equippedSilver() {
   db.prepare("INSERT INTO portal_sessions VALUES (?, 'session-token', ?, NULL)").run(player, Date.now() + 60000);
 }
 
-test("session, public profile and settings hide passive expiry without a reconciliation visit", async () => {
+test("renewing an expired login session preserves the account's selected theme", async () => {
   reset();
   membership(1);
   equippedSilver();
   assert.equal((await getPortalSession("session-token"))?.profileThemeKey, "vip_silver");
   assert.equal((await getPlayerProfileThemeKeys([player])).get(player), "vip_silver");
   assert.equal((await getPlayerSettings(player)).activeTheme?.key, "vip_silver");
-  db.exec("UPDATE arena_group_memberships SET expires_at = '2021-01-01'");
+  db.exec("UPDATE portal_sessions SET expires_at = 0");
+  assert.equal(await getPortalSession("session-token"), null);
+  await createPortalSession({ tokenHash: "renewed-session", steamId: player, expiresAt: Date.now() + 60000 });
+  assert.equal((await getPortalSession("renewed-session"))?.profileThemeKey, "vip_silver");
+  assert.equal((await getPlayerSettings(player)).activeThemeItemId, silver.itemId);
+});
+
+test("selecting default explicitly stays selected on subsequent reads", async () => {
+  reset();
+  membership(1);
+  equippedSilver();
+  const saved = await updatePlayerSettings({ steamId: player, inventoryVisibility: "private", activeThemeItemId: null });
+  assert.equal(saved.activeThemeItemId, null);
   assert.equal((await getPortalSession("session-token"))?.profileThemeKey, null);
   assert.equal((await getPlayerProfileThemeKeys([player])).has(player), false);
   const settings = await getPlayerSettings(player);
   assert.equal(settings.activeTheme, null);
-  assert.deepEqual(settings.ownedThemes, []);
+  assert.equal(settings.ownedThemes.some((theme) => theme.inventoryItemId === silver.itemId), true);
 });
 
-test("settings and inventory equip reject stale account-bound rank items", async () => {
+test("settings and inventory equip reject another player's theme", async () => {
   reset();
   const itemId = "11111111-1111-4111-8111-111111111111";
   db.prepare("UPDATE portal_inventory_items SET id = ? WHERE id = ?").run(itemId, silver.itemId);
   db.prepare("UPDATE portal_identity_group_reward_awards SET item_id = ? WHERE item_id = ?").run(itemId, silver.itemId);
+  db.prepare("UPDATE portal_inventory_items SET owner_steam_id = ? WHERE id = ?").run(other, itemId);
   await assert.rejects(updatePlayerSettings({ steamId: player, inventoryVisibility: "public", activeThemeItemId: itemId }), { code: "theme_not_owned" });
-  await assert.rejects(equipProfileThemeItem({ steamId: player, itemId, idempotencyKey: "rank-equip-expired:test" }), { code: "theme_not_owned" });
+  await assert.rejects(equipProfileThemeItem({ steamId: player, itemId, idempotencyKey: "rank-equip-other-owner:test" }), { code: "item_not_owned" });
   assert.equal(db.prepare("SELECT COUNT(*) AS count FROM portal_player_settings").get()?.count, 0);
 });
 
-test("active bound and direct grants equip successfully through both write paths", async () => {
+test("owned themes save and equip during membership outages through both write paths", async () => {
   for (const directGrant of [false, true]) {
     reset();
     const itemId = "11111111-1111-4111-8111-111111111111";
@@ -265,6 +289,8 @@ test("active bound and direct grants equip successfully through both write paths
     db.prepare("UPDATE portal_identity_group_reward_awards SET item_id = ? WHERE item_id = ?").run(itemId, silver.itemId);
     if (directGrant) db.exec("DELETE FROM portal_identity_group_reward_awards WHERE reward_id = 1");
     else membership(1);
+    authorityAvailable = false;
+    nativeAdminsAvailable = false;
     const settings = await updatePlayerSettings({ steamId: player, inventoryVisibility: "private", activeThemeItemId: itemId });
     assert.equal(settings.activeThemeItemId, itemId);
     const equipped = await equipProfileThemeItem({ steamId: player, itemId, idempotencyKey: "rank-equip-active:test" });
@@ -278,10 +304,9 @@ function founderReward() {
   db.prepare("INSERT INTO admins VALUES (1, ?, 'Founder player', '[]', '[\"Founder\"]', 100, ?)").run(player, JSON.stringify([configuredGameServerGuid()]));
 }
 
-test("Founder rewards use their native Admins.Core membership for equip and profile reads", async () => {
+test("Founder-granted inventory supports settings and inventory equip", async () => {
   reset();
   founderReward();
-  // Founder has no Arena membership: its authority deliberately stays native.
   assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver])], [silver.itemId]);
   const itemId = "11111111-1111-4111-8111-111111111111";
   db.prepare("UPDATE portal_inventory_items SET id = ? WHERE id = ?").run(itemId, silver.itemId);
@@ -293,38 +318,40 @@ test("Founder rewards use their native Admins.Core membership for equip and prof
   assert.equal((await updatePlayerSettings({ steamId: player, inventoryVisibility: "private", activeThemeItemId: itemId })).activeThemeItemId, itemId);
 });
 
-test("Founder rewards never trust another server, player, or a portal-only Founder membership", async () => {
+test("Founder membership changes leave an available theme selected until inventory revocation", async () => {
   for (const mutation of [
     "UPDATE admins SET Servers = '[\"other-server\"]'",
     `UPDATE admins SET SteamId64 = '${other}'`,
     "UPDATE admins SET Groups = '[\"Owner\"]'",
     "DELETE FROM admins",
-    "UPDATE portal_identity_group_rewards SET enabled = 0",
-    "UPDATE portal_inventory_items SET state = 'revoked'",
   ]) {
     reset();
     founderReward();
     assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver])], [silver.itemId]);
-    // A projected Founder membership must not substitute for native authority.
-    db.exec("INSERT INTO arena_groups VALUES (4, 4, 'admin', NULL, 100, 1, 'Founder'); INSERT INTO arena_group_scopes VALUES (4, 1, 1, NULL)");
-    membership(4);
+    equippedSilver();
     db.exec(mutation);
+    assert.equal((await getPlayerSettings(player)).activeThemeItemId, silver.itemId, mutation);
+    db.exec("UPDATE portal_inventory_items SET state = 'revoked'");
     assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver])], [], mutation);
+    assert.equal((await getPlayerSettings(player)).activeThemeItemId, null, mutation);
   }
 });
 
-test("membership sources fail independently and Founder revocation takes effect immediately", async () => {
+test("Founder source outages cannot change the equipped theme", async () => {
   reset();
   founderReward();
+  equippedSilver();
   authorityAvailable = false;
   assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver])], [silver.itemId]);
   authorityAvailable = true;
   membership(3);
   nativeAdminsAvailable = false;
-  assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver, moderator])], [moderator.itemId]);
+  assert.deepEqual(await getAuthorizedProfileThemeItemIds(executor, [silver, moderator]), new Set([silver.itemId, moderator.itemId]));
+  assert.equal((await getPortalSession("session-token"))?.profileThemeKey, "vip_silver");
+  assert.equal((await getPlayerSettings(player)).activeThemeItemId, silver.itemId);
   nativeAdminsAvailable = true;
   db.exec("UPDATE admins SET Groups = '[]'");
-  assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver])], []);
+  assert.deepEqual([...await getAuthorizedProfileThemeItemIds(executor, [silver])], [silver.itemId]);
 });
 
 test("an unavailable theme returns an actionable conflict instead of a generic server error", async () => {
@@ -332,4 +359,32 @@ test("an unavailable theme returns an actionable conflict instead of a generic s
   const response = economyMutationFailure(Object.assign(new Error(message), { code: "theme_not_owned" }));
   assert.equal(response.status, 409);
   assert.deepEqual(await response.json(), { ok: false, message });
+});
+
+test("new copies of the same theme do not displace the selected inventory item", async () => {
+  reset();
+  equippedSilver();
+  db.prepare("INSERT INTO portal_inventory_items (id, owner_steam_id, catalogue_id, item_type, state, tradable, acquired_at) VALUES ('new-silver-item', ?, 1, 'profile_theme', 'available', 1, '2026-09-06')").run(player);
+  const settings = await getPlayerSettings(player);
+  assert.equal(settings.activeThemeItemId, silver.itemId);
+  assert.equal(settings.ownedThemes.filter((theme) => theme.key === "vip_silver").length, 1);
+  assert.equal((await getPortalSession("session-token"))?.profileThemeKey, "vip_silver");
+});
+
+test("ordinary themes also require a matching owned, available and trusted inventory item", async () => {
+  reset();
+  db.exec("UPDATE portal_profile_themes SET theme_key = 'tap_god' WHERE id = 1");
+  const theme = { ...silver, themeKey: "tap_god" };
+  assert.deepEqual(await getAuthorizedProfileThemeItemIds(executor, [theme]), new Set([silver.itemId]));
+  for (const candidate of [
+    { ...theme, steamId: other },
+    { ...theme, itemId: "missing-item" },
+    { ...theme, themeKey: "beta_tester" },
+    { ...theme, themeKey: "default" },
+    { ...theme, themeKey: "unregistered_theme" },
+  ]) {
+    assert.deepEqual(await getAuthorizedProfileThemeItemIds(executor, [candidate]), new Set());
+  }
+  db.exec("UPDATE portal_inventory_items SET state = 'revoked'");
+  assert.deepEqual(await getAuthorizedProfileThemeItemIds(executor, [theme]), new Set());
 });

@@ -35,8 +35,8 @@ export type MarketplacePriceIdentityInput = {
   seed?: number | null | undefined;
   // StatTrak™ is a distinct public-market identity from the standard item.
   stattrak?: boolean | null | undefined;
-  // Exact float/seed market listings are queried only for a single sale or
-  // purchase quote, never while rendering an entire inventory page.
+  // Requests the selected seed/float listing when the server has a CSFloat
+  // key. Without matching evidence the quote remains an explicit estimate.
   exactPatternQuote?: boolean | null | undefined;
 };
 
@@ -349,6 +349,9 @@ function validFallback(value: MarketplacePriceFallback | null | undefined) {
   const eurCents = validEuroCents(value.eurCents);
   const source = normalizedText(value.source);
   if (eurCents === null || !source || source.length > 96) return null;
+  // Coarse catalogue and wear caches do not retain exact seed/float identity.
+  // A historical listing premium cannot become another pattern's base price.
+  if (normalizedKey(source) === "csfloat-exact-listing") return null;
   const sourceReference = normalizedText(value.sourceReference);
   const observedAtInput = normalizedText(value.observedAt);
   const observedAtMilliseconds = observedAtInput
@@ -487,16 +490,15 @@ export async function getMarketplacePriceQuotes(
     );
   }
 
-  // When a CSFloat API key is configured, sale and purchase mutations also
-  // try its listing endpoint with the actual float and paint-seed filters.
-  // This is intentionally opt-in per input so inventory-page rendering does
-  // not generate one remote query per card.
+  // Opted-in inventory, sale and purchase prices use identical listing
+  // evidence. The adapter caches the full seed/float identity and coalesces
+  // duplicate requests; generic exterior quotes remain a separate fallback.
   const exactQuotes = await Promise.all(
     inputs.map(async (input, index) => {
       if (input.exactPatternQuote !== true) return null;
       if (input.fallbackOnly === true) return null;
       const identity = identities[index];
-      if (identity.floatValue === null && identity.seed === null) return null;
+      if (identity.floatValue === null || identity.seed === null) return null;
       // A named phase/version must remain on a source that exposes that exact
       // version; do not infer it from an otherwise matching market hash.
       if (identity.marketVersion) return null;

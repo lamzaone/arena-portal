@@ -128,6 +128,8 @@ export function crateDropDisclosureLabel(
 export type MarketplacePurchaseIntentOptions = {
   quantity?: unknown;
   floatValue?: number;
+  seed?: number;
+  expectedUnitPriceTokens?: number;
   stattrak: boolean;
 };
 
@@ -152,6 +154,10 @@ export function marketplacePurchaseIntentSignature(
     catalogueId,
     quantity: clampCrateQuantity(options.quantity ?? 1),
     floatValue,
+    seed: options.seed ?? null,
+    ...(options.expectedUnitPriceTokens === undefined
+      ? {}
+      : { expectedUnitPriceTokens: options.expectedUnitPriceTokens }),
     stattrak: options.stattrak === true,
   });
 }

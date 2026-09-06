@@ -3,6 +3,10 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   ...(process.env.ARENA_STANDALONE === "true" ? { output: "standalone" as const } : {}),
   poweredByHeader: false,
+  serverExternalPackages: ["playwright", "sharp", "@skinhub/cdn", "@skinhub/viewer"],
+  outputFileTracingIncludes: {
+    "/api/economy/thumbnails*": ["./node_modules/playwright/**", "./node_modules/playwright-core/**", "./node_modules/@skinhub/viewer/**", "./node_modules/@skinhub/cdn/**"],
+  },
   async headers() {
     return [
       {

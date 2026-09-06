@@ -19,6 +19,7 @@ import {
 import { useRouter } from "next/navigation";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { PaginatedItemGrid } from "@/components/economy/item-grid";
 
 import {
   DEFAULT_SEARCH_DEBOUNCE_MS,
@@ -305,7 +306,7 @@ export function StaffGrantItemControls({
 
   const visibleCatalogue = useMemo(() => {
     if (query.trim()) return searchResults ?? [];
-    return catalogue.filter((item) => matchesFilter(item, filter)).slice(0, 40);
+    return catalogue.filter((item) => matchesFilter(item, filter));
   }, [catalogue, filter, query, searchResults]);
   const selectedCatalogueCounts = useMemo(() => {
     const counts = new Map<number, number>();
@@ -708,10 +709,10 @@ export function StaffGrantItemControls({
               </button>
             ))}
           </div>
-          <div
+          <PaginatedItemGrid
             className="staff-grant-catalogue-list"
-            role="group"
-            aria-label="Grantable catalogue items"
+            label="Grantable catalogue items"
+            resetKey={`${mode}:${filter}:${query}`}
           >
             {visibleCatalogue.length ? (
               visibleCatalogue.map((item) => {
@@ -757,7 +758,7 @@ export function StaffGrantItemControls({
                     : "No catalogue items are available in this shortcut."}
               </p>
             )}
-          </div>
+          </PaginatedItemGrid>
           <span
             className="staff-grant-search-status"
             id="staff-grant-search-status"

@@ -9,6 +9,7 @@ import {
   getMarketplacePriceQuotes,
   isFloatPricedMarketplaceItem,
   isStattrakMarketplaceItem,
+  marketplaceWearLabel,
 } from "@/lib/economy/market-pricing";
 import {
   cacheMarketplaceVariantQuote,
@@ -35,13 +36,10 @@ function stattrakFromSearch(value: string | null) {
   return null;
 }
 
-function metadataSeed(metadata: Record<string, unknown>) {
-  for (const key of ["seed", "defaultSeed", "patternSeed"]) {
-    const value = metadata[key];
-    if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 1_000)
-      return value;
-  }
-  return undefined;
+function seedFromSearch(value: string | null) {
+  if (!value?.trim()) return null;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 1_000 ? parsed : null;
 }
 
 function legacySteamPrice(source: string | undefined) {
@@ -59,6 +57,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const catalogueId = catalogueIdFromSearch(url.searchParams.get("catalogueId"));
   const floatValue = floatFromSearch(url.searchParams.get("float"));
+  const seed = seedFromSearch(url.searchParams.get("seed"));
   const stattrak = stattrakFromSearch(url.searchParams.get("stattrak"));
   if (catalogueId === null || floatValue === null) {
     return NextResponse.json(
@@ -69,6 +68,12 @@ export async function GET(request: Request) {
   if (stattrak === null) {
     return NextResponse.json(
       { ok: false, message: "Choose a valid StatTrak option." },
+      { status: 400 },
+    );
+  }
+  if (seed === null) {
+    return NextResponse.json(
+      { ok: false, message: "Choose a whole-number seed between 0 and 1000." },
       { status: 400 },
     );
   }
@@ -104,6 +109,45 @@ export async function GET(request: Request) {
       );
     }
 
+    if (item.metadata.customServerFinish === true) {
+      const price = item.price;
+      if (
+        !price || price.source !== "staff-last-known" ||
+        price.sourceReference !== "staff-panel" || price.euroCents <= 0 ||
+        price.tokenPrice <= 0
+      ) {
+        return NextResponse.json(
+          { ok: false, message: "This custom server finish needs a current staff price." },
+          { status: 409 },
+        );
+      }
+      const discounted = await getEconomyDiscountedPrice({
+        catalogueId,
+        itemType: item.itemType,
+        basePriceTokens: price.tokenPrice,
+      });
+      return NextResponse.json(
+        {
+          ok: true,
+          priceTokens: discounted.finalPriceTokens,
+          basePriceTokens: discounted.basePriceTokens,
+          euroCents: price.euroCents,
+          originalEuroCents: price.euroCents,
+          baseEuroCents: price.euroCents,
+          discount: discounted.appliedDiscount,
+          source: price.source,
+          floatValue,
+          wear: marketplaceWearLabel(floatValue),
+          stattrak,
+          floatDiscountBps: 0,
+          pricingRule: "custom-server-fixed-v1",
+          seed,
+          seedMatched: false,
+        },
+        { headers: { "Cache-Control": "private, no-store" } },
+      );
+    }
+
     const fallbackPrice = await getCachedMarketplaceVariantFallback({
       catalogueId,
       floatValue,
@@ -126,13 +170,13 @@ export async function GET(request: Request) {
         minFloat: item.minFloat,
         maxFloat: item.maxFloat,
         floatValue,
-        seed: metadataSeed(item.metadata),
+        seed,
         stattrak,
         exactPatternQuote: true,
         fallbackPrice,
       },
     ]);
-    if (!quote || quote.floatValue !== floatValue || !quote.wear) {
+    if (!quote || quote.floatValue !== floatValue || quote.seed !== seed || !quote.wear) {
       return NextResponse.json(
         {
           ok: false,

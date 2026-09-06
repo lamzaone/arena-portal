@@ -26,6 +26,9 @@ import { SignInRequired } from "@/components/sign-in-required";
 import { StaffSubmenu } from "@/components/staff-submenu";
 import { PortalToast } from "@/components/success-toast";
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
+import { PaginatedItemGrid } from "@/components/economy/item-grid";
+import { ServerItemGrid } from "@/components/economy/server-item-grid";
+import { normalizeItemGridPageSize } from "@/lib/economy/item-grid-layout";
 import { DiscountRuleAdmin } from "@/components/economy/discount-rule-admin";
 import { AdminPageHeader } from "@/components/ui/admin-page-header";
 import { PortalShell } from "@/components/ui/portal-shell";
@@ -48,6 +51,8 @@ type AdminItemsPageProps = {
   searchParams: Promise<{
     tab?: string;
     marketplaceQ?: string;
+    marketplacePage?: string;
+    marketplacePageSize?: string;
     crateQ?: string;
     discountQ?: string;
     /** Legacy catalogue links remain valid while callers migrate. */
@@ -300,6 +305,8 @@ export default async function AdminItemsPage({
   const marketplaceQuery = cleanLookup(
     params.marketplaceQ ?? params.catalogue,
   );
+  const marketplacePage = Math.max(1, Math.min(10_000, Math.trunc(Number(params.marketplacePage)) || 1));
+  const marketplacePageSize = normalizeItemGridPageSize(params.marketplacePageSize);
   const crateQuery = cleanLookup(params.crateQ);
   const discountQuery = cleanLookup(params.discountQ);
   const crateRewardQuery = cleanLookup(params.crateReward);
@@ -332,13 +339,14 @@ export default async function AdminItemsPage({
         items: item ? [item] : [],
         total: item ? 1 : 0,
         page: 1,
-        pageSize: 100,
+        pageSize: marketplacePageSize,
       };
     } else {
       catalogue = await getEconomyCatalogue({
         includeDisabled: true,
         query: marketplaceQuery || undefined,
-        pageSize: 100,
+        page: marketplacePage,
+        pageSize: marketplacePageSize,
       });
     }
   } else if (activeTab === "crates") {
@@ -590,7 +598,7 @@ export default async function AdminItemsPage({
                   editable here. Official Valve cases stay protected.
                 </p>
                 {visibleCustomCrates.length ? (
-                  <div className="economy-crate-picker-list">
+                  <PaginatedItemGrid className="economy-crate-picker-list" label="Managed crates" resetKey={crateQuery}>
                     {visibleCustomCrates.map((crate) => (
                       <Link
                         className={`economy-crate-picker-item ${customCrate?.crate.id === crate.id ? "is-selected" : ""}`}
@@ -603,6 +611,8 @@ export default async function AdminItemsPage({
                       >
                         <MarketplaceItemPreview
                           item={{
+                            ...crate,
+                            raw: { catalogue: crate },
                             catalogueId: crate.id,
                             displayName: crate.displayName,
                             floatValue: null,
@@ -624,7 +634,7 @@ export default async function AdminItemsPage({
                         </div>
                       </Link>
                     ))}
-                  </div>
+                  </PaginatedItemGrid>
                 ) : (
                   <p className="empty-copy">
                     {crateQuery
@@ -873,7 +883,7 @@ export default async function AdminItemsPage({
                     </button>
                   </form>
                   {crateRewardCatalogue.items.length ? (
-                    <div className="economy-crate-candidate-list">
+                    <PaginatedItemGrid className="economy-crate-candidate-list" label="Crate reward candidates" resetKey={`${customCrate.crate.id}:${crateRewardQuery}:${crateRewardType}`}>
                       {crateRewardCatalogue.items
                         .filter((item) => item.id !== customCrate.crate.id)
                         .map((item) => {
@@ -885,6 +895,8 @@ export default async function AdminItemsPage({
                             <article className="economy-crate-candidate" key={item.id}>
                               <MarketplaceItemPreview
                                 item={{
+                                  ...item,
+                                  raw: { catalogue: item },
                                   catalogueId: item.id,
                                   displayName: item.displayName,
                                   floatValue: null,
@@ -936,14 +948,14 @@ export default async function AdminItemsPage({
                             </article>
                           );
                         })}
-                    </div>
+                    </PaginatedItemGrid>
                   ) : (
                     <p className="empty-copy economy-crate-empty-candidates">
                       No enabled catalogue items match this reward search.
                     </p>
                   )}
                   {customCrate.entries.length ? (
-                    <div className="economy-crate-reward-list">
+                    <PaginatedItemGrid className="economy-crate-reward-list" label="Configured crate rewards" resetKey={String(customCrate.crate.id)}>
                       {customCrate.entries.map((entry) => {
                         const rewardIsActive =
                           entry.enabled && entry.catalogue.enabled;
@@ -954,6 +966,8 @@ export default async function AdminItemsPage({
                           >
                             <MarketplaceItemPreview
                               item={{
+                                ...entry.catalogue,
+                                raw: { catalogue: entry.catalogue },
                                 catalogueId: entry.catalogue.id,
                                 displayName: entry.catalogue.displayName,
                                 floatValue: null,
@@ -1000,7 +1014,7 @@ export default async function AdminItemsPage({
                           </article>
                         );
                       })}
-                    </div>
+                    </PaginatedItemGrid>
                   ) : (
                     <p className="empty-copy economy-crate-empty-rewards">
                       This crate has no rewards yet. It cannot be listed or opened
@@ -1048,8 +1062,10 @@ export default async function AdminItemsPage({
                 artwork, price snapshots, and listing status.
               </p>
             </div>
-            {catalogue.items.length ? (
-              <div className={styles.marketplaceGrid}>
+            {catalogue.items.length || catalogue.total > 0 ? (
+              <ServerItemGrid className={styles.marketplaceGrid} label="Marketplace products"
+                page={catalogue.page} pageSize={catalogue.pageSize} total={catalogue.total}
+                href={itemsHref("marketplace", tabContext)} pageParameter="marketplacePage" sizeParameter="marketplacePageSize">
                 {catalogue.items.map((item) => {
                   const vipMembership = isVipMembership(item.itemType);
                   const managedMembershipListing =
@@ -1085,6 +1101,8 @@ export default async function AdminItemsPage({
                     <div className={styles.marketplaceArtwork}>
                       <MarketplaceItemPreview
                         item={{
+                          ...item,
+                          raw: { catalogue: item },
                           catalogueId: item.id,
                           displayName: item.displayName,
                           floatValue: null,
@@ -1306,7 +1324,7 @@ export default async function AdminItemsPage({
                     </article>
                   );
                 })}
-              </div>
+              </ServerItemGrid>
             ) : (
               <p className="empty-copy">
                 No catalogue entries match this filter. Run the server catalogue

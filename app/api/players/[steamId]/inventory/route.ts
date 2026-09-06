@@ -6,6 +6,7 @@ import {
   getPlayerProfileInventoryPage,
 } from "@/lib/data/portal-repository";
 import { isIndividualSteamId64 } from "@/lib/steam/steam-id";
+import { normalizeItemGridPageSize } from "@/lib/economy/item-grid-layout";
 
 type RouteContext = { params: Promise<{ steamId: string }> };
 
@@ -27,7 +28,9 @@ export async function GET(request: Request, { params }: RouteContext) {
   if (!isIndividualSteamId64(steamId))
     return json({ ok: false, message: "Choose a valid player." }, 400);
 
-  const page = pageNumber(new URL(request.url).searchParams.get("page"));
+  const searchParams = new URL(request.url).searchParams;
+  const page = pageNumber(searchParams.get("page"));
+  const pageSize = normalizeItemGridPageSize(searchParams.get("pageSize"));
   if (page === null)
     return json({ ok: false, message: "Choose a valid inventory page." }, 400);
 
@@ -37,6 +40,7 @@ export async function GET(request: Request, { params }: RouteContext) {
       session?.steamId ?? null,
       steamId,
       page,
+      pageSize,
     );
     return json({ ok: true, ...inventory });
   } catch (error) {

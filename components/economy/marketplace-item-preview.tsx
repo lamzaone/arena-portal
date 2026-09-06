@@ -25,9 +25,9 @@ import {
   type EconomyItemView,
 } from "@/components/economy/economy-view-model";
 import { proxiedImageUrl } from "@/lib/images/proxy-url";
-import { SkinViewer, type SkinViewerItem } from "@skinhub/viewer";
-import { weaponPreviewItem, type WeaponPreviewSource } from "@/lib/economy/weapon-preview";
-import { weaponPreviewBudget } from "@/lib/economy/preview-budget";
+import type { WeaponPreviewSource } from "@/lib/economy/weapon-preview";
+import { thumbnailForSource, thumbnailSignature } from "@/lib/economy/weapon-thumbnail";
+import { ExactWeaponThumbnail } from "./exact-weapon-thumbnail";
 
 type MarketplaceItemPreviewProps = {
   item: Pick<
@@ -128,51 +128,17 @@ function fallbackIcon(itemType: string) {
   return Box;
 }
 
-export function MarketplaceItemPreview({
-  item, enableMarketPreview = true, floatValue = null, patternSeed = null, overlay,
-}: MarketplaceItemPreviewProps) {
-  const preview = weaponPreviewItem({ ...item, floatValue: floatValue ?? item.floatValue, seed: patternSeed ?? item.seed });
-  const artwork = <CatalogueItemPreview item={item} enableMarketPreview={enableMarketPreview} floatValue={floatValue} />;
-  if (preview) return <InstanceItemPreview item={preview} label={item.displayName} rarityRank={item.rarityRank} artwork={artwork} overlay={overlay} />;
-  return <CatalogueItemPreview item={item} enableMarketPreview={enableMarketPreview} floatValue={floatValue} overlay={overlay} />;
-}
-
-function InstanceItemPreview({ item, label, rarityRank, artwork, overlay }: {
-  item: SkinViewerItem; label: string; rarityRank: number; artwork: ReactNode; overlay?: ReactNode;
-}) {
-  const container = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const [granted, setGranted] = useState(false);
-  const budgetId = useRef(Symbol());
-  const identity = JSON.stringify(item);
-  useEffect(() => setFailed(false), [identity]);
-  useEffect(() => {
-    if (!visible || failed) { setGranted(false); return; }
-    return weaponPreviewBudget.register(budgetId.current, setGranted);
-  }, [visible, failed]);
-  useEffect(() => {
-    const element = container.current;
-    if (!element) return;
-    let intersecting = false;
-    const update = () => setVisible(intersecting && document.visibilityState === "visible");
-    const observer = new IntersectionObserver(([entry]) => { intersecting = entry.isIntersecting; update(); }, { threshold: 0.05 });
-    observer.observe(element);
-    document.addEventListener("visibilitychange", update);
-    return () => { observer.disconnect(); document.removeEventListener("visibilitychange", update); };
-  }, []);
-  const fallback = <div className="economy-instance-fallback">{artwork}<small className="economy-instance-art-label">Catalogue artwork · {failed ? "3D unavailable" : "Hover or inspect for 3D"}</small></div>;
-  return <div ref={container} data-ui="item-artwork" onMouseEnter={() => weaponPreviewBudget.prioritize(budgetId.current)} className={`economy-item-preview economy-instance-preview ${rarityRankClass(rarityRank)}`}>
-    {visible && granted && !failed ? <div className="economy-instance-canvas" inert>
-      <SkinViewer item={item} title={`${label}, float ${item.float}, pattern ${item.seed}`} style={{ width: "100%", height: "100%" }}
-        settings={{ quality: { renderScale: 0.5, bloom: 0, shadows: false }, environment: { background: "transparent", map: "Warehouse" } }}
-        interactions={{ orbit: false, zoom: false, dragStickers: false, dragCharm: false }}
-        onError={() => setFailed(true)}
-        loading={<div className="economy-instance-loading"><LoaderCircle size={18} /><small>Rendering float & pattern…</small></div>}
-        fallback={fallback} />
-    </div> : failed || visible ? fallback : <div className="economy-instance-loading"><small>3D item preview</small></div>}
-    {overlay ? <div className="economy-item-preview-overlay">{overlay}</div> : null}
+export function MarketplaceItemPreview(props: MarketplaceItemPreviewProps) {
+  const preview = useMemo(() => thumbnailForSource(props.item, props.floatValue, props.patternSeed), [props.item, props.floatValue, props.patternSeed]);
+  if (preview) return <ExactWeaponThumbnail key={thumbnailSignature(preview.item)} item={preview.item} sample={preview.sample}
+    name={props.item.displayName} rarityRank={props.item.rarityRank} overlay={props.overlay}
+    fallbackImageUrls={imageCandidates(props.item.imageUrl)}
+    className={["skin", "weapon", "knife"].includes(props.item.itemType) ? "economy-weapon-artwork" : undefined} />;
+  if (["skin", "weapon", "knife", "glove"].includes(props.item.itemType)) return <div className={`economy-item-preview ${rarityRankClass(props.item.rarityRank)}`}>
+    <div className="economy-item-preview-fallback"><ImageOff aria-hidden="true" /><span>{props.patternSeed === -1 ? "Choose a valid float and seed" : "Exact preview unavailable"}</span></div>
+    {props.overlay ? <div className="economy-item-preview-overlay">{props.overlay}</div> : null}
   </div>;
+  return <CatalogueItemPreview {...props} />;
 }
 
 function CatalogueItemPreview({
@@ -211,9 +177,7 @@ function CatalogueItemPreview({
         : null,
     [enableMarketPreview, item.catalogueId, previewFloat],
   );
-  const prefersWearPreview =
-    previewFloat !== null &&
-    ["skin", "knife", "glove"].includes(item.itemType);
+  const isWeaponArtwork = ["skin", "weapon", "knife", "glove"].includes(item.itemType);
   const Icon = fallbackIcon(item.itemType);
   const previewImageUrl = previewImageUrls.find(
     (imageUrl) => !failedPreviewImageUrls.includes(imageUrl),
@@ -250,7 +214,7 @@ function CatalogueItemPreview({
     if (
       !isVisible ||
       !previewRequestUrl ||
-      (!prefersWearPreview && directImageUrl)
+      directImageUrl
     ) {
       setState(directImageUrl ? "ready" : "idle");
       return;
@@ -284,13 +248,10 @@ function CatalogueItemPreview({
     directImageKey,
     directImageUrl,
     isVisible,
-    prefersWearPreview,
     previewRequestUrl,
   ]);
 
-  // A selected float gets Steam's exterior-specific art whenever it is
-  // available; the startup-cached catalogue image stays on screen while that
-  // request resolves and remains the reliable fallback when Steam is down.
+  // Non-renderable items keep their artwork and explicitly identify it as such.
   const imageUrl = previewImageUrl ?? directImageUrl;
   const imageLoading = Boolean(imageUrl && loadedImageUrl !== imageUrl);
   const requestLoading = !imageUrl && state === "loading";
@@ -312,9 +273,9 @@ function CatalogueItemPreview({
         <>
           <img
             src={imageUrl}
-            alt={`${item.displayName} preview`}
+            alt={`${item.displayName} ${isWeaponArtwork ? "catalogue artwork" : "preview"}`}
             className={imageLoading ? "is-loading" : undefined}
-            loading="lazy"
+            loading="eager"
             decoding="async"
             referrerPolicy="no-referrer"
             onLoad={() => setLoadedImageUrl(imageUrl)}
@@ -360,6 +321,7 @@ function CatalogueItemPreview({
           <span>{label}</span>
         </div>
       )}
+      {imageUrl && isWeaponArtwork ? <small className="economy-item-art-label">Catalogue artwork</small> : null}
       {overlay ? (
         <div className="economy-item-preview-overlay">{overlay}</div>
       ) : null}

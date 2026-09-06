@@ -31,6 +31,7 @@ import {
 } from "@/components/economy/crate-drop-preview";
 import {
   createEconomyIdempotencyKey,
+  EconomyActionRequestError,
   postEconomyAction,
 } from "@/components/economy/economy-request";
 import {
@@ -41,6 +42,8 @@ import {
   type EconomyItemView,
 } from "@/components/economy/economy-view-model";
 import { TokenBalance } from "@/components/economy/token-balance";
+import { useItemGridLayout } from "@/components/economy/item-grid";
+import { WeaponInspectButton } from "@/components/economy/weapon-inspect-button";
 import { PortalToast } from "@/components/success-toast";
 import {
   SearchNavigationForm,
@@ -50,6 +53,13 @@ import {
   marketplaceCategories,
   normalizeMarketplaceCategory,
 } from "@/lib/economy/market-categories";
+import {
+  marketQuoteEvidenceLabel,
+  marketQuoteMatchesSelection,
+  MAX_MARKET_SEED,
+  MIN_MARKET_SEED,
+  parseMarketSeed,
+} from "@/lib/economy/market-selection";
 import {
   ECONOMY_RARITY_RANKS,
   ECONOMY_SPECIAL_RARITY_RANK,
@@ -103,6 +113,9 @@ type MarketplaceQuote = {
   floatValue: number;
   wear: string | null;
   stattrak: boolean;
+  seed: number;
+  seedMatched: boolean;
+  pricingRule: string | null;
   floatDiscountBps: number | null;
   discount: EconomyItemView["marketDiscount"];
 };
@@ -111,6 +124,8 @@ type MarketplaceQuoteStatus = "idle" | "loading" | "ready" | "error";
 
 type MarketplacePurchaseOptions = {
   floatValue?: number;
+  seed?: number;
+  expectedUnitPriceTokens?: number;
   stattrak: boolean;
   quantity?: number;
 };
@@ -119,12 +134,13 @@ function isContainerItem(item: EconomyItemView) {
   return ["crate", "case", "capsule"].includes(item.itemType);
 }
 
-function marketHref(filters: MarketplaceFilters, page: number) {
+function marketHref(filters: MarketplaceFilters, page: number, pageSize: number) {
   const parameters = new URLSearchParams();
   if (filters.query) parameters.set("q", filters.query);
   if (filters.itemType) parameters.set("type", filters.itemType);
   if (filters.rarity) parameters.set("rarity", filters.rarity);
   if (page > 1) parameters.set("page", String(page));
+  parameters.set("pageSize", String(pageSize));
   const query = parameters.toString();
   return query ? `/market?${query}` : "/market";
 }
@@ -219,10 +235,6 @@ function defaultFloatForItem(item: EconomyItemView, fallback: string) {
   return formatFloat(Math.min(maximum, Math.max(minimum, preferred)));
 }
 
-function floatsMatch(left: number, right: number) {
-  return Math.abs(left - right) < 0.0000005;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -245,6 +257,7 @@ function marketplaceQuoteFromResponse(value: unknown): MarketplaceQuote | null {
   const priceTokens = numberFromUnknown(record.priceTokens);
   const basePriceTokens = numberFromUnknown(record.basePriceTokens);
   const floatValue = numberFromUnknown(record.floatValue);
+  const seed = numberFromUnknown(record.seed);
   const floatDiscountBps = numberFromUnknown(record.floatDiscountBps);
   const stattrak = record.stattrak;
   const discountRecord = isRecord(record.discount) ? record.discount : null;
@@ -264,6 +277,10 @@ function marketplaceQuoteFromResponse(value: unknown): MarketplaceQuote | null {
     floatValue === null ||
     floatValue < 0 ||
     floatValue > 1 ||
+    seed === null ||
+    !Number.isSafeInteger(seed) ||
+    seed < MIN_MARKET_SEED ||
+    seed > MAX_MARKET_SEED ||
     typeof stattrak !== "boolean"
   ) {
     return null;
@@ -279,6 +296,9 @@ function marketplaceQuoteFromResponse(value: unknown): MarketplaceQuote | null {
       ? record.wear.trim()
       : null,
     stattrak,
+    seed,
+    seedMatched: record.seedMatched === true,
+    pricingRule: typeof record.pricingRule === "string" ? record.pricingRule : null,
     floatDiscountBps:
       floatDiscountBps !== null &&
       Number.isSafeInteger(floatDiscountBps) &&
@@ -335,11 +355,13 @@ function MarketplacePurchaseAction({
   pending,
   walletBalance,
   floatInput,
+  seedInput,
   quote,
   quoteStatus,
   quotePending,
   quoteError,
   onFloatChange,
+  onSeedChange,
   stattrak,
   onStattrakChange,
   onPurchase,
@@ -348,11 +370,13 @@ function MarketplacePurchaseAction({
   pending: boolean;
   walletBalance: number;
   floatInput: string;
+  seedInput: string;
   quote: MarketplaceQuote | null;
   quoteStatus: MarketplaceQuoteStatus;
   quotePending: boolean;
   quoteError: string | null;
   onFloatChange: (value: string) => void;
+  onSeedChange: (value: string) => void;
   stattrak: boolean;
   onStattrakChange: (value: boolean) => void;
   onPurchase: (item: EconomyItemView, options: MarketplacePurchaseOptions) => void;
@@ -362,9 +386,8 @@ function MarketplacePurchaseAction({
   const supportsFloat = isFloatSelectable(item);
   const supportsStattrak = isStattrakSelectable(item);
   const selectedFloat = parseFloatInput(floatInput);
-  // The standard catalogue price must never be shown or charged while the
-  // separately quoted StatTrak™ variant is still being resolved.
-  const knownPrice = stattrak && !quote ? null : item.marketPriceTokens;
+  const selectedSeed = parseMarketSeed(seedInput);
+  const knownPrice = supportsFloat ? quote?.priceTokens ?? null : item.marketPriceTokens;
   const needsMarketPrice = knownPrice === null;
   const canFetchMarketPrice = supportsFloat
     ? Boolean(item.catalogueId)
@@ -379,6 +402,7 @@ function MarketplacePurchaseAction({
       Math.max(minimumFloat, DEFAULT_MARKET_FLOAT),
     );
   const floatControlId = `market-purchase-float-${item.catalogueId ?? item.id}`;
+  const seedControlId = `market-purchase-seed-${item.catalogueId ?? item.id}`;
   const stattrakControlId = `market-purchase-stattrak-${item.catalogueId ?? item.id}`;
   const missingFloat = supportsFloat && selectedFloat.number === null;
   const floatIsSupported =
@@ -398,6 +422,7 @@ function MarketplacePurchaseAction({
     (needsMarketPrice && !canFetchMarketPrice) ||
     missingFloat ||
     (supportsFloat && (!selectedFloat.valid || !floatIsSupported)) ||
+    (supportsFloat && (selectedSeed === null || !quote)) ||
     quoteLoading ||
     quoteFailed;
 
@@ -442,9 +467,38 @@ function MarketplacePurchaseAction({
             onChange={(event) => onFloatChange(event.target.value)}
           />
           <small id={`market-float-help-${item.catalogueId ?? item.id}`}>
-            {`Allowed ${minimumFloat.toFixed(6)}-${maximumFloat.toFixed(6)}. The price updates with your float; higher float lowers the Token price.`}
+            {`Allowed ${minimumFloat.toFixed(6)}–${maximumFloat.toFixed(6)}. Preview and price update with your selection.`}
           </small>
         </div>
+      ) : null}
+      {supportsFloat ? (
+        <div className="market-purchase-float market-purchase-seed">
+          <label className="market-float-slider-label" htmlFor={seedControlId}>
+            Pattern seed
+            <input
+              id={seedControlId}
+              type="number"
+              inputMode="numeric"
+              min={MIN_MARKET_SEED}
+              max={MAX_MARKET_SEED}
+              step={1}
+              value={seedInput}
+              aria-invalid={selectedSeed === null}
+              aria-describedby={`${seedControlId}-help`}
+              onChange={(event) => onSeedChange(event.target.value)}
+            />
+          </label>
+          <small id={`${seedControlId}-help`}>
+            {selectedSeed === null
+              ? `Enter a whole number from ${MIN_MARKET_SEED} to ${MAX_MARKET_SEED}.`
+              : `Choose ${MIN_MARKET_SEED}–${MAX_MARKET_SEED}. This pattern is saved with your purchase.`}
+          </small>
+        </div>
+      ) : null}
+      {supportsFloat && quote ? (
+        <p className="market-quote-evidence" role="status">
+          {marketQuoteEvidenceLabel(quote)}
+        </p>
       ) : null}
       {quoteFailed ? (
         <p className="market-purchase-error" role="alert">
@@ -463,6 +517,8 @@ function MarketplacePurchaseAction({
               floatValue: supportsFloat
                 ? (selectedFloat.number ?? undefined)
                 : undefined,
+              seed: supportsFloat ? (selectedSeed ?? undefined) : undefined,
+              expectedUnitPriceTokens: supportsFloat ? quote?.priceTokens : undefined,
               stattrak,
             },
           )
@@ -479,6 +535,8 @@ function MarketplacePurchaseAction({
             ? "Enter a float"
             : supportsFloat && (!selectedFloat.valid || !floatIsSupported)
             ? "Enter a valid float"
+            : supportsFloat && selectedSeed === null
+              ? "Enter a valid seed"
             : quoteLoading
               ? "Updating price..."
               : quoteFailed
@@ -508,10 +566,13 @@ function MarketplaceStandardListing({
   pending: boolean;
   walletBalance: number;
   suggestedPurchaseFloat: string;
-  onPurchase: (item: EconomyItemView, options: MarketplacePurchaseOptions) => void;
+  onPurchase: (item: EconomyItemView, options: MarketplacePurchaseOptions) => Promise<boolean | undefined>;
 }) {
   const defaultFloat = defaultFloatForItem(item, suggestedPurchaseFloat);
   const [floatInput, setFloatInput] = useState(defaultFloat);
+  const [seedInput, setSeedInput] = useState(() =>
+    String(parseMarketSeed(String(item.seed ?? MIN_MARKET_SEED)) ?? MIN_MARKET_SEED),
+  );
   const [stattrak, setStattrak] = useState(false);
   const [quote, setQuote] = useState<MarketplaceQuote | null>(null);
   const [quoteStatus, setQuoteStatus] =
@@ -520,44 +581,38 @@ function MarketplaceStandardListing({
   const supportsFloat = isFloatSelectable(item);
   const supportsStattrak = isStattrakSelectable(item);
   const selectedFloat = parseFloatInput(floatInput);
+  const selectedSeed = parseMarketSeed(seedInput);
   const minimumFloat = item.minFloat ?? 0;
   const maximumFloat = item.maxFloat ?? 1;
-  const defaultFloatValue = parseFloatInput(defaultFloat).number;
-  const serverQuoteFloat = displayQuotedFloat(item) ?? defaultFloatValue;
   const selectedFloatIsSupported =
     selectedFloat.number !== null &&
     floatInRange(selectedFloat.number, minimumFloat, maximumFloat);
   const activeQuote =
     quote &&
     selectedFloat.number !== null &&
-    floatsMatch(quote.floatValue, selectedFloat.number) &&
-    quote.stattrak === stattrak
+    selectedSeed !== null &&
+    marketQuoteMatchesSelection(quote, {
+      floatValue: selectedFloat.number,
+      seed: selectedSeed,
+      stattrak,
+    })
       ? quote
       : null;
-  const serverQuoteMatchesSelection =
-    !stattrak &&
-    selectedFloat.number !== null &&
-    serverQuoteFloat !== null &&
-    floatsMatch(serverQuoteFloat, selectedFloat.number);
   const shouldRefreshQuote =
     supportsFloat &&
     Boolean(item.catalogueId) &&
     selectedFloat.valid &&
     selectedFloatIsSupported &&
-    !activeQuote &&
-    !serverQuoteMatchesSelection;
+    selectedSeed !== null &&
+    !activeQuote;
 
-  useEffect(() => {
-    setFloatInput(defaultFloat);
-    setQuote(null);
-    setQuoteStatus("idle");
-    setQuoteError(null);
-    setStattrak(false);
-  }, [defaultFloat, item.catalogueId]);
+  // Listings are keyed by catalogue identity. Keep the player's selection
+  // when wallet refreshes deliver a new server price for the same listing.
 
   useEffect(() => {
     const requestedFloat = selectedFloat.number;
-    if (!shouldRefreshQuote || requestedFloat === null || !item.catalogueId) {
+    const requestedSeed = selectedSeed;
+    if (!shouldRefreshQuote || requestedFloat === null || requestedSeed === null || !item.catalogueId) {
       if (!shouldRefreshQuote) {
         setQuoteStatus("idle");
         setQuoteError(null);
@@ -574,6 +629,7 @@ function MarketplaceStandardListing({
           const parameters = new URLSearchParams({
             catalogueId: String(item.catalogueId),
             float: requestedFloat.toFixed(6),
+            seed: String(requestedSeed),
             stattrak: stattrak ? "1" : "0",
           });
           const response = await fetch(
@@ -589,15 +645,19 @@ function MarketplaceStandardListing({
           if (!response.ok || !nextQuote) {
             throw new Error(
               marketplaceQuoteError(payload) ??
-                "A float-specific price is not available right now.",
+                "A price for this float and seed is not available right now.",
             );
           }
           if (
-            !floatsMatch(nextQuote.floatValue, requestedFloat) ||
-            nextQuote.stattrak !== stattrak
+            !marketQuoteMatchesSelection(nextQuote, {
+              floatValue: requestedFloat,
+              seed: requestedSeed,
+              stattrak,
+            })
           ) {
-            throw new Error("The marketplace returned a price for a different float.");
+            throw new Error("The marketplace returned a price for a different float, seed, or StatTrak selection.");
           }
+          if (controller.signal.aborted) return;
           setQuote(nextQuote);
           setQuoteStatus("ready");
         } catch (error) {
@@ -607,7 +667,7 @@ function MarketplaceStandardListing({
           setQuoteError(
             error instanceof Error
               ? error.message
-              : "A float-specific price is not available right now.",
+              : "A price for this float and seed is not available right now.",
           );
         }
       })();
@@ -621,13 +681,15 @@ function MarketplaceStandardListing({
     activeQuote,
     item.catalogueId,
     selectedFloat.number,
+    selectedSeed,
     stattrak,
     shouldRefreshQuote,
   ]);
 
-  const previewFloat = parseFloatInput(floatInput).number;
+  const previewFloat = selectedFloatIsSupported ? selectedFloat.number : null;
   const pricedItem = {
     ...item,
+    ...(supportsFloat ? { floatValue: previewFloat, seed: selectedSeed } : {}),
     stattrak: supportsStattrak && stattrak,
     stattrakCount: 0,
     ...(activeQuote
@@ -640,7 +702,17 @@ function MarketplaceStandardListing({
         marketPriceFloatDiscountBps: activeQuote.floatDiscountBps,
         marketDiscount: activeQuote.discount,
         }
-      : {}),
+      : supportsFloat
+        ? {
+            marketPriceTokens: null,
+            marketBasePriceTokens: null,
+            marketPriceSource: null,
+            marketPriceFloatValue: null,
+            marketPriceWear: null,
+            marketPriceFloatDiscountBps: null,
+            marketDiscount: null,
+          }
+        : {}),
   };
   const discountLabel = discountPercentLabel(pricedItem);
   return (
@@ -648,8 +720,8 @@ function MarketplaceStandardListing({
       item={pricedItem}
       className={isSpecialItem(item) ? "market-item-special" : ""}
       enableMarketPreview
-      previewFloat={previewFloat}
-      previewSeed={item.seed ?? 0}
+      previewFloat={supportsFloat ? previewFloat ?? -1 : null}
+      previewSeed={supportsFloat ? selectedSeed ?? -1 : null}
       previewOverlay={
         discountLabel ? (
           <span className="market-artwork-discount-tag">
@@ -659,20 +731,26 @@ function MarketplaceStandardListing({
       }
       actions={
         <>
-        {supportsFloat && item.seed === null ? <p className="empty-copy">Preview pattern: 0. Purchases receive a rolled pattern.</p> : null}
+        {(!supportsFloat || (previewFloat !== null && selectedSeed !== null)) ? (
+          <WeaponInspectButton item={pricedItem} />
+        ) : null}
         <MarketplacePurchaseAction
           item={pricedItem}
           pending={pending}
           walletBalance={walletBalance}
           floatInput={floatInput}
+          seedInput={seedInput}
           quote={activeQuote}
           quoteStatus={quoteStatus}
           quotePending={shouldRefreshQuote}
           quoteError={quoteError}
           onFloatChange={setFloatInput}
+          onSeedChange={setSeedInput}
           stattrak={stattrak}
           onStattrakChange={setStattrak}
-          onPurchase={onPurchase}
+          onPurchase={async (selectedItem, options) => {
+            if (await onPurchase(selectedItem, options) === false) setQuote(null);
+          }}
         />
         </>
       }
@@ -929,7 +1007,7 @@ function MarketplaceListing({
   suggestedPurchaseFloat: string;
   expanded: boolean;
   onContainerToggle: () => void;
-  onPurchase: (item: EconomyItemView, options: MarketplacePurchaseOptions) => void;
+  onPurchase: (item: EconomyItemView, options: MarketplacePurchaseOptions) => Promise<boolean | undefined>;
 }) {
   if (isContainerItem(item)) {
     return (
@@ -960,6 +1038,26 @@ export function MarketplaceBrowser({
 }: MarketplaceBrowserProps) {
   const router = useRouter();
   const items = useMemo(() => economyCatalogueItems(catalogue), [catalogue]);
+  const { gridProps, pageSize, columns: marketGridColumns, measured } = useItemGridLayout();
+  const visibleItems = items.slice(0, pageSize);
+  const layoutRequestRef = useRef<string | null>(null);
+  const layoutResponsesRef = useRef(new Set<string>());
+  const filterKey = JSON.stringify([filters.query, filters.itemType, filters.rarity]);
+  const serverPageKey = `${filterKey}:${pagination.page}:${pagination.pageSize}`;
+  const anchorRef = useRef({ filterKey, serverPageKey, offset: (pagination.page - 1) * pagination.pageSize });
+  if (anchorRef.current.serverPageKey !== serverPageKey) {
+    const filtersChanged = anchorRef.current.filterKey !== filterKey;
+    if (filtersChanged || !layoutResponsesRef.current.has(serverPageKey)) {
+      anchorRef.current.offset = (pagination.page - 1) * pagination.pageSize;
+    }
+    if (filtersChanged) {
+      layoutResponsesRef.current.clear();
+      layoutRequestRef.current = null;
+    }
+    anchorRef.current.filterKey = filterKey;
+    anchorRef.current.serverPageKey = serverPageKey;
+  }
+  const layoutPending = measured && pagination.pageSize !== pageSize;
   const walletView = useMemo(() => economyWallet(wallet), [wallet]);
   const [draft, setDraft] = useState<MarketplaceFilters>(() => ({
     ...filters,
@@ -976,8 +1074,6 @@ export function MarketplaceBrowser({
   const [pendingPurchaseIds, setPendingPurchaseIds] = useState<ReadonlySet<number>>(
     () => new Set<number>(),
   );
-  const marketGridRef = useRef<HTMLDivElement | null>(null);
-  const [marketGridColumns, setMarketGridColumns] = useState(1);
   const [selectedContainerCatalogueId, setSelectedContainerCatalogueId] =
     useState<number | null>(null);
   const [closingContainerCatalogueId, setClosingContainerCatalogueId] =
@@ -985,26 +1081,27 @@ export function MarketplaceBrowser({
   const containerCloseTimerRef = useRef<number | null>(null);
   const pageCount = Math.max(
     1,
-    Math.ceil(pagination.total / pagination.pageSize),
+    Math.ceil(pagination.total / pageSize),
   );
+  const currentPage = Math.min(pageCount, Math.floor(anchorRef.current.offset / pageSize) + 1);
   const firstResult = pagination.total
     ? (pagination.page - 1) * pagination.pageSize + 1
     : 0;
   const lastResult = pagination.total
-    ? Math.min(pagination.total, firstResult + items.length - 1)
+    ? Math.min(pagination.total, firstResult + visibleItems.length - 1)
     : 0;
-  const pageLinks = paginationPages(pageCount, pagination.page);
+  const pageLinks = paginationPages(pageCount, currentPage);
   const selectedContainerIndex =
     selectedContainerCatalogueId === null
       ? -1
-      : items.findIndex(
+      : visibleItems.findIndex(
           (item) => item.catalogueId === selectedContainerCatalogueId,
         );
   const selectedContainer =
-    selectedContainerIndex < 0 ? null : items[selectedContainerIndex];
+    selectedContainerIndex < 0 ? null : visibleItems[selectedContainerIndex];
   const containerPanelInsertionIndex = inlinePanelInsertionIndex(
     selectedContainerIndex,
-    items.length,
+    visibleItems.length,
     marketGridColumns,
   );
   // Browsing by a float range only filters catalogue entries; it does not
@@ -1024,20 +1121,18 @@ export function MarketplaceBrowser({
   ]);
 
   useEffect(() => {
-    const grid = marketGridRef.current;
-    if (!grid) return;
-    const syncColumns = () => {
-      const columns = getComputedStyle(grid)
-        .gridTemplateColumns
-        .split(/\s+/)
-        .filter(Boolean).length;
-      setMarketGridColumns(Math.max(1, columns));
-    };
-    syncColumns();
-    const observer = new ResizeObserver(syncColumns);
-    observer.observe(grid);
-    return () => observer.disconnect();
-  }, [items.length]);
+    if (!measured || draft.query !== filters.query || draft.itemType !== filters.itemType || draft.rarity !== filters.rarity) return;
+    if (!layoutPending && pagination.page === currentPage) {
+      layoutRequestRef.current = null;
+      layoutResponsesRef.current.clear();
+      return;
+    }
+    const href = marketHref(filters, currentPage, pageSize);
+    if (layoutRequestRef.current === href) return;
+    layoutRequestRef.current = href;
+    layoutResponsesRef.current.add(`${filterKey}:${currentPage}:${pageSize}`);
+    router.replace(href, { scroll: false });
+  }, [currentPage, draft.itemType, draft.query, draft.rarity, filterKey, filters.itemType, filters.query, filters.rarity, layoutPending, measured, pageSize, pagination.page, router]);
 
   useEffect(() => {
     if (
@@ -1154,6 +1249,10 @@ export function MarketplaceBrowser({
           ...(options.floatValue === undefined
             ? {}
             : { floatValue: options.floatValue }),
+          ...(options.seed === undefined ? {} : { seed: options.seed }),
+          ...(options.expectedUnitPriceTokens === undefined
+            ? {}
+            : { expectedUnitPriceTokens: options.expectedUnitPriceTokens }),
           ...(options.quantity === undefined
             ? {}
             : { quantity: clampCrateQuantity(options.quantity) }),
@@ -1173,6 +1272,7 @@ export function MarketplaceBrowser({
           `${item.displayName} was added to your inventory.`,
       });
       router.refresh();
+      return true;
     } catch (error) {
       setNotice({
         type: "error",
@@ -1181,6 +1281,10 @@ export function MarketplaceBrowser({
             ? error.message
             : "The purchase could not be completed.",
       });
+      if (isFloatSelectable(item) && error instanceof EconomyActionRequestError && error.code === "price_changed") {
+        purchaseRequestRefs.current.delete(catalogueId);
+        return false;
+      }
     } finally {
       pendingPurchaseIdsRef.current.delete(catalogueId);
       setPendingPurchaseIds(new Set(pendingPurchaseIdsRef.current));
@@ -1196,9 +1300,9 @@ export function MarketplaceBrowser({
           </p>
           <h2>Buy the exact item you want.</h2>
           <p className="empty-copy">
-            Token prices use current public market data. Crates and capsules
-            use their listed base price unless an explicit admin discount is
-            active; no key is needed to open them.
+            Public market data informs Token prices; custom server finishes
+            use staff-set prices. Crates and capsules use their listed base
+            price unless an admin discount is active; no key is needed to open them.
           </p>
         </div>
         <TokenBalance wallet={walletView} />
@@ -1218,6 +1322,7 @@ export function MarketplaceBrowser({
         instant
         resetFields={["page"]}
       >
+        <input type="hidden" name="pageSize" value={pageSize} />
         <div className="market-filter-heading">
           <div>
             <p className="eyebrow">
@@ -1228,7 +1333,7 @@ export function MarketplaceBrowser({
               such as weapons or skins.
             </p>
           </div>
-          <span className="tag">Up to 50 items per page</span>
+          <span className="tag">Up to {pageSize} items per page</span>
         </div>
         <div className="market-filter-grid">
           <SearchField
@@ -1275,7 +1380,7 @@ export function MarketplaceBrowser({
             </select>
           </label>
           <div className="market-filter-actions">
-            <Link className="button button-quiet" href="/market" scroll={false}>
+            <Link className="button button-quiet" href={marketHref({ query: "", itemType: "", rarity: "" }, 1, pageSize)} scroll={false}>
               <X aria-hidden="true" /> Clear filters
             </Link>
           </div>
@@ -1284,13 +1389,12 @@ export function MarketplaceBrowser({
           {pagination.total
             ? `Showing ${firstResult}–${lastResult} of ${pagination.total} matching items`
             : "No matching items"}
-          <span>{pagination.pageSize} per page</span>
+          <span>{pageSize} per page</span>
         </p>
       </SearchNavigationForm>
 
-      {items.length ? (
-        <div ref={marketGridRef} className="feature-grid market-item-grid">
-          {items.flatMap((item, index) => {
+        <div {...gridProps} className="feature-grid market-item-grid" aria-busy={layoutPending || undefined}>
+          {visibleItems.flatMap((item, index) => {
             const itemKey = `${item.catalogueId ?? item.id}-${item.displayName}`;
             const listing = (
               <MarketplaceListing
@@ -1333,21 +1437,22 @@ export function MarketplaceBrowser({
               : [listing];
           })}
         </div>
-      ) : (
+      {!items.length ? (
         <EconomyEmptyState
           title="No marketplace items match"
           description="Try a broader search or clear one of the filters."
         />
-      )}
+      ) : null}
 
-      {pagination.total > pagination.pageSize ? (
-        <nav className="market-pagination" aria-label="Marketplace pages">
+      {pagination.total > pageSize ? (
+        <nav className="market-pagination marketplace-pagination" aria-label="Marketplace pages">
           <Link
             className="button button-secondary market-page-button"
-            href={marketHref(filters, Math.max(1, pagination.page - 1))}
+            href={marketHref(filters, Math.max(1, currentPage - 1), pageSize)}
             scroll={false}
-            aria-disabled={pagination.page <= 1}
-            tabIndex={pagination.page <= 1 ? -1 : undefined}
+            aria-disabled={currentPage <= 1 || layoutPending}
+            tabIndex={currentPage <= 1 || layoutPending ? -1 : undefined}
+            onClick={(event) => { if (currentPage <= 1 || layoutPending) event.preventDefault(); }}
           >
             <ChevronLeft aria-hidden="true" /> Previous
           </Link>
@@ -1360,10 +1465,13 @@ export function MarketplaceBrowser({
               ) : (
                 <Link
                   key={page}
-                  className={`market-page-number ${page === pagination.page ? "is-current" : ""}`}
-                  href={marketHref(filters, page)}
+                  className={`market-page-number ${page === currentPage ? "is-current" : ""}`}
+                  href={marketHref(filters, page, pageSize)}
                   scroll={false}
-                  aria-current={page === pagination.page ? "page" : undefined}
+                  aria-current={page === currentPage ? "page" : undefined}
+                  aria-disabled={layoutPending || undefined}
+                  tabIndex={layoutPending ? -1 : undefined}
+                  onClick={(event) => { if (layoutPending) event.preventDefault(); }}
                 >
                   {page}
                 </Link>
@@ -1372,10 +1480,11 @@ export function MarketplaceBrowser({
           </div>
           <Link
             className="button button-secondary market-page-button"
-            href={marketHref(filters, Math.min(pageCount, pagination.page + 1))}
+            href={marketHref(filters, Math.min(pageCount, currentPage + 1), pageSize)}
             scroll={false}
-            aria-disabled={pagination.page >= pageCount}
-            tabIndex={pagination.page >= pageCount ? -1 : undefined}
+            aria-disabled={currentPage >= pageCount || layoutPending}
+            tabIndex={currentPage >= pageCount || layoutPending ? -1 : undefined}
+            onClick={(event) => { if (currentPage >= pageCount || layoutPending) event.preventDefault(); }}
           >
             Next <ChevronRight aria-hidden="true" />
           </Link>

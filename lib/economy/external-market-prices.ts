@@ -13,6 +13,7 @@ const frankfurterFallbackUrl =
 const indexTtlMs = 15 * 60 * 1_000;
 const exchangeRateTtlMs = 6 * 60 * 60 * 1_000;
 const exactListingTtlMs = 5 * 60 * 1_000;
+const maximumExactListingCacheEntries = 2_000;
 const failedRefreshBackoffMs = 2 * 60 * 1_000;
 const maximumIndexRows = 100_000;
 
@@ -70,6 +71,7 @@ let exchangeRateSnapshot: ExchangeRateSnapshot | null = null;
 let exchangeRateRefresh: Promise<ExchangeRateSnapshot | null> | null = null;
 let exchangeRateRetryAfter = 0;
 const exactListingCache = new Map<string, ExactListingCacheValue>();
+const exactListingRequests = new Map<string, Promise<ExternalMarketPrice | null>>();
 
 function text(value: unknown) {
   return typeof value === "string" ? value.normalize("NFKC").replace(/\s+/g, " ").trim() : "";
@@ -123,6 +125,7 @@ async function fetchJson(
         "User-Agent": "TAPPED.RO Token Economy/1.0",
         ...headers,
       },
+      signal: AbortSignal.timeout(8_000),
       ...(revalidateSeconds > 0
         ? { next: { revalidate: revalidateSeconds } }
         : { cache: "no-store" }),
@@ -334,10 +337,6 @@ function exactListingCacheKey(input: CsfloatExactListingLookup) {
   ].join("\u0000");
 }
 
-function listingSearchReference(marketHashName: string) {
-  return `https://csfloat.com/search?market_hash_name=${encodeURIComponent(marketHashName)}`;
-}
-
 /**
  * Looks up a matching CSFloat listing when the optional server-side API key is
  * configured. CSFloat's listing API supports both float and paint-seed
@@ -350,28 +349,59 @@ export async function getCsfloatExactListingPrice(
   if (!apiKey) return null;
   const marketHashName = text(input.marketHashName);
   if (!marketHashName) return null;
+  const requestedFloat = numberInRange(input.floatValue, 0, 1);
+  const requestedSeed = numberInRange(input.seed, 0, 1_000);
+  if (requestedFloat === null || requestedSeed === null || !Number.isInteger(requestedSeed))
+    return null;
+  const targetFloat = Number(requestedFloat.toFixed(6));
   const cacheKey = exactListingCacheKey({ ...input, marketHashName });
   const cached = exactListingCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.quote;
+  const pending = exactListingRequests.get(cacheKey);
+  if (pending) return pending;
 
+  const request = fetchExactListingPrice(input, marketHashName, targetFloat, requestedSeed, apiKey);
+  exactListingRequests.set(cacheKey, request);
+  try {
+    const quote = await request;
+    exactListingCache.delete(cacheKey);
+    for (const [key, value] of exactListingCache) {
+      if (value.expiresAt <= Date.now()) exactListingCache.delete(key);
+    }
+    while (exactListingCache.size >= maximumExactListingCacheEntries) {
+      const oldest = exactListingCache.keys().next().value;
+      if (oldest === undefined) break;
+      exactListingCache.delete(oldest);
+    }
+    exactListingCache.set(cacheKey, { expiresAt: Date.now() + exactListingTtlMs, quote });
+    return quote;
+  } finally {
+    exactListingRequests.delete(cacheKey);
+  }
+}
+
+async function fetchExactListingPrice(
+  input: CsfloatExactListingLookup,
+  marketHashName: string,
+  targetFloat: number,
+  requestedSeed: number,
+  apiKey: string,
+) {
   const search = new URLSearchParams({
     limit: "50",
     sort_by: "lowest_price",
     type: "buy_now",
     market_hash_name: marketHashName,
     category: input.stattrak ? "2" : "1",
+    paint_seed: String(requestedSeed),
   });
-  const targetFloat = numberInRange(input.floatValue, 0, 1);
-  if (targetFloat !== null) {
-    const minFloat = numberInRange(input.minFloat, 0, 1) ?? 0;
-    const maxFloat = numberInRange(input.maxFloat, 0, 1) ?? 1;
-    const span = Math.max(0, maxFloat - minFloat);
-    const tolerance = Math.max(0.001, Math.min(0.01, span * 0.02));
-    search.set("min_float", Math.max(minFloat, targetFloat - tolerance).toFixed(6));
-    search.set("max_float", Math.min(maxFloat, targetFloat + tolerance).toFixed(6));
-  }
-  const requestedSeed = numberInRange(input.seed, 0, 1_000);
-  if (requestedSeed !== null) search.set("paint_seed", String(Math.round(requestedSeed)));
+  const minFloat = numberInRange(input.minFloat, 0, 1) ?? 0;
+  const maxFloat = numberInRange(input.maxFloat, 0, 1) ?? 1;
+  // Portal wear is persisted to six decimals. Query that same rounding bin,
+  // then verify the returned identity instead of trusting remote filters.
+  const tolerance = 0.0000005;
+  search.set("min_float", Math.max(minFloat, targetFloat - tolerance).toFixed(7));
+  search.set("max_float", Math.min(maxFloat, targetFloat + tolerance).toFixed(7));
 
   const payload = await fetchJson(
     `https://csfloat.com/api/v1/listings?${search.toString()}`,
@@ -384,10 +414,12 @@ export async function getCsfloatExactListingPrice(
     for (const entry of listingRows(payload)) {
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
       const row = entry as Record<string, unknown>;
+      if (row.type !== "buy_now" || row.state !== "listed") continue;
       const item = row.item;
       if (!item || typeof item !== "object" || Array.isArray(item)) continue;
       const itemRow = item as Record<string, unknown>;
       if (key(itemRow.market_hash_name as string) !== key(marketHashName)) continue;
+      if (itemRow.is_stattrak !== input.stattrak || itemRow.is_souvenir !== false) continue;
       const usdCents = positiveInteger(row.price);
       const eurCents = usdCents === null
         ? null
@@ -395,27 +427,25 @@ export async function getCsfloatExactListingPrice(
       const listingFloat = numberInRange(itemRow.float_value, 0, 1);
       const listingSeed = numberInRange(itemRow.paint_seed, 0, 1_000);
       if (eurCents === null) continue;
-      if (targetFloat !== null && listingFloat === null) continue;
+      if (listingFloat === null || Number(listingFloat.toFixed(6)) !== targetFloat) continue;
       if (
-        requestedSeed !== null &&
-        (listingSeed === null || Math.round(listingSeed) !== Math.round(requestedSeed))
+        listingSeed === null || !Number.isInteger(listingSeed) || listingSeed !== requestedSeed
       ) {
         continue;
       }
+      if (quote && quote.eurCents <= eurCents) continue;
+      const listingId = text(row.id);
       quote = {
         eurCents,
         source: "csfloat-exact-listing",
-        sourceReference: listingSearchReference(marketHashName),
+        sourceReference: /^\d+$/.test(listingId)
+          ? `https://csfloat.com/api/v1/listings/${listingId}`
+          : `https://csfloat.com/api/v1/listings?${search.toString()}`,
         marketHashName,
-        exactFloat: targetFloat !== null,
-        exactSeed: requestedSeed !== null,
+        exactFloat: true,
+        exactSeed: true,
       };
-      break;
     }
   }
-  exactListingCache.set(cacheKey, {
-    expiresAt: Date.now() + exactListingTtlMs,
-    quote,
-  });
   return quote;
 }

@@ -72,7 +72,7 @@ export async function getCachedMarketplaceVariantFallback(
     // A portal deployment can come up just before the game-server plug-in
     // creates the cache table. Price resolution must retain its older public
     // provider path during that small rollout window.
-    return input.stattrak ? null : input.standardFallback ?? null;
+    return input.stattrak ? null : selectMarketplacePriceFallback(input.standardFallback);
   }
   return fallbackFromCached(input, cached);
 }
@@ -92,7 +92,7 @@ export async function getCachedMarketplaceVariantFallbacks(
     return inputs.map((input, index) => fallbackFromCached(input, cached[index]));
   } catch {
     return inputs.map((input) =>
-      input.stattrak ? null : input.standardFallback ?? null,
+      input.stattrak ? null : selectMarketplacePriceFallback(input.standardFallback),
     );
   }
 }

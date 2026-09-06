@@ -15,6 +15,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
+import { PaginatedItemGrid } from "@/components/economy/item-grid";
 import {
   rarityClass,
   toEconomyItem,
@@ -324,7 +325,7 @@ export function EconomyLoadoutManager({
               </div>
 
               {displayedWeaponGroups.length > 0 ? (
-                <div className="loadout-weapon-grid">
+                <PaginatedItemGrid className="loadout-weapon-grid" label="Owned weapon models" resetKey={activeWeaponCategory}>
                   {displayedWeaponGroups.map((group) => {
                     const currentT = slotItem(loadout, "weapon", "T", group.definitionIndex);
                     const currentCT = slotItem(loadout, "weapon", "CT", group.definitionIndex);
@@ -369,7 +370,7 @@ export function EconomyLoadoutManager({
                       </button>
                     );
                   })}
-                </div>
+                </PaginatedItemGrid>
               ) : (
                 <LoadoutEmptyState message={loadoutChoiceEmptyMessage("weapon", teamTarget, false)} />
               )}
@@ -425,7 +426,7 @@ export function EconomyLoadoutManager({
               ? <p className="loadout-selection-prompt">Choose a weapon above to see its owned finishes.</p>
               : <LoadoutEmptyState message={loadoutChoiceEmptyMessage("weapon", teamTarget, false)} />
           ) : choiceItems.length > 0 ? (
-            <div className="loadout-choice-grid">
+            <PaginatedItemGrid className="loadout-choice-grid" label="Owned loadout items" resetKey={`${activeCategory}:${selectedDefinitionIndex}:${teamTarget}`}>
               {choiceItems.map((item) => {
                 const selected = selectedItemId === item.id;
                 const equippedLabel = equippedTeamLabels(item.id, loadout);
@@ -453,7 +454,7 @@ export function EconomyLoadoutManager({
                   </button>
                 );
               })}
-            </div>
+            </PaginatedItemGrid>
           ) : (
             <LoadoutEmptyState
               message={loadoutChoiceEmptyMessage(

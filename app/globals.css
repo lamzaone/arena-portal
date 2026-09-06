@@ -32,12 +32,7 @@
 
 * { box-sizing: border-box; }
 
-.economy-instance-preview { position: relative; }
-.economy-instance-canvas { position: absolute; inset: 0; pointer-events: none; }
-.economy-instance-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: var(--muted); font-size: 11px; }
-.economy-instance-fallback { position: absolute; inset: 0; }
-.economy-instance-fallback > .economy-item-preview { width: 100%; height: 100%; min-height: 0; }
-.economy-instance-art-label { position: absolute; bottom: 3px; inset-inline: 5px; text-align: center; font-size: 9px; color: var(--muted); }
+.economy-item-art-label { position: absolute; z-index: 2; bottom: 5px; left: 8px; padding: 2px 5px; border-radius: 3px; background: #0a090bbf; color: var(--muted); font-size: 9px; pointer-events: none; }
 
 html { scroll-behavior: smooth; }
 
@@ -405,6 +400,9 @@ code { padding: 2px 4px; border-radius: 4px; color: #fecdd3; background: rgba(22
 .market-float-slider-controls input[type="range"]:focus-visible, .market-purchase-float .market-float-slider:focus-visible { outline: 2px solid rgba(255,145,164,.9); outline-offset: 3px; }
 .market-purchase-float { gap: 7px; }
 .market-purchase-float .market-float-slider-label { margin-top: 1px; }
+.market-purchase-seed .market-float-slider-label { margin: 0; }
+.market-purchase-seed input { flex: 0 0 84px; width: 84px; min-height: 36px; margin: 0; font-size: 12px; text-align: right; }
+.market-quote-evidence { margin: 0; color: #cba8b0; font-size: 10px; line-height: 1.4; }
 @media (max-width: 480px) { .market-float-range > .market-float-slider-controls { grid-template-columns: 1fr; } }
 
 @media (prefers-reduced-motion: reduce) { .economy-item-preview img { transition: none; }.economy-item-preview-spinner { animation: none; } }
@@ -4421,4 +4419,39 @@ main.staff-page :is(input, select, textarea, button) {
   main.staff-page :is(.button, .staff-unban-button, .staff-danger-button):focus-visible {
     outline-color: Highlight;
   }
+}
+.economy-item-preview .exact-thumbnail-cover { position: absolute; inset: 0; }
+
+/* Cached weapon frames include safe transparent margins; use more of the card. */
+.economy-item-card .economy-weapon-artwork > img,
+.profile-inventory-artwork > .economy-weapon-artwork > img {
+  padding: 0;
+  transform: scale(1.25);
+  transform-origin: center;
+}
+
+/* Item collections share a five-column ceiling and four rows per page. */
+[data-item-grid="true"] {
+  display: grid !important;
+  grid-template-columns: repeat(var(--item-grid-columns, 1), minmax(0, 1fr)) !important;
+  min-width: 0;
+  width: 100%;
+  max-height: none !important;
+  overflow: visible !important;
+  align-items: stretch;
+}
+[data-item-grid="true"] > * { min-width: 0; }
+.item-grid-section { min-width: 0; width: 100%; }
+.item-grid-count { margin: 14px 0 0; color: var(--muted); font-size: 12px; }
+.item-grid-section > .market-pagination { flex-wrap: wrap; gap: 10px; }
+.item-grid-section .market-page-list { flex-wrap: wrap; justify-content: center; }
+.profile-inventory-panel { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.profile-inventory-pagination, .marketplace-pagination { flex-wrap: wrap; gap: 10px; }
+.profile-inventory-pagination .market-page-list, .marketplace-pagination .market-page-list { flex-wrap: wrap; justify-content: center; }
+
+.redeem-selected-rewards > .item-grid-section {
+  display: block;
+  min-width: 0;
+  align-items: normal;
+  justify-content: normal;
 }

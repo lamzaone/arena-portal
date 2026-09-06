@@ -64,18 +64,18 @@ expires with membership; tradable rewards and direct grants retain normal
 inventory ownership behavior. No theme name implies a permission or forces a
 particular reward group.
 
-Bound rank rewards are checked against their actual awarding group's live,
-scoped membership on session/profile reads, Settings reads/writes, and inventory
-equip. Passive expiry therefore hides an invalid selection even before the next
-inventory reconciliation. These checks never grant, revoke or restore items;
-the existing reward lifecycle remains responsible for inventory changes.
-Founder reward memberships are read from native Admins.Core assignments on the
-configured server, using the same reader as reward backfills. Founder is
-deliberately excluded from the Arena membership projection; that projection
-cannot prove or replace a native Founder assignment.
+The selected theme is stored on the account and persists across sessions while
+its registered, enabled theme item remains available in that player's inventory.
+Session/profile reads, Settings reads/writes, and inventory equip use this same
+ownership check. Membership lookups and catalogue listing changes cannot hide
+an item the player still owns or silently select the default theme. The existing
+reward lifecycle remains responsible for revoking membership rewards; once the
+inventory item is revoked, transferred, or otherwise unavailable, it no longer
+authorizes the theme. Selecting ARENA default explicitly remains supported.
 
 `npm run test:themes` covers surface fallbacks, progression, existing-theme
-compatibility, expiry, revocation, permanent grants and both equip paths. The
+compatibility, session renewal, membership outages, inventory revocation,
+permanent grants and both equip paths. The
 entitlement tests use isolated SQLite fixtures with the real relational queries;
 they do not claim to exercise MySQL locking or cross-database atomicity.
 

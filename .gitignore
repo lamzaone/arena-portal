@@ -12,6 +12,8 @@ node_modules/
 !.env.production.example
 dist/
 npm-debug.log*
+.cache/
+.playwright-browsers/
 
 # Ignore the accidental empty repository nested inside this checkout.
 /arena-portal/

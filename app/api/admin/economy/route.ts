@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { NextResponse } from "next/server";
+import { normalizeItemGridPageSize } from "@/lib/economy/item-grid-layout";
 
 import { canActOnTarget, getAdminAccess } from "@/lib/admin/access";
 import { getSession, verifyAdminActionToken } from "@/lib/auth/session";
@@ -92,6 +93,9 @@ function redirect(
       url.searchParams.set("page", String(returnPlayerPage));
     if (returnInventoryPage)
       url.searchParams.set("inventoryPage", String(returnInventoryPage));
+    url.searchParams.set("inventoryPageSize", String(normalizeItemGridPageSize(
+      requestUrl.searchParams.get("returnInventoryPageSize"),
+    )));
     if (returnInventoryQuery)
       url.searchParams.set("inventoryQ", returnInventoryQuery);
     if (

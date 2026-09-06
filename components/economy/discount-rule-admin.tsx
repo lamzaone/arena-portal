@@ -10,6 +10,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { PaginatedItemGrid } from "@/components/economy/item-grid";
 
 import type {
   EconomyCatalogueItem,
@@ -425,15 +426,15 @@ export function DiscountRuleAdmin({
               : `Showing ${matches.length} of ${resultTotal} products for rule selection.`}
         </p>
         {matches.length ? (
-          <div className={styles.lookupMatches} aria-label="Matching catalogue IDs">
-            {matches.slice(0, 12).map((item) => (
+          <PaginatedItemGrid className={styles.lookupMatches} label="Matching catalogue IDs" resetKey={query}>
+            {matches.map((item) => (
               <span key={item.id}>
                 <strong>#{item.id}</strong>
                 <span>{item.displayName}</span>
                 <small>{economyItemTypeLabel(item.itemType)}</small>
               </span>
             ))}
-          </div>
+          </PaginatedItemGrid>
         ) : searchState === "ready" ? (
           <p className={styles.lookupEmpty}>
             No catalogue products matched. Try a broader name, item type, or exact ID.
