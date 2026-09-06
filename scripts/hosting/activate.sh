@@ -74,10 +74,19 @@ if [[ -d "$custom_images" && ! -L "$custom_images" ]]; then
 fi
 test ! -e "$custom_images" && test ! -L "$custom_images"
 ln -s -- "$shared_images" "$custom_images"
-# Keep the stable supervisor entry point outside versioned releases.
-if [[ ! -f "$app_root/start-hosting.sh" ]]; then
-  cp -- "$release/start-hosting.sh" "$app_root/start-hosting.sh"
+# Refresh the stable supervisor entry point on every release. Otherwise an
+# older launcher can omit runtime settings such as the bundled browser path.
+# Preserve the exact previous launcher so a failed upgrade can restore both.
+install_launcher() {
+  local next_launcher
+  next_launcher="$(mktemp "$app_root/.start-hosting.XXXXXX")"
+  cp -- "$1" "$next_launcher"
+  mv -f -- "$next_launcher" "$app_root/start-hosting.sh"
+}
+if [[ -f "$app_root/start-hosting.sh" ]]; then
+  cp -- "$app_root/start-hosting.sh" "$release/.previous-start-hosting.sh"
 fi
+install_launcher "$release/start-hosting.sh"
 
 point_to() {
   ln -s -- "$1" "$app_root/current.next"
@@ -128,6 +137,11 @@ if healthy "$release"; then
 fi
 
 echo "New release failed; restoring previous release" >&2
+if [[ -f "$release/.previous-start-hosting.sh" ]]; then
+  install_launcher "$release/.previous-start-hosting.sh"
+else
+  install_launcher "$previous/start-hosting.sh"
+fi
 point_to "$previous"
 failed_pid="$(app_pid "$release" || true)"
 if [[ -n "$failed_pid" ]]; then

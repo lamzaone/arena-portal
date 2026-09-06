@@ -11,6 +11,12 @@ that GitHub can connect. The host must provide Linux x86-64/glibc (Ubuntu 22.04 
 newer is the build target), Bash, tar, curl, flock and same-user `/proc` access.
 FreakHosting's Automatic mode supplies Node 24 to the application launcher.
 
+Each activation atomically updates the managed `start-hosting.sh` launcher as
+well as the release. Failed upgrades restore the previous launcher and release
+together. This keeps settings such as the bundled Chromium path current on
+existing installations. CI launches the packaged browser, draws with WebGL2,
+and encodes a WebP before accepting the release archive.
+
 Weapon model assets persist under `~/arena-portal/cache/weapon-thumbnail-assets` using a dedicated Chromium profile. Override with `WEAPON_THUMBNAIL_ASSET_CACHE_DIR`; separate concurrent portal processes need separate roots. Before startup, `npm run thumbnails:warm -- --models --profile=server` preloads all supported mesh generations without database access. The server profile must not be open during this offline preload. Ordinary inventory/catalogue warm commands use a separate profile and share the finished image cache.
 
 Weapon thumbnails also require Chromium's Linux system libraries. CI includes

@@ -1,5 +1,6 @@
 """Linux integration tests for release activation and scoped restarts."""
 import os
+import json
 from pathlib import Path
 import socket
 import subprocess
@@ -18,6 +19,7 @@ class DeploymentTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.env = dict(os.environ, ARENA_DEPLOY_ROOT=str(self.root), ARENA_HEALTH_ATTEMPTS="8")
+        self.env.pop("PLAYWRIGHT_BROWSERS_PATH", None)
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             self.env["PORT"] = str(sock.getsockname()[1])
@@ -36,12 +38,14 @@ class DeploymentTests(unittest.TestCase):
                 pass
         self.temp.cleanup()
 
-    def archive(self, release, healthy=True):
+    def archive(self, release, healthy=True, launcher=None):
         source = self.root / ("fixture-" + release)
         source.mkdir()
         (source / "server.js").write_text("fixture")
         (source / "healthy").write_text(str(healthy))
-        (source / "start-hosting.sh").write_bytes((SCRIPTS / "start-hosting.sh").read_bytes())
+        (source / "start-hosting.sh").write_text(launcher if launcher is not None else (SCRIPTS / "start-hosting.sh").read_text())
+        (source / ".playwright-browsers").mkdir()
+        (source / ".playwright-browsers/fixture").write_text("browser directory fixture")
         (source / ".next").mkdir()
         (source / ".next/BUILD_ID").write_text(release)
         archive = self.root / (release + ".tar.gz")
@@ -60,7 +64,8 @@ class DeploymentTests(unittest.TestCase):
         tools.mkdir()
         node = tools / "node"
         node.write_text("#!/usr/bin/python3\n"
-                        "import http.server,os,pathlib\n"
+                        "import http.server,os,pathlib,json\n"
+                        "pathlib.Path('runtime.json').write_text(json.dumps({'browser':os.environ.get('PLAYWRIGHT_BROWSERS_PATH'),'root':os.environ.get('ARENA_HOSTING_ROOT')}))\n"
                         "if pathlib.Path('healthy').read_text() != 'True': raise SystemExit(1)\n"
                         "class H(http.server.BaseHTTPRequestHandler):\n"
                         " def do_GET(self):\n"
@@ -107,6 +112,34 @@ class DeploymentTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual((self.root / "current").resolve().name, "release-1")
         self.assertIn("Rollback healthy", result.stderr)
+
+    def test_update_replaces_old_launcher_and_sets_the_new_releases_browser_path(self):
+        launcher = (SCRIPTS / "start-hosting.sh").read_text()
+        old_launcher = launcher.replace('  export PLAYWRIGHT_BROWSERS_PATH="$release/.playwright-browsers"', '  : # old launcher has no bundled-browser configuration')
+        self.archive("release-old", launcher=old_launcher)
+        self.assertEqual(self.activate("release-old").returncode, 0)
+        self.supervise()
+        old_runtime = json.loads((self.root / "current/runtime.json").read_text())
+        self.assertIsNone(old_runtime["browser"])
+        self.archive("release-browser")
+        result = self.activate("release-browser")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        runtime = json.loads((self.root / "current/runtime.json").read_text())
+        self.assertEqual(runtime["browser"], str(self.root / "releases/release-browser/.playwright-browsers"))
+        self.assertEqual(runtime["root"], str(self.root))
+        self.assertEqual((self.root / "start-hosting.sh").read_text(), launcher)
+
+    def test_failed_launcher_update_restores_the_previous_launcher_and_release(self):
+        launcher = (SCRIPTS / "start-hosting.sh").read_text() + "\n# previous launcher fixture\n"
+        self.archive("release-old", launcher=launcher)
+        self.assertEqual(self.activate("release-old").returncode, 0)
+        self.supervise()
+        self.archive("release-bad-launcher", launcher="#!/usr/bin/env bash\nexit 23\n")
+        result = self.activate("release-bad-launcher")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Rollback healthy", result.stderr)
+        self.assertEqual((self.root / "current").resolve().name, "release-old")
+        self.assertEqual((self.root / "start-hosting.sh").read_text(), launcher)
 
     def test_uploads_survive_updates_and_old_releases_are_pruned(self):
         legacy = self.root / "public/images/economy/custom"

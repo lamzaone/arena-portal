@@ -16,16 +16,46 @@ printf '%s\n' 'ECONOMY_PRICE_REFRESH_ENABLED=false' 'GAME_DATABASE_URL=' 'PORTAL
 ARENA_DEPLOY_ROOT="$stage" PORT=4319 bash "$repo_root/scripts/hosting/activate.sh" smoke
 (
   cd -- "$stage/current"
-  node --input-type=module <<'JS'
+  export PLAYWRIGHT_BROWSERS_PATH="$PWD/.playwright-browsers"
+  node --experimental-strip-types --input-type=module <<'JS'
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { chromium } from 'playwright';
 import sharp from 'sharp';
-const bytes = await sharp({ create: { width: 640, height: 360, channels: 4,
-  background: { r: 20, g: 40, b: 60, alpha: 1 } } }).webp({ quality: 82 }).toBuffer();
-const metadata = await sharp(bytes).metadata();
-assert.equal(metadata.format, 'webp');
-assert.equal(metadata.width, 640);
-assert.equal(metadata.height, 360);
-console.log('Packaged Sharp WebP encoding passed');
+import { thumbnailPersistentBrowserOptions } from './lib/economy/thumbnail-browser.ts';
+const profile = await mkdtemp(join(tmpdir(), 'arena-browser-smoke-'));
+let context;
+try {
+  // Launch the packaged browser with the renderer's real options. Importing
+  // Playwright or printing warmer --help cannot detect missing executables.
+  context = await chromium.launchPersistentContext(profile, {
+    ...thumbnailPersistentBrowserOptions(), viewport: { width: 640, height: 360 }, offline: true,
+  });
+  const page = context.pages()[0] ?? await context.newPage();
+  await page.setContent('<style>body{margin:0}</style><canvas width="640" height="360"></canvas>');
+  const pixel = await page.evaluate(() => {
+    const canvas = document.querySelector('canvas');
+    const gl = canvas.getContext('webgl2', { preserveDrawingBuffer: true });
+    if (!gl) throw new Error('Packaged browser cannot create a WebGL2 context');
+    gl.clearColor(1, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    const rgba = new Uint8Array(4);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, rgba);
+    return [...rgba];
+  });
+  assert.deepEqual(pixel, [255, 0, 0, 255]);
+  const bytes = await sharp(await page.screenshot()).webp({ quality: 82 }).toBuffer();
+  const metadata = await sharp(bytes).metadata();
+  assert.equal(metadata.format, 'webp');
+  assert.equal(metadata.width, 640);
+  assert.equal(metadata.height, 360);
+  console.log('Packaged Chromium WebGL and Sharp WebP encoding passed');
+} finally {
+  await context?.close();
+  await rm(profile, { recursive: true, force: true });
+}
 JS
   node --experimental-strip-types scripts/warm-weapon-thumbnails.mjs --help > /dev/null
 )
