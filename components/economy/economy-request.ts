@@ -15,6 +15,7 @@ export type EconomyActionResult = {
   dropPools?: unknown[];
   globalAnnouncementQueued?: boolean;
   itemId?: string;
+  attachmentRevision?: number;
   catalogueId?: number;
   rewardLootEntryId?: number;
   codeId?: number;

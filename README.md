@@ -2,6 +2,16 @@
 
 The player portal for the ARENA CS2 server: Steam sign-in, player dashboard, moderation records, appeals, tickets, and the Token Economy inventory, loadout, marketplace, trades, and staff item-management flows. Players buy crates and capsules from Market, then inspect and open owned containers from Inventory.
 
+## 3D weapon customization
+
+Inventory's workbench uses the supported [SkinHub viewer](https://github.com/SkinHubgg/skinhub-viewer), with SkinCraft as the interaction reference. It supports orbit/zoom, first-person views, five sticker slots with rotation/wear/placement, charm placement, and CS2 inspect links. Changes are staged until Save placement. New attachments must be owned; repositioning preserves item float, pattern, StatTrak and charm seed. Saves, inventory consumption, audits and game refresh jobs share one transaction and retry receipt.
+
+Instance thumbnails use the same float/seed configuration. At most eight visible thumbnails render at once; hovering prioritizes a thumbnail and offscreen frames release their WebGL contexts. Other cards explicitly label catalogue artwork. Market cards use a labeled sample pattern until purchase assigns the actual seed. The provider retains its credit and requires access to `https://skinhub.gg` (allow it in `frame-src` if adding a CSP). The viewer has no PNG export service; these are live previews, and renderer/network failures use labeled artwork. Legacy sixth-slot stickers remain stored but are not supported by the viewer.
+
+`node scripts/sync-weapon-models.mjs` refreshes the compact weapon/finish mesh table after CS2 updates. The portal and `TAPPED.Inventory` embed the same `lib/economy/cs2-skin-models.json`; rebuild both after refreshing it. Fifth-slot native anchors use the pinned SDK's conversion table. Existing name tags that exceed the inspect codec's limit remain intact; link export is unavailable for those items.
+
+`npm run test:loadout` includes preview/placement tests and repository transaction tests against isolated SQLite. SQLite does not verify MySQL locking or CS2 replication. Before a production rollout, confirm ordinary and zero-count StatTrak weapons/knives, fifth-slot stickers, charms, drop/equip refreshes, and first-person inspection on a staging CS2 server. No database migration is required for this change.
+
 ## Start locally
 
 1. Copy `.env.example` to `.env.local` and set `SITE_URL` to `http://localhost:3000` for local testing.

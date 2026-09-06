@@ -649,6 +649,7 @@ function MarketplaceStandardListing({
       className={isSpecialItem(item) ? "market-item-special" : ""}
       enableMarketPreview
       previewFloat={previewFloat}
+      previewSeed={item.seed ?? 0}
       previewOverlay={
         discountLabel ? (
           <span className="market-artwork-discount-tag">
@@ -657,6 +658,8 @@ function MarketplaceStandardListing({
         ) : null
       }
       actions={
+        <>
+        {supportsFloat && item.seed === null ? <p className="empty-copy">Preview pattern: 0. Purchases receive a rolled pattern.</p> : null}
         <MarketplacePurchaseAction
           item={pricedItem}
           pending={pending}
@@ -671,6 +674,7 @@ function MarketplaceStandardListing({
           onStattrakChange={setStattrak}
           onPurchase={onPurchase}
         />
+        </>
       }
     />
   );

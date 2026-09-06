@@ -41,6 +41,8 @@ import {
   type EconomyItemType,
 } from "@/lib/economy/item-taxonomy";
 import { economyItemDisplayName } from "@/lib/economy/item-display-name";
+import { parseWeaponCustomization, authorizeStickerPlacement, authorizeCharmPlacement } from "@/lib/economy/weapon-customization";
+import { nativeStickerPlacement } from "@/lib/economy/weapon-model";
 import { isIndividualSteamId64 } from "@/lib/steam/steam-id";
 import {
   adjustedMarketplaceEuroCents,
@@ -12871,6 +12873,110 @@ export async function setEconomyItemNametag(
         priceTokens: nametagItemId ? 0 : ECONOMY_NAMETAG_PRICE_TOKENS,
         wallet,
       };
+    },
+  });
+}
+
+export async function customizeEconomyWeapon(input: {
+  steamId: string; weaponItemId: string; customization: unknown; idempotencyKey: string;
+}) {
+  const steamId = economySteamId(input.steamId);
+  const weaponItemId = economyItemId(input.weaponItemId, "Weapon item ID");
+  const customization = parseWeaponCustomization(input.customization);
+  return runEconomyMutation({
+    operationName: "item.attachments.customize", actorSteamId: steamId,
+    idempotencyKey: input.idempotencyKey, request: { weaponItemId, customization },
+    work: async (context) => {
+      const additionIds = customization.stickers.flatMap((s) => s.stickerItemId ? [s.stickerItemId] : []);
+      if (customization.charm?.charmItemId) additionIds.push(customization.charm.charmItemId);
+      const items = await lockEconomyInventoryItems(context.connection, [weaponItemId, ...additionIds]);
+      const weapon = items.get(weaponItemId)!;
+      if (weapon.ownerSteamId !== steamId || weapon.state !== "available")
+        economyError("ownership_required", "That weapon is not available in your inventory.");
+      if (weapon.itemType !== "skin")
+        economyError("unsupported_customization", "That item does not support attachment placement.");
+      const ownedAddition = (id: string | undefined, type: EconomyItemType) => {
+        if (!id) return null;
+        const item = items.get(id);
+        if (!item || item.ownerSteamId !== steamId || item.state !== "available" || item.itemType !== type)
+          economyError("ownership_required", "That attachment is not available in your inventory.");
+        return item;
+      };
+      const [rows] = await context.connection.query<Array<RowDataPacket & {
+        sticker_slot: number; sticker_definition_index: number | null; attributes: unknown;
+      }>>(
+        "SELECT sticker_slot, sticker_definition_index, attributes FROM portal_inventory_item_stickers WHERE weapon_item_id = ? ORDER BY sticker_slot FOR UPDATE",
+        [weaponItemId],
+      );
+      const existing = new Map(rows.map((row) => [Number(row.sticker_slot), row]));
+      for (const placement of customization.stickers) {
+        if (placement.slot >= economyStickerSlots(weapon))
+          economyError("unsupported_customization", "That weapon does not support this sticker slot.");
+        const row = existing.get(placement.slot);
+        const addition = ownedAddition(placement.stickerItemId, "sticker");
+        authorizeStickerPlacement(placement, row ? { definitionIndex: row.sticker_definition_index === null ? null : Number(row.sticker_definition_index) } : null, addition);
+        if (addition) await attachEconomyStickerRecord({
+          connection: context.connection, weapon, sticker: addition, slot: placement.slot,
+          actorSteamId: steamId, idempotencyKey: context.idempotencyKey,
+          linePrefix: "customize:add", eventType: "item.sticker.attached",
+        });
+        // Identity always comes from the locked attachment row. These attributes
+        // contain placement only; never allow a JSON id/slot to override it.
+        const attributes = { ...(row ? economyRecord(row.attributes) : addition?.attributes),
+          ...nativeStickerPlacement(weapon.definitionIndex ?? 0, weapon.paintkit ?? 0, placement.slot, placement.offsetX, placement.offsetY, economyMetadataBoolean(weapon.attributes, "useLegacyModel")), scale: 1,
+          rotation: placement.rotation, wear: placement.wear };
+        delete (attributes as Record<string, unknown>).id;
+        delete (attributes as Record<string, unknown>).slot;
+        await context.connection.execute(
+          "UPDATE portal_inventory_item_stickers SET attributes = ? WHERE weapon_item_id = ? AND sticker_slot = ?",
+          [JSON.stringify(attributes), weaponItemId, placement.slot],
+        );
+        await writeInventoryEvent({
+          connection: context.connection, itemId: weaponItemId, actorSteamId: steamId,
+          eventType: "item.sticker.positioned", idempotencyKey: context.idempotencyKey,
+          lineKey: "customize:sticker:" + placement.slot,
+          beforeState: row ? economyRecord(row.attributes) : null, afterState: attributes,
+          metadata: { slot: placement.slot },
+        });
+      }
+      const attachmentRevision = (economyMetadataInteger(weapon.attributes, "attachmentRevision") ?? 0) + 1;
+      if (!Number.isSafeInteger(attachmentRevision)) economyError("invalid_database_value", "The attachment revision is invalid.");
+      let nextAttributes: Record<string, unknown> = { ...weapon.attributes, attachmentRevision };
+      const charm = customization.charm;
+      if (charm) {
+        if (!economyItemSupportsCharm(weapon))
+          economyError("unsupported_customization", "That item does not support charms.");
+        const addition = ownedAddition(charm.charmItemId, "keychain");
+        const current = economyRecord(weapon.attributes.keychain);
+        authorizeCharmPlacement(charm, current, addition);
+        const keychain = { ...(addition ? economyCharmAttributes(addition) : current),
+          offsetX: charm.offsetX, offsetY: charm.offsetY, offsetZ: charm.offsetZ };
+        nextAttributes = { ...nextAttributes, keychain };
+        if (addition) {
+          await context.connection.execute(
+            "UPDATE portal_inventory_items SET state = 'consumed', consumed_at = CURRENT_TIMESTAMP WHERE id = ? AND state = 'available'",
+            [addition.id],
+          );
+          await writeInventoryEvent({
+            connection: context.connection, itemId: addition.id, actorSteamId: steamId,
+            eventType: "charm.consumed", idempotencyKey: context.idempotencyKey,
+            lineKey: "customize:charm:consumed", beforeState: economyInventorySnapshot(addition),
+            afterState: { ...economyInventorySnapshot(addition), state: "consumed" }, metadata: { weaponItemId },
+          });
+        }
+      }
+      await context.connection.execute(
+        "UPDATE portal_inventory_items SET attributes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        [JSON.stringify(nextAttributes), weaponItemId],
+      );
+      await writeInventoryEvent({
+        connection: context.connection, itemId: weaponItemId, actorSteamId: steamId,
+        eventType: "item.attachments.customized", idempotencyKey: context.idempotencyKey,
+        lineKey: "customize:weapon", beforeState: economyInventorySnapshot(weapon),
+        afterState: { ...economyInventorySnapshot(weapon), attributes: nextAttributes }, metadata: customization,
+      });
+      await enqueueEconomyLoadoutRefresh(context.connection, steamId, context.idempotencyKey, "attachments-customized", [weaponItemId, ...additionIds]);
+      return { itemId: weaponItemId, attachmentRevision };
     },
   });
 }

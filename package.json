@@ -26,7 +26,7 @@
     "test:seo": "node --experimental-strip-types --test lib/seo/site.test.ts",
     "test:vip": "node --experimental-strip-types --test lib/economy/vip-membership-conversion.test.ts lib/economy/vip-activation-state.test.ts",
     "test:navigation": "node --experimental-strip-types --test components/primary-navigation-routes.test.ts",
-    "test:loadout": "node --experimental-strip-types --test lib/economy/weapon-categories.test.ts lib/economy/loadout-selection.test.ts",
+    "test:loadout": "node --experimental-strip-types --test lib/economy/weapon-categories.test.ts lib/economy/loadout-selection.test.ts lib/economy/weapon-preview.test.ts lib/economy/weapon-model.test.ts lib/economy/weapon-customization.test.ts lib/economy/preview-budget.test.ts && node --experimental-transform-types --test lib/data/weapon-customization.test.ts",
     "test:inventory-lock": "node --experimental-strip-types --test lib/economy/inventory-sale-lock.test.ts",
     "test:inventory-selection": "node --experimental-strip-types --test lib/economy/inventory-selection.test.ts",
     "test:crates": "node --experimental-strip-types --test lib/economy/crate-presentation.test.ts",
@@ -39,6 +39,8 @@
     "test:server-status": "node --experimental-strip-types --test lib/server-link/*.test.ts"
   },
   "dependencies": {
+    "@skinhub/cdn": "0.3.0",
+    "@skinhub/viewer": "0.3.3",
     "lucide-react": "^1.34.0",
     "mysql2": "^3.24.2",
     "next": "16.2.12",

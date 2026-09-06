@@ -32,6 +32,13 @@
 
 * { box-sizing: border-box; }
 
+.economy-instance-preview { position: relative; }
+.economy-instance-canvas { position: absolute; inset: 0; pointer-events: none; }
+.economy-instance-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: var(--muted); font-size: 11px; }
+.economy-instance-fallback { position: absolute; inset: 0; }
+.economy-instance-fallback > .economy-item-preview { width: 100%; height: 100%; min-height: 0; }
+.economy-instance-art-label { position: absolute; bottom: 3px; inset-inline: 5px; text-align: center; font-size: 9px; color: var(--muted); }
+
 html { scroll-behavior: smooth; }
 
 body {

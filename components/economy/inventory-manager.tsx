@@ -37,6 +37,8 @@ import {
   postEconomyAction,
 } from "@/components/economy/economy-request";
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
+import { WeaponCustomizer } from "@/components/economy/weapon-customizer";
+import { weaponPreviewItem } from "@/lib/economy/weapon-preview";
 import {
   economyItems,
   economyLoadout,
@@ -233,6 +235,7 @@ export function InventoryManager({
     text: string;
   } | null>(null);
   const [pending, startTransition] = useTransition();
+  const [customizationBusy, setCustomizationBusy] = useState(false);
   const inventoryGridRef = useRef<HTMLDivElement | null>(null);
   const bulkSaleRequestRef = useRef<{
     signature: string;
@@ -395,7 +398,7 @@ export function InventoryManager({
       itemSupportsCharm(selected) ||
       itemSupportsStickers(selected));
   const inventoryMutationBusy =
-    pending || bulkSelling || bulkLocking || crateOpening.busy;
+    pending || customizationBusy || bulkSelling || bulkLocking || crateOpening.busy;
   const inventoryInteractionBlocked =
     inventoryMutationBusy || inventoryClosing || crateOpening.bulk !== null;
 
@@ -1125,8 +1128,9 @@ export function InventoryManager({
                 data-layout={selectedManagementLayout}
               >
                 <div className="inventory-management-main">
-                <div className="inventory-detail-hero">
-                  <MarketplaceItemPreview item={selected} enableMarketPreview />
+                {weaponPreviewItem(selected) ? <WeaponCustomizer item={selected} inventory={items} csrf={csrf} disabled={pending || bulkSelling || bulkLocking || crateOpening.busy || selected.state !== "available"} onSaved={() => router.refresh()} onBusyChange={setCustomizationBusy} /> : null}
+                <div className="inventory-detail-hero" style={weaponPreviewItem(selected) ? { gridTemplateColumns: "1fr" } : undefined}>
+                  {!weaponPreviewItem(selected) ? <MarketplaceItemPreview item={selected} enableMarketPreview /> : null}
                   <div className="inventory-detail-heading">
                     <p>
                       {selected.rarity} · {selectedVipMembership ? "Group membership" : humanize(selected.itemType)}
@@ -1365,7 +1369,7 @@ export function InventoryManager({
                   </fieldset>
                 ) : null}
 
-                {itemSupportsCharm(selected) ? (
+                {itemSupportsCharm(selected) && !weaponPreviewItem(selected) ? (
                   <fieldset className="form-panel">
                     <legend>Charm</legend>
                     <label htmlFor="inventory-charm">
@@ -1408,7 +1412,7 @@ export function InventoryManager({
                   </fieldset>
                 ) : null}
 
-                {itemSupportsStickers(selected) ? (
+                {itemSupportsStickers(selected) && !weaponPreviewItem(selected) ? (
                   <fieldset className="form-panel">
                     <legend>Apply sticker</legend>
                     <label htmlFor="inventory-sticker">

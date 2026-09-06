@@ -24,6 +24,7 @@ type EconomyItemCardProps = {
   selectionId?: string;
   enableMarketPreview?: boolean;
   previewFloat?: number | null;
+  previewSeed?: number | null;
   previewOverlay?: ReactNode;
   className?: string;
   disabled?: boolean;
@@ -39,6 +40,7 @@ export function EconomyItemCard({
   selectionId,
   enableMarketPreview = true,
   previewFloat = null,
+  previewSeed = null,
   previewOverlay,
   className = "",
   disabled = false,
@@ -59,6 +61,7 @@ export function EconomyItemCard({
         item={item}
         enableMarketPreview={enableMarketPreview}
         floatValue={previewFloat}
+        patternSeed={previewSeed}
         overlay={previewOverlay}
       />
       <div className="panel-heading">

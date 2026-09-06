@@ -25,6 +25,9 @@ import {
   type EconomyItemView,
 } from "@/components/economy/economy-view-model";
 import { proxiedImageUrl } from "@/lib/images/proxy-url";
+import { SkinViewer, type SkinViewerItem } from "@skinhub/viewer";
+import { weaponPreviewItem, type WeaponPreviewSource } from "@/lib/economy/weapon-preview";
+import { weaponPreviewBudget } from "@/lib/economy/preview-budget";
 
 type MarketplaceItemPreviewProps = {
   item: Pick<
@@ -35,9 +38,10 @@ type MarketplaceItemPreviewProps = {
     | "imageUrl"
     | "itemType"
     | "rarityRank"
-  >;
+  > & Partial<WeaponPreviewSource>;
   enableMarketPreview?: boolean;
   floatValue?: number | null;
+  patternSeed?: number | null;
   overlay?: ReactNode;
 };
 
@@ -125,6 +129,53 @@ function fallbackIcon(itemType: string) {
 }
 
 export function MarketplaceItemPreview({
+  item, enableMarketPreview = true, floatValue = null, patternSeed = null, overlay,
+}: MarketplaceItemPreviewProps) {
+  const preview = weaponPreviewItem({ ...item, floatValue: floatValue ?? item.floatValue, seed: patternSeed ?? item.seed });
+  const artwork = <CatalogueItemPreview item={item} enableMarketPreview={enableMarketPreview} floatValue={floatValue} />;
+  if (preview) return <InstanceItemPreview item={preview} label={item.displayName} rarityRank={item.rarityRank} artwork={artwork} overlay={overlay} />;
+  return <CatalogueItemPreview item={item} enableMarketPreview={enableMarketPreview} floatValue={floatValue} overlay={overlay} />;
+}
+
+function InstanceItemPreview({ item, label, rarityRank, artwork, overlay }: {
+  item: SkinViewerItem; label: string; rarityRank: number; artwork: ReactNode; overlay?: ReactNode;
+}) {
+  const container = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [granted, setGranted] = useState(false);
+  const budgetId = useRef(Symbol());
+  const identity = JSON.stringify(item);
+  useEffect(() => setFailed(false), [identity]);
+  useEffect(() => {
+    if (!visible || failed) { setGranted(false); return; }
+    return weaponPreviewBudget.register(budgetId.current, setGranted);
+  }, [visible, failed]);
+  useEffect(() => {
+    const element = container.current;
+    if (!element) return;
+    let intersecting = false;
+    const update = () => setVisible(intersecting && document.visibilityState === "visible");
+    const observer = new IntersectionObserver(([entry]) => { intersecting = entry.isIntersecting; update(); }, { threshold: 0.05 });
+    observer.observe(element);
+    document.addEventListener("visibilitychange", update);
+    return () => { observer.disconnect(); document.removeEventListener("visibilitychange", update); };
+  }, []);
+  const fallback = <div className="economy-instance-fallback">{artwork}<small className="economy-instance-art-label">Catalogue artwork · {failed ? "3D unavailable" : "Hover or inspect for 3D"}</small></div>;
+  return <div ref={container} data-ui="item-artwork" onMouseEnter={() => weaponPreviewBudget.prioritize(budgetId.current)} className={`economy-item-preview economy-instance-preview ${rarityRankClass(rarityRank)}`}>
+    {visible && granted && !failed ? <div className="economy-instance-canvas" inert>
+      <SkinViewer item={item} title={`${label}, float ${item.float}, pattern ${item.seed}`} style={{ width: "100%", height: "100%" }}
+        settings={{ quality: { renderScale: 0.5, bloom: 0, shadows: false }, environment: { background: "transparent", map: "Warehouse" } }}
+        interactions={{ orbit: false, zoom: false, dragStickers: false, dragCharm: false }}
+        onError={() => setFailed(true)}
+        loading={<div className="economy-instance-loading"><LoaderCircle size={18} /><small>Rendering float & pattern…</small></div>}
+        fallback={fallback} />
+    </div> : failed || visible ? fallback : <div className="economy-instance-loading"><small>3D item preview</small></div>}
+    {overlay ? <div className="economy-item-preview-overlay">{overlay}</div> : null}
+  </div>;
+}
+
+function CatalogueItemPreview({
   item,
   enableMarketPreview = true,
   floatValue = null,

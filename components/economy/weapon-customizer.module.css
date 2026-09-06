@@ -1,0 +1,34 @@
+.editor { margin-block: 16px 24px; border: 1px solid var(--border-bright); border-radius: 14px; overflow: hidden; background: var(--surface); color: var(--text); }
+.toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.toolbar strong { display: block; font-size: 18px; }
+.eyebrow { color: var(--accent-bright); font-size: 10px; letter-spacing: .2em; font-weight: 700; }
+.viewButtons { display: flex; gap: 6px; }
+.editor button { cursor: pointer; font: inherit; }
+.viewButtons button, .slot > button, .placeCharm { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--border); background: var(--surface-strong); color: var(--muted); padding: 8px 12px; border-radius: 7px; }
+.editor button[aria-pressed=true] { color: var(--text); border-color: var(--accent-bright); background: var(--accent-surface); }
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(210px, 270px); }
+.workspace:not(:has(.attachments)) { grid-template-columns: 1fr; }
+.stage { position: relative; min-width: 0; min-height: 380px; background: radial-gradient(ellipse at 50% 35%, rgba(140, 80, 90, .12), transparent 65%), #0a090b; }
+.stageHint { position: absolute; bottom: 10px; left: 12px; right: 12px; pointer-events: none; text-align: center; font-size: 11px; color: #b5a8ab; }
+.loading { height: 100%; display: flex; gap: 10px; align-items: center; justify-content: center; padding: 24px; text-align: center; background: #0a090b; color: var(--muted); }
+.attachments { min-width: 0; margin: 0; padding: 16px; border: 0; border-left: 1px solid var(--border); }
+.attachments legend { display: flex; gap: 8px; align-items: center; padding: 12px 0 0; font-size: 13px; font-weight: 700; }
+.attachments p { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.slot { display: flex; gap: 6px; margin-block: 8px; min-width: 0; }
+.slot > button:first-child { width: 32px; flex-shrink: 0; padding: 6px; }
+.slot .attachedName { justify-content: flex-start; min-width: 0; width: 100%; overflow: hidden; font-size: 12px; text-align: left; }
+.editor select, .editor input { width: 100%; min-width: 0; background: var(--surface-strong); color: var(--text); border: 1px solid var(--border); padding: 8px; border-radius: 6px; font: inherit; font-size: 12px; }
+.numbers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-block: 12px; }
+.numbers label, .charm { display: grid; gap: 4px; font-size: 11px; color: var(--muted); }
+.charm { margin-top: 18px; }
+.placeCharm { margin-top: 8px; width: 100%; font-size: 12px; }
+.identity { display: flex; flex-wrap: wrap; gap: 10px 24px; padding: 12px 20px; border-block: 1px solid var(--border); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.identity b { color: var(--text); font-weight: 500; margin-left: 4px; }
+.identity .unsaved { color: var(--accent-bright); margin-left: auto; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 20px 8px; }
+.actions :global(.button) { font-size: 12px; min-height: 36px; padding: 8px 12px; }
+.notice { margin: 0; padding: 0 20px 12px; font-size: 12px; color: var(--muted); }
+.notice:empty { padding-bottom: 6px; }
+.editor :is(button, select, input, a):focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 3px; }
+.editor button:disabled { opacity: .5; cursor: default; }
+@media (max-width: 760px) { .workspace { grid-template-columns: 1fr; } .stage { min-height: 340px; } .attachments { border-left: 0; border-top: 1px solid var(--border); } .toolbar { padding: 12px; } .toolbar strong { font-size: 15px; } .viewButtons button { padding: 8px; } }
