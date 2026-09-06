@@ -9,6 +9,7 @@ type PreviewRequest =
 type CachedPreview = { imageUrl: string | null; expiresAt: number };
 
 const previewCache = new Map<string, CachedPreview>();
+const previewRequests = new Map<string, Promise<string | null>>();
 const successfulPreviewTtl = 1000 * 60 * 60 * 12;
 const failedPreviewTtl = 1000 * 60 * 10;
 
@@ -55,7 +56,9 @@ async function fetchMarketImage(marketName: string) {
   try {
     const response = await fetch(url, {
       headers: { "User-Agent": "TAPPED.RO Loadout Preview/1.0", "Accept-Language": "en-US,en;q=0.9" },
-      next: { revalidate: 60 * 60 }
+      // Listing HTML regularly exceeds Next's 2 MB fetch-cache limit.
+      // Keep only its extracted image URL in the preview cache below.
+      cache: "no-store"
     });
     if (!response.ok) return null;
     return imageUrlFromMarketHtml(await response.text());
@@ -80,11 +83,18 @@ export async function getMarketPreviewForNames(marketNames: readonly string[]) {
       continue;
     }
 
-    const imageUrl = await fetchMarketImage(marketName);
-    previewCache.set(cacheKey, {
-      imageUrl,
-      expiresAt: Date.now() + (imageUrl ? successfulPreviewTtl : failedPreviewTtl),
-    });
+    let pending = previewRequests.get(cacheKey);
+    if (!pending) {
+      pending = fetchMarketImage(marketName).then(imageUrl => {
+        previewCache.set(cacheKey, {
+          imageUrl,
+          expiresAt: Date.now() + (imageUrl ? successfulPreviewTtl : failedPreviewTtl),
+        });
+        return imageUrl;
+      }).finally(() => { previewRequests.delete(cacheKey); });
+      previewRequests.set(cacheKey, pending);
+    }
+    const imageUrl = await pending;
     if (imageUrl) return imageUrl;
   }
 

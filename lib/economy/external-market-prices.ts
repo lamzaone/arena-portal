@@ -264,8 +264,10 @@ function externalPrice(
 async function refreshPriceIndex(): Promise<PriceIndexSnapshot | null> {
   const [exchangeRate, csfloatPayload, skinCashPayload] = await Promise.all([
     getExchangeRate(),
-    fetchJson(csfloatPriceIndexUrl),
-    fetchJson(skinCashPriceIndexUrl),
+    // Cache the parsed index below; multi-megabyte raw feeds do not fit
+    // Next's per-entry fetch cache. Small exchange-rate responses still do.
+    fetchJson(csfloatPriceIndexUrl, {}, 0),
+    fetchJson(skinCashPriceIndexUrl, {}, 0),
   ]);
   if (!exchangeRate) return null;
   const csfloat = csfloatQuotes(csfloatPayload);

@@ -153,9 +153,9 @@ async function fetchSkinportRows(url: string) {
         Accept: "application/json",
         "User-Agent": "TAPPED.RO Token Economy/1.0",
       },
-      // Next's data cache complements the in-process cache below, protecting
-      // the public endpoint when the portal runs on more than one instance.
-      next: { revalidate: snapshotTtlMs / 1_000 },
+      // Bulk feeds exceed Next's 2 MB fetch-cache limit. The parsed snapshot
+      // and shared pending request below provide the cache and deduplication.
+      cache: "no-store",
     });
     if (!response.ok) return null;
     const payload: unknown = await response.json();
