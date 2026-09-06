@@ -76,6 +76,36 @@ with the runtime environment, and rebuild when changing public variables.
 Production application secrets are not needed by the GitHub build. Database
 migrations and DNS changes are not performed by this workflow.
 
+## SSH connection failures
+
+**Artifact successfully uploaded** means the archive was saved to GitHub Actions
+storage. The subsequent **Upload and activate on FreakHosting** step must still
+connect to the hosting account and transfer it there. An artifact download link
+does not mean the website was deployed.
+
+`kex_exchange_identification: read: Connection reset by peer` means the SSH
+connection was reset during its initial handshake, before key authentication.
+The log alone cannot identify which server or network rule caused the reset.
+Check `FREAKHOSTING_SSH_HOST` and `FREAKHOSTING_SSH_PORT` against the provider's
+external SSH endpoint; the application proxy port and internal panel hostname
+are not necessarily the SSH endpoint. Confirm with FreakHosting that external
+SSH is enabled for the website account and that GitHub Actions runners are
+allowed through any firewall/IP restrictions or SSH connection limits. Being
+able to open the panel's terminal does not verify external access.
+
+`scripts/hosting/deploy.sh` labels connection, transfer and activation separately.
+It retries temporary network failures during directory preparation and archive
+upload up to three times, waiting 5 then 10 seconds. A failed transfer is fully
+re-uploaded before activation can start. Authentication, host-key verification
+and disk errors stop immediately; host-key verification remains strict. Repeated
+handshake resets require fixing the endpoint or hosting access; retries cannot
+remove a persistent network restriction.
+
+Activation runs once. If SSH disconnects during that step, the remote script may
+already have started, so the workflow reports an unknown release state and does
+not replay it. Check `readlink ~/arena-portal/current`, the application log and
+`/api/health` from the hosting panel before starting another deployment.
+
 ## First run
 
 1. Commit and push the prepared repository to `main`, including `.github` and
@@ -133,9 +163,8 @@ shared images. Back up both `.env.production` and `shared`, as well as databases
 
 If the deploy step cannot find the tracked app PID, it stops without switching
 the active release. Check Automatic mode, the startup command, and
-`~/persistent_app_<ID>.log`. The initial launcher is installed once; changes to
-the launcher itself require replacing `~/arena-portal/start-hosting.sh` from the
-new release and one panel restart.
+`~/persistent_app_<ID>.log`. Each deployment updates the managed launcher before
+switching releases and restores the previous launcher if activation fails.
 
 ## References
 
