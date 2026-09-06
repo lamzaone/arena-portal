@@ -17,15 +17,24 @@ together. This keeps settings such as the bundled Chromium path current on
 existing installations. CI launches the packaged browser, draws with WebGL2,
 and encodes a WebP before accepting the release archive.
 
+Item grids use normal catalogue thumbnails and load every image on the current
+page immediately. Browsing does not queue renders, poll thumbnail jobs or replace
+artwork with delayed exact images. Images load directly from their CDN, with the
+portal image proxy as a fallback. Missing artwork uses the shared catalogue image
+index without scraping Steam market pages. Float, seed, StatTrak and attachment
+previews remain in the client-side 3D inspector and customizer.
+
+The following renderer cache/warmup tools remain optional; they are not needed
+for market or inventory thumbnail loading.
+
 Weapon model assets persist under `~/arena-portal/cache/weapon-thumbnail-assets` using a dedicated Chromium profile. Override with `WEAPON_THUMBNAIL_ASSET_CACHE_DIR`; separate concurrent portal processes need separate roots. Before startup, `npm run thumbnails:warm -- --models --profile=server` preloads all supported mesh generations without database access. The server profile must not be open during this offline preload. Ordinary inventory/catalogue warm commands use a separate profile and share the finished image cache.
 
 Weapon thumbnails also require Chromium's Linux system libraries. CI includes
 the matching headless browser in the runtime bundle; a host-provided Chromium
 can be selected with `WEAPON_THUMBNAIL_BROWSER_PATH`. Generated WebP files live
 in `~/arena-portal/cache/weapon-thumbnails`, outside release cleanup. Set
-`WEAPON_THUMBNAIL_CACHE_DIR` to override that path. Before opening the updated
-market, warm inventory images from the active release (the command only reads
-the database):
+`WEAPON_THUMBNAIL_CACHE_DIR` to override that path. To generate inventory images
+explicitly, run this from the active release (the command only reads the database):
 
 ```bash
 cd ~/arena-portal/current
@@ -114,8 +123,8 @@ NAT routes. A successful check verifies authentication and remote command access
 at that moment; it does not prove that an earlier reset is resolved permanently.
 
 The build and browser smoke test run on GitHub, so their CPU/memory usage is not
-the hosting account's usage. Live thumbnail generation runs inside the website
-account. If the provider confirms there are no configured RAM/CPU caps, do not
+the hosting account's usage. Explicit thumbnail generation runs inside the website
+account; ordinary grid browsing does not start it. If the provider confirms there are no configured RAM/CPU caps, do not
 attribute a pre-authentication SSH reset to those caps without server evidence.
 Ask support to distinguish network filtering, SSH connection limits, host-wide
 resource pressure and any separate process limits in their logs.

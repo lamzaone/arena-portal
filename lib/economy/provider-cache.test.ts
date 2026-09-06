@@ -100,3 +100,42 @@ test("a failed Steam preview is retried after its cooldown without a stuck pendi
   assert.equal(await getMarketPreviewForNames([normal]), image);
   assert.equal(calls, 2);
 });
+
+test("large CS2 catalogues share a parsed image index without oversized Next cache writes", async t => {
+  t.mock.timers.enable({ apis: ["Date"], now: 1000 });
+  const crateImage = "https://community.steamstatic.com/economy/image/test-crate";
+  const skinImage = "https://community.steamstatic.com/economy/image/test-skin";
+  const { requests, oversizedWrites } = provider(t, url => url.pathname.endsWith("crates.json")
+    ? [{ name: "Test Case", def_index: "4001", image: crateImage, contains: [{ padding }] }]
+    : [{ name: normal, weapon: { weapon_id: "7" }, paint_index: "44", image: skinImage, padding }]);
+  const { getCs2CatalogueImage } = await freshModule("./cs2-item-images.ts");
+  const crate = { itemType: "crate", definitionIndex: 4001, paintkit: null, displayName: "Test Case", marketHashName: null };
+  const skin = { itemType: "skin", definitionIndex: 7, paintkit: 44, displayName: normal, marketHashName: normal };
+  const images = await Promise.all(Array.from({ length: 20 }, () => getCs2CatalogueImage(crate)));
+  assert.ok(images.every(image => image === crateImage));
+  assert.equal(requests.length, 1, "concurrent catalogue lookups share one download");
+  assert.equal(await getCs2CatalogueImage(skin), skinImage);
+  assert.equal(requests.length, 2);
+  assert.deepEqual(oversizedWrites, [], "cache extracted image indexes instead of multi-megabyte catalogue bodies");
+  assert.equal(await getCs2CatalogueImage({ ...crate, displayName: "An alias" }), crateImage);
+  assert.equal(requests.length, 2, "an uncached item name reuses the parsed definition index");
+  t.mock.timers.tick(12 * 60 * 60 * 1000 + 1);
+  assert.equal(await getCs2CatalogueImage(crate), crateImage);
+  assert.equal(requests.length, 3, "catalogue images refresh after the existing TTL");
+});
+
+test("failed CS2 catalogue downloads recover after their cooldown", async t => {
+  t.mock.timers.enable({ apis: ["Date"], now: 1000 });
+  let calls = 0;
+  const image = "https://community.steamstatic.com/economy/image/recovered-crate";
+  t.mock.method(globalThis, "fetch", async () => ++calls === 1 ? new Response(null, { status: 503 })
+    : Response.json([{ name: "Test Case", def_index: 4001, image }]));
+  const { getCs2CatalogueImage } = await freshModule("./cs2-item-images.ts");
+  const crate = { itemType: "crate", definitionIndex: 4001, paintkit: null, displayName: "Test Case", marketHashName: null };
+  assert.equal(await getCs2CatalogueImage(crate), null);
+  assert.equal(await getCs2CatalogueImage(crate), null);
+  assert.equal(calls, 1);
+  t.mock.timers.tick(10 * 60 * 1000 + 1);
+  assert.equal(await getCs2CatalogueImage(crate), image);
+  assert.equal(calls, 2);
+});

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getSession } from "@/lib/auth/session";
+import { getSessionIdentity } from "@/lib/auth/session-identity";
 import { getEconomyCatalogueItem } from "@/lib/data/portal-repository";
 import { getCs2CatalogueImage } from "@/lib/economy/cs2-item-images";
 import { getMarketPreviewForNames } from "@/lib/loadout/market-preview";
@@ -54,6 +54,18 @@ function officialImageUrl(metadata: Record<string, unknown>) {
   }
 }
 
+function catalogueArtworkUrl(value: string | null) {
+  if (!value || value.length > 2048) return null;
+  if (value.startsWith("/images/economy/") && !/[\\?#]/.test(value) && !value.includes("..")) return value;
+  try {
+    const url = new URL(value);
+    const allowedHost = url.hostname === "steamstatic.com" || url.hostname.endsWith(".steamstatic.com")
+      || url.hostname === "steamcdn-a.akamaihd.net"
+      || (url.hostname === "raw.githubusercontent.com" && url.pathname.startsWith("/ByMykel/counter-strike-image-tracker/"));
+    return url.protocol === "https:" && allowedHost ? url.toString() : null;
+  } catch { return null; }
+}
+
 function previewMarketNames(input: {
   itemType: string;
   displayName: string;
@@ -95,7 +107,7 @@ function uniqueImageUrls(values: Array<string | null | undefined>) {
 }
 
 export async function GET(request: Request) {
-  const session = await getSession();
+  const session = await getSessionIdentity();
   if (!session) return NextResponse.json({ imageUrl: null }, { status: 401 });
 
   const url = new URL(request.url);
@@ -105,6 +117,21 @@ export async function GET(request: Request) {
 
   const item = await getEconomyCatalogueItem(catalogueId);
   if (!item) return NextResponse.json({ imageUrl: null }, { status: 404 });
+
+  if (url.searchParams.get("mode") === "catalogue") {
+    // Normal grid thumbnails never scrape Steam pages or generate a render.
+    // Use stored artwork immediately; only missing artwork needs the shared
+    // catalogue image index. Exact item appearance lives in the inspector.
+    const storedImage = url.searchParams.get("fallback") === "1" ? null
+      : catalogueArtworkUrl(item.imageUrl) ?? officialImageUrl(item.metadata);
+    const imageUrl = storedImage ?? await getCs2CatalogueImage({
+        itemType: item.itemType, definitionIndex: item.definitionIndex,
+        paintkit: item.paintkit, displayName: item.displayName, marketHashName: item.marketHashName,
+      });
+    return NextResponse.json({ imageUrl, imageUrls: imageUrl ? [imageUrl] : [] }, {
+      headers: { "Cache-Control": imageUrl ? "private, max-age=3600" : "private, max-age=60" },
+    });
+  }
 
   const floatValue = asFloat(url.searchParams.get("float"));
   const [marketImageUrl, catalogueImageUrl] = await Promise.all([

@@ -4431,6 +4431,11 @@ main.staff-page :is(input, select, textarea, button) {
 }
 
 /* Item collections share a five-column ceiling and four rows per page. */
+.economy-item-card .economy-catalogue-weapon-artwork > img,
+.profile-inventory-artwork > .economy-catalogue-weapon-artwork > img {
+  padding: 4px;
+}
+
 [data-item-grid="true"] {
   display: grid !important;
   grid-template-columns: repeat(var(--item-grid-columns, 1), minmax(0, 1fr)) !important;

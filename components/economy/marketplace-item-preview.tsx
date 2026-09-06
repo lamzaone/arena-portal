@@ -15,7 +15,6 @@ import {
 import {
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -26,8 +25,6 @@ import {
 } from "@/components/economy/economy-view-model";
 import { proxiedImageUrl } from "@/lib/images/proxy-url";
 import type { WeaponPreviewSource } from "@/lib/economy/weapon-preview";
-import { thumbnailForSource, thumbnailSignature } from "@/lib/economy/weapon-thumbnail";
-import { ExactWeaponThumbnail } from "./exact-weapon-thumbnail";
 
 type MarketplaceItemPreviewProps = {
   item: Pick<
@@ -73,21 +70,16 @@ function imageCandidates(value: string | null | undefined) {
   if (!directImageUrl) return [];
   if (directImageUrl.startsWith("/")) return [directImageUrl];
   const proxiedUrl = proxiedImageUrl(directImageUrl);
-  return [...new Set([proxiedUrl, directImageUrl].filter(Boolean))] as string[];
+  // Let the browser use the image provider's CDN and its own HTTP cache.
+  // Going through shared hosting first adds a hop to every cold thumbnail.
+  return [...new Set([directImageUrl, proxiedUrl].filter(Boolean))] as string[];
 }
 
-function marketPreviewUrl(catalogueId: number | null, floatValue: number | null) {
+function marketPreviewUrl(catalogueId: number | null, hasStoredArtwork: boolean) {
   if (!catalogueId || !Number.isSafeInteger(catalogueId) || catalogueId < 1)
     return null;
-  const params = new URLSearchParams({ catalogueId: String(catalogueId) });
-  if (
-    floatValue !== null &&
-    Number.isFinite(floatValue) &&
-    floatValue >= 0 &&
-    floatValue <= 1
-  ) {
-    params.set("float", floatValue.toFixed(6));
-  }
+  const params = new URLSearchParams({ catalogueId: String(catalogueId), mode: "catalogue" });
+  if (hasStoredArtwork) params.set("fallback", "1");
   return `/api/economy/market/preview?${params.toString()}`;
 }
 
@@ -129,26 +121,18 @@ function fallbackIcon(itemType: string) {
 }
 
 export function MarketplaceItemPreview(props: MarketplaceItemPreviewProps) {
-  const preview = useMemo(() => thumbnailForSource(props.item, props.floatValue, props.patternSeed), [props.item, props.floatValue, props.patternSeed]);
-  if (preview) return <ExactWeaponThumbnail key={thumbnailSignature(preview.item)} item={preview.item} sample={preview.sample}
-    name={props.item.displayName} rarityRank={props.item.rarityRank} overlay={props.overlay}
-    fallbackImageUrls={imageCandidates(props.item.imageUrl)}
-    className={["skin", "weapon", "knife"].includes(props.item.itemType) ? "economy-weapon-artwork" : undefined} />;
-  if (["skin", "weapon", "knife", "glove"].includes(props.item.itemType)) return <div className={`economy-item-preview ${rarityRankClass(props.item.rarityRank)}`}>
-    <div className="economy-item-preview-fallback"><ImageOff aria-hidden="true" /><span>{props.patternSeed === -1 ? "Choose a valid float and seed" : "Exact preview unavailable"}</span></div>
-    {props.overlay ? <div className="economy-item-preview-overlay">{props.overlay}</div> : null}
-  </div>;
-  return <CatalogueItemPreview {...props} />;
+  // Browsing never queues a render or waits for an exact image. Float, seed
+  // and attachments remain visible in the item details and 3D inspector.
+  // Reset failed artwork when the catalogue identity changes, while keeping
+  // the loaded image mounted across float/seed edits.
+  return <CatalogueItemPreview key={`${props.item.catalogueId}|${props.item.imageUrl}|${props.item.itemType}`} {...props} />;
 }
 
 function CatalogueItemPreview({
   item,
   enableMarketPreview = true,
-  floatValue = null,
   overlay,
 }: MarketplaceItemPreviewProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isVisible, setIsVisible] = useState(false);
   const [failedDirectImageUrls, setFailedDirectImageUrls] = useState<string[]>(
     [],
   );
@@ -163,19 +147,12 @@ function CatalogueItemPreview({
   const directImageUrl = directImageUrls.find(
     (imageUrl) => !failedDirectImageUrls.includes(imageUrl),
   );
-  const previewFloat =
-    floatValue !== null &&
-    Number.isFinite(floatValue) &&
-    floatValue >= 0 &&
-    floatValue <= 1
-      ? floatValue
-      : item.floatValue;
   const previewRequestUrl = useMemo(
     () =>
       enableMarketPreview
-        ? marketPreviewUrl(item.catalogueId, previewFloat)
+        ? marketPreviewUrl(item.catalogueId, directImageUrls.length > 0)
         : null,
-    [enableMarketPreview, item.catalogueId, previewFloat],
+    [enableMarketPreview, item.catalogueId, directImageUrls.length],
   );
   const isWeaponArtwork = ["skin", "weapon", "knife", "glove"].includes(item.itemType);
   const Icon = fallbackIcon(item.itemType);
@@ -188,31 +165,9 @@ function CatalogueItemPreview({
   }, [directImageKey]);
 
   useEffect(() => {
-    const element = containerRef.current;
-    if (!element) return;
-    if (!("IntersectionObserver" in window)) {
-      setIsVisible(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setIsVisible(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "240px 0px" },
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
     setPreviewImageUrls([]);
     setFailedPreviewImageUrls([]);
     if (
-      !isVisible ||
       !previewRequestUrl ||
       directImageUrl
     ) {
@@ -247,11 +202,11 @@ function CatalogueItemPreview({
   }, [
     directImageKey,
     directImageUrl,
-    isVisible,
     previewRequestUrl,
   ]);
 
-  // Non-renderable items keep their artwork and explicitly identify it as such.
+  // Every row on the bounded page loads together. Catalogue art deliberately
+  // does not claim to depict the selected float, seed or attachments.
   const imageUrl = previewImageUrl ?? directImageUrl;
   const imageLoading = Boolean(imageUrl && loadedImageUrl !== imageUrl);
   const requestLoading = !imageUrl && state === "loading";
@@ -264,9 +219,8 @@ function CatalogueItemPreview({
 
   return (
     <div
-      ref={containerRef}
       data-ui="item-artwork"
-      className={`economy-item-preview ${rarityRankClass(item.rarityRank)}`}
+      className={`economy-item-preview ${rarityRankClass(item.rarityRank)}${isWeaponArtwork ? " economy-catalogue-weapon-artwork" : ""}`}
       aria-busy={loading}
     >
       {imageUrl ? (
@@ -274,7 +228,8 @@ function CatalogueItemPreview({
           <img
             src={imageUrl}
             alt={`${item.displayName} ${isWeaponArtwork ? "catalogue artwork" : "preview"}`}
-            className={imageLoading ? "is-loading" : undefined}
+            width={640}
+            height={360}
             loading="eager"
             decoding="async"
             referrerPolicy="no-referrer"
@@ -321,7 +276,7 @@ function CatalogueItemPreview({
           <span>{label}</span>
         </div>
       )}
-      {imageUrl && isWeaponArtwork ? <small className="economy-item-art-label">Catalogue artwork</small> : null}
+      {imageUrl && isWeaponArtwork ? <small className="economy-item-art-label" title="Open Inspect for the exact float, seed and attachments">Catalogue preview</small> : null}
       {overlay ? (
         <div className="economy-item-preview-overlay">{overlay}</div>
       ) : null}

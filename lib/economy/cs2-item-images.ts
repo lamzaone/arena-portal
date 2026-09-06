@@ -192,7 +192,10 @@ async function getImageSource(file: string): Promise<CatalogueImageSource> {
     try {
       const response = await fetch(`${catalogueBaseUrl}/${file}`, {
         headers: { Accept: "application/json" },
-        next: { revalidate: 60 * 60 * 12 },
+        // Raw catalogues can exceed Next's 2 MB entry limit (crates alone is
+        // over 10 MB). The shared maps below retain only indexed image URLs
+        // for twelve hours and coalesce concurrent downloads.
+        cache: "no-store",
       });
       if (!response.ok) throw new Error(`CS2 item catalogue returned ${response.status}.`);
       const source = buildImageSource(file, asRows(await response.json()));
