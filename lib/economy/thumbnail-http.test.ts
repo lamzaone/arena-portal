@@ -6,6 +6,25 @@ const origin=process.env.SITE_URL ? new URL(process.env.SITE_URL).origin : 'http
 function request(body: unknown, headers: Record<string,string>={}) {
   return new Request(`${origin}/api/economy/thumbnails`,{method:'POST',headers:{'content-type':'application/json',origin,...headers},body:JSON.stringify(body)});
 }
+
+test('cache-only batches never create or wait for renders',async()=>{
+  let reads=0,renders=0,waits=0;
+  const response=await thumbnailStatusResponse(request({items:[item,{...item,seed:2}],cacheOnly:true,waitMs:5000}),{
+    session:async()=>({steamId:'owner'}),
+    request:async()=>{renders++;return {key:'a'.repeat(64),status:'queued',retryAfterMs:500};},
+    lookup:async value=>{reads++;return {key:'b'.repeat(64),status:value.seed===2?'unavailable':'ready',retryAfterMs:30000};},
+    waitForAny:async()=>{waits++;},
+  });
+  assert.equal(response.status,200);assert.equal(reads,2);assert.equal(renders,0);assert.equal(waits,0);
+  assert.deepEqual((await response.json()).tickets.map((t:{status:string})=>t.status),['ready','unavailable']);
+});
+test('cache-only requests fail closed if the reader is unavailable or mode is malformed',async()=>{
+  let renders=0;
+  const dependencies={session:async()=>({steamId:'owner'}),request:async()=>{renders++;return {key:'a'.repeat(64),status:'queued' as const,retryAfterMs:500};}};
+  assert.equal((await thumbnailStatusResponse(request({items:[item],cacheOnly:true}),dependencies)).status,503);
+  assert.equal((await thumbnailStatusResponse(request({items:[item],cacheOnly:'true'}),dependencies)).status,400);
+  assert.equal(renders,0);
+});
 test('thumbnail route authenticates, enforces origin and validates whole batch before starting jobs', async()=>{
   let renders=0;
   const dependencies={session:async()=>({steamId:'owner'}),request:async()=>{renders++;return {key:'a'.repeat(64),status:'queued' as const,retryAfterMs:1500};}};

@@ -9,6 +9,35 @@ const src = (seed: number) => `/api/economy/thumbnails/${String(seed).padStart(6
 const ready = (items: WeaponThumbnail[]) => Response.json({ tickets: items.map(value => ({ status: "ready", src: src(value.seed), retryAfterMs: 0 })) });
 async function flush() { for (let index = 0; index < 12; index++) await Promise.resolve(); }
 async function advance(t: TestContext, milliseconds: number) { t.mock.timers.tick(milliseconds); await flush(); }
+
+test("cached snapshot clients batch reads without rendering, long polling or rapid retries", async t => {
+  t.mock.timers.enable({apis:["Date","setTimeout"],now:1000});
+  const requests:Array<{cacheOnly:boolean;waitMs:number;items:WeaponThumbnail[]}>=[];
+  const client=createWeaponThumbnailClient((async(_url,options)=>{
+    const body=JSON.parse(String(options?.body));requests.push(body);
+    return Response.json({tickets:body.items.map(()=>({status:"unavailable",retryAfterMs:0}))});
+  }) as typeof fetch,()=>undefined,{cacheOnly:true});
+  t.after(()=>client.dispose());
+  for(let seed=0;seed<20;seed++)client.watchWeaponThumbnail(item(seed),()=>{});
+  await advance(t,16);
+  assert.equal(requests.length,1);assert.equal(requests[0].items.length,20);
+  assert.equal(requests[0].cacheOnly,true);assert.equal(requests[0].waitMs,0);
+  await advance(t,29999);assert.equal(requests.length,1);
+  await advance(t,1);assert.equal(requests.length,2);
+});
+
+test("a stalled snapshot read aborts in one second while normal artwork remains usable",async t=>{
+  t.mock.timers.enable({apis:["Date","setTimeout"],now:1000});
+  const signals:AbortSignal[]=[],states:ThumbnailState[]=[];
+  const client=createWeaponThumbnailClient((async(_url,options)=>{
+    const signal=options!.signal as AbortSignal;signals.push(signal);
+    return new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(new Error('aborted')),{once:true}));
+  }) as typeof fetch,()=>undefined,{cacheOnly:true});
+  t.after(()=>client.dispose());client.watchWeaponThumbnail(item(1),state=>states.push(state));
+  await advance(t,16);await advance(t,1000);
+  assert.equal(signals[0].aborted,true);assert.equal(states.at(-1)?.status,'unavailable');
+  await advance(t,29999);assert.equal(signals.length,1);
+});
 async function setup(t: TestContext, response: (request: Request, index: number) => Promise<Response> | Response = request => ready(request.items), storage?: () => CacheStorage | undefined) {
   t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000 });
   const requests: Request[] = [];

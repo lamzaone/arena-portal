@@ -4,6 +4,7 @@ import type { ThumbnailTicket } from "./thumbnail-cache.ts";
 type Dependencies = {
   session: () => Promise<{ steamId: string } | null>;
   request: (item: WeaponThumbnail, owner: string) => Promise<ThumbnailTicket>;
+  lookup?: (item: WeaponThumbnail) => Promise<ThumbnailTicket>;
   waitForAny?: (keys: readonly string[], signal: AbortSignal, maxWaitMs: number) => Promise<void>;
 };
 export async function thumbnailStatusResponse(request: Request, dependencies: Dependencies) {
@@ -28,9 +29,12 @@ export async function thumbnailStatusResponse(request: Request, dependencies: De
   }
   let items: WeaponThumbnail[];
   let waitMs = 0;
+  let cacheOnly = false;
   try {
     const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
     if (!Array.isArray(body.items) || !body.items.length || body.items.length > 20) throw new Error();
+    if (body.cacheOnly !== undefined && typeof body.cacheOnly !== "boolean") throw new Error();
+    cacheOnly = body.cacheOnly === true;
     if (body.waitMs !== undefined) {
       if (!Number.isSafeInteger(body.waitMs) || body.waitMs < 0 || body.waitMs > 5000) throw new Error();
       waitMs = body.waitMs;
@@ -38,9 +42,10 @@ export async function thumbnailStatusResponse(request: Request, dependencies: De
     items = body.items.map(normalizeWeaponThumbnail);
   } catch { return json({ error: "Invalid preview configuration" }, 400); }
   if (request.signal.aborted) return json({ error: "Request cancelled" }, 499);
-  const readTickets = () => Promise.all(items.map(item => dependencies.request(item, session.steamId)));
+  if (cacheOnly && !dependencies.lookup) return json({ error: "Snapshot cache unavailable" }, 503);
+  const readTickets = () => Promise.all(items.map(item => cacheOnly ? dependencies.lookup!(item) : dependencies.request(item, session.steamId)));
   let tickets = await readTickets();
-  const waiting = waitMs > 0 && dependencies.waitForAny;
+  const waiting = !cacheOnly && waitMs > 0 && dependencies.waitForAny;
   if (waiting && !tickets.some(ticket => ticket.status === "ready")) {
     const keys = tickets.filter(ticket => ticket.status === "queued").map(ticket => ticket.key);
     if (keys.length) {

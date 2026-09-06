@@ -17,15 +17,26 @@ together. This keeps settings such as the bundled Chromium path current on
 existing installations. CI launches the packaged browser, draws with WebGL2,
 and encodes a WebP before accepting the release archive.
 
-Item grids use normal catalogue thumbnails and load every image on the current
-page immediately. Browsing does not queue renders, poll thumbnail jobs or replace
-artwork with delayed exact images. Images load directly from their CDN, with the
-portal image proxy as a fallback. Missing artwork uses the shared catalogue image
-index without scraping Steam market pages. Float, seed, StatTrak and attachment
-previews remain in the client-side 3D inspector and customizer.
+Owned weapons use saved 2D snapshots of their float, seed, StatTrak, name, stickers
+and charm. The existing Node hosting process prepares these in the background:
+it checks recent changes and a bounded batch of older inventory every 30 seconds.
+Jobs continue after players leave and reuse the persistent image cache. New items
+and configuration changes receive a different image identity; an old snapshot
+cannot be shown for a changed item. No inventory or pricing rows are written.
 
-The following renderer cache/warmup tools remain optional; they are not needed
-for market or inventory thumbnail loading.
+Pages load normal catalogue artwork immediately, then show a saved snapshot if
+available. One cache-only batch checks up to 20 images, with a one-second request
+timeout and quiet 30-second refreshes for missing snapshots. Browsing never starts
+a render or waits for generation. Catalogue samples continue using normal artwork
+directly from the CDN, with the portal image proxy as fallback. The 3D inspector
+and customizer remain available, but snapshots themselves are ordinary WebP images.
+
+Automatic prewarming defaults on when `ARENA_HOSTING_ROOT` and production Node
+mode are set, as in the managed launcher. Set `WEAPON_THUMBNAIL_PREWARM_ENABLED=false`
+to pause it, or `true` to enable it locally. Hosting builds disable the worker.
+
+The following manual warmup tools remain optional. Use a separate profile for a
+manual warmup while automatic prewarming is running.
 
 Weapon model assets persist under `~/arena-portal/cache/weapon-thumbnail-assets` using a dedicated Chromium profile. Override with `WEAPON_THUMBNAIL_ASSET_CACHE_DIR`; separate concurrent portal processes need separate roots. Before startup, `npm run thumbnails:warm -- --models --profile=server` preloads all supported mesh generations without database access. The server profile must not be open during this offline preload. Ordinary inventory/catalogue warm commands use a separate profile and share the finished image cache.
 
@@ -123,7 +134,7 @@ NAT routes. A successful check verifies authentication and remote command access
 at that moment; it does not prove that an earlier reset is resolved permanently.
 
 The build and browser smoke test run on GitHub, so their CPU/memory usage is not
-the hosting account's usage. Explicit thumbnail generation runs inside the website
+the hosting account's usage. Background snapshot generation runs inside the website
 account; ordinary grid browsing does not start it. If the provider confirms there are no configured RAM/CPU caps, do not
 attribute a pre-authentication SSH reset to those caps without server evidence.
 Ask support to distinguish network filtering, SSH connection limits, host-wide

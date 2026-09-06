@@ -44,6 +44,7 @@ const stubs: Record<string, string> = {
   "@/lib/economy/thumbnail-service": `const s=globalThis.__thumbnailSessionTest;
     export function weaponThumbnailCache(){return {
       async read(key){s.reads++;return key==='${imageKey}'?Buffer.from('cached-webp'):null;},
+      async lookup(){s.reads++;return {key:'${imageKey}',status:'ready',retryAfterMs:0};},
       async request(item,owner){s.owners.push(owner);return {key:'${imageKey}',status:'ready',retryAfterMs:0};}
     };}`,
 };
@@ -62,9 +63,9 @@ const { POST } = await import("./thumbnails/route.ts");
 const { getSession } = await import("../../../lib/auth/session.ts");
 const context = (key = imageKey) => ({ params: Promise.resolve({ key }) });
 const imageRequest = (headers: Record<string, string> = {}) => new Request(`${origin}/api/economy/thumbnails/${imageKey}`, { headers });
-const statusRequest = (headers: Record<string, string> = {}) => new Request(`${origin}/api/economy/thumbnails`, {
+const statusRequest = (headers: Record<string, string> = {}, cacheOnly = false) => new Request(`${origin}/api/economy/thumbnails`, {
   method: "POST", headers: { "content-type": "application/json", origin, ...headers },
-  body: JSON.stringify({ items: [{ defindex: 7, paintIndex: 44, float: 0.2, seed: 661 }] }),
+  body: JSON.stringify({ items: [{ defindex: 7, paintIndex: 44, float: 0.2, seed: 661 }], cacheOnly }),
 });
 test.beforeEach(() => {
   state.cookie = token; state.fullSessionReads = 0; state.queries = []; state.reads = 0; state.owners = [];
@@ -82,6 +83,13 @@ test("twenty cached images use only indexed session reads without themes or last
   assert.ok(state.queries.every(query => !/\bJOIN\b|theme|last_seen/i.test(query.sql)));
   assert.ok(state.queries.every(query => query.values[0] === hash));
   assert.equal(db.prepare("SELECT last_seen_at FROM portal_sessions").get()?.last_seen_at, "unchanged");
+});
+
+test("cache-only POST authenticates once and never invokes render creation",async()=>{
+  const response=await POST(statusRequest({},true));
+  assert.equal(response.status,200);assert.equal(state.reads,1);
+  assert.equal(state.queries.length,1);assert.deepEqual(state.owners,[]);
+  assert.equal((await response.json()).tickets[0].src,`/api/economy/thumbnails/${imageKey}`);
 });
 
 test("missing, short and tampered cookies never authenticate", async () => {

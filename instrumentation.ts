@@ -4,4 +4,6 @@ export async function register() {
     "./lib/economy/price-refresh-scheduler"
   );
   startEconomyPublicPriceRefreshScheduler();
+  const { startOwnedThumbnailPrewarming } = await import("./lib/economy/thumbnail-prewarm-scheduler");
+  startOwnedThumbnailPrewarming();
 }

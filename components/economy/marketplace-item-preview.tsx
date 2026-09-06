@@ -25,6 +25,8 @@ import {
 } from "@/components/economy/economy-view-model";
 import { proxiedImageUrl } from "@/lib/images/proxy-url";
 import type { WeaponPreviewSource } from "@/lib/economy/weapon-preview";
+import { thumbnailForSource, thumbnailSignature } from "@/lib/economy/weapon-thumbnail";
+import { OwnedWeaponThumbnail } from "./owned-weapon-thumbnail";
 
 type MarketplaceItemPreviewProps = {
   item: Pick<
@@ -121,11 +123,13 @@ function fallbackIcon(itemType: string) {
 }
 
 export function MarketplaceItemPreview(props: MarketplaceItemPreviewProps) {
-  // Browsing never queues a render or waits for an exact image. Float, seed
-  // and attachments remain visible in the item details and 3D inspector.
-  // Reset failed artwork when the catalogue identity changes, while keeping
-  // the loaded image mounted across float/seed edits.
-  return <CatalogueItemPreview key={`${props.item.catalogueId}|${props.item.imageUrl}|${props.item.itemType}`} {...props} />;
+  const preview = useMemo(() => thumbnailForSource(props.item, props.floatValue, props.patternSeed), [props.item, props.floatValue, props.patternSeed]);
+  const fallback = <CatalogueItemPreview key={`${props.item.catalogueId}|${props.item.imageUrl}|${props.item.itemType}`} {...props} />;
+  // Owned items have a real float/seed and can read their prepared snapshot.
+  // Catalogue samples stay on fast normal artwork; browsing never queues work.
+  return preview && !preview.sample ? <OwnedWeaponThumbnail key={thumbnailSignature(preview.item)}
+    item={preview.item} name={props.item.displayName} rarityRank={props.item.rarityRank}
+    fallback={fallback} overlay={props.overlay} /> : fallback;
 }
 
 function CatalogueItemPreview({

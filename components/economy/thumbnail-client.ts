@@ -15,6 +15,7 @@ type Pending = { entry: Entry; revision: number };
 type Request = { batch: Pending[]; controller: AbortController; timeout?: ReturnType<typeof setTimeout> };
 const BATCH_DELAY_MS = 16;
 const BATCH_SIZE = 20;
+const SNAPSHOT_REFRESH_MS = 30_000;
 const TRANSIENT_RETRY_MS = [1_000, 2_000, 5_000, 10_000, 20_000, 30_000];
 const READY_CACHE_KEY = "arena.weapon-thumbnails.v1";
 const isThumbnailUrl = (src: unknown): src is string => typeof src === "string" && /^\/api\/economy\/thumbnails\/[a-f0-9]{64}$/.test(src);
@@ -61,7 +62,8 @@ function createReadyCache(getStorage: () => CacheStorage | undefined) {
 
 /** Each client owns its subscriptions, cache, and request lifetime. */
 export function createWeaponThumbnailClient(fetcher: typeof fetch = (...args) => fetch(...args),
-  getStorage: () => CacheStorage | undefined = () => typeof window === "undefined" ? undefined : window.localStorage) {
+  getStorage: () => CacheStorage | undefined = () => typeof window === "undefined" ? undefined : window.localStorage,
+  options: { cacheOnly?: boolean } = {}) {
   const entries = new Map<string, Entry>();
   const readyCache = createReadyCache(getStorage);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -90,7 +92,7 @@ export function createWeaponThumbnailClient(fetcher: typeof fetch = (...args) =>
 
   function retry(entry: Entry, paused = false) {
     entry.state = { status: "unavailable" };
-    const delay = TRANSIENT_RETRY_MS[Math.min(entry.failures++, TRANSIENT_RETRY_MS.length - 1)];
+    const delay = options.cacheOnly ? SNAPSHOT_REFRESH_MS : TRANSIENT_RETRY_MS[Math.min(entry.failures++, TRANSIENT_RETRY_MS.length - 1)];
     entry.next = paused ? Infinity : Date.now() + delay;
   }
 
@@ -125,13 +127,13 @@ export function createWeaponThumbnailClient(fetcher: typeof fetch = (...args) =>
     // Rotate all active identities, including a selection beside a full grid.
     // Shorten each wait so every batch renews within the server's ten-second lease.
     batch.forEach(({ entry }) => { entry.lastRequested = ++requestOrder; });
-    const waitMs = Math.max(100, Math.floor(5000 / Math.ceil(pending.length / BATCH_SIZE)));
-    request.timeout = setTimeout(() => request.controller.abort(), 15_000);
+    const waitMs = options.cacheOnly ? 0 : Math.max(100, Math.floor(5000 / Math.ceil(pending.length / BATCH_SIZE)));
+    request.timeout = setTimeout(() => request.controller.abort(), options.cacheOnly ? 1_000 : 15_000);
     let paused = false;
     try {
       const response = await fetcher("/api/economy/thumbnails", {
         method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: batch.map(({ entry }) => entry.item), waitMs }), signal: request.controller.signal,
+        body: JSON.stringify({ items: batch.map(({ entry }) => entry.item), waitMs, ...(options.cacheOnly ? { cacheOnly: true } : {}) }), signal: request.controller.signal,
       });
       paused = response.status === 401 || response.status === 403;
       if (!response.ok) throw new Error("Preview unavailable");
@@ -147,10 +149,10 @@ export function createWeaponThumbnailClient(fetcher: typeof fetch = (...args) =>
           return;
         }
         entry.state = ticket.status === "ready" ? { status: "ready", src: ticket.src }
-          : { status: ticket.status === "unavailable" ? "unavailable" : "loading" };
+          : { status: options.cacheOnly || ticket.status === "unavailable" ? "unavailable" : "loading" };
         entry.failures = 0;
         const delay = Number.isFinite(ticket.retryAfterMs) && (ticket.retryAfterMs! > 0 || (ticket.retryAfterMs === 0 && ticket.status === "queued")) ? ticket.retryAfterMs! : 1_000;
-        entry.next = ticket.status === "ready" ? Infinity : Date.now() + delay;
+        entry.next = ticket.status === "ready" ? Infinity : Date.now() + (options.cacheOnly ? SNAPSHOT_REFRESH_MS : delay);
         if (ticket.status === "ready") readyCache.set(thumbnailSignature(entry.item), ticket.src!);
       });
     } catch {
@@ -232,3 +234,9 @@ export function createWeaponThumbnailClient(fetcher: typeof fetch = (...args) =>
 const client = createWeaponThumbnailClient();
 export const watchWeaponThumbnail = client.watchWeaponThumbnail;
 export const invalidateWeaponThumbnail = client.invalidateWeaponThumbnail;
+
+// Inventory browsing reads finished snapshots only. Missing files are retried
+// quietly while the independent inventory worker prepares them.
+const snapshots = createWeaponThumbnailClient(undefined, undefined, { cacheOnly: true });
+export const watchCachedWeaponThumbnail = snapshots.watchWeaponThumbnail;
+export const invalidateCachedWeaponThumbnail = snapshots.invalidateWeaponThumbnail;

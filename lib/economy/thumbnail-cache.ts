@@ -5,7 +5,7 @@ import { thumbnailSignature, type WeaponThumbnail } from "./weapon-thumbnail.ts"
 
 export type ThumbnailTicket = { key: string; status: "ready" | "queued" | "busy" | "unavailable"; retryAfterMs: number };
 type Options = { directory: string; render: (item: WeaponThumbnail) => Promise<Buffer>; groupForItem?: (item: WeaponThumbnail) => string; renderLanes?: 1 | 2; laneForItem?: (item: WeaponThumbnail) => number; maxPending?: number; retryMs?: number; maxBytes?: number; maxNewPerHour?: number };
-type Job = { item: WeaponThumbnail; owner: string; requestedAt: number; lane: number };
+type Job = { item: WeaponThumbnail; owner: string; requestedAt: number; lane: number; background: boolean };
 type QueuedJob = [string, Job];
 export function createThumbnailCache({ directory, render, groupForItem, renderLanes = 1, laneForItem, maxPending = 128, retryMs = 60000, maxBytes = 512 * 1024 * 1024, maxNewPerHour = 240 }: Options) {
   if (renderLanes !== 1 && renderLanes !== 2) throw new Error("Thumbnail render lanes must be 1 or 2");
@@ -38,6 +38,8 @@ export function createThumbnailCache({ directory, render, groupForItem, renderLa
   }
   let publishing = Promise.resolve();
   const pathFor = (key: string) => join(directory, `${key}.webp`);
+  const keyFor = (item: WeaponThumbnail) => createHash("sha256").update(thumbnailSignature(item)).digest("hex");
+  const expired = (job: Job) => !job.background && Date.now() - job.requestedAt > 10000;
   async function exists(key: string) { try { return (await stat(pathFor(key))).size > 0; } catch { return false; } }
   function publish(key: string, buffer: Buffer) {
     // Rendering can overlap across lanes; eviction and index/file publication
@@ -66,7 +68,7 @@ export function createThumbnailCache({ directory, render, groupForItem, renderLa
   }
   function nextBatch(lane: number) {
     // Expired jobs must not choose the leading group or occupy cohort slots.
-    for (const [key, job] of jobs) if (job.lane === lane && Date.now() - job.requestedAt > 10000) removeJob(key, job);
+    for (const [key, job] of jobs) if (job.lane === lane && expired(job)) removeJob(key, job);
     const pending = [...jobs].filter(([, job]) => job.lane === lane).slice(0, 20);
     if (!groupForItem) return pending;
     // Each lane freezes its own oldest cohort. Matching arrivals cannot keep
@@ -82,7 +84,7 @@ export function createThumbnailCache({ directory, render, groupForItem, renderLa
   }
   async function runJob([key, job]: QueuedJob) {
     try {
-      if (jobs.get(key) !== job || Date.now() - job.requestedAt > 10000) return;
+      if (jobs.get(key) !== job || expired(job)) return;
       // Visible cards can renew their ticket after the cohort is selected.
       if (!await exists(key)) {
         const buffer = await render(job.item);
@@ -117,21 +119,28 @@ export function createThumbnailCache({ directory, render, groupForItem, renderLa
     });
   }
   return {
-    async request(item: WeaponThumbnail, owner: string): Promise<ThumbnailTicket> {
-      const key = createHash("sha256").update(thumbnailSignature(item)).digest("hex");
+    async lookup(item: WeaponThumbnail): Promise<ThumbnailTicket> {
+      const key = keyFor(item);
+      return { key, status: await exists(key) ? "ready" : "unavailable", retryAfterMs: 30000 };
+    },
+    async request(item: WeaponThumbnail, owner: string, options: { background?: boolean } = {}): Promise<ThumbnailTicket> {
+      const key = keyFor(item);
       if (await exists(key)) return { key,status:"ready",retryAfterMs:0 };
       if ((failures.get(key) ?? 0) > Date.now()) return { key,status:"unavailable",retryAfterMs:retryMs };
       const queued=jobs.get(key);
-      if (queued) { queued.requestedAt=Date.now(); return { key,status:"queued",retryAfterMs:500 }; }
+      if (queued) { queued.requestedAt=Date.now(); queued.background ||= options.background === true; return { key,status:"queued",retryAfterMs:500 }; }
       if (jobs.size >= maxPending || [...jobs.values()].filter(job=>job.owner===owner).length >= 48) return { key,status:"busy",retryAfterMs:3000 };
       const now=Date.now();
       for(const [id,budget] of owners) if(now-budget.since>=3600000)owners.delete(id);
       const budget=owners.get(owner)??{since:now,count:0};
-      if(budget.count>=maxNewPerHour || (!owners.has(owner)&&owners.size>=4096))return {key,status:"busy",retryAfterMs:Math.max(60000,3600000-(now-budget.since))};
+      // Only trusted server-side inventory scans can retain work without a
+      // visible page. They keep the global/per-owner queue bounds but do not
+      // consume the quota for player-requested preview configurations.
+      if(!options.background && (budget.count>=maxNewPerHour || (!owners.has(owner)&&owners.size>=4096)))return {key,status:"busy",retryAfterMs:Math.max(60000,3600000-(now-budget.since))};
       const lane = renderLanes === 1 ? 0 : laneForItem?.(item) ?? 0;
       if (!Number.isInteger(lane) || lane < 0 || lane >= renderLanes) throw new Error("Invalid thumbnail render lane");
-      budget.count++;owners.set(owner,budget);
-      jobs.set(key,{ item,owner,requestedAt:now,lane }); start(lane);
+      if (!options.background) { budget.count++;owners.set(owner,budget); }
+      jobs.set(key,{ item,owner,requestedAt:now,lane,background:options.background === true }); start(lane);
       return { key,status:"queued",retryAfterMs:500 };
     },
     async read(key: string): Promise<Buffer | null> {

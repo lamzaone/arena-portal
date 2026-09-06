@@ -17,6 +17,30 @@ async function fixture(run:(directory:string)=>Promise<void>){
 }
 function requireSeparator(){return process.platform==='win32'?'\\':'/';}
 
+test("cache-only lookups never render or consume a creation budget",async()=>fixture(async directory=>{
+  let renders=0;
+  const cache=createThumbnailCache({directory,maxNewPerHour:1,render:async()=>{renders++;return Buffer.from('snapshot');}});
+  const missing=await cache.lookup(item);
+  assert.equal(missing.status,'unavailable');
+  await cache.drain();assert.equal(renders,0);
+  await cache.request(item,'player');await cache.drain();
+  assert.equal((await cache.lookup(item)).status,'ready');
+  assert.equal(renders,1);
+}));
+
+test("trusted background jobs survive closed pages and retain queue bounds",async t=>fixture(async directory=>{
+  let clock=Date.now();t.mock.method(Date,'now',()=>clock);
+  const gate=deferred(),started=deferred();const seeds:number[]=[];
+  const cache=createThumbnailCache({directory,maxPending:2,maxNewPerHour:0,render:async value=>{seeds.push(value.seed);started.resolve();await gate.promise;return Buffer.from('snapshot');}});
+  assert.equal((await cache.request(item,'owner',{background:true})).status,'queued');await started.promise;
+  const second=await cache.request({...item,seed:2},'owner',{background:true});
+  assert.equal((await cache.request({...item,seed:3},'owner',{background:true})).status,'busy');
+  clock+=60000;gate.resolve();await cache.drain();
+  assert.deepEqual(seeds,[661,2]);
+  assert.equal((await cache.read(second.key))?.toString(),'snapshot');
+  assert.equal((await cache.request({...item,seed:3},'owner')).status,'busy','Untrusted requests keep their normal quota');
+}));
+
 test("deduplicates simultaneous exact renders and survives cache recreation",async()=>fixture(async(directory)=>{
   let calls=0;
   const cache=createThumbnailCache({directory,render:async()=>{calls++;return Buffer.from('test-image');}});
