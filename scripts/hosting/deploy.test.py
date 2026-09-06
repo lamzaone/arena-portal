@@ -17,11 +17,13 @@ import json, os, pathlib, stat, sys
 root = pathlib.Path(os.environ["TRANSPORT_ROOT"])
 args = sys.argv[1:]
 command = pathlib.Path(sys.argv[0]).name
-stage = "sleep" if command == "sleep" else "upload" if command == "scp" else "activate" if args[-1].startswith("bash -s -- ") else "prepare"
+stage = ("sleep" if command == "sleep" else "public-ip" if command == "curl" else
+         "version" if args == ["-V"] else "upload" if command == "scp" else
+         "check" if args[-1] == "true" else "activate" if args[-1].startswith("bash -s -- ") else "prepare")
 log = root / "calls.jsonl"
 calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
 event = {"stage": stage, "args": args}
-if stage != "sleep":
+if stage in ("prepare", "upload", "activate", "check"):
     key = pathlib.Path(args[args.index("-i") + 1])
     hosts = pathlib.Path(next(arg.split("=", 1)[1] for arg in args if arg.startswith("UserKnownHostsFile=")))
     event["key_mode"] = stat.S_IMODE(key.stat().st_mode)
@@ -42,6 +44,10 @@ if stage == "upload":
     (root / "uploaded-archive").write_bytes(archive.read_bytes() if code == 0 else b"partial upload")
 if error:
     print(error, file=sys.stderr)
+if code == 0 and stage == "public-ip":
+    print("198.51.100.42")
+if code == 0 and stage == "version":
+    print("OpenSSH fixture client", file=sys.stderr)
 raise SystemExit(code)
 '''
 
@@ -62,7 +68,7 @@ class TransportTests(unittest.TestCase):
         self.runner_temp.mkdir()
         commands = self.root / "bin"
         commands.mkdir()
-        for command in ("ssh", "scp", "sleep"):
+        for command in ("ssh", "scp", "sleep", "curl"):
             path = commands / command
             path.write_text(TRANSPORT)
             path.chmod(0o700)
@@ -73,9 +79,9 @@ class TransportTests(unittest.TestCase):
                         SSH_KNOWN_HOSTS="[ssh.example.test]:2222 ssh-ed25519 fixture",
                         RELEASE_ID="sha-123-2")
 
-    def deploy(self, outcomes=None, **overrides):
+    def deploy(self, outcomes=None, arguments=(), **overrides):
         env = dict(self.env, TRANSPORT_OUTCOMES=json.dumps(outcomes or {}), **overrides)
-        result = subprocess.run(["bash", "scripts/hosting/deploy.sh"], cwd=self.project,
+        result = subprocess.run(["bash", "scripts/hosting/deploy.sh", *arguments], cwd=self.project,
                                 env=env, capture_output=True, text=True, timeout=10)
         self.assertNotIn(self.env["SSH_PRIVATE_KEY"], result.stdout + result.stderr)
         self.assertEqual(list(self.runner_temp.iterdir()), [], "Credentials must be cleaned up")
@@ -168,6 +174,45 @@ class TransportTests(unittest.TestCase):
             with self.subTest(overrides=overrides):
                 (self.root / "calls.jsonl").unlink(missing_ok=True)
                 result = self.deploy(**overrides)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.calls(), [])
+
+    def test_ssh_check_needs_no_build_and_only_runs_a_read_only_remote_command(self):
+        (self.project / "dist/freakhosting-release.tar.gz").unlink()
+        result = self.deploy(arguments=("--check-ssh",), RELEASE_ID="")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([call["stage"] for call in self.calls()], ["public-ip", "version", "check"])
+        self.assertIn("198.51.100.42", result.stdout)
+        self.assertIn("UTC", result.stdout)
+        self.assertIn("OpenSSH fixture client", result.stderr)
+        self.assertIn("SSH authentication and remote command succeeded", result.stdout)
+        call = self.calls("check")[0]
+        self.assertEqual(call["args"][-1], "true")
+        for option in ("-vv", "-n", "-T", "StrictHostKeyChecking=yes", "BatchMode=yes", "IdentitiesOnly=yes"):
+            self.assertIn(option, call["args"])
+        self.assertEqual(call["key_mode"], 0o600)
+        self.assertEqual(call["hosts_mode"], 0o600)
+
+    def test_ssh_check_preserves_reset_details_without_deploying_or_retrying(self):
+        result = self.deploy({"check": [[255, RESET]]}, arguments=("--check-ssh",))
+        self.assertEqual(result.returncode, 255, result.stderr)
+        self.assertEqual([call["stage"] for call in self.calls()], ["public-ip", "version", "check"])
+        self.assertIn(RESET, result.stderr)
+        self.assertIn("SSH diagnostic failed", result.stderr)
+        self.assertNotIn("remote command succeeded", result.stdout)
+
+    def test_public_ip_lookup_failure_does_not_prevent_the_ssh_check(self):
+        result = self.deploy({"public-ip": [[6, "Could not resolve IP lookup service"]]}, arguments=("--check-ssh",))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self.calls("check")), 1)
+        self.assertIn("public IPv4 lookup unavailable", result.stderr)
+        self.assertIn("SSH authentication and remote command succeeded", result.stdout)
+
+    def test_unknown_or_extra_arguments_cannot_accidentally_start_a_deployment(self):
+        for arguments in (("--check",), ("--check-ssh", "extra")):
+            with self.subTest(arguments=arguments):
+                (self.root / "calls.jsonl").unlink(missing_ok=True)
+                result = self.deploy(arguments=arguments)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(self.calls(), [])
 

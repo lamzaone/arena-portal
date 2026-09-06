@@ -3,18 +3,31 @@
 set -euo pipefail
 # OpenSSH diagnostics are classified below; keep their language predictable.
 export LC_ALL=C
+mode=deploy
+if (($# > 0)); then
+  if [[ "$#" != 1 || "$1" != --check-ssh ]]; then
+    echo 'Usage: bash scripts/hosting/deploy.sh [--check-ssh]' >&2
+    exit 2
+  fi
+  mode=check
+fi
 : "${SSH_HOST:?Set FREAKHOSTING_SSH_HOST}"
 : "${SSH_USER:?Set FREAKHOSTING_SSH_USER}"
 : "${SSH_PRIVATE_KEY:?Set FREAKHOSTING_SSH_KEY}"
 : "${SSH_KNOWN_HOSTS:?Set FREAKHOSTING_KNOWN_HOSTS}"
-: "${RELEASE_ID:?Set RELEASE_ID}"
 : "${RUNNER_TEMP:?Set RUNNER_TEMP}"
+if [[ "$mode" == deploy ]]; then
+  : "${RELEASE_ID:?Set RELEASE_ID}"
+  if ! [[ "$RELEASE_ID" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]{0,100}$ ]]; then
+    echo '::error::Invalid release ID.' >&2
+    exit 1
+  fi
+fi
 SSH_PORT="${SSH_PORT:-22}"
 if ! [[ "$SSH_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ &&
         "$SSH_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_.-]*$ &&
-        "$SSH_PORT" =~ ^[0-9]{1,5}$ &&
-        "$RELEASE_ID" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]{0,100}$ ]]; then
-  echo '::error::Invalid SSH host, user, port or release ID.' >&2
+        "$SSH_PORT" =~ ^[0-9]{1,5}$ ]]; then
+  echo '::error::Invalid SSH host, user or port.' >&2
   exit 1
 fi
 SSH_PORT="$((10#$SSH_PORT))"
@@ -23,7 +36,7 @@ if ((SSH_PORT < 1 || SSH_PORT > 65535)); then
   exit 1
 fi
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.."
-if [[ ! -s dist/freakhosting-release.tar.gz || ! -s scripts/hosting/activate.sh ]]; then
+if [[ "$mode" == deploy ]] && [[ ! -s dist/freakhosting-release.tar.gz || ! -s scripts/hosting/activate.sh ]]; then
   echo '::error::The release archive or activation script is missing.' >&2
   exit 1
 fi
@@ -40,6 +53,31 @@ options=(-i "$key" -o BatchMode=yes -o IdentitiesOnly=yes
   -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$hosts"
   -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
 target="$SSH_USER@$SSH_HOST"
+
+if [[ "$mode" == check ]]; then
+  printf 'SSH diagnostic UTC: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  # Report this runner's outbound address for provider log correlation. HTTPS
+  # and SSH may use different NAT routes; the provider must confirm the SSH IP.
+  # No SSH credentials or destination details are sent to this lookup service.
+  if runner_ip="$(curl --ipv4 --fail --silent --show-error --connect-timeout 5 --max-time 10 https://api.ipify.org)" &&
+      [[ "$runner_ip" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
+    printf 'Runner public IPv4 (observed over HTTPS): %s\n' "$runner_ip"
+  else
+    echo '::warning::Runner public IPv4 lookup unavailable; continuing with SSH.' >&2
+  fi
+  ssh -V
+  echo 'Checking SSH authentication and a read-only command (one attempt; no upload or activation)'
+  # Verbose SSH logs show protocol/authentication/session stages, never private
+  # key contents. Keep the deployment's pinned host keys and identity options.
+  if ssh -vv -n -T "${options[@]}" -p "$SSH_PORT" "$target" 'true'; then
+    echo 'SSH authentication and remote command succeeded. This diagnostic did not deploy a release.'
+    exit 0
+  else
+    status=$?
+    echo "::error::SSH diagnostic failed (exit $status). Share this check's UTC time, runner IP and SSH error with FreakHosting so they can correlate firewall and SSH logs. No release was uploaded or activated." >&2
+    exit "$status"
+  fi
+fi
 
 # Only idempotent preparation and archive upload may be retried. Authentication,
 # host verification, remote command and disk failures need intervention.

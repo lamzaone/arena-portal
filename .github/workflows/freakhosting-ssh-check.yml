@@ -1,0 +1,32 @@
+name: FreakHosting SSH check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Keep manual checks in their own queue so they cannot replace a pending release.
+concurrency:
+  group: freakhosting-ssh-check-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ssh-check:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Test SSH diagnostic behavior
+        run: python3 scripts/hosting/deploy.test.py
+      - name: Check SSH without building or deploying
+        env:
+          SSH_HOST: ${{ secrets.FREAKHOSTING_SSH_HOST }}
+          SSH_PORT: ${{ secrets.FREAKHOSTING_SSH_PORT }}
+          SSH_USER: ${{ secrets.FREAKHOSTING_SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.FREAKHOSTING_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.FREAKHOSTING_KNOWN_HOSTS }}
+        run: bash scripts/hosting/deploy.sh --check-ssh

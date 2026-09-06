@@ -78,6 +78,11 @@ migrations and DNS changes are not performed by this workflow.
 
 ## SSH connection failures
 
+This deployment targets an Enhance **shared webhosting account**, not a VPS.
+FreakHosting manages the SSH daemon, network filtering and hosting resource
+policy. Troubleshooting must use the website panel, website-user SSH access or
+provider support; it does not require root access or changes to server services.
+
 **Artifact successfully uploaded** means the archive was saved to GitHub Actions
 storage. The subsequent **Upload and activate on FreakHosting** step must still
 connect to the hosting account and transfer it there. An artifact download link
@@ -92,6 +97,28 @@ are not necessarily the SSH endpoint. Confirm with FreakHosting that external
 SSH is enabled for the website account and that GitHub Actions runners are
 allowed through any firewall/IP restrictions or SSH connection limits. Being
 able to open the panel's terminal does not verify external access.
+
+For a quick check, use **Actions > FreakHosting SSH check > Run workflow** on
+`main`. It reuses the existing secrets without building, installing Chromium,
+uploading an archive or activating a release. It prints the UTC timestamp,
+runner's public IPv4 address observed over HTTPS and verbose SSH connection
+stages, then authenticates and executes only `true`. Host-key verification stays
+strict. No private key contents are printed. If public-IP lookup is unavailable,
+the SSH test still runs. This check is available even when automatic deployment
+is disabled, and has its own queue so it cannot replace a pending release.
+
+Give FreakHosting the timestamp, IP and SSH failure from **that diagnostic run**.
+Another run may use a different outbound address; the provider should confirm
+the actual SSH source IP in their logs because HTTPS and SSH can take different
+NAT routes. A successful check verifies authentication and remote command access
+at that moment; it does not prove that an earlier reset is resolved permanently.
+
+The build and browser smoke test run on GitHub, so their CPU/memory usage is not
+the hosting account's usage. Live thumbnail generation runs inside the website
+account. If the provider confirms there are no configured RAM/CPU caps, do not
+attribute a pre-authentication SSH reset to those caps without server evidence.
+Ask support to distinguish network filtering, SSH connection limits, host-wide
+resource pressure and any separate process limits in their logs.
 
 `scripts/hosting/deploy.sh` labels connection, transfer and activation separately.
 It retries temporary network failures during directory preparation and archive
