@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="350 0 850 765" fill="none">
-  <title>TAPPED emblem</title>
-  <desc>Beveled platinum T, crimson blade and lightning point inside a segmented crimson crosshair. Transparent background.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="390 180 800 560" fill="none">
+  <title>TAPPED emblem without crosshair</title>
+  <desc>Beveled platinum T, crimson blade and lightning point. Transparent background.</desc>
   <defs>
     <!-- Crimson is the base pigment; the other reds describe its lit and shaded bevels. -->
     <linearGradient id="crimson" x1="466" y1="78" x2="1060" y2="696" gradientUnits="userSpaceOnUse">
@@ -67,24 +67,6 @@
     <path id="top-face" d="M434 215H1138L1038 308H523Z"/>
     <path id="stem-face" d="M729 342H892L628 600V466H603Z"/>
   </defs>
-
-  <g id="crosshair">
-    <!-- Kept in one removable group so the standalone variation shares the exact monogram. -->
-    <path d="M734 47C572 64 436 196 418 366L466 364C483 221 587 113 733 90ZM802 47C966 64 1100 198 1118 366H1071C1053 224 950 113 802 90ZM418 418C435 574 566 693 733 710V666C590 648 483 545 466 418ZM1118 418C1101 575 967 694 802 710V666C946 648 1053 545 1071 418Z" fill="#650a1d" stroke="#090609" stroke-width="9" stroke-linejoin="round"/>
-    <path d="M728 54C569 76 443 203 425 360L459 357C481 216 586 104 728 83ZM808 54C967 76 1093 203 1111 360L1078 357C1056 216 950 104 808 83ZM426 424C446 576 573 687 728 702V673C588 653 483 550 459 424ZM1110 424C1090 576 963 687 808 702V673C948 653 1053 550 1078 424Z" fill="url(#crimson)"/>
-    <path d="M726 65C577 88 456 211 438 354M810 65C960 88 1080 211 1098 354M439 429C461 571 581 675 726 691M1097 429C1075 571 955 675 810 691" stroke="#ed4966" stroke-width="8"/>
-    <path d="M726 65C577 88 456 211 438 354M810 65C960 88 1080 211 1098 354M439 429C461 571 581 675 726 691M1097 429C1075 571 955 675 810 691" stroke="#f7a1b0" stroke-width="2"/>
-    <path d="M728 54V83L726 65ZM808 54V83L810 65ZM425 360L438 354L459 357ZM1078 357L1098 354L1111 360ZM426 424L439 429L459 424ZM1078 424L1097 429L1110 424ZM728 673V702L726 691ZM808 673V702L810 691Z" fill="#f07288"/>
-    <path d="M728 83C586 104 481 216 459 357M808 83C950 104 1056 216 1078 357M459 424C483 550 588 653 728 673M1078 424C1053 550 948 653 808 673" stroke="#8a0b27" stroke-width="3"/>
-    <!-- The original has slender inward stems on its vertical targeting ticks. -->
-    <path d="M763 118H773V172H763ZM763 580H773V632H763Z" fill="#a60e2f" stroke="#090609" stroke-width="8" stroke-linejoin="round"/>
-    <path d="M767 120V169M767 583V631" stroke="#ed6b83" stroke-width="2"/>
-    <path d="M751 14H785V122H751ZM751 630H785V723H751ZM369 377H502V407H369ZM1035 377H1165V407H1035Z" fill="#6c091f" stroke="#090609" stroke-width="9" stroke-linejoin="round"/>
-    <path d="M754 17H782V118H754ZM754 634H782V719H754ZM373 380H498V403H373ZM1039 380H1161V403H1039Z" fill="url(#tick-face)" stroke="#b91034" stroke-width="2"/>
-    <path d="M761 23H776V111H761ZM761 640H776V712H761ZM380 386H491V397H380ZM1046 386H1154V397H1046Z" stroke="#f3a2b2" stroke-width="1.5"/>
-    <path d="M754 17H782L776 23H761ZM754 634H782L776 640H761ZM373 380H498L491 386H380ZM1039 380H1161L1154 386H1046Z" fill="#f4c1cb"/>
-    <path d="M754 118L761 111H776L782 118ZM754 719L761 712H776L782 719ZM373 403L380 397H491L498 403ZM1039 403L1046 397H1154L1161 403Z" fill="#790b23"/>
-  </g>
 
   <g id="monogram">
     <!-- A narrow lower lightning point sits behind the separate upper blade. -->
