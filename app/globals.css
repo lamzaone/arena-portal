@@ -2348,7 +2348,7 @@ main,
 .skip-link:focus-visible { transform: translateY(0); }
 #main-content:focus { outline: none; }
 
-:where(a, button, summary, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+:where(a, button, summary, input, select, textarea, [tabindex]:not([tabindex="-1"])):not(:where([data-search-input])):focus-visible {
   outline: 2px solid #ffd0d8 !important;
   outline-offset: 3px;
 }
@@ -4255,7 +4255,7 @@ main.staff-page :is(
   .economy-admin-form,
   .redeem-builder,
   .redeem-picker
-) :is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), select) {
+) :is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), select):not(:where([data-search-input])) {
   min-height: var(--admin-control-height);
   border-radius: var(--theme-radius, 4px);
 }
@@ -4266,7 +4266,7 @@ main.staff-page :is(
   .staff-vip-edit,
   .economy-admin-actions,
   .economy-crate-candidate
-) :is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), select) {
+) :is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), select):not(:where([data-search-input])) {
   min-height: var(--admin-compact-control-height);
 }
 

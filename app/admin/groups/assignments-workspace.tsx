@@ -1482,7 +1482,7 @@ export function AssignmentsWorkspace({
         <div>
           <p className={styles.eyebrow}><UsersRound aria-hidden="true" /> Access control</p>
           <h2 id={`${generatedId}-title`}>Assignments</h2>
-          <p>Manage Admin, VIP, and custom access from one player-focused workspace. Every action targets one exact Arena membership and scope.</p>
+          <p>Find a player, review their access, and update the selected membership.</p>
         </div>
         <span className={styles.liveSource}><Database aria-hidden="true" /> Live Arena records</span>
       </header>

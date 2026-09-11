@@ -51,7 +51,7 @@ export default async function RedeemCodeAdminPage({
       <AdminPageHeader
         id="redeem-code-management-title"
         title="Redeem codes"
-        description="Build a reward once, choose its global claim limit, and let every player claim that code only once from the server or portal."
+        description="Create Token and item rewards, set claim limits, and manage your campaigns. Each player can claim a code once."
         access={access}
       />
 

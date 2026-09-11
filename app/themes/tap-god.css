@@ -703,7 +703,7 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
   text-shadow: 0 0 12px rgba(255, 23, 68, .68);
 }
 
-.player-profile-page.profile-theme-tap-god :where(a, button, summary, input, select, textarea, [tabindex]:not([tabindex="-1"])):not(:where(.site-header *, .account-nav *)):focus-visible {
+.player-profile-page.profile-theme-tap-god :where(a, button, summary, input, select, textarea, [tabindex]:not([tabindex="-1"])):not(:where(.site-header *, .account-nav *, [data-search-input])):focus-visible {
   outline: 2px solid var(--tap-red) !important;
   outline-offset: 3px;
 }
@@ -1283,7 +1283,7 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
   html.global-theme-tap-god,
   html[data-theme="tap_god"][data-theme-surface~="global"]
 ):not(:has(.player-profile-page[data-theme-owner="profile"])) body :where(
-  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([data-search-input]),
   select,
   textarea
 ) {
@@ -1298,7 +1298,7 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
   html.global-theme-tap-god,
   html[data-theme="tap_god"][data-theme-surface~="global"]
 ):not(:has(.player-profile-page[data-theme-owner="profile"])) body :where(
-  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([data-search-input]),
   select,
   textarea
 ):is(:hover, :focus, :focus-visible) {
@@ -1838,7 +1838,6 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
   .loadout-saved-list,
   .loadout-market-preview,
   .appeal-ban,
-  .case-conversation,
   .case-message,
   .case-player-reply
 ) {

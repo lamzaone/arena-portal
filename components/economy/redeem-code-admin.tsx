@@ -89,6 +89,8 @@ export function RedeemCodeAdmin({
   const [customUses, setCustomUses] = useState("10");
   const [rewards, setRewards] = useState<SelectedReward[]>([]);
   const [pickerQuery, setPickerQuery] = useState(searchQuery);
+  const [campaignQuery, setCampaignQuery] = useState("");
+  const [campaignStatus, setCampaignStatus] = useState("all");
   const [pickerItems, setPickerItems] = useState(catalogue);
   const [knownCatalogueItems, setKnownCatalogueItems] = useState(() =>
     new Map(catalogue.map((item) => [item.id, item])),
@@ -107,6 +109,13 @@ export function RedeemCodeAdmin({
   const selectedRewards = rewards.flatMap((reward) => {
     const item = catalogueById.get(reward.catalogueId);
     return item ? [{ reward, item }] : [];
+  });
+  const visibleCodes = codes.filter((campaign) => {
+    const matchesStatus = campaignStatus === "all" ||
+      (campaignStatus === "live" ? campaign.enabled : !campaign.enabled);
+    const query = campaignQuery.trim().toLocaleLowerCase();
+    return matchesStatus && (!query ||
+      `${campaign.displayName} ${campaign.codeHint}`.toLocaleLowerCase().includes(query));
   });
 
   function addReward(catalogueId: number) {
@@ -388,7 +397,7 @@ export function RedeemCodeAdmin({
                   </li>
                 ))}
               </PaginatedItemGrid>
-            ) : <p>Search the catalogue below, then add cases, skins, stickers, agents, or other existing items.</p>}
+            ) : <p>Use the item catalogue to add cases, skins, stickers, agents, or other existing items.</p>}
           </div>
           <AsyncButton
             className="button button-primary redeem-create-button"
@@ -446,11 +455,15 @@ export function RedeemCodeAdmin({
       ) : null}
 
       <section className="redeem-code-list">
-        <div className="section-heading compact">
-          <p className="eyebrow"><Gift aria-hidden="true" /> Active &amp; saved campaigns</p>
-          <h2>Recent redeem codes</h2>
+        <div className="staff-section-heading">
+          <div><p className="eyebrow"><Gift aria-hidden="true" /> Saved campaigns</p><h2>Recent redeem codes</h2></div>
+          <span aria-live="polite">{visibleCodes.length} of {codes.length} campaigns</span>
         </div>
-        {codes.length ? <PaginatedItemGrid className="redeem-code-grid" label="Redeem codes">{codes.map((item) => (
+        {codes.length ? <div className="staff-campaign-filters">
+          <SearchField id="staff-campaign-search" label="Find a campaign" value={campaignQuery} onValueChange={setCampaignQuery} placeholder="Campaign label or code hint" />
+          <label>Status<select value={campaignStatus} onChange={(event) => setCampaignStatus(event.target.value)}><option value="all">All campaigns</option><option value="live">Live</option><option value="paused">Paused</option></select></label>
+        </div> : null}
+        {visibleCodes.length ? <PaginatedItemGrid className="redeem-code-grid" label="Redeem codes" resetKey={`${campaignQuery}:${campaignStatus}`}>{visibleCodes.map((item) => (
           <article className={`panel redeem-code-card ${item.enabled ? "is-live" : "is-paused"}`} key={item.id}>
             <header><div><span className="redeem-code-hint">{item.codeHint}</span><h3>{item.displayName}</h3></div><span className={`redeem-code-status ${item.enabled ? "" : "is-paused"}`}>{item.enabled ? "Live" : "Paused"}</span></header>
             <div className="redeem-code-meta"><span><Coins aria-hidden="true" /> {item.tokenAmount.toLocaleString()} Tokens</span><span><TicketCheck aria-hidden="true" /> {usesLabel(item)}</span></div>
@@ -467,7 +480,7 @@ export function RedeemCodeAdmin({
               {item.enabled ? "Pause code" : "Make live"}
             </AsyncButton>
           </article>
-        ))}</PaginatedItemGrid> : <p className="empty-copy">No redeem campaigns have been created yet.</p>}
+        ))}</PaginatedItemGrid> : <p className="empty-copy">{codes.length ? "No campaigns match these filters. Try a different label or status." : "No redeem campaigns have been created yet."}</p>}
       </section>
       {notice ? <PortalToast message={notice} onDismiss={() => setNotice(null)} /> : null}
       {error ? <PortalToast variant="danger" message={error} onDismiss={() => setError(null)} /> : null}

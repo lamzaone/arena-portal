@@ -91,7 +91,7 @@ function HitMap({ stats }: { stats: HitboxStats }) {
 
   return (
     <article className="panel hit-map-panel">
-      <div className="panel-heading"><div><h2>Hit distribution</h2><p>Real K4 LevelRanks hitgroup data.</p></div><span>{formatCount(stats.totalHits)} hits</span></div>
+      <div className="panel-heading"><div><h2>Hit distribution</h2><p>Where your shots connect.</p></div><span>{formatCount(stats.totalHits)} hits</span></div>
       {stats.totalHits ? <div className="hit-map-layout">
         <figure className="hit-map-figure">
           <svg className="hit-map-body" viewBox="0 0 180 350" role="img" aria-labelledby="hit-map-title hit-map-description">
@@ -112,7 +112,7 @@ function HitMap({ stats }: { stats: HitboxStats }) {
         <div className="hit-map-list" aria-label="Hit distribution details">
           {cells.map((cell) => <div key={cell.key}><span><i style={{ "--hit-intensity": hitIntensity(cell.value, max) } as CSSProperties} aria-hidden="true" />{cell.label}</span><strong>{formatCount(cell.value)}</strong><small>{cell.percent.toFixed(1)}%</small></div>)}
         </div>
-      </div> : <p className="empty-copy">Hitgroup tracking has no saved hits for this player yet. K4 LevelRanks will populate this after combat damage is recorded.</p>}
+      </div> : <p className="empty-copy">No hits recorded yet. Play a few rounds to see your accuracy by body zone.</p>}
       <div className="hit-map-damage"><span>Health damage <strong>{formatCount(stats.healthDamage)}</strong></span><span>Armor damage <strong>{formatCount(stats.armorDamage)}</strong></span></div>
     </article>
   );
@@ -211,7 +211,7 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
 
   return (
     <main
-      className={`tapped-page player-profile-page ${profileThemeSurface.className}`}
+      className={`tapped-page player-profile-page${showSettings ? " profile-settings-page" : ""} ${profileThemeSurface.className}`}
       data-profile-theme={profileTheme.key}
       data-theme={profileTheme.key}
       data-theme-surface="profile"
@@ -223,6 +223,7 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
         <SiteHeader
           authenticated={isAuthenticated}
           themeKey={profileThemeKey ?? null}
+          settingsActive={isOwnProfile && settingsOpen}
         />
         <section className="public-player-hero shared-profile-hero">
           <div className="public-player-copy">
@@ -253,7 +254,7 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
           <aside className="public-rank-card">
             <span>SERVER PLACEMENT</span>
             <strong>#{profile.leaderboardPosition ?? "-"}</strong>
-            <small>Top player ranking</small>
+            <small>{profile.leaderboardTotal ? `of ${formattedPlacementTotal} ranked players` : "No placement yet"}</small>
             <div><span>K4 rank</span><b style={{ color: levelRank.hex }}>{levelRank.tag}</b><small>{levelRank.name}</small></div>
             {isOwnProfile ? <Link className="button button-secondary profile-loadout-link" href="/inventory">Open inventory <ArrowRight aria-hidden="true" /></Link> : null}
           </aside>
@@ -276,20 +277,20 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
             </> : null}
           </section> : undefined}
         >
-        {isOwnProfile && dashboard && (!dashboard.sourceConnected ? <div className="notice notice-info"><AlertTriangle aria-hidden="true" /><span>Game-data access is not configured yet. Add <code>GAME_DATABASE_URL</code> to populate this profile.</span></div> : !dashboard.hasGameRecord ? <div className="notice notice-info"><AlertTriangle aria-hidden="true" /><span>No K4 LevelRanks record exists for this Steam account yet. Join the server once and refresh this page.</span></div> : null)}
+        {isOwnProfile && dashboard && (!dashboard.sourceConnected ? <div className="notice notice-info"><AlertTriangle aria-hidden="true" /><span>Your game statistics are temporarily unavailable. Your inventory and account settings are still accessible.</span></div> : !dashboard.hasGameRecord ? <div className="notice notice-info"><AlertTriangle aria-hidden="true" /><span>Your ranking starts with your first game. Join the server, then refresh your profile.</span></div> : null)}
         {!showSettings && isOwnProfile && activeBan ? <div className="notice notice-danger"><Ban aria-hidden="true" /><span><strong>You have an active ban.</strong> Appeal it here with your explanation and keep track of staff responses.</span><Link href="/appeals">Open appeal</Link></div> : null}
         {!showSettings && isOwnProfile && activeComms.length > 0 ? <div className="notice notice-warning"><VolumeX aria-hidden="true" /><span>You currently have {activeComms.length} active communication restriction{activeComms.length === 1 ? "" : "s"}.</span></div> : null}
 
         {!showSettings ? <section className="stat-grid public-player-stat-grid" aria-label={`${displayName}'s statistics`}>
           <article><span>Playtime</span><strong>{formatPlaytime(profile.playtimeSeconds)}</strong><Clock3 aria-hidden="true" /></article>
-          <article className="profile-points-stat" style={{ "--level-rank-color": levelRank.hex } as CSSProperties}><span>Points</span><strong>{levelRank.name}</strong><span className="stat-foot">{formatCount(profile.points)} total points</span><ShieldCheck aria-hidden="true" /></article>
-          <article className="level-rank-stat"><span>K4 rank</span><strong>RANKED #{placement}</strong><span className="stat-foot">out of {formattedPlacementTotal}</span></article>
-          <article><span>K / D</span><strong>{kdRatio}</strong><span className="stat-foot">{profile.kills} kills / {profile.deaths} deaths</span></article>
+          <article className="profile-points-stat" style={{ "--level-rank-color": levelRank.hex } as CSSProperties}><span>Ranking points</span><strong>{formatCount(profile.points)}</strong><span className="stat-foot">{levelRank.name}</span><ShieldCheck aria-hidden="true" /></article>
+          <article className="level-rank-stat"><span>Server position</span><strong>#{placement}</strong><span className="stat-foot">{profile.leaderboardTotal ? `of ${formattedPlacementTotal} players` : "Not ranked yet"}</span></article>
+          <article><span>Kill / death ratio</span><strong>{kdRatio}</strong><span className="stat-foot">{formatCount(profile.kills)} kills / {formatCount(profile.deaths)} deaths</span></article>
         </section> : null}
 
         {!showSettings ? <section className="content-grid public-player-content-grid shared-profile-content">
           <article className="panel">
-            <div className="panel-heading"><h2>Groups</h2><p>Portal identity, VIPCore, and Admins.Core.</p></div>
+            <div className="panel-heading"><h2>Memberships &amp; groups</h2><p>Your community identity.</p></div>
             <div className="group-role-sections">
               <section className="group-role-section group-role-identity">
                 <div><h3>Profile groups</h3><small>{identity.groups.length ? `${identity.groups.length} active` : "None assigned"}</small></div>
@@ -298,14 +299,14 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
             </div>
           </article>
           <article className="panel combat-panel">
-            <div className="panel-heading"><h2>Combat profile</h2><p>From K4 LevelRanks.</p></div>
+            <div className="panel-heading"><h2>Combat performance</h2><p>Lifetime server stats.</p></div>
             <div className="combat-stat-grid">
               <div><span>Kills</span><strong>{formatCount(profile.kills)}</strong><Crosshair aria-hidden="true" /></div>
               <div><span>Deaths</span><strong>{formatCount(profile.deaths)}</strong><Ban aria-hidden="true" /></div>
               <div><span>Headshot rate</span><strong>{headshotPercent}%</strong><Target aria-hidden="true" /></div>
               <div><span>Noscopes</span><strong>{formatCount(profile.noscopes)}</strong><UserRound aria-hidden="true" /></div>
             </div>
-            <div className="rank-progress" aria-label={`K4 rank progression: ${levelRank.name}`}><div><span>{levelRank.name}</span><strong>{nextLevelRank ? `${formatCount(Math.max(0, nextLevelRank.points - profile.points))} points to ${nextLevelRank.tag}` : "Highest K4 rank"}</strong></div><div className="rank-progress-track"><i style={{ width: `${rankProgress}%`, backgroundColor: levelRank.hex }} /></div></div>
+            <div className="rank-progress" aria-label={`K4 rank progression: ${levelRank.name}`}><div><span>{levelRank.name}</span><strong>{nextLevelRank ? `${formatCount(Math.max(0, nextLevelRank.points - profile.points))} points to ${nextLevelRank.tag}` : "Highest K4 rank"}</strong></div><div className="rank-progress-track" role="progressbar" aria-label="Progress to next rank" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(rankProgress)}><i style={{ width: `${rankProgress}%`, backgroundColor: levelRank.hex }} /></div></div>
           </article>
           <HitMap stats={profile.hitStats} />
         </section> : null}
@@ -315,7 +316,6 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
           <div className="history-grid">
             <article className="panel history-panel"><div className="panel-heading"><h3>Bans</h3><Link href="/appeals">Appeals <ArrowRight aria-hidden="true" /></Link></div>{dashboard.bans.length ? <ul className="record-list">{dashboard.bans.map((ban) => { const moderator = ban.adminSteamId ? relatedPlayerIdentities[ban.adminSteamId] : undefined; return <li key={ban.id}><div><strong>{ban.reason}</strong><span>By {moderator ? <PlayerIdentity player={moderator} variant="inline" showSteamId={false} /> : ban.adminName || "Console"} · {formatDate(ban.createdAt)}</span></div><b className={isActiveSanction(ban.expiresAt) ? "badge badge-danger" : "badge"}>{isActiveSanction(ban.expiresAt) ? "Active" : "Expired"}</b></li>; })}</ul> : <p className="empty-copy">No ban history found.</p>}</article>
             <article className="panel history-panel"><div className="panel-heading"><h3>Gags &amp; mutes</h3><span>{dashboard.sanctions.length} record{dashboard.sanctions.length === 1 ? "" : "s"}</span></div>{dashboard.sanctions.length ? <ul className="record-list">{dashboard.sanctions.map((sanction) => { const moderator = sanction.adminSteamId ? relatedPlayerIdentities[sanction.adminSteamId] : undefined; return <li key={sanction.id}><div><strong>{sanction.kind} · {sanction.reason}</strong><span>By {moderator ? <PlayerIdentity player={moderator} variant="inline" showSteamId={false} /> : sanction.adminName || "Console"} · {formatDate(sanction.createdAt)}</span></div><b className={isActiveSanction(sanction.expiresAt) ? "badge badge-warning" : "badge"}>{isActiveSanction(sanction.expiresAt) ? "Active" : "Expired"}</b></li>; })}</ul> : <p className="empty-copy">No gag or mute history found.</p>}</article>
-            <article className="panel history-panel"><div className="panel-heading"><h3>Kick history</h3><span>Audit bridge</span></div><p className="empty-copy">The current game stack does not persist kicks. The Swiftly audit bridge can add kick reasons here without changing existing moderation tables.</p></article>
           </div>
         </section> : null}
         </ProfileTabs>

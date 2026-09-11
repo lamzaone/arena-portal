@@ -651,8 +651,8 @@ export default async function VipPage({ searchParams }: VipPageProps) {
         <section className="catalog-hero" aria-labelledby="vip-title">
           <div>
             <p className="tapped-kicker"><Crown aria-hidden="true" /> TAPPED.RO membership</p>
-            <h1 id="vip-title">Choose your<br /><span>advantage.</span></h1>
-            <p>Published VIPCore tiers and connected community memberships, delivered as auditable inventory items. Your active access is checked again after Steam login.</p>
+            <h1 id="vip-title">VIP <span>memberships</span></h1>
+            <p>Compare benefits, choose your duration, and request a membership. Sign in to see your current tier and upgrade options.</p>
           </div>
           <aside
             className={`catalog-signal ${styles.currentSignal}`}
@@ -682,12 +682,12 @@ export default async function VipPage({ searchParams }: VipPageProps) {
 
         <VipSectionNav active="memberships" />
 
-        {listingStorageError ? <aside className={styles.storageNotice} role="status"><PackageCheck aria-hidden="true" /><div><strong>{listingMigrationNeeded ? "Membership listing tables are missing." : "Membership listings are being connected."}</strong><span>{listingMigrationNeeded ? "Staff must apply db/020_identity_group_listings.sql to the portal database." : "Configure the portal database to publish EUR donation options."}</span></div></aside> : null}
+        {listingStorageError ? <aside className={styles.storageNotice} role="status"><PackageCheck aria-hidden="true" /><div><strong>Membership offers are temporarily unavailable.</strong><span>{listingMigrationNeeded ? "The membership catalogue is being updated. Please check back shortly." : "Please check back shortly or contact staff for help with your membership."}</span></div></aside> : null}
 
         {listings.length ? (
           <section className={`vip-catalogue ${styles.catalogue}`} aria-labelledby="vip-memberships-title">
             <div className="catalog-section-heading">
-              <div><p className="tapped-kicker"><Sparkles aria-hidden="true" /> Published membership items</p><h2 id="vip-memberships-title">Choose your access.</h2></div>
+              <div><p className="tapped-kicker"><Sparkles aria-hidden="true" /> Available tiers</p><h2 id="vip-memberships-title">Compare memberships</h2></div>
               <p>Each donation creates a private purchase request. Staff delivers the exact inventory item shown here; activate it from your inventory when it arrives.</p>
             </div>
             <div className={styles.listingGrid}>
@@ -730,7 +730,7 @@ export default async function VipPage({ searchParams }: VipPageProps) {
                           src={artwork}
                           alt=""
                           fill
-                          sizes="(max-width: 46rem) calc(100vw - 3rem), (max-width: 58rem) 46vw, (max-width: 80rem) 30vw, 19vw"
+                          sizes="(max-width: 46rem) calc(100vw - 3rem), (max-width: 68rem) 46vw, 30vw"
                           className={styles.artworkImage}
                         />
                       ) : (
@@ -738,7 +738,7 @@ export default async function VipPage({ searchParams }: VipPageProps) {
                       )}
                       <div className={styles.artworkShade} data-part="artwork-shade" aria-hidden="true" />
                       <div className={styles.cardTopline}>
-                        <span>{sourceName(firstListing)}</span>
+                        <span>{tier ? "VIP" : "Community"}</span>
                         <span className={styles.relationshipBadge} data-part="relationship">
                           {relationshipLabel(relationship, currentTier)}
                         </span>
@@ -785,7 +785,7 @@ export default async function VipPage({ searchParams }: VipPageProps) {
                       {featuredBenefits.length ? (
                         <div className={styles.benefitBlock} data-part="benefits">
                           <div className={styles.benefitHeading}>
-                            <span>Enabled VIPCore benefits</span>
+                            <span>Membership benefits</span>
                             <strong>{tier?.benefits.length ?? 0}</strong>
                           </div>
                           <ul className={styles.benefitPreview}>
@@ -858,15 +858,16 @@ export default async function VipPage({ searchParams }: VipPageProps) {
                                     </small>
                                   ) : null}
                                 </div>
-                                <div className={styles.conversionPreview} data-part="conversion-preview">
-                                  <RefreshCw aria-hidden="true" />
-                                  <span>
-                                    <small className={styles.previewLabel}>{conversionPreview.label}</small>
-                                    <strong>{conversionPreview.title}</strong>
+                                <details className={styles.conversionPreview} data-part="conversion-preview" open={action.disabled}>
+                                  <summary>
+                                    <RefreshCw aria-hidden="true" />
+                                    <span><small className={styles.previewLabel}>{conversionPreview.label}</small><strong>{conversionPreview.title}</strong></span>
+                                  </summary>
+                                  <div className={styles.previewDetails}>
                                     <small>{conversionPreview.detail}</small>
                                     {conversionPreview.rate ? <small className={styles.previewRate}>{conversionPreview.rate}</small> : null}
-                                  </span>
-                                </div>
+                                  </div>
+                                </details>
                                 <div className={styles.offerPurchase}>
                                   <span>{price(listing.euroPriceCents)}</span>
                                   {!session ? (
@@ -893,9 +894,9 @@ export default async function VipPage({ searchParams }: VipPageProps) {
                 );
               })}
             </div>
-            <p className="catalog-disclaimer"><ShieldCheck aria-hidden="true" /> Purchase buttons open a private donation request with staff until a payment checkout is connected. Conversion previews use the current canonical Token rates; listing data and the exact result are recalculated atomically when the inventory item is activated.</p>
+            <p className="catalog-disclaimer"><ShieldCheck aria-hidden="true" /> Request your membership through a private ticket with staff, then activate the delivered item from your inventory. Any time conversion is confirmed before activation.</p>
           </section>
-        ) : !listingStorageError ? <section className="catalog-empty"><Crown aria-hidden="true" /><h2>No membership listings are published.</h2><p>Staff can publish monthly, permanent, custom, VIPCore, or Admins.Core group items from the group listing editor.</p></section> : null}
+        ) : !listingStorageError ? <section className="catalog-empty"><Crown aria-hidden="true" /><h2>No membership offers yet.</h2><p>New membership options will appear here when they become available.</p></section> : null}
 
         <section className="vip-roster" aria-labelledby="vip-roster-title">
           <div className="catalog-section-heading">

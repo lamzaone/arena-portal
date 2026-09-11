@@ -2,7 +2,7 @@
   display: flex;
   align-items: center;
   gap: .7rem;
-  margin: 1rem 20px 0;
+  margin: 1rem 0 0;
   padding: .8rem 1rem;
   color: var(--theme-text-muted);
   border: 1px solid color-mix(in srgb, var(--theme-accent-soft) 36%, var(--theme-border));
@@ -53,9 +53,9 @@
 
 .listingGrid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: .85rem;
-  align-items: stretch;
+  align-items: start;
 }
 
 .tierCard {
@@ -95,8 +95,8 @@
   position: relative;
   isolation: isolate;
   display: grid;
-  min-height: 10.5rem;
-  aspect-ratio: 16 / 8.5;
+  min-height: 8rem;
+  aspect-ratio: 16 / 5.5;
   overflow: hidden;
   place-items: center;
   border-bottom: 1px solid color-mix(in srgb, var(--vip-tier-color) 24%, var(--theme-border));
@@ -164,9 +164,8 @@
 }
 
 .relationshipBadge {
-  max-width: 70%;
+  max-width: 75%;
   padding: .32rem .48rem;
-  overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--vip-tier-color) 55%, var(--theme-border));
   border-radius: max(0px, calc(var(--theme-radius) - 2px));
   color: color-mix(in srgb, var(--vip-tier-soft) 72%, var(--theme-text));
@@ -174,8 +173,8 @@
   font-family: var(--font-body);
   font-weight: 850;
   letter-spacing: .035em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.3;
+  text-align: right;
   backdrop-filter: blur(8px);
 }
 
@@ -452,9 +451,6 @@
 .offerScope > svg { width: .78rem; height: .78rem; flex: 0 0 auto; }
 
 .conversionPreview {
-  display: grid;
-  grid-template-columns: 1rem minmax(0, 1fr);
-  gap: .5rem;
   padding: .65rem;
   border: 1px solid color-mix(in srgb, var(--vip-tier-color) 30%, var(--theme-border));
   border-left: 3px solid color-mix(in srgb, var(--vip-tier-color) 72%, var(--theme-border-strong));
@@ -462,18 +458,32 @@
   background: color-mix(in srgb, var(--vip-tier-color) 6%, var(--theme-control-bg));
 }
 
-.conversionPreview > svg {
+.conversionPreview summary {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr) auto;
+  align-items: start;
+  gap: .5rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.conversionPreview summary::-webkit-details-marker { display: none; }
+.conversionPreview summary::after { content: "+"; color: var(--theme-accent-strong); font-size: 1rem; }
+.conversionPreview[open] summary::after { content: "−"; }
+.conversionPreview summary:focus-visible { outline: 2px solid var(--theme-focus-ring); outline-offset: 4px; }
+.conversionPreview summary > svg {
   width: .88rem;
   height: .88rem;
   margin-top: .1rem;
   color: var(--vip-tier-color);
 }
 
-.conversionPreview > span {
+.conversionPreview summary > span, .previewDetails {
   display: grid;
   min-width: 0;
   gap: .18rem;
 }
+.previewDetails { padding: .65rem 0 0 1.5rem; }
 
 .conversionPreview strong {
   overflow-wrap: anywhere;
@@ -539,18 +549,14 @@
 
 .offerAction:disabled { cursor: not-allowed; opacity: .68; }
 
-@media (max-width: 80rem) {
-  .listingGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-
-@media (max-width: 58rem) {
+@media (max-width: 68rem) {
   .listingGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 46rem) {
-  .storageNotice { margin-right: 4px; margin-left: 4px; }
+  .storageNotice { margin-right: 0; margin-left: 0; }
   .listingGrid { grid-template-columns: 1fr; }
-  .artwork { min-height: 11rem; aspect-ratio: 16 / 7.8; }
+  .artwork { min-height: 8rem; aspect-ratio: 16 / 5.5; }
 }
 
 @media (max-width: 25rem) {

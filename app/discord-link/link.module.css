@@ -1,0 +1,16 @@
+.panel { max-width: 58rem; margin: 1.5rem 0 3rem; padding: clamp(1.25rem, 4vw, 2.5rem); }
+.copy { max-width: 42rem; }
+.copy h2, .linked h2 { margin: .5rem 0 .75rem; }
+.copy p, .linked p { line-height: 1.65; color: var(--text-muted, #a9b0be); }
+.form { margin-top: 1.75rem; }
+.form label { display: block; margin-bottom: .65rem; font-weight: 700; }
+.controls { display: flex; flex-wrap: wrap; gap: .75rem; }
+.controls input { flex: 1 1 15rem; min-width: 0; min-height: 3rem; padding: .85rem 1rem; border: 1px solid var(--border, #383d48); border-radius: .5rem; background: var(--surface, #151820); color: inherit; font: inherit; font-family: monospace; letter-spacing: .08em; }
+.controls input:focus-visible { outline: 2px solid var(--accent, #e3ab42); outline-offset: 3px; }
+.controls input:disabled { opacity: .65; }
+.help { margin: .8rem 0 0; font-size: .875rem; line-height: 1.6; color: var(--text-muted, #a9b0be); }
+.error { margin-top: 1rem; color: #ffb4b4; line-height: 1.6; }
+.linked { display: flex; gap: 1rem; align-items: flex-start; }
+.linked > svg { flex-shrink: 0; width: 1.6rem; height: 1.6rem; margin-top: .5rem; color: #a2d8af; }
+.linked code { overflow-wrap: anywhere; }
+@media (max-width: 480px) { .controls > button { width: 100%; } }

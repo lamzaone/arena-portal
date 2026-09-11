@@ -186,13 +186,6 @@ a.identity:focus-visible .name {
   transition-delay: 0s;
 }
 
-:global(.player-profile-preview-layer) {
-  position: fixed;
-  z-index: 1200;
-  inset: 0;
-  pointer-events: none;
-}
-
 .hoverCard:focus-visible,
 .hoverCard:focus-within {
   outline: 2px solid var(--player-identity-focus, var(--theme-focus-ring, rgba(255, 113, 133, 0.68)));

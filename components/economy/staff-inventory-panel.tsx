@@ -388,6 +388,7 @@ export function StaffInventoryPanel({
           <Link className="button button-secondary" href="#staff-inventory-items">
             <Archive aria-hidden="true" /> Inventory
           </Link>
+          {canAdjustTokens || canManage || canManageLoadouts ? <Link className="button button-secondary" href="#staff-inventory-controls"><SlidersHorizontal aria-hidden="true" /> Staff tools</Link> : null}
           {canGrant ? <Link className="button button-primary" href="#staff-grant-item"><PackagePlus aria-hidden="true" /> Grant item</Link> : null}
         </nav>
       </header>

@@ -28,6 +28,8 @@ Before starting the portal, run `npm run thumbnails:warm -- --models --profile=s
 
 ## Start locally
 
+The Discord bridge is implemented in [`discord-bot/`](discord-bot/README.md): private account-link codes, managed group roles, and queued staff alerts from the portal and game. See [setup and migrations](docs/discord-bot-plan.md) before enabling it; run the bot as a separate Node process.
+
 1. Copy `.env.example` to `.env.local` and set `SITE_URL` to `http://localhost:3000` for local testing.
 2. Set a long random `SESSION_SECRET` for CSRF protection on sensitive staff actions.
 3. Run `npm install`, then `npm run dev`.

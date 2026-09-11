@@ -1,4 +1,5 @@
-import { Crown, Crosshair, Medal, Trophy, UsersRound } from "lucide-react";
+import Link from "next/link";
+import { Crown, Crosshair, Medal, Trophy, UsersRound, X } from "lucide-react";
 
 import { PlayerIdentity } from "@/components/player-identity";
 import { PlayerSearchField } from "@/components/player-search-field";
@@ -42,14 +43,14 @@ export default async function RankingPage({ searchParams }: RankingPageProps) {
   return (
     <PortalShell authenticated={Boolean(session)} className="ranking-page">
         <section className="ranking-hero" aria-labelledby="ranking-title">
-          <div><p className="tapped-kicker"><Trophy aria-hidden="true" /> TAPPED.RO leaderboard</p><h1 id="ranking-title">Every point<br /><span>has a place.</span></h1><p>The top ARENA.TAPPED.RO players, ordered by K4 LevelRanks points. Each displayed rank is derived from the current K4 rank ladder.</p></div>
-          <aside className="ranking-summary"><Crown aria-hidden="true" /><span>COMPETITORS</span><strong>{leaderboard.total.toLocaleString()}</strong><small>25 players per page</small></aside>
+          <div><p className="tapped-kicker"><Trophy aria-hidden="true" /> Competition</p><h1 id="ranking-title">Player <span>ranking</span></h1><p>Find a player, compare combat stats, and follow the climb. Ordered by total ranking points.</p></div>
+          <aside className="ranking-summary"><Crown aria-hidden="true" /><span>{query ? "MATCHING PLAYERS" : "RANKED PLAYERS"}</span><strong>{leaderboard.total.toLocaleString()}</strong><small>{leaderboard.pageSize} players per page</small></aside>
         </section>
 
         <section className="leaderboard-section" aria-labelledby="leaderboard-title">
           <div className="leaderboard-heading">
             <div>
-              <p className="tapped-kicker"><Crosshair aria-hidden="true" /> Monthly race</p>
+              <p className="tapped-kicker"><Crosshair aria-hidden="true" /> Live standings</p>
               <h2 id="leaderboard-title">{query ? "Search results" : "Top players"}</h2>
             </div>
             <div className="leaderboard-controls">
@@ -72,16 +73,17 @@ export default async function RankingPage({ searchParams }: RankingPageProps) {
               <span>Page {page} / {totalPages}</span>
             </div>
           </div>
+          {query ? <div className="ranking-query-summary" role="status"><span>{leaderboard.total.toLocaleString()} result{leaderboard.total === 1 ? "" : "s"} for <strong>“{query}”</strong></span><Link href="/ranking"><X aria-hidden="true" /> Clear search</Link></div> : null}
           {leaderboard.players.length ? (
             <DataTable caption="ARENA player ranking">
                 <thead>
                   <tr>
-                    <th scope="col">Position</th>
-                    <th scope="col">K4 rank</th>
+                    <th scope="col" aria-label="Position">#</th>
                     <th scope="col">Player</th>
                     <th scope="col">Points</th>
-                    <th scope="col">K</th>
-                    <th scope="col">D</th>
+                    <th scope="col">K4 rank</th>
+                    <th scope="col">Kills</th>
+                    <th scope="col">Deaths</th>
                     <th scope="col">MVPs</th>
                   </tr>
                 </thead>
@@ -99,22 +101,10 @@ export default async function RankingPage({ searchParams }: RankingPageProps) {
                       >
                         <td>
                           <span
-                            className={`leaderboard-position position-${Math.min(position, 3)}`}
+                            className={`leaderboard-position${position <= 3 ? ` position-${position}` : ""}`}
                           >
-                            {position <= 3 ? (
-                              <Medal aria-hidden="true" />
-                            ) : (
-                              `#${position}`
-                            )}
-                          </span>
-                        </td>
-                        <td>
-                          <span
-                            className="leaderboard-level-rank"
-                            style={{ color: levelRank.hex }}
-                          >
-                            <strong>{levelRank.tag}</strong>
-                            <small>{levelRank.name}</small>
+                            {position <= 3 ? <Medal aria-hidden="true" /> : null}
+                            <span>#{position}</span>
                           </span>
                         </td>
                         <td>
@@ -134,6 +124,12 @@ export default async function RankingPage({ searchParams }: RankingPageProps) {
                         <td className="points-cell">
                           {player.points.toLocaleString()}
                         </td>
+                        <td>
+                          <span className="leaderboard-level-rank" style={{ color: levelRank.hex }}>
+                            <strong>{levelRank.tag}</strong>
+                            <small>{levelRank.name}</small>
+                          </span>
+                        </td>
                         <td>{player.kills.toLocaleString()}</td>
                         <td>{player.deaths.toLocaleString()}</td>
                         <td>{player.mvps.toLocaleString()}</td>
@@ -145,13 +141,13 @@ export default async function RankingPage({ searchParams }: RankingPageProps) {
           ) : (
             <div className="ranking-empty">
               <UsersRound aria-hidden="true" />
-              <h2>No ranking data yet.</h2>
+              <h2>{query ? "No matching players." : "No ranking data yet."}</h2>
               <p>
-                Players appear here after K4 LevelRanks has created their
-                server record.
+                {query ? "Try another player name or SteamID64, or clear the search to see all players." : "Join the server and play a few rounds to enter the leaderboard."}
               </p>
             </div>
           )}
+          {leaderboard.players.length ? <p className="ranking-scroll-hint">Scroll the table to compare rank and combat stats <span aria-hidden="true">→</span></p> : null}
           <LinkPagination
             page={page}
             totalPages={totalPages}

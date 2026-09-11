@@ -259,7 +259,7 @@ export default async function GroupListingsPage({
       <AdminPageHeader
         id="group-listings-title"
         title="Group listings"
-        description="Publish any connected group as an inventory-backed EUR donation or Token-market item, and manage standalone VIP perk offers from one compact workspace."
+        description="Manage membership packages and individual perk offers for the VIP page and Marketplace."
         access={access}
       />
 
@@ -274,6 +274,8 @@ export default async function GroupListingsPage({
 
       {activeView === "memberships" ? (
         <>
+          <details className="staff-create-disclosure staff-listing-create" open={listingSnapshot.listings.length === 0}>
+          <summary><PackageCheck aria-hidden="true" /><span><strong>Create a membership listing</strong><small>Choose a group, duration, price, and storefront.</small></span></summary>
           <section className="staff-record-section" data-ui="group-listing-create">
             <div className="staff-section-heading"><div><p className="tapped-kicker"><PackageCheck aria-hidden="true" /> Inventory-backed access</p><h2>Create listing</h2></div><span>{listingSnapshot.groups.length} connected groups</span></div>
             <p className={styles.intro}>One definition controls both storefronts. EUR opens a private donation request from the VIP page; Tokens publish the same inventory item in the marketplace. Players activate the item from their inventory.</p>
@@ -309,6 +311,7 @@ export default async function GroupListingsPage({
               <button className="button button-primary" type="submit"><PackageCheck aria-hidden="true" /> Create inventory listing</button>
             </form>
           </section>
+          </details>
 
           <section className="staff-record-section" data-ui="group-listing-catalogue">
             <div className="staff-section-heading"><div><p className="tapped-kicker"><Crown aria-hidden="true" /> Publication matrix</p><h2>Membership listings</h2></div><span>{listingSnapshot.listings.length} variants</span></div>

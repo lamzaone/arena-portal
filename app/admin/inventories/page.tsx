@@ -247,7 +247,7 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
         <AdminPageHeader
           id="player-inventories-title"
           title="Player inventories"
-          description="Find a player by display name or SteamID64, then inspect their live wallet, loadout, and paged item inventory without leaving the staff workspace."
+          description="Find a player to review their items, Token wallet, and loadout."
           access={access}
         />
 

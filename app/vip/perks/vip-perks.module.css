@@ -1,12 +1,12 @@
 .page {
-  --perk-accent: var(--theme-accent, #f0b35a);
+  --perk-accent: var(--theme-accent-strong);
 }
 
-.hero { margin-bottom: 1rem; }
+.hero { margin-bottom: 0; }
 
 .shop,
 .roster {
-  padding: clamp(1rem, 3vw, 2rem) 0;
+  padding: 24px 0 0;
 }
 
 .storageNotice {
@@ -17,8 +17,8 @@
   padding: .8rem 1rem;
   color: var(--theme-text-muted, #aeb5c3);
   border: 1px solid color-mix(in srgb, var(--perk-accent) 36%, transparent);
-  border-radius: .75rem;
-  background: color-mix(in srgb, var(--perk-accent) 7%, var(--theme-panel, rgba(15,16,20,.94)));
+  border-radius: var(--theme-radius);
+  background: color-mix(in srgb, var(--perk-accent) 7%, var(--theme-surface));
 }
 .storageNotice > svg { width: 1.1rem; color: var(--perk-accent); }
 .storageNotice > div { display: grid; gap: .1rem; }
@@ -34,8 +34,8 @@
   padding: 0.65rem 0.85rem;
   color: var(--theme-text-muted, #aeb5c3);
   border: 1px solid var(--theme-border, rgba(255, 255, 255, 0.12));
-  border-radius: 0.65rem;
-  background: var(--theme-panel-subtle, rgba(12, 13, 17, 0.78));
+  border-radius: var(--theme-radius);
+  background: var(--theme-surface-muted);
 }
 
 .balance svg { width: 1rem; color: var(--perk-accent); }
@@ -44,7 +44,7 @@
 .shopGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
+  gap: 12px;
 }
 
 .shopCard {
@@ -53,15 +53,18 @@
   min-width: 0;
   padding: 1rem;
   border: 1px solid var(--theme-border, rgba(255, 255, 255, 0.12));
-  border-radius: 0.9rem;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--perk-accent) 6%, transparent), var(--theme-panel, rgba(15, 16, 20, 0.94)) 45%);
+  border-radius: var(--theme-radius);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--perk-accent) 6%, var(--theme-surface)), var(--theme-surface) 45%);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
 }
+.shopCard:focus-within, .shopCard:hover { border-color: var(--theme-border-strong); box-shadow: 0 0 22px color-mix(in srgb, var(--perk-accent) 8%, transparent); }
 
 .shopCard > p {
-  min-height: 3rem;
+  min-height: 0;
   margin: 0.75rem 0 1rem;
   color: var(--theme-text-muted, #aeb5c3);
   line-height: 1.5;
+  font-size: 13px;
 }
 
 .cardHeading { display: flex; align-items: center; gap: 0.75rem; }
@@ -77,7 +80,7 @@
   flex: 0 0 auto;
   color: var(--perk-accent);
   border: 1px solid color-mix(in srgb, var(--perk-accent) 40%, transparent);
-  border-radius: 0.65rem;
+  border-radius: var(--theme-radius);
   background: color-mix(in srgb, var(--perk-accent) 10%, transparent);
 }
 
@@ -118,7 +121,7 @@
 .perkName small { color: var(--theme-text-muted, #aeb5c3); text-transform: capitalize; }
 
 .sources { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-.sources span { padding: 0.25rem 0.45rem; color: var(--theme-text-muted, #aeb5c3); border: 1px solid var(--theme-border, rgba(255, 255, 255, 0.12)); border-radius: 999px; background: var(--theme-panel-subtle, rgba(9, 10, 13, 0.7)); font-size: 0.72rem; }
+.sources span { padding: 0.25rem 0.45rem; color: var(--theme-text-muted); border: 1px solid var(--theme-border); border-radius: var(--theme-radius); background: var(--theme-surface-muted); font-size: 0.72rem; }
 
 .empty {
   display: grid;
@@ -128,8 +131,8 @@
   text-align: center;
   color: var(--theme-text-muted, #aeb5c3);
   border: 1px dashed var(--theme-border, rgba(255, 255, 255, 0.16));
-  border-radius: 0.85rem;
-  background: var(--theme-panel-subtle, rgba(9, 10, 13, 0.62));
+  border-radius: var(--theme-radius);
+  background: var(--theme-surface-muted);
 }
 
 .empty svg { width: 1.5rem; color: var(--perk-accent); }
@@ -148,4 +151,7 @@
   .offerRow { align-items: stretch; flex-direction: column; }
   .offerRow button,
   .offerRow a { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shopCard { transition: none; }
 }

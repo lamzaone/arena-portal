@@ -1,4 +1,6 @@
 import { AlertTriangle, MessageSquareText, Shield } from "lucide-react";
+import Link from "next/link";
+import styles from "../tickets/support-workspace.module.css";
 
 import { CaseStatusTag } from "@/components/case-status-tag";
 import { CaseConversation } from "@/components/case-conversation";
@@ -23,7 +25,7 @@ function canReply(appeal: BanAppeal) {
 }
 
 function EvidenceGuidance() {
-  return <p className="evidence-guidance"><strong>Evidence:</strong> paste video evidence as an unlisted YouTube link in your appeal or reply. Attach up to five PNG, JPEG, or WebP screenshots (5 MB each) below.</p>;
+  return <p className="evidence-guidance"><strong>Evidence:</strong> include an unlisted YouTube link in your message, or attach up to five PNG, JPEG, or WebP screenshots (5 MB each).</p>;
 }
 
 function AppealReplyForm({ appeal }: { appeal: BanAppeal }) {
@@ -57,7 +59,7 @@ function AppealCase({ appeal, playerIdentities, viewerSteamId }: { appeal: BanAp
     </header>
     <AppealBanContext ban={appeal.ban} playerIdentities={playerIdentities} />
     <CaseConversation openingBody={appeal.body} openingAt={appeal.createdAt} openingAuthorId={viewerSteamId} messages={appeal.messages} viewerSteamId={viewerSteamId} playerIdentities={playerIdentities} />
-    {canReply(appeal) ? <AppealReplyForm appeal={appeal} /> : <p className="case-closed-copy">This appeal has been closed by staff.</p>}
+    {canReply(appeal) ? <details className={styles.reply}><summary><MessageSquareText aria-hidden="true" /> Reply to staff</summary><AppealReplyForm appeal={appeal} /></details> : <p className="case-closed-copy">This appeal has been closed by staff.</p>}
   </ThemedPlayerContainer>;
 }
 
@@ -77,15 +79,19 @@ export default async function AppealsPage({ searchParams }: AppealsPageProps) {
 
   return (
     <PortalShell authenticated className="tapped-page">
-      <PageHeading eyebrow={<><Shield aria-hidden="true" /> Moderation review</>} title="Ban appeals" description="Appeals are unlocked only while a current ban is active." />
+      <PageHeading eyebrow={<><Shield aria-hidden="true" /> Player support</>} title="Ban appeals" description="Review a current ban, submit an appeal, and follow staff replies." actions={<div className={styles.headingActions}><a className="button button-secondary" href="#appeal-history">Your appeals ({appeals.length})</a><Link className="button button-quiet" href="/tickets">Support tickets</Link></div>} />
       {params.submitted && <PortalToast message="Your appeal was submitted. Staff updates will appear below." />}
       {params.replied && <PortalToast message="Your reply and any screenshots were sent to staff." />}
       {params.error && <PortalToast variant="danger" message={error} />}
+      <div className={styles.workspace}>
+      <div className={styles.composer}>
       {activeBan ? <>
         <section className="panel appeal-ban"><div><span className="badge badge-danger">Active ban</span><h2>{activeBan.reason}</h2><p>Issued by <AdminProfileMention steamId={activeBan.adminSteamId} name={activeBan.adminSteamId ? playerIdentities[activeBan.adminSteamId]?.displayName ?? activeBan.adminName : activeBan.adminName} player={activeBan.adminSteamId ? playerIdentities[activeBan.adminSteamId] : undefined} /> on {formatDate(activeBan.createdAt)}. {activeBan.expiresAt ? `Ends ${formatDate(activeBan.expiresAt)}.` : "This ban is permanent until reviewed."}</p></div></section>
         {storageReady && appealEligibility?.eligible ? <form className="panel form-panel" action="/api/appeals" method="post" encType="multipart/form-data"><input type="hidden" name="action" value="create" /><div className="panel-heading"><h2>Submit an appeal</h2><p>Explain what happened, take responsibility where appropriate, and include useful context.</p></div><label htmlFor="appeal-body">Your appeal</label><textarea id="appeal-body" name="body" minLength={20} maxLength={5000} required placeholder="Write your appeal…" /><label htmlFor="appeal-screenshots">Screenshots (optional)<input id="appeal-screenshots" name="screenshots" type="file" accept="image/png,image/jpeg,image/webp" multiple /></label><EvidenceGuidance /><button className="button button-primary" type="submit">Submit appeal</button></form> : !storageReady ? <div className="notice notice-info"><AlertTriangle aria-hidden="true" /> Portal storage needs to be configured before appeals can be submitted.</div> : <div className="notice notice-warning"><AlertTriangle aria-hidden="true" /> Your previous appeal was closed as still banned. You can submit a new appeal after <strong>{appealEligibility?.eligibleAt ? formatPortalDate(appealEligibility.eligibleAt) : "the seven-day review cooldown"}</strong>.</div>}
       </> : <section className="empty-state compact"><h2>No active ban</h2><p>Your account has no active ban, so no appeal is needed. Previous appeals remain visible below if any exist.</p></section>}
-      <section className="history-section case-history"><div className="section-heading compact"><p className="eyebrow">Appeal timeline</p><h2>Your submitted appeals</h2></div>{appeals.length ? <div className="case-card-list">{appeals.map((appeal) => <AppealCase key={appeal.id} appeal={appeal} playerIdentities={playerIdentities} viewerSteamId={session.steamId} />)}</div> : <p className="empty-copy">No appeals have been submitted from this Steam account.</p>}</section>
+      </div>
+      <section id="appeal-history" className={`history-section case-history ${styles.history}`} aria-label="Appeal history"><div className="section-heading compact"><h2>Your appeals</h2><span className={styles.count}>{appeals.filter(canReply).length} open / {appeals.length} total</span></div>{appeals.length ? <div className="case-card-list">{appeals.map((appeal) => <AppealCase key={appeal.id} appeal={appeal} playerIdentities={playerIdentities} viewerSteamId={session.steamId} />)}</div> : <p className="empty-copy">No appeals have been submitted from this Steam account.</p>}</section>
+      </div>
     </PortalShell>
   );
 }

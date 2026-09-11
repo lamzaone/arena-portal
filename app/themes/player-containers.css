@@ -49,7 +49,7 @@ html body [data-theme-surface="player-container"][data-ui="player-owned-containe
 }
 
 html body [data-theme-surface="player-container"][data-ui="player-owned-container"]
-  :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea):not(:where([data-search-input])) {
   border-color: var(--theme-border);
   border-radius: var(--theme-control-radius);
   color: var(--theme-text);
@@ -57,7 +57,7 @@ html body [data-theme-surface="player-container"][data-ui="player-owned-containe
 }
 
 html body [data-theme-surface="player-container"][data-ui="player-owned-container"]
-  :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea):is(:hover, :focus) {
+  :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea):not(:where([data-search-input])):is(:hover, :focus) {
   border-color: var(--theme-border-strong);
   background: var(--theme-control-hover);
 }

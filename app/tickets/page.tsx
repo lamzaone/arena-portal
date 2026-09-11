@@ -1,4 +1,6 @@
 import { AlertTriangle, MessageSquareText, Ticket } from "lucide-react";
+import Link from "next/link";
+import styles from "./support-workspace.module.css";
 
 import { CaseStatusTag } from "@/components/case-status-tag";
 import { CaseConversation } from "@/components/case-conversation";
@@ -40,7 +42,7 @@ function canReply(ticket: PortalTicket) {
 }
 
 function EvidenceGuidance() {
-  return <p className="evidence-guidance"><strong>Evidence:</strong> paste video evidence as an unlisted YouTube link in your message. Attach up to five PNG, JPEG, or WebP screenshots (5 MB each) below.</p>;
+  return <p className="evidence-guidance"><strong>Evidence:</strong> include an unlisted YouTube link in your message, or attach up to five PNG, JPEG, or WebP screenshots (5 MB each).</p>;
 }
 
 function TicketReplyForm({ ticket }: { ticket: PortalTicket }) {
@@ -58,11 +60,11 @@ function TicketCase({ ticket, playerIdentities, viewerSteamId }: { ticket: Porta
   const owner = playerIdentities[viewerSteamId];
   return <ThemedPlayerContainer as="article" className="case-card" containerKind="case" ownerSteamId={viewerSteamId} profileThemeKey={owner?.profileThemeKey}>
     <header className="case-card-header">
-      <div><span className="case-card-category">{ticket.category.replace(/-/g, " ")}</span><h3>{ticket.subject}</h3></div>
+      <div><span className="case-card-category">{ticket.category.replace(/-/g, " ")}<span className={styles.caseNumber}>#{ticket.id}</span></span><h3>{ticket.subject}</h3></div>
       <CaseStatusTag status={ticket.status} />
     </header>
     <CaseConversation openingBody={ticket.body} openingAt={ticket.createdAt} openingAuthorId={viewerSteamId} messages={ticket.messages} viewerSteamId={viewerSteamId} playerIdentities={playerIdentities} />
-    {canReply(ticket) ? <TicketReplyForm ticket={ticket} /> : <p className="case-closed-copy">This ticket is closed. Open a new ticket if you need further help.</p>}
+    {canReply(ticket) ? <details className={styles.reply}><summary><MessageSquareText aria-hidden="true" /> Reply to staff</summary><TicketReplyForm ticket={ticket} /></details> : <p className="case-closed-copy">This ticket is closed. Open a new ticket if you need further help.</p>}
   </ThemedPlayerContainer>;
 }
 
@@ -97,13 +99,17 @@ export default async function TicketsPage({ searchParams }: TicketsPageProps) {
 
   return (
     <PortalShell authenticated className="tapped-page">
-      <PageHeading eyebrow={<><Ticket aria-hidden="true" /> Player support</>} title="Tickets" description="Open a private ticket for a player report, an admin report, a bug, account help, or a VIP purchase request." />
+      <PageHeading eyebrow={<><Ticket aria-hidden="true" /> Player support</>} title="Tickets" description="Get private help with reports, bugs, your account, or a membership purchase." actions={<div className={styles.headingActions}><a className="button button-secondary" href="#ticket-history">Your tickets ({tickets.length})</a><Link className="button button-quiet" href="/appeals">Ban appeals</Link></div>} />
       {params.submitted && <PortalToast message="Ticket created. You can follow staff updates and reply below." />}
       {params.replied && <PortalToast message="Your reply and any screenshots were sent to staff." />}
       {params.error && <PortalToast variant="danger" message={error} />}
       {invalidListingRequest ? <PortalToast variant="danger" message="That membership listing is no longer published. Choose a current option from the VIP page." /> : null}
-      {storageReady ? <form className="panel form-panel" action="/api/tickets" method="post" encType="multipart/form-data"><input type="hidden" name="action" value="create" />{vipRequest && requestedListing ? <input type="hidden" name="listingId" value={requestedListing.id} /> : null}<div className="panel-heading"><h2>{vipRequest ? "Request membership purchase" : "Create ticket"}</h2><p>{vipRequest ? "The published listing, duration, and current EUR price were resolved by the server and are locked below. They will be verified again when you submit." : "Reports will be sent to the Discord staff workflow once the bot is connected."}</p></div><div className="form-grid"><label htmlFor="ticket-category">Category<select id="ticket-category" name="category" defaultValue={vipRequest ? "vip" : "player-report"}><option value="player-report">Report a player</option><option value="admin-report">Report an admin</option><option value="bug">Bug report</option><option value="account">Account help</option><option value="vip">VIP purchase</option><option value="other">Other</option></select></label><label htmlFor="ticket-subject">Subject<input id="ticket-subject" name="subject" minLength={4} maxLength={120} required placeholder="Short summary" defaultValue={vipRequest?.subject} readOnly={Boolean(vipRequest)} /></label></div><label htmlFor="ticket-body">Details<textarea id="ticket-body" name="body" minLength={10} maxLength={5000} required placeholder="Include names, approximate time, map, and any evidence links that can help staff investigate." defaultValue={vipRequest?.body} readOnly={Boolean(vipRequest)} /></label><label htmlFor="ticket-screenshots">Screenshots (optional)<input id="ticket-screenshots" name="screenshots" type="file" accept="image/png,image/jpeg,image/webp" multiple /></label><EvidenceGuidance /><button className="button button-primary" type="submit"><MessageSquareText aria-hidden="true" /> Submit ticket</button></form> : <div className="notice notice-info"><AlertTriangle aria-hidden="true" /> Portal storage needs to be configured before tickets can be submitted.</div>}
-      <section className="history-section case-history"><div className="section-heading compact"><p className="eyebrow">Your cases</p><h2>Ticket history</h2></div>{tickets.length ? <div className="case-card-list">{tickets.map((ticket) => <TicketCase key={ticket.id} ticket={ticket} playerIdentities={playerIdentities} viewerSteamId={session.steamId} />)}</div> : <p className="empty-copy">No tickets have been created from this Steam account.</p>}</section>
+      <div className={styles.workspace}>
+      <div className={styles.composer}>
+      {storageReady ? <form className="panel form-panel" action="/api/tickets" method="post" encType="multipart/form-data"><input type="hidden" name="action" value="create" />{vipRequest && requestedListing ? <input type="hidden" name="listingId" value={requestedListing.id} /> : null}<div className="panel-heading"><h2>{vipRequest ? "Request membership purchase" : "Create ticket"}</h2><p>{vipRequest ? "Review the membership, duration, and price below. These details are fixed for this request." : "Choose a category and describe what happened. Staff replies appear in your ticket history."}</p></div><div className="form-grid"><label htmlFor="ticket-category">Category<select id="ticket-category" name="category" defaultValue={vipRequest ? "vip" : "player-report"}><option value="player-report">Report a player</option><option value="admin-report">Report an admin</option><option value="bug">Bug report</option><option value="account">Account help</option><option value="vip">VIP purchase</option><option value="other">Other</option></select></label><label htmlFor="ticket-subject">Subject<input id="ticket-subject" name="subject" minLength={4} maxLength={120} required placeholder="Short summary" defaultValue={vipRequest?.subject} readOnly={Boolean(vipRequest)} /></label></div><label htmlFor="ticket-body">Details<textarea id="ticket-body" name="body" minLength={10} maxLength={5000} required placeholder="Include names, approximate time, map, and any evidence links that can help staff investigate." defaultValue={vipRequest?.body} readOnly={Boolean(vipRequest)} /></label><label htmlFor="ticket-screenshots">Screenshots (optional)<input id="ticket-screenshots" name="screenshots" type="file" accept="image/png,image/jpeg,image/webp" multiple /></label><EvidenceGuidance /><button className="button button-primary" type="submit"><MessageSquareText aria-hidden="true" /> Submit ticket</button></form> : <div className="notice notice-info"><AlertTriangle aria-hidden="true" /> Portal storage needs to be configured before tickets can be submitted.</div>}
+      </div>
+      <section id="ticket-history" className={`history-section case-history ${styles.history}`} aria-label="Ticket history"><div className="section-heading compact"><h2>Ticket history</h2><span className={styles.count}>{tickets.filter(canReply).length} open / {tickets.length} total</span></div>{tickets.length ? <div className="case-card-list">{tickets.map((ticket) => <TicketCase key={ticket.id} ticket={ticket} playerIdentities={playerIdentities} viewerSteamId={session.steamId} />)}</div> : <p className="empty-copy">No tickets have been created from this Steam account.</p>}</section>
+      </div>
     </PortalShell>
   );
 }

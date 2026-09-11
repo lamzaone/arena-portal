@@ -522,8 +522,13 @@ function GroupCard({
         </p>
       ) : null}
 
-      <RuntimeSourceEditor group={group} definition={runtimeDefinition} csrf={csrf} />
+      {group.sourceType !== "custom" ? <details className={styles.groupDetails}>
+        <summary><span>Edit live {sourceLabel(group)} settings</span><small>Permissions, perks &amp; server scope</small></summary>
+        <RuntimeSourceEditor group={group} definition={runtimeDefinition} csrf={csrf} />
+      </details> : null}
 
+      <details className={styles.groupDetails}>
+      <summary><span>Edit identity &amp; badge</span><small>Name, colors, visibility &amp; priority</small></summary>
       <form className={`staff-management-form ${styles.groupPresentationForm}`} action="/api/admin/groups" method="post" aria-label={`Edit ${group.displayName} presentation`}>
         <MutationFields csrf={csrf} />
         <input type="hidden" name="groupId" value={group.id} />
@@ -631,8 +636,9 @@ function GroupCard({
           ) : null}
         </div>
       </form>
+      </details>
 
-      <details className={styles.groupDetails} open>
+      <details className={styles.groupDetails}>
         <summary>
           <span>{group.sourceType === "custom" ? "Group access, rewards & members" : "Portal presentation & inventory"}</span>
           <small>{group.tags.length} tags · {group.privileges.length} privileges · {activeRewards.length} rewards</small>
@@ -1052,7 +1058,7 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
         <AdminPageHeader
           id="group-management-title"
           title="Group management"
-          description="Review Admin, VIP, and custom identities in one place; authorized staff can manage assignments and Founder-owned group configuration."
+          description="Manage groups, player assignments, permissions, and rewards from one workspace."
           access={access}
         />
 

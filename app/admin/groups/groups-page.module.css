@@ -136,17 +136,21 @@
 }
 
 .groupDetails > summary {
+  position: relative;
   min-height: 45px;
-  padding: 13px 16px;
+  padding: 13px 40px 13px 16px;
   color: var(--theme-text-muted);
   cursor: pointer;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0;
   list-style-position: inside;
-  text-transform: uppercase;
+  text-transform: none;
   transition: color 180ms ease, background-color 180ms ease;
 }
+
+.groupDetails > summary::after { position: absolute; top: 10px; right: 16px; content: "+"; color: var(--theme-accent-soft); font-size: 20px; font-weight: 400; }
+.groupDetails[open] > summary::after { content: "−"; }
 
 .groupDetails > summary:hover,
 .groupDetails > summary:focus-visible {
@@ -547,14 +551,10 @@
  * These controls consume the centralized semantic theme contract so the
  * Founder workspace follows default, BETA TESTER, TAP GOD, and future themes.
  */
-:global(.staff-record-section[id]) {
-  scroll-margin-top: 28px;
-}
-
 .groupWorkspace {
   display: grid;
   grid-template-columns: minmax(400px, 0.36fr) minmax(0, 1fr);
-  min-height: 400px;
+  min-height: 280px;
   overflow: clip;
   border: 1px solid var(--theme-border);
   border-radius: var(--theme-radius);
@@ -565,9 +565,9 @@
 
 .groupNavigator {
   position: sticky;
-  top: 86px;
+  top: var(--portal-sticky-offset, 140px);
   display: grid;
-  max-height: calc(100vh - 106px);
+  max-height: calc(100dvh - var(--portal-sticky-offset, 140px) - 16px);
   align-self: start;
   grid-template-rows: auto auto auto minmax(0, 1fr);
   border-right: 1px solid var(--theme-border);
@@ -896,7 +896,7 @@
 
 .groupWorkspaceEmpty {
   display: grid;
-  min-height: 400px;
+  min-height: 220px;
   padding: 24px;
   place-content: center;
   justify-items: center;
@@ -1323,7 +1323,7 @@
 .groupDetails > summary {
   display: flex;
   min-height: 51px;
-  padding: 11px 16px;
+  padding: 11px 40px 11px 16px;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
@@ -1750,10 +1750,6 @@
 }
 
 @container staff-content (max-width: 1200px) {
-  .groupWorkspace {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .groupCardHeader,
   .managementGrid,
   .directAwardGrid {
@@ -1791,7 +1787,7 @@
   }
 }
 
-@container staff-content (max-width: 1200px) {
+@container staff-content (max-width: 900px) {
   .groupWorkspace {
     grid-template-columns: 1fr;
   }

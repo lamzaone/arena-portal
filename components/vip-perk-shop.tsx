@@ -54,7 +54,7 @@ export function VipPerkShop({ offers, owned, csrf, initialBalance, authenticated
   }
 
   if (!groups.length) {
-    return <div className={styles.empty}><ShoppingBag aria-hidden="true" /><h3>No perk offers are live.</h3><p>Staff can publish timed Token offers from the group management panel.</p></div>;
+    return <div className={styles.empty}><ShoppingBag aria-hidden="true" /><h3>No perk offers are live.</h3><p>Check back soon for new perks you can unlock with Tokens.</p></div>;
   }
 
   return (

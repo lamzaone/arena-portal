@@ -21,9 +21,14 @@ export type StaffDirectoryProfile = {
   avatarUrl: string | null;
   presence: "online" | "offline" | "unknown";
   profileThemeKey?: string | null;
+  discordProfileUrl?: string | null;
 };
 
-export type StaffDirectoryMember = StaffDirectoryProfile & { steamId: string; profileThemeKey: string | null };
+export type StaffDirectoryMember = StaffDirectoryProfile & {
+  steamId: string;
+  profileThemeKey: string | null;
+  discordProfileUrl: string | null;
+};
 export type StaffDirectoryGroup = Omit<StaffDirectoryDefinition, "enabled" | "rank"> & {
   members: StaffDirectoryMember[];
 };
@@ -68,12 +73,16 @@ export function buildStaffDirectory(
     .map(({ key, name, description, icon, color }): StaffDirectoryGroup => {
       const members = [...(membershipsByGroup.get(staffGroupKey(key)) ?? [])].map((steamId) => {
         const profile = profiles[steamId];
+        const discordProfileUrl = profile?.discordProfileUrl ?? null;
         const member: StaffDirectoryMember = {
           steamId,
           name: profile?.name.trim() || names.get(steamId) || steamId,
           avatarUrl: profile?.avatarUrl ?? null,
           presence: profile?.presence ?? "unknown",
           profileThemeKey: profile?.profileThemeKey ?? null,
+          discordProfileUrl: discordProfileUrl && /^https:\/\/discord\.com\/users\/[1-9]\d{16,19}$/.test(discordProfileUrl)
+            ? discordProfileUrl
+            : null,
         };
         uniqueMembers.set(steamId, member);
         return member;

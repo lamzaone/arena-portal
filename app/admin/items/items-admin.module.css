@@ -1,7 +1,8 @@
 .lookupPanel {
   display: grid;
   gap: 12px;
-  margin-bottom: 22px;
+  margin-top: 16px;
+  margin-bottom: 16px;
   padding: 16px;
   border-color: var(--theme-border);
   background:
@@ -82,8 +83,8 @@
 .sectionHeading h2 {
   color: var(--theme-text);
   font-family: var(--font-display);
-  font-size: clamp(1.8rem, 3vw, 2.55rem);
-  font-weight: 400;
+  font-size: clamp(1.25rem, 2vw, 1.65rem);
+  font-weight: 600;
   letter-spacing: -0.045em;
 }
 
@@ -96,7 +97,7 @@
 
 .marketplaceGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 365px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
   gap: 12px;
   align-items: start;
 }
@@ -118,6 +119,15 @@
   border-color: color-mix(in srgb, var(--theme-border-strong) 72%, var(--theme-border));
 }
 
+.marketplaceCard {
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.marketplaceCard:focus-within {
+  border-color: var(--theme-focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-accent) 12%, transparent);
+}
+
 .specialCard {
   border-color: var(--theme-border-strong);
   background: linear-gradient(
@@ -128,7 +138,7 @@
 }
 
 .marketplaceArtwork {
-  min-height: 178px;
+  min-height: 136px;
   border-bottom: 1px solid var(--theme-border);
   background:
     radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--theme-accent) 17%, transparent), transparent 54%),
@@ -136,19 +146,19 @@
 }
 
 .marketplaceArtwork :global(.economy-item-preview) {
-  min-height: 178px;
+  min-height: 136px;
   margin: 0;
   border: 0;
   background: transparent;
 }
 
 .marketplaceArtwork :global(.economy-item-preview img) {
-  height: 178px;
+  height: 136px;
   padding: 13px;
 }
 
 .marketplaceArtwork :global(.economy-item-preview-fallback) {
-  min-height: 178px;
+  min-height: 136px;
 }
 
 .cardCopy {
@@ -192,7 +202,8 @@
 }
 
 .statusBadge {
-  justify-self: end;
+  grid-column: 1 / -1;
+  justify-self: start;
   padding: 4px 7px;
   border: 1px solid;
   border-radius: 999px;
@@ -263,6 +274,35 @@
   background: color-mix(in srgb, var(--theme-page-bg) 64%, transparent);
 }
 
+.productEditor {
+  border-top: 1px solid var(--theme-border);
+}
+
+.productEditor > summary {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 9px;
+  padding: 12px 14px;
+  color: var(--theme-text);
+  background: var(--theme-control-bg);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+  list-style: none;
+  transition: background-color 160ms ease;
+}
+
+.productEditor > summary::-webkit-details-marker { display: none; }
+.productEditor > summary > svg { width: 15px; height: 15px; color: var(--theme-accent-soft); }
+.productEditor > summary > small { color: var(--theme-text-subtle); font-size: 11px; font-weight: 400; }
+.productEditor > summary::after { margin-left: auto; content: "+"; color: var(--theme-accent-soft); font-size: 18px; }
+.productEditor[open] > summary::after { content: "−"; }
+.productEditor > summary:hover { background: var(--theme-control-hover); }
+.productEditor > summary:focus-visible { outline: 2px solid var(--theme-focus-ring); outline-offset: -3px; }
+.productEditor .actionGrid { border-top: 1px solid var(--theme-border); }
+
 .actionGrid > form {
   display: grid;
   min-width: 0;
@@ -327,13 +367,17 @@
   display: grid;
   justify-items: start;
   gap: 8px;
-  min-height: 230px;
+  min-height: 160px;
   align-content: center;
-  padding: clamp(24px, 5vw, 56px);
+  padding: clamp(20px, 3vw, 32px);
   border-color: var(--theme-border);
   background:
     radial-gradient(circle at 85% 20%, color-mix(in srgb, var(--theme-accent) 14%, transparent), transparent 16rem),
     color-mix(in srgb, var(--theme-surface-muted) 92%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marketplaceCard, .productEditor > summary { transition: none; }
 }
 
 .emptyResults > svg {

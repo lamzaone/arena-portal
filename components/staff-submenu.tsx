@@ -71,8 +71,8 @@ export function StaffSubmenu({
         { label: "Community", items: community },
         { label: "Economy", items: economy },
       ].filter((group) => group.items.length > 0).map((group) => (
-        <div className="staff-navigation-group" key={group.label}>
-          <p>{group.label}</p>
+        <div className="staff-navigation-group" key={group.label} role="group" aria-label={group.label}>
+          <p aria-hidden="true">{group.label}</p>
           <div className="staff-navigation-links">
             {group.items.map((item) => {
               const Icon = item.icon;

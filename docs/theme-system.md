@@ -102,6 +102,14 @@ Run `npm run typecheck`, `npm run build`, and `git diff --check` before shipping
 
 - Shared components consume semantic variables; they do not branch on theme
   keys.
+- Use `SearchField`, `ServerSearchField`, and `PlayerSearchField` for search.
+  Their outer `[data-part="control"]` owns the themed surface and focus ring;
+  inner inputs carry `data-search-input` and are excluded from generic form
+  skins and input focus outlines. Keep those inputs transparent with no
+  border or shadow. The icon and trailing action columns provide the inset.
+  Labels use a 16px line and 8px gap; `SearchSubmitButton alignWithLabel` uses
+  the matching 24px offset. `labelHidden` preserves an accessible label in
+  compact directory filters.
 - Persistent navigation reads its effective theme from its own `data-theme`
   boundary. Pass a route override to `SiteHeader` only when that route owns the
   full-page presentation.
@@ -127,5 +135,12 @@ space left beside the group browser.
 
 Use `PortalToast` for action feedback and `ConfirmSubmitButton` for existing
 confirmation flows. Their CSS modules consume the semantic theme tokens and
-handle reduced motion. Keep `app/staff-workspace.css` and
-`app/themes/refinements.css` before the accessibility stylesheet.
+handle reduced motion. Keep `app/staff-workspace.css`,
+`app/themes/refinements.css`, `app/panel-system.css`, and
+`app/public-panels.css` before the accessibility stylesheet.
+
+The shared desktop navigation is sticky. Nested sticky directories and section
+headings use `--portal-sticky-offset` so navigation does not cover them. Shared
+pointer depth affects decorative artwork only; forms, item actions and player
+popover ancestors retain their normal positioning. All motion respects the
+viewer’s reduced-motion preference.

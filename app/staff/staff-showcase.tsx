@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
-import { ArrowDown, ArrowRight, ArrowUpRight, BadgeCheck, Crown, Crosshair, Pause, Play, Search, ShieldCheck, Sparkles, Star, UsersRound, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUpRight, BadgeCheck, Crosshair, Crown, MessageCircle, Pause, Play, Search, ShieldCheck, Sparkles, Star, UsersRound } from "lucide-react";
 
 import { ResilientRemoteImage } from "@/components/resilient-remote-image";
 import { BrandEmblem } from "@/components/brand-emblem";
 import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
+import { SearchField } from "@/components/ui/search-field";
 import type { StaffDirectory, StaffDirectoryGroup, StaffDirectoryMember } from "@/lib/staff-directory";
 
 import styles from "./staff.module.css";
@@ -36,7 +37,7 @@ function MemberCard({ member, group, index, motion }: {
   index: number;
   motion: boolean;
 }) {
-  const card = useRef<HTMLAnchorElement>(null);
+  const card = useRef<HTMLElement>(null);
   const frame = useRef<number | null>(null);
 
   function resetTilt() {
@@ -53,7 +54,7 @@ function MemberCard({ member, group, index, motion }: {
     return () => { if (frame.current !== null) cancelAnimationFrame(frame.current); };
   }, [motion]);
 
-  function tilt(event: PointerEvent<HTMLAnchorElement>) {
+  function tilt(event: PointerEvent<HTMLElement>) {
     if (!motion || event.pointerType !== "mouse" || !window.matchMedia("(hover: hover) and (prefers-reduced-motion: no-preference)").matches) return;
     card.current = event.currentTarget;
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -72,13 +73,11 @@ function MemberCard({ member, group, index, motion }: {
   const presence = member.presence === "online" ? "Steam online" : member.presence === "offline" ? "Steam offline" : "Steam member";
   return (
     <ThemedPlayerContainer
-      as={Link}
+      as="article"
       ownerSteamId={member.steamId}
       profileThemeKey={member.profileThemeKey}
       className={styles.card}
-      href={`/players/${member.steamId}`}
-      prefetch={false}
-      aria-label={`View ${member.name}'s profile, ${group.name}`}
+      aria-label={`${member.name}, ${group.name}`}
       style={{ "--entry-delay": `${(index % 2) * 90}ms` } as CSSProperties}
       data-staff-reveal="card"
       onPointerMove={tilt}
@@ -86,22 +85,24 @@ function MemberCard({ member, group, index, motion }: {
       onPointerCancel={resetTilt}
       onBlur={resetTilt}
     >
-      <div className={styles.cardTop}>
-        <span className={styles.memberRole}><GroupIcon icon={group.icon} /><span title={group.name}>{group.name}</span></span>
-        <span className={styles.memberNumber} aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
-      </div>
       <GroupIcon icon={group.icon} className={styles.cardWatermark} />
-      <div className={styles.memberBody}>
+      <Link className={styles.portraitLink} href={`/players/${member.steamId}`} prefetch={false} aria-label={`View ${member.name}'s profile`}>
         <div className={styles.avatar}>
           <ResilientRemoteImage src={member.avatarUrl} alt="" loading="lazy" fallback={<span>{member.name.trim().slice(0, 2).toUpperCase()}</span>} />
           <span className={styles.avatarBadge}><GroupIcon icon={group.icon} /></span>
         </div>
+      </Link>
+      <div className={styles.memberBody}>
         <div className={styles.memberCopy}>
-          <h4 title={member.name}>{member.name}</h4>
-          <span className={styles.presence} data-presence={member.presence}><i />{presence}</span>
+          <span className={styles.memberRole}><GroupIcon icon={group.icon} /><span>{group.name}</span></span>
+          <h4><Link href={`/players/${member.steamId}`} prefetch={false}>{member.name}</Link></h4>
+          <span className={styles.presence} data-presence={member.presence}><i aria-hidden="true" />{presence}</span>
+        </div>
+        <div className={styles.cardActions}>
+          <Link href={`/players/${member.steamId}`} prefetch={false} className={styles.profileAction} aria-label={`View ${member.name}'s profile`}>View profile <ArrowUpRight aria-hidden="true" /></Link>
+          {member.discordProfileUrl ? <a href={member.discordProfileUrl} target="_blank" rel="noopener noreferrer" className={styles.discordAction} aria-label={`Open ${member.name}'s Discord profile (opens in a new tab)`}><MessageCircle aria-hidden="true" />Discord <ArrowUpRight aria-hidden="true" /></a> : null}
         </div>
       </div>
-      <div className={styles.cardBottom}><span>TAPPED.RO / THE TEAM</span><span>Meet the player <ArrowUpRight className={styles.cardArrow} aria-hidden="true" /></span></div>
     </ThemedPlayerContainer>
   );
 }
@@ -160,8 +161,8 @@ export function StaffShowcase({ directory }: { directory: StaffDirectory & { ava
       <section className={styles.hero} aria-labelledby="staff-title">
         <div className={styles.heroCopy}>
           <p className={styles.eyebrow}><span /> THE PEOPLE OF TAPPED.RO</p>
-          <h1 id="staff-title">Good people.<br /><span>Great games.</span></h1>
-          <p className={styles.lede}>Behind every fair round is someone who cares. Meet the players keeping this community in good hands.</p>
+          <h1 id="staff-title">Meet <span>the team.</span></h1>
+          <p className={styles.lede}>The people behind ARENA. Keeping the games fair, the community welcoming, and the next round ready.</p>
           <a href="#staff-directory" className={styles.explore} onClick={(event) => {
             if (motion) return;
             event.preventDefault();
@@ -172,52 +173,55 @@ export function StaffShowcase({ directory }: { directory: StaffDirectory & { ava
         <div className={styles.heroArt} aria-hidden="true">
           <span className={styles.artWord}>STAFF</span>
           <div className={styles.orbitScene}>
-            <div className={styles.orbitRing} /><div className={styles.orbitRingInner} />
-            <div className={styles.crest}>
-              <BrandEmblem width={800} priority className={styles.heroLogo} />
-            </div>
+            <div className={styles.orbitRing} />
+            <div className={styles.orbitRingInner} />
+            <div className={styles.crest}><BrandEmblem width={800} priority className={styles.heroLogo} /></div>
             <div className={`${styles.floatingTag} ${styles.tagTop}`}><Crosshair /><span>FAIR PLAY.<br /><strong>EVERY ROUND.</strong></span></div>
             <div className={`${styles.floatingTag} ${styles.tagBottom}`}><UsersRound /><span>BUILT BY PLAYERS.<br /><strong>HERE FOR YOU.</strong></span></div>
             <span className={styles.orbitDot} />
           </div>
         </div>
-      </section>
-
-      <div className={styles.overview}>
-        <div className={styles.overviewLabel}><ShieldCheck aria-hidden="true" /><span>Different roles.<br /><strong>One shared purpose.</strong></span></div>
         <dl className={styles.stats}>
           <div><dt>Staff members</dt><dd>{directory.available ? String(directory.memberCount).padStart(2, "0") : "—"}</dd></div>
-          <div><dt>Admin groups</dt><dd>{directory.available ? String(directory.groups.length).padStart(2, "0") : "—"}</dd></div>
+          <div><dt>Staff roles</dt><dd>{directory.available ? String(directory.groups.length).padStart(2, "0") : "—"}</dd></div>
           <div><dt><i /> Steam online</dt><dd>{directory.available ? String(directory.onlineCount).padStart(2, "0") : "—"}</dd></div>
         </dl>
-      </div>
+      </section>
 
       <section className={styles.directory} id="staff-directory" aria-labelledby="directory-title">
         <div className={styles.directoryHeading}>
-          <div><p className={styles.eyebrow}>THE LINEUP / TAPPED.RO</p><h2 id="directory-title">Your arena. <span>Your people.</span></h2></div>
+          <h2 id="directory-title">Find your people</h2>
           <button className={styles.motionToggle} type="button" onClick={() => setPaused(!paused)} disabled={reducedMotion} aria-pressed={paused || reducedMotion}>
             {motion ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}{reducedMotion ? "Reduced motion" : paused ? "Resume motion" : "Pause motion"}
           </button>
         </div>
         <div className={styles.directoryControls}>
               <nav className={styles.groupNav} aria-label="Filter staff by admin group">
-                <button type="button" aria-pressed={selectedGroup === null} onClick={() => setSelectedGroup(null)}><UsersRound aria-hidden="true" /><span>All groups</span><b>{directory.groups.length}</b></button>
+                <button type="button" aria-pressed={selectedGroup === null} onClick={() => setSelectedGroup(null)}><UsersRound aria-hidden="true" /><span>All roles</span><b>{directory.groups.length}</b></button>
                 {directory.groups.map((group) => <button key={group.key} type="button" aria-pressed={selectedGroup === group.key} onClick={() => setSelectedGroup(group.key)} style={{ "--group-color": group.color } as CSSProperties}><GroupIcon icon={group.icon} /><span>{group.name}</span><b>{group.members.length}</b></button>)}
               </nav>
-              <div className={styles.search}><Search aria-hidden="true" /><input aria-label="Search staff by name, group or Steam ID" type="search" placeholder="Find your people…" value={query} onChange={(event) => setQuery(event.target.value)} />{query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear staff search"><X aria-hidden="true" /></button> : null}</div>
+              <SearchField
+                id="staff-directory-search"
+                label="Staff search"
+                labelHidden
+                aria-label="Search staff by name, group or Steam ID"
+                placeholder="Search name or role…"
+                value={query}
+                onValueChange={setQuery}
+                rootClassName={styles.search}
+              />
         </div>
           <div className={styles.roster}>
             <div className={styles.rosterMeta}>
-              <span>{selectedGroup ? directory.groups.find((group) => group.key === selectedGroup)?.name : "ALL HANDS ON DECK"}</span>
+              <span>{selectedGroup ? directory.groups.find((group) => group.key === selectedGroup)?.name : "The full team"}</span>
               <span className={styles.resultCount} role="status">{directory.available ? `${visibleMemberCount} ${visibleMemberCount === 1 ? "member" : "members"}` : "Unavailable"}</span>
             </div>
             {!directory.available ? <div className={styles.empty} role="status"><ShieldCheck aria-hidden="true" /><h3>The team will be right back.</h3><p>The staff directory is temporarily unavailable. Please try again shortly.</p><a href="/staff">Try again <ArrowRight aria-hidden="true" /></a></div> : filtered.length === 0 ? <div className={styles.empty}><Search aria-hidden="true" /><h3>{directory.groups.length ? "No staff found." : "The lineup is on its way."}</h3><p>{directory.groups.length ? "Try another name or explore all admin groups." : "The team will appear here when admin groups are available."}</p>{query || selectedGroup ? <button type="button" onClick={clearFilters}>Show all staff <ArrowRight aria-hidden="true" /></button> : null}</div> : filtered.map((group) => {
-              const position = directory.groups.findIndex((entry) => entry.key === group.key) + 1;
               return <section className={styles.group} key={group.key} data-empty={group.members.length === 0} data-single={group.members.length === 1} style={{ "--group-color": group.color } as CSSProperties} aria-labelledby={`staff-group-${encodeURIComponent(group.key)}`}>
                 <div className={styles.groupHeading} data-staff-reveal="heading">
-                  <div className={styles.groupIndex}><span className={styles.groupNumber} aria-hidden="true">{String(position).padStart(2, "0")}</span><span className={styles.groupEmblem}><GroupIcon icon={group.icon} /></span></div>
-                  <div className={styles.groupTitle}><h3 id={`staff-group-${encodeURIComponent(group.key)}`}>{group.name}</h3><span>{group.members.length}</span></div><p>{groupDescription(group)}</p>
-                  <span className={styles.groupRule} aria-hidden="true" />
+                  <span className={styles.groupEmblem}><GroupIcon icon={group.icon} /></span>
+                  <div className={styles.groupTitle}><h3 id={`staff-group-${encodeURIComponent(group.key)}`}>{group.name}</h3><p>{groupDescription(group)}</p></div>
+                  <span className={styles.groupCount}>{group.members.length} {group.members.length === 1 ? "member" : "members"}</span>
                 </div>
                 {group.members.length ? <div className={styles.memberGrid}>{group.members.map((member, index) => <MemberCard key={member.steamId} member={member} group={group} index={index} motion={motion} />)}</div> : <div className={styles.emptyGroup}><UsersRound aria-hidden="true" /><span>No active members in this group yet.</span></div>}
               </section>;

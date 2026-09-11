@@ -1,6 +1,6 @@
 .root {
   display: grid;
-  gap: 18px;
+  gap: 14px;
   min-width: 0;
   color: var(--theme-text);
 }
@@ -114,10 +114,10 @@
 .summaryCard {
   display: flex;
   min-width: 0;
-  min-height: 92px;
+  min-height: 76px;
   align-items: center;
-  gap: 13px;
-  padding: 16px;
+  gap: 10px;
+  padding: 12px;
   border: 1px solid var(--theme-border);
   border-radius: var(--theme-radius);
   background: color-mix(in srgb, var(--theme-surface) 90%, transparent);
@@ -206,9 +206,9 @@
   cursor: pointer;
   font: inherit;
   font-size: 0.78rem;
-  font-weight: 850;
-  letter-spacing: 0.045em;
-  text-transform: uppercase;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
   transition: border-color 180ms ease, color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
 }
 
@@ -1283,7 +1283,7 @@
   }
 
   .summaryGrid {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .summaryCard {
@@ -1291,7 +1291,7 @@
   }
 
   .segmented {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .segmented button {

@@ -1173,6 +1173,8 @@ export default async function AdminItemsPage({
                       </dl>
                     </div>
                     {access.canManageEconomy ? (
+                    <details className={styles.productEditor}>
+                    <summary><SlidersHorizontal aria-hidden="true" /><span>Edit product</span><small>Price, artwork &amp; availability</small></summary>
                     <div className={`${styles.actionGrid} economy-admin-actions`}>
                       {!customProduct ? (
                         <form action="/api/admin/economy" method="post">
@@ -1316,6 +1318,7 @@ export default async function AdminItemsPage({
                         </form>
                       )}
                     </div>
+                    </details>
                     ) : (
                       <p className={styles.readOnlyNotice}>
                         Your staff role has read-only economy access.

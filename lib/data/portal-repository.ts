@@ -1,4 +1,5 @@
 import "server-only";
+import { enqueueDiscordNotification } from "@/lib/discord/notification-repository";
 import { cs2FinishValiditySql, getCs2Finish, getCs2PaintkitWear, isValidCs2Finish, isCs2CatalogueFinishAvailable } from "@/lib/economy/cs2-finish-catalogue";
 
 const economyReleasedFinishSql = cs2FinishValiditySql("c");
@@ -3074,7 +3075,7 @@ export async function getAppealEligibility(
 }
 
 async function writeAudit(
-  pool: Pool,
+  pool: Pick<Pool, "execute">,
   actorId: string,
   action: string,
   targetType: string,
@@ -3159,6 +3160,14 @@ export async function createTicket(input: {
         );
       }
     }
+    if (process.env.DISCORD_NOTIFICATIONS_ENABLED === "true") {
+      await enqueueDiscordNotification(connection, {
+        eventType: "ticket.created", title: `Ticket #${ticketId}: ${input.subject}`,
+        body: `Category: ${input.category}\nSteam: ${input.steamId}\n\n${input.body}`,
+        steamId: input.steamId, path: "/admin/tickets",
+      });
+    }
+    await writeAudit(connection, input.steamId, "ticket.created", "ticket", String(ticketId));
     await connection.commit();
   } catch (error) {
     await connection.rollback();
@@ -3166,13 +3175,6 @@ export async function createTicket(input: {
   } finally {
     connection.release();
   }
-  await writeAudit(
-    pool,
-    input.steamId,
-    "ticket.created",
-    "ticket",
-    String(ticketId),
-  );
   return ticketId;
 }
 
@@ -3213,6 +3215,14 @@ export async function createAppeal(input: {
         );
       }
     }
+    if (process.env.DISCORD_NOTIFICATIONS_ENABLED === "true") {
+      await enqueueDiscordNotification(connection, {
+        eventType: "appeal.created", title: `Ban appeal #${appealId}`,
+        body: `Steam: ${input.steamId}\nBan: ${input.banId ?? "Not specified"}\n\n${input.body}`,
+        steamId: input.steamId, path: "/admin/appeals",
+      });
+    }
+    await writeAudit(connection, input.steamId, "appeal.created", "appeal", String(appealId));
     await connection.commit();
   } catch (error) {
     await connection.rollback();
@@ -3220,13 +3230,6 @@ export async function createAppeal(input: {
   } finally {
     connection.release();
   }
-  await writeAudit(
-    pool,
-    input.steamId,
-    "appeal.created",
-    "appeal",
-    String(appealId),
-  );
   return appealId;
 }
 

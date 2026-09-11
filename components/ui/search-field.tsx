@@ -151,6 +151,7 @@ type SearchFieldProps = Omit<
 > & {
   id: string;
   label: string;
+  labelHidden?: boolean;
   value: string;
   onValueChange: (value: string) => void;
   onClear?: () => void;
@@ -163,6 +164,7 @@ type SearchFieldProps = Omit<
 export function SearchField({
   id,
   label,
+  labelHidden = false,
   value,
   onValueChange,
   onClear,
@@ -192,7 +194,7 @@ export function SearchField({
 
   return (
     <div data-ui="search-field" className={[styles.root, rootClassName].filter(Boolean).join(" ")}>
-      <label className={styles.labelText} htmlFor={id}>{label}</label>
+      <label className={labelHidden ? "sr-only" : styles.labelText} htmlFor={id}>{label}</label>
       <span className={styles.control} data-part="control">
         <Search className={styles.icon} aria-hidden="true" />
         <input
@@ -205,6 +207,7 @@ export function SearchField({
           className={styles.input}
           id={id}
           type="search"
+          data-search-input="true"
           value={value}
           disabled={disabled}
           aria-describedby={inputProps["aria-describedby"] ?? helpId}

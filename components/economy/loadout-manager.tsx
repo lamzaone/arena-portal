@@ -13,6 +13,7 @@ import {
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import styles from "./player-workspace.module.css";
 
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
 import { PaginatedItemGrid } from "@/components/economy/item-grid";
@@ -254,7 +255,7 @@ export function EconomyLoadoutManager({
   ].join("-");
 
   return (
-    <section className="loadout-manager" aria-labelledby="loadout-manager-heading">
+    <section className={`loadout-manager ${styles.workspace}`} aria-labelledby="loadout-manager-heading">
       <header className="loadout-manager-header">
         <div>
           <p className="eyebrow"><Crosshair aria-hidden="true" /> Owned loadout</p>
@@ -416,14 +417,14 @@ export function EconomyLoadoutManager({
                 disabled={isPending}
                 onClick={() => chooseTeamTarget(target)}
               >
-                {target === "both" ? "Both" : target}
+                {target === "both" ? "Both teams" : target === "T" ? "Terrorists" : "Counter-Terrorists"}
               </button>
             ))}
           </div>
 
           {activeCategory === "weapon" && selectedDefinitionIndex === null ? (
             displayedWeaponGroups.length > 0
-              ? <p className="loadout-selection-prompt">Choose a weapon above to see its owned finishes.</p>
+              ? <p className="loadout-selection-prompt">Choose a weapon in step 2 to see its owned finishes.</p>
               : <LoadoutEmptyState message={loadoutChoiceEmptyMessage("weapon", teamTarget, false)} />
           ) : choiceItems.length > 0 ? (
             <PaginatedItemGrid className="loadout-choice-grid" label="Owned loadout items" resetKey={`${activeCategory}:${selectedDefinitionIndex}:${teamTarget}`}>
@@ -516,7 +517,7 @@ function LoadoutEmptyState({ message }: { message: string }) {
     <div className="loadout-empty">
       <p>{message}</p>
       <p>
-        Find owned cosmetics in <Link href="/market">Market</Link> or <Link href="/crates">open an owned crate</Link>.
+        Find cosmetics in <Link href="/market">Marketplace</Link> or <Link href="/inventory">open an owned crate</Link>.
       </p>
     </div>
   );

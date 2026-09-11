@@ -3,7 +3,7 @@ import "server-only";
 import type { RowDataPacket } from "mysql2/promise";
 
 import { configuredGameServerGuid, isAssignedToConfiguredGameServer } from "@/lib/admin/server-scope";
-import { getGameDatabasePool } from "@/lib/data/database-pools";
+import { getGameDatabasePool, getPortalDatabasePool } from "@/lib/data/database-pools";
 import { getPlayerProfileThemeKeys } from "@/lib/data/portal-repository";
 import { getStaffAdminMembershipSnapshot } from "@/lib/data/staff-admin-memberships";
 import { buildStaffDirectory, staffGroupKey, type StaffDirectory, type StaffDirectoryDefinition, type StaffDirectoryProfile } from "@/lib/staff-directory";
@@ -19,6 +19,31 @@ type ArenaGroupRow = RowDataPacket & {
   effective_rank: number;
   enabled: number;
 };
+type DiscordLinkRow = RowDataPacket & { steam_id: string; discord_user_id: string };
+
+async function readDiscordProfileUrls(steamIds: readonly string[]) {
+  const profiles = new Map<string, string>();
+  const pool = getPortalDatabasePool();
+  if (!pool || steamIds.length === 0) return profiles;
+  try {
+    // This table contains completed identity links; pending link codes and
+    // linking metadata never enter the public directory.
+    const [links] = await pool.query<DiscordLinkRow[]>(
+      `SELECT steam_id, discord_user_id FROM portal_discord_links WHERE steam_id IN (${steamIds.map(() => "?").join(", ")})`,
+      [...steamIds],
+    );
+    for (const link of links) {
+      profiles.set(link.steam_id, `https://discord.com/users/${link.discord_user_id}`);
+    }
+  } catch (error) {
+    // Discord is optional: a portal awaiting the linking migration must still
+    // show its staff. A failed contact lookup must not hide the whole team.
+    if ((error as { code?: string }).code !== "ER_NO_SUCH_TABLE") {
+      console.error("Public staff Discord contacts unavailable.");
+    }
+  }
+  return profiles;
+}
 
 function serverList(value: NativeGroupRow["Servers"]): string[] {
   if (Array.isArray(value)) return value.filter((entry) => typeof entry === "string");
@@ -92,17 +117,22 @@ export async function getPublicStaffDirectory(): Promise<StaffDirectory & { avai
     const ids = [...new Set(initial.groups.flatMap((group) => group.members.map((member) => member.steamId)))];
     const batches: string[][] = [];
     for (let index = 0; index < ids.length; index += 100) batches.push(ids.slice(index, index + 100));
-    const [steamBatches, themeKeys] = await Promise.all([
+    const [steamBatches, themeKeys, discordProfileUrls] = await Promise.all([
       Promise.all(batches.map((batch) => getSteamProfiles(batch))),
       getPlayerProfileThemeKeys(ids),
+      readDiscordProfileUrls(ids),
     ]);
     const profiles: Record<string, StaffDirectoryProfile> = {};
     for (const steamId of ids) {
-      profiles[steamId] = { name: "", avatarUrl: null, presence: "unknown", profileThemeKey: themeKeys.get(steamId) ?? null };
+      profiles[steamId] = {
+        name: "", avatarUrl: null, presence: "unknown",
+        profileThemeKey: themeKeys.get(steamId) ?? null,
+        discordProfileUrl: discordProfileUrls.get(steamId) ?? null,
+      };
     }
     for (const batch of steamBatches) {
       for (const [steamId, profile] of batch) {
-        profiles[steamId] = { name: profile.name, avatarUrl: profile.avatarFull, presence: profile.presence, profileThemeKey: themeKeys.get(steamId) ?? null };
+        profiles[steamId] = { ...profiles[steamId], name: profile.name, avatarUrl: profile.avatarFull, presence: profile.presence };
       }
     }
     return { ...buildStaffDirectory(definitions, memberships, profiles), available: true };

@@ -13,11 +13,13 @@ import { resolvePortalThemeSurface } from "@/lib/themes/registry";
 type SiteHeaderProps = {
   authenticated?: boolean;
   themeKey?: string | null;
+  settingsActive?: boolean;
 };
 
 export async function SiteHeader({
   authenticated = false,
   themeKey,
+  settingsActive = false,
 }: SiteHeaderProps) {
   const session = authenticated ? await getSession() : null;
   const identities = session ? await resolvePlayerIdentities([{
@@ -34,7 +36,7 @@ export async function SiteHeader({
   );
 
   return (
-    <>
+    <div className="portal-navigation">
       {/* The route may override the viewer theme when another surface owns the
           full page, such as a viewed player's profile. */}
       <header
@@ -54,16 +56,16 @@ export async function SiteHeader({
             />
             {staffAccess?.isAdmin ? <Link className="button button-quiet header-staff-link" href="/admin/bans" aria-label="Open staff panel"><ShieldCheck aria-hidden="true" /><span>Staff panel</span></Link> : null}
             <form action="/api/auth/logout" method="post">
-              <button className="button button-quiet" type="submit"><LogOut aria-hidden="true" /> Sign out</button>
+              <button className="button button-quiet" type="submit" aria-label="Sign out"><LogOut aria-hidden="true" /> Sign out</button>
             </form>
           </>
         ) : (
-          <a className="button button-primary" href="/api/auth/steam"><LogIn aria-hidden="true" /> Steam login</a>
+          <a className="button button-primary" href="/api/auth/steam" aria-label="Sign in with Steam"><LogIn aria-hidden="true" /> Steam login</a>
         )}
       </header>
       {session ? (
-        <AccountNav profileHref={`/players/${session.steamId}`} themeKey={globalTheme.key} />
+        <AccountNav profileHref={`/players/${session.steamId}`} themeKey={globalTheme.key} settingsActive={settingsActive} />
       ) : null}
-    </>
+    </div>
   );
 }

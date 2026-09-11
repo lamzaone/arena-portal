@@ -3,31 +3,31 @@
 main.staff-page {
   --admin-control-height: 44px;
   --admin-compact-control-height: 38px;
-  --admin-panel-inset: clamp(16px, 2vw, 26px);
-  --admin-section-gap: 28px;
+  --admin-panel-inset: clamp(16px, 1.5vw, 24px);
+  --admin-section-gap: 20px;
 }
 
 main.staff-page > .shell {
   width: calc(100% - clamp(24px, 5vw, 80px));
   max-width: 1720px;
-  padding-inline: 0;
+  padding-inline: var(--admin-content-gutter);
 }
 
 .staff-page .portal-workspace-layout {
   display: grid;
-  grid-template-columns: 208px minmax(0, 1fr);
+  grid-template-columns: 196px minmax(0, 1fr);
   align-items: start;
-  gap: clamp(20px, 2.4vw, 36px);
-  margin-top: 24px;
+  gap: clamp(16px, 1.8vw, 24px);
+  margin-top: 18px;
 }
 
 .portal-workspace-content { min-width: 0; container: staff-content / inline-size; }
 
 .staff-navigation {
   position: sticky;
-  top: 20px;
+  top: var(--portal-sticky-offset, 140px);
   min-width: 0;
-  max-height: calc(100dvh - 40px);
+  max-height: calc(100dvh - var(--portal-sticky-offset, 140px) - 16px);
   overflow-y: auto;
   padding: 18px 12px 12px;
   border: 1px solid var(--theme-border);
@@ -99,28 +99,29 @@ main.staff-page > .shell {
 .staff-navigation-return:hover { color: var(--theme-accent-soft); }
 
 main.staff-page .admin-page-header {
-  grid-template-columns: minmax(0, 1fr) minmax(190px, 238px);
-  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 220px);
+  gap: 20px;
   margin-top: 0;
-  padding: 28px var(--admin-panel-inset);
+  padding-block: 18px;
+  padding-inline: var(--admin-panel-inset);
   border: 0;
   border-bottom: 1px solid var(--theme-border);
   background: none;
   box-shadow: none;
 }
 main.staff-page .admin-page-header h1 {
-  font-size: clamp(2rem, 3.2vw, 3.4rem);
+  font-size: clamp(1.7rem, 2.5vw, 2.5rem);
   line-height: 1.08;
   letter-spacing: -.045em;
 }
 main.staff-page .admin-page-header > :first-child > p:last-child {
   max-width: 64ch;
-  margin-top: 12px;
+  margin-top: 9px;
   font-size: 14px;
-  line-height: 1.65;
+  line-height: 1.55;
 }
 main.staff-page .admin-page-summary {
-  padding: 16px;
+  padding: 12px 14px;
   gap: 8px;
   border-color: var(--theme-border);
   background: var(--theme-surface);
@@ -159,10 +160,11 @@ main.staff-page nav[data-ui="section-nav"] [data-part="item"] {
 }
 main.staff-page nav[data-ui="section-nav"] [data-part="item"]::after { right: 12px; left: 12px; bottom: 0; box-shadow: none; }
 
-main.staff-page .staff-tools { gap: 18px; padding: 22px 0; align-items: center; }
+main.staff-page .staff-tools { gap: 14px; padding-block: 16px; padding-inline: var(--admin-panel-inset); align-items: center; }
 main.staff-page .staff-search { flex: 1 1 420px; min-width: 0; max-width: 660px; }
 main.staff-page .staff-search > div { display: flex; width: 100%; align-items: end; gap: 10px; }
 main.staff-page .staff-search [data-ui="player-search"] { flex: 1; min-width: 0; }
+main.staff-page .staff-search > div > button { flex: 0 0 auto; width: max-content; align-self: start; }
 main.staff-page .staff-write-status { gap: 8px; color: var(--theme-warning); font-size: 12px; line-height: 1.5; }
 main.staff-page .staff-write-status.ready { color: var(--theme-success-text); }
 main.staff-page .staff-write-status svg { color: inherit; }
@@ -184,9 +186,10 @@ main.staff-page .staff-ban-form form > .button { grid-column: 1 / -1; justify-se
 main.staff-page .staff-ban-form form > [data-ui="player-search"] { grid-column: 1 / -1; }
 main.staff-page .staff-ban-form .staff-reason { grid-column: 1 / -1; }
 
-main.staff-page .staff-record-section { padding: 28px 0 0; }
+main.staff-page .staff-record-section { padding-block: 20px; padding-inline: var(--admin-panel-inset); }
+main.staff-page .staff-record-section[id] { scroll-margin-top: var(--portal-sticky-offset, 140px); }
 main.staff-page .staff-section-heading { align-items: center; }
-main.staff-page .staff-section-heading h2 { font-size: clamp(1.4rem, 2vw, 2rem); line-height: 1.2; letter-spacing: -.025em; }
+main.staff-page .staff-section-heading h2 { font-size: clamp(1.25rem, 1.8vw, 1.65rem); line-height: 1.2; letter-spacing: -.025em; }
 main.staff-page .staff-section-heading > span { color: var(--theme-text-muted); font-size: 12px; white-space: normal; text-align: right; }
 main.staff-page :is(.staff-section-heading, .staff-ban-form) .tapped-kicker { color: var(--theme-accent-soft); font-size: 10px; }
 
@@ -208,7 +211,7 @@ main.staff-page .staff-case-form textarea { min-height: 120px; }
 main.staff-page .staff-case-heading { flex-wrap: wrap; }
 main.staff-page :is(.staff-case > small, .case-message small, .case-message time) { color: var(--theme-text-subtle); font-size: 12px; }
 main.staff-page :is(.staff-case > p, .case-message p) { color: var(--theme-text-muted); font-size: 14px; }
-main.staff-page .staff-table :is(th, td) { padding: 15px 14px; }
+main.staff-page .staff-table :is(th, td) { padding: 12px 14px; }
 main.staff-page .staff-table th { color: var(--theme-text-muted); font-size: 11px; letter-spacing: .07em; }
 main.staff-page .staff-table td { font-size: 13px; line-height: 1.5; }
 main.staff-page .staff-table td small { color: var(--theme-text-subtle); font-size: 11px; }
@@ -216,7 +219,7 @@ main.staff-page .empty-copy { color: var(--theme-text-muted); font-size: 13px; l
 
 @media (max-width: 1100px) {
   .staff-page .portal-workspace-layout { grid-template-columns: 180px minmax(0, 1fr); gap: 20px; }
-  .staff-navigation { padding-inline: 8px; }
+  .staff-navigation { padding-inline: 12px; }
   .staff-navigation-links a { padding-inline: 10px; font-size: 12px; }
   main.staff-page .admin-page-header { grid-template-columns: minmax(0, 1fr); gap: 18px; }
   main.staff-page .admin-page-header-side { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; }
@@ -254,4 +257,177 @@ main.staff-page .empty-copy { color: var(--theme-text-muted); font-size: 13px; l
   main.staff-page .staff-section-heading { align-items: start; }
   main.staff-page nav[data-ui="section-nav"] [data-part="item"] { flex: 1 1 auto; font-size: 12px; }
   main.staff-page :is(input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea) { font-size: 16px; }
+}
+
+/* Staff tasks share compact, keyboard-operable disclosure controls. */
+.staff-create-disclosure,
+.staff-case-details {
+  min-width: 0;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius);
+  background: var(--theme-surface);
+}
+.staff-create-disclosure > summary,
+.staff-case-details > summary {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 16px;
+  color: var(--theme-text);
+  cursor: pointer;
+  list-style: none;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+.staff-create-disclosure > summary::-webkit-details-marker,
+.staff-case-details > summary::-webkit-details-marker { display: none; }
+.staff-create-disclosure > summary:not(:has(> svg:last-child))::after { content: "+"; margin-left: auto; color: var(--theme-accent-soft); font-size: 20px; }
+.staff-create-disclosure[open] > summary:not(:has(> svg:last-child))::after { content: "−"; }
+.staff-listing-create { margin-top: 16px; }
+main.staff-page .staff-listing-create > .staff-record-section { padding: 16px; border-top: 1px solid var(--theme-border); }
+.staff-create-disclosure > summary:hover,
+.staff-case-details > summary:hover { background: var(--theme-control-hover); }
+.staff-create-disclosure > summary:focus-visible,
+.staff-case-details > summary:focus-visible {
+  outline: 2px solid var(--theme-focus-ring);
+  outline-offset: -3px;
+}
+.staff-create-disclosure > summary > svg,
+.staff-case-details > summary > svg { width: 17px; height: 17px; flex: 0 0 auto; color: var(--theme-accent-soft); }
+.staff-create-disclosure > summary > svg:last-child,
+.staff-case-details > summary > svg:last-child { margin-left: auto; transition: transform 160ms ease; }
+.staff-create-disclosure[open] > summary > svg:last-child,
+.staff-case-details[open] > summary > svg:last-child { transform: rotate(180deg); }
+.staff-create-disclosure > summary > span { display: grid; gap: 4px; }
+.staff-create-disclosure > summary strong { font-size: 14px; }
+.staff-create-disclosure > summary small { color: var(--theme-text-muted); font-size: 12px; line-height: 1.5; }
+main.staff-page .staff-create-disclosure .staff-ban-form {
+  grid-template-columns: minmax(0, 1fr);
+  border: 0;
+  border-top: 1px solid var(--theme-border);
+  border-radius: 0;
+  background: var(--theme-surface);
+}
+main.staff-page .staff-create-disclosure .staff-ban-form form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+main.staff-page .staff-case { padding: 16px; border-radius: var(--theme-radius); }
+.staff-case-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.staff-case-meta > span:first-child { color: var(--theme-text-subtle); font-size: 11px; font-variant-numeric: tabular-nums; }
+.staff-case-details { margin-top: 14px; background: color-mix(in srgb, var(--theme-surface-muted) 65%, transparent); }
+.staff-case-details > summary { min-height: 44px; padding: 10px 12px; }
+.staff-case-details > summary strong { font-size: 12px; font-weight: 650; }
+.staff-case-details > summary > span { color: var(--theme-text-subtle); font-size: 11px; white-space: nowrap; }
+.staff-case-workspace { min-width: 0; padding: 0 14px 14px; border-top: 1px solid var(--theme-border); }
+main.staff-page .staff-case-form { border-top-color: var(--theme-border); }
+main.staff-page .staff-case-form label { max-width: none; }
+main.staff-page .staff-case-form > div { padding-top: 4px; gap: 8px; }
+main.staff-page .staff-case-form > div > :last-child { margin-left: auto; }
+main.staff-page .staff-case-heading > div:first-child > strong { display: block; margin-bottom: 6px; color: var(--theme-text); font-size: 15px; line-height: 1.4; }
+main.staff-page .staff-appeal-source { padding: 10px 12px; border-left: 2px solid var(--theme-border-strong); background: var(--theme-control-bg); font-size: 12px; }
+main.staff-page .staff-table :is(th, td):last-child { text-align: right; }
+main.staff-page .staff-table td:last-child form { display: flex; justify-content: flex-end; }
+main.staff-page .staff-status { font-variant-numeric: tabular-nums; }
+main.staff-page .staff-permission-note { border-radius: var(--theme-radius); }
+main.staff-page .staff-pagination { margin-top: 16px; }
+
+/* Make the available content width, including the staff rail, drive layouts. */
+main.staff-page .staff-inventories-layout { grid-template-columns: minmax(240px, 280px) minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+main.staff-page .staff-player-directory { top: var(--portal-sticky-offset, 140px); padding: 14px; gap: 12px; }
+main.staff-page .staff-player-directory-heading h2 { font-size: 1.35rem; }
+main.staff-page .staff-player-directory-heading > span { border-radius: 999px; font-size: 11px; letter-spacing: 0; }
+main.staff-page .staff-inventory-detail-heading { padding: 14px; align-items: center; flex-wrap: wrap; }
+main.staff-page .staff-inventory-shortcuts { gap: 6px; }
+main.staff-page .staff-inventory-shortcuts .button { min-height: 40px; }
+main.staff-page .staff-inventory-detail .economy-admin-summary { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 10px; }
+main.staff-page .staff-inventory-detail .economy-admin-summary .panel { min-height: 0; padding: 14px; }
+main.staff-page .staff-inventory-detail .economy-admin-summary h2 { margin-block: 8px; font-size: clamp(1.2rem, 1.8vw, 1.65rem); }
+main.staff-page .staff-inventory-collection { padding-inline: var(--admin-panel-inset); }
+main.staff-page .staff-inventory-filters { grid-template-columns: minmax(140px, 1fr) repeat(2, minmax(100px, .65fr)); }
+main.staff-page .staff-inventory-filters > .button { grid-column: 1 / -1; justify-self: end; min-height: 40px; }
+main.staff-page .staff-inventory-filters label { color: var(--theme-text-muted); font-size: 12px; letter-spacing: 0; text-transform: none; }
+main.staff-page .staff-inventory-operations { padding-inline: var(--admin-panel-inset); scroll-margin-top: var(--portal-sticky-offset, 140px); }
+main.staff-page .staff-inventory-clear { min-height: 40px; font-size: 11px; letter-spacing: 0; text-transform: none; }
+main.staff-page .staff-inventory-no-results { min-height: 160px; padding: 20px; }
+main.staff-page .staff-inventory-empty { min-height: 280px; padding: 24px; }
+main.staff-page :is(.economy-crate-section, .staff-inventory-operations) .section-heading h2,
+main.staff-page .staff-inventory-tool h2 { font-size: clamp(1.2rem, 1.8vw, 1.6rem); line-height: 1.3; }
+
+/* Campaign controls use the same theme and touch targets as other staff forms. */
+main.staff-page .redeem-admin-layout { margin-top: 16px; }
+main.staff-page .redeem-admin-grid { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 16px; }
+main.staff-page :is(.redeem-builder, .redeem-picker) { padding: 16px; }
+main.staff-page :is(.redeem-builder, .redeem-picker) .panel-heading h2 { font-size: 1.4rem; }
+main.staff-page .redeem-builder-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+main.staff-page .redeem-builder-fields > label:first-child { grid-column: 1 / -1; }
+main.staff-page .redeem-builder label,
+main.staff-page .redeem-use-limits legend { color: var(--theme-text-muted); font-size: 12px; letter-spacing: 0; text-transform: none; }
+main.staff-page .redeem-use-limits > label { min-height: 64px; padding: 9px; }
+main.staff-page .redeem-use-limits small,
+main.staff-page .redeem-builder-fields small { color: var(--theme-text-subtle); font-size: 11px; }
+main.staff-page .redeem-picker-item strong { font-size: 12px; }
+main.staff-page .redeem-picker-item small { font-size: 11px; }
+main.staff-page .redeem-picker-item .button { min-height: 40px; padding: 7px 10px; font-size: 11px; }
+main.staff-page .redeem-quantity button { width: 36px; height: 36px; }
+main.staff-page .redeem-quantity output { min-width: 24px; font-size: 12px; }
+main.staff-page .redeem-code-grid[data-item-grid] { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+main.staff-page .redeem-picker-list { max-height: 460px; scrollbar-width: thin; scrollbar-color: var(--theme-border-strong) transparent; }
+.staff-campaign-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(170px, .35fr); align-items: end; gap: 12px; margin-bottom: 14px; }
+.staff-campaign-filters > label { display: grid; gap: 6px; color: var(--theme-text-muted); font-size: 12px; }
+.staff-campaign-filters select { min-height: 44px; padding: 9px 12px; color: var(--theme-text); border: 1px solid var(--theme-border); border-radius: var(--theme-control-radius, var(--theme-radius)); background: var(--theme-control-bg); }
+.staff-campaign-filters select:focus-visible { outline: 2px solid var(--theme-focus-ring); outline-offset: 2px; }
+
+@container staff-content (max-width: 1040px) {
+  main.staff-page .staff-inventories-layout { grid-template-columns: minmax(0, 1fr); }
+  main.staff-page .staff-player-directory { position: static; }
+  main.staff-page .staff-player-results { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 220px; }
+  main.staff-page .redeem-admin-grid { grid-template-columns: minmax(0, 1fr); }
+  main.staff-page .redeem-builder-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  main.staff-page .redeem-builder-fields > label:first-child { grid-column: auto; }
+  main.staff-page .redeem-picker-list { max-height: 340px; }
+}
+
+@media (max-width: 800px) {
+  .staff-navigation { display: flex; flex-wrap: wrap; gap: 5px; padding: 12px; }
+  .staff-navigation-heading,
+  .staff-navigation-group > p { display: none; }
+  .staff-navigation-group,
+  .staff-navigation-links { display: contents; }
+  .staff-navigation-links a,
+  .staff-navigation-group:has(.staff-navigation-links > :only-child) a {
+    flex: 1 1 auto;
+    flex-direction: row;
+    justify-content: center;
+    min-height: 42px;
+    gap: 7px;
+    padding: 9px 10px;
+    font-size: 12px;
+  }
+  main.staff-page .admin-page-header { padding-block: 18px; }
+}
+
+@container staff-content (max-width: 620px) {
+  main.staff-page .staff-player-results { grid-template-columns: minmax(0, 1fr); max-height: 190px; }
+  main.staff-page .staff-inventory-detail .economy-admin-summary { grid-template-columns: minmax(0, 1fr); }
+  main.staff-page .staff-inventory-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  main.staff-page .staff-inventory-filters > :first-child { grid-column: 1 / -1; }
+  main.staff-page .staff-inventory-filters > .button { width: 100%; }
+  main.staff-page .redeem-builder-fields { grid-template-columns: minmax(0, 1fr); }
+  main.staff-page .redeem-use-limits { grid-template-columns: minmax(0, 1fr); }
+  main.staff-page .redeem-use-limits > label { min-height: 48px; }
+  .staff-campaign-filters { grid-template-columns: minmax(0, 1fr); }
+  main.staff-page .staff-create-disclosure .staff-ban-form form { grid-template-columns: minmax(0, 1fr); }
+  main.staff-page .staff-case-form > div > :last-child { margin-left: 0; }
+  main.staff-page .staff-case-form > div > * { flex: 1 1 140px; justify-content: center; }
+  .staff-case-details > summary { flex-wrap: wrap; gap: 7px; }
+  .staff-case-details > summary strong { font-size: 11px; }
+  .staff-case-workspace { padding-inline: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .staff-create-disclosure > summary,
+  .staff-case-details > summary,
+  .staff-create-disclosure > summary > svg:last-child,
+  .staff-case-details > summary > svg:last-child { transition: none; }
 }

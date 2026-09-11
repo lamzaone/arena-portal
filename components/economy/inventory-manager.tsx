@@ -58,6 +58,7 @@ import {
 } from "@/components/economy/economy-view-model";
 import { PortalToast } from "@/components/success-toast";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import styles from "./player-workspace.module.css";
 import { SearchField } from "@/components/ui/search-field";
 import {
   crateOnlySelection,
@@ -873,7 +874,7 @@ export function InventoryManager({
   }
 
   return (
-    <section className="inventory-manager" aria-label="Inventory manager" aria-busy={pending || bulkSelling || bulkLocking || crateOpening.busy}>
+    <section className={`inventory-manager ${styles.workspace}`} aria-label="Inventory manager" aria-busy={pending || bulkSelling || bulkLocking || crateOpening.busy}>
       <header className="panel inventory-overview">
         <div className="inventory-overview-copy">
           <p className="eyebrow">

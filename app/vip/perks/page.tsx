@@ -56,8 +56,8 @@ export default async function VipPerksPage({ searchParams }: { searchParams: Pro
       <section className={`catalog-hero ${styles.hero}`} aria-labelledby="vip-perks-title">
         <div>
           <p className="tapped-kicker"><Sparkles aria-hidden="true" /> Individual VIP perks</p>
-          <h1 id="vip-perks-title">Build your<br /><span>own advantage.</span></h1>
-          <p>Buy individual, timed VIPCore features with Tokens or receive them through a custom community group. Every entitlement has a visible source and expiry.</p>
+          <h1 id="vip-perks-title">Individual <span>perks</span></h1>
+          <p>Spend Tokens on the extras you want. Compare durations and see which perks are already active.</p>
         </div>
         <aside className="catalog-signal">
           <span className="signal-label">PERK WALLET</span>
@@ -68,20 +68,20 @@ export default async function VipPerksPage({ searchParams }: { searchParams: Pro
 
       <VipSectionNav active="perks" />
 
-      {storageError ? <aside className={styles.storageNotice} role="status"><Sparkles aria-hidden="true" /><div><strong>{migrationNeeded ? "VIP perk tables are missing or incomplete." : "VIP perks are being connected."}</strong><span>{migrationNeeded ? "Apply db/019_vip_perks.sql to the database configured by PORTAL_DATABASE_URL, then refresh this page." : "Configure VIP perk storage and apply portal migration 019 to publish offers and active entitlements."}</span></div></aside> : null}
+      {storageError ? <aside className={styles.storageNotice} role="status"><Sparkles aria-hidden="true" /><div><strong>Perk offers are temporarily unavailable.</strong><span>{migrationNeeded ? "The perk catalogue is being updated. Please check back shortly." : "Please check back shortly or contact staff about an existing perk."}</span></div></aside> : null}
 
       <section className={styles.shop} aria-labelledby="perk-shop-title">
         <div className="catalog-section-heading">
-          <div><p className="tapped-kicker"><Coins aria-hidden="true" /> Token shop</p><h2 id="perk-shop-title">Choose one perk at a time.</h2></div>
-          <p>Prices and durations are locked again by the server when you buy. Purchasing the same perk extends its existing direct entitlement.</p>
+          <div><p className="tapped-kicker"><Coins aria-hidden="true" /> Token shop</p><h2 id="perk-shop-title">Available perks</h2></div>
+          <p>Buying a perk you already have extends its remaining time.</p>
         </div>
         <VipPerkShop offers={storefront.offers} owned={storefront.owned} csrf={session ? createEconomyActionToken(session) : ""} initialBalance={storefront.balance} authenticated={Boolean(session)} />
       </section>
 
       <section className={styles.roster} aria-labelledby="perk-roster-title">
         <div className="catalog-section-heading">
-          <div><p className="tapped-kicker"><UsersRound aria-hidden="true" /> Active entitlement roster</p><h2 id="perk-roster-title">Who has which perks.</h2></div>
-          <p>{roster.total.toLocaleString()} active player-perk entitlement{roster.total === 1 ? "" : "s"}. Group and direct sources are combined without hiding the effective expiration.</p>
+          <div><p className="tapped-kicker"><UsersRound aria-hidden="true" /> Community</p><h2 id="perk-roster-title">Active perks</h2></div>
+          <p>{roster.total.toLocaleString()} active player perk{roster.total === 1 ? "" : "s"}, with their source and expiry.</p>
         </div>
         {roster.entries.length ? (
           <DataTable className={styles.tableScroll} tableClassName={styles.table} caption="Active individual VIP perks">

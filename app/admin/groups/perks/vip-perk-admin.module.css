@@ -31,6 +31,11 @@
 .definitionList { display: grid; gap: .55rem; margin-top: .8rem; }
 .definition { border: 1px solid var(--theme-border); border-radius: var(--theme-radius); background: color-mix(in srgb, var(--theme-surface-raised) 84%, transparent); overflow: clip; }
 .definition summary { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: .8rem; padding: .68rem .85rem; cursor: pointer; }
+.definition summary { list-style: none; }
+.definition summary::-webkit-details-marker { display: none; }
+.definition summary::after { content: "+"; color: var(--perk-accent); font-size: 18px; }
+.definition[open] summary::after { content: "−"; }
+.definition summary > .status { margin-left: auto; }
 .definition summary:hover { background: var(--theme-control-hover); }
 .definition summary > span:first-child { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.55rem; min-width: 0; }
 .definition summary:focus-visible { outline: 2px solid var(--theme-focus-ring); outline-offset: -2px; }
@@ -86,4 +91,19 @@
   .wide { grid-column: auto; }
   .grantRow { grid-template-columns: 1fr; align-items: stretch; }
   .grantRow button { width: 100%; }
+}
+
+@container staff-content (max-width: 900px) {
+  .createForm { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .assignGrid { grid-template-columns: minmax(0, 1fr); }
+  .grantRow { grid-template-columns: minmax(0, 1fr) auto; }
+  .grantRow > :first-child { grid-column: 1 / -1; }
+}
+
+@container staff-content (max-width: 540px) {
+  .createForm, .grantRow { grid-template-columns: minmax(0, 1fr); }
+  .grantRow > :first-child { grid-column: 1; }
+  .grantRow button { width: 100%; }
+  .definition summary { flex-wrap: wrap; }
+  .definition summary > span:first-child { flex: 1 1 160px; }
 }

@@ -184,6 +184,10 @@
   transition: background-color 180ms ease, color 180ms ease;
 }
 .listing > summary:hover { background: var(--theme-control-hover); }
+.listing > summary { list-style: none; }
+.listing > summary::-webkit-details-marker { display: none; }
+.listing > summary::after { content: "+"; flex: 0 0 auto; color: var(--listing-accent); font-size: 20px; }
+.listing[open] > summary::after { content: "−"; }
 .listing > summary:focus-visible { outline: 2px solid var(--theme-focus-ring); outline-offset: -2px; }
 .listing[open] > summary { border-bottom: 1px solid var(--theme-border); background: color-mix(in srgb, var(--listing-accent) 5%, transparent); }
 .listingIdentity { display: flex; min-width: 0; align-items: center; gap: .65rem; }
@@ -335,4 +339,22 @@
   .editForm :is(input, select),
   .perkCreateForm :is(input, select),
   .perkEditForm input { transition: none; }
+}
+
+@container staff-content (max-width: 1000px) {
+  .createForm, .editForm, .perkCreateForm { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .perkOffer { grid-template-columns: minmax(0, 1fr) auto; }
+  .perkEditForm { grid-column: 1 / -1; }
+  .perkOffer > :last-child { grid-column: auto; }
+  .listing > summary { flex-wrap: wrap; gap: 10px; }
+  .listingFacts { flex: 1 1 auto; justify-content: flex-start; }
+}
+
+@container staff-content (max-width: 580px) {
+  .createForm, .editForm, .perkCreateForm, .perkOffer, .perkEditForm { grid-template-columns: minmax(0, 1fr); }
+  .listing > summary { align-items: flex-start; }
+  .listingIdentity { flex-basis: 100%; }
+  .listingFacts { gap: 5px; }
+  .listingFacts > span { white-space: normal; }
+  .perkEditForm button, .disableButton { width: 100%; }
 }

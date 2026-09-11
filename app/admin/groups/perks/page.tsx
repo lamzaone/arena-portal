@@ -108,7 +108,7 @@ export default async function VipPerkAdminPage({ searchParams }: { searchParams:
       <AdminPageHeader
         id="vip-perk-management-title"
         title="VIP perks"
-        description="Define VIPCore features once and grant them to custom groups or individual players without manufacturing a VIP membership."
+        description="Manage VIP perk definitions and grant them to individual players or custom groups."
         access={access}
       />
 
@@ -133,6 +133,8 @@ export default async function VipPerkAdminPage({ searchParams }: { searchParams:
       {activeView === "definitions" ? <section className="staff-record-section">
         <div className="staff-section-heading"><div><p className="tapped-kicker"><Settings2 aria-hidden="true" /> Runtime definitions</p><h2>Perk catalogue</h2></div><span>{snapshot.perks.length} definitions</span></div>
         <p className={styles.intro}>The stable key must exactly match the feature registered by VIPCore. Configuration is the standalone default applied to direct and custom-group grants.</p>
+        <details className="staff-create-disclosure" open={snapshot.perks.length === 0}>
+        <summary><Sparkles aria-hidden="true" /><span><strong>Create a perk definition</strong><small>Add a feature and its default configuration.</small></span></summary>
         <form className={`staff-management-form ${styles.createForm}`} action="/api/admin/vip-perks" method="post">
           <Fields csrf={csrf} action="perk-create" />
           <label>Feature key<input name="perkKey" pattern="[a-z0-9][a-z0-9._:-]{0,95}" maxLength={96} placeholder="vip.feature" required /></label>
@@ -142,6 +144,7 @@ export default async function VipPerkAdminPage({ searchParams }: { searchParams:
           <label className={styles.wide}>Default plugin configuration<textarea name="configuration" rows={4} defaultValue="{}" spellCheck={false} required /><small>Valid JSON. Use the exact shape expected by the registered feature module.</small></label>
           <button className="button button-primary" type="submit"><Sparkles aria-hidden="true" /> Create definition</button>
         </form>
+        </details>
         <div className={styles.definitionList}>
           {snapshot.perks.map((perk) => <details className={styles.definition} key={perk.id}><summary><span><strong>{perk.displayName}</strong><code>{perk.key}</code></span><span className={styles.status} data-enabled={perk.enabled ? "true" : "false"}>{perk.enabled ? "Enabled" : "Disabled"}</span></summary><form className="staff-management-form" action="/api/admin/vip-perks" method="post"><Fields csrf={csrf} action="perk-update" /><input type="hidden" name="perkId" value={perk.id} /><label>Display name<input name="displayName" maxLength={100} defaultValue={perk.displayName} required /></label><label>Category<input name="category" pattern="[a-z0-9][a-z0-9_-]{0,47}" maxLength={48} defaultValue={perk.category} required /></label><label>Status<select name="enabled" defaultValue={perk.enabled ? "true" : "false"}><option value="true">Enabled</option><option value="false">Disabled</option></select></label><label className={styles.wide}>Description<input name="description" maxLength={255} defaultValue={perk.description ?? ""} /></label><label className={styles.wide}>Default plugin configuration<textarea name="configuration" rows={6} defaultValue={configuration(perk.configuration)} spellCheck={false} required /></label><button className="button button-primary" type="submit">Save definition</button></form></details>)}
         </div>

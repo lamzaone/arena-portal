@@ -586,7 +586,7 @@ body:has(.player-profile-page[data-theme-owner="profile"].profile-theme-beta-tes
   background-color: rgba(56, 189, 248, .1);
 }
 
-.player-profile-page.profile-theme-beta-tester :where(a, button, summary, input, select, textarea, [tabindex]:not([tabindex="-1"])):not(:where(.site-header *, .account-nav *)):focus-visible {
+.player-profile-page.profile-theme-beta-tester :where(a, button, summary, input, select, textarea, [tabindex]:not([tabindex="-1"])):not(:where(.site-header *, .account-nav *, [data-search-input])):focus-visible {
   outline: 2px solid var(--beta-yellow) !important;
   outline-offset: 3px;
 }

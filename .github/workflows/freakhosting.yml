@@ -22,7 +22,7 @@ jobs:
     env:
       SITE_URL: ${{ vars.SITE_URL || 'https://tapped.ro' }}
       NEXT_PUBLIC_SERVER_NAME: ${{ vars.NEXT_PUBLIC_SERVER_NAME || 'ARENA.TAPPED.RO' }}
-      NEXT_PUBLIC_SERVER_CONNECT_URL: ${{ vars.NEXT_PUBLIC_SERVER_CONNECT_URL || 'steam://connect/arena.tapped.ro' }}
+      NEXT_PUBLIC_SERVER_CONNECT_URL: ${{ vars.NEXT_PUBLIC_SERVER_CONNECT_URL || 'steam://connect/82.47.171.114:27015' }}
       ECONOMY_PRICE_REFRESH_ENABLED: 'false'
       RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
@@ -35,6 +35,7 @@ jobs:
           cache: npm
       - run: npm ci --include=dev
       - run: npm test
+      - run: npm run test:discord
       - name: Test packaging, SSH transport, restart and rollback
         run: |
           python3 scripts/hosting/package.test.py

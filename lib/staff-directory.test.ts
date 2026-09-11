@@ -61,5 +61,19 @@ test("sorts by resolved Steam name and counts online people once across groups",
 test("publishes only presentation fields even when the source has private membership metadata", () => {
   const record = { ...membership("76561198000000001", "founder"), grantReason: "private", permissions: ["root"], membershipUuid: "private" };
   const directory = buildStaffDirectory(definitions, [record]);
-  assert.deepEqual(Object.keys(directory.groups[0].members[0]).sort(), ["avatarUrl", "name", "presence", "profileThemeKey", "steamId"]);
+  assert.deepEqual(Object.keys(directory.groups[0].members[0]).sort(), ["avatarUrl", "discordProfileUrl", "name", "presence", "profileThemeKey", "steamId"]);
+});
+
+test("publishes a Discord contact only when its linked profile URL is canonical", () => {
+  const steamId = "76561198000000001";
+  const memberWithDiscord = (discordProfileUrl?: string | null) => buildStaffDirectory(
+    definitions,
+    [membership(steamId, "founder")],
+    { [steamId]: { name: "Alice", avatarUrl: null, presence: "online", discordProfileUrl } },
+  ).groups[0].members[0];
+
+  assert.equal(memberWithDiscord("https://discord.com/users/123456789012345678").discordProfileUrl, "https://discord.com/users/123456789012345678");
+  for (const invalid of [undefined, null, "", "javascript:alert(1)", "https://discord.com.evil.test/users/123456789012345678", "https://discord.com/users/123456789012345678?redirect=other", "https://discord.com/users/not-a-user", "https://discord.com/users/1234"]) {
+    assert.equal(memberWithDiscord(invalid).discordProfileUrl, null);
+  }
 });

@@ -5,11 +5,11 @@
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   width: 100%;
   min-width: 0;
-  min-height: 520px;
-  padding: 0 24px;
+  min-height: 0;
+  padding: 0 20px;
   color: var(--theme-text);
   border: 1px solid var(--theme-border-strong);
-  border-radius: calc(var(--theme-radius) * 2);
+  border-radius: var(--theme-radius);
   background: linear-gradient(145deg, color-mix(in srgb, var(--theme-accent) 12%, var(--theme-surface)), var(--theme-surface) 65%);
   box-shadow: var(--theme-shadow);
 }
@@ -37,7 +37,7 @@
 .online { color: var(--theme-success); background: var(--theme-success-surface); }
 .lost { color: var(--theme-danger-text); }
 .unknown { color: var(--theme-warning); }
-.overview { display: grid; gap: 20px; padding: 25px 0 24px; }
+.overview { display: grid; gap: 14px; padding: 18px 0; }
 .mapHeading { display: flex; align-items: center; gap: 13px; min-width: 0; }
 .mapHeading > div { min-width: 0; }
 .modeBadge { display: grid; flex: 0 0 48px; height: 48px; place-items: center; border: 1px solid var(--theme-border-strong); border-radius: var(--theme-radius); background: var(--theme-control-hover); color: var(--theme-accent-soft); font-family: var(--font-display); font-size: 15px; }
@@ -66,10 +66,10 @@
 .steamLink svg { width: 13px; height: 13px; }
 .steamLink:hover { color: var(--theme-accent-soft); background: var(--theme-control-hover); }
 .steamLink:focus-visible { outline: 2px solid var(--theme-focus-ring); outline-offset: 1px; }
-.emptyRoster { display: grid; min-height: 100px; margin: 0; place-items: center; padding: 18px; border: 1px dashed var(--theme-border-strong); border-radius: var(--theme-radius); background: var(--theme-surface-muted); color: var(--theme-text-muted); text-align: center; font-size: 12px; line-height: 1.7; }
-@media (max-width: 960px) { .panel { max-width: 650px; } }
+.emptyRoster { display: grid; min-height: 70px; margin: 0; place-items: center; padding: 14px; border: 1px dashed var(--theme-border-strong); border-radius: var(--theme-radius); background: var(--theme-surface-muted); color: var(--theme-text-muted); text-align: center; font-size: 12px; line-height: 1.7; }
+@media (max-width: 960px) { .panel { max-width: none; } }
 @media (max-width: 640px) {
-  .panel { min-height: 490px; padding: 0 14px; }
+  .panel { min-height: 0; padding: 0 14px; }
   .terminalLabel { font-size: 9px; gap: 6px; }
   .status { font-size: 9px; }
   .overview { padding: 20px 0; gap: 16px; }

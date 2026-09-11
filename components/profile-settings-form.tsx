@@ -9,11 +9,11 @@ import {
   Trophy,
 } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useMemo, useState, useTransition } from "react";
 
 import { PortalToast } from "@/components/success-toast";
-import { ProfileShowcases } from "@/components/profile-showcases";
 import { AsyncButton } from "@/components/ui/async-button";
 import { getTrustedProfileTheme } from "@/lib/content/profile-themes";
 import { getPortalTheme } from "@/lib/themes/registry";
@@ -158,8 +158,8 @@ export function ProfileSettingsForm({
           <strong>Choose who can browse your tradeable items.</strong>
         </legend>
         <p className="empty-copy" id="inventory-visibility-help">
-          Staff tools remain protected separately. This controls what other
-          signed-in players can see while preparing a trade.
+          Control what other signed-in players can see when viewing your
+          inventory or preparing a trade.
         </p>
         <div
           className="settings-choice-grid"
@@ -210,11 +210,9 @@ export function ProfileSettingsForm({
           <strong>Select a theme owned by your account.</strong>
         </legend>
         <p className="empty-copy">
-          Choose how your profile looks. Global themes also style the site for
-          you and your player cards for everyone. Your selection stays saved
-          while the theme is available in your inventory. Group rewards may be
-          removed when the granting membership ends.
-          Equip a theme here or from Inventory.
+          Choose your look. Each theme lists the areas it styles, including your
+          profile, site interface, and player cards. Membership rewards remain
+          available while the granting membership is active.
         </p>
         <div className="settings-theme-grid">
           <label
@@ -294,13 +292,10 @@ export function ProfileSettingsForm({
         </div>
         {!initialSettings.ownedThemes.length ? (
           <p className="settings-owned-empty">
-            Your themes will appear here when you receive one through a VIP or
-            staff membership, or get one from the Market.
+            Collect themes through memberships or the <Link href="/market">Market</Link> to personalise your profile.
           </p>
         ) : null}
       </fieldset>
-
-      <ProfileShowcases />
 
       <footer className="settings-save-bar">
         <p role="status" aria-live="polite">
@@ -310,6 +305,8 @@ export function ProfileSettingsForm({
               ? "You have unsaved changes."
               : "All changes saved."}
         </p>
+        <div className="settings-save-actions">
+        {dirty ? <button className="button button-secondary" type="button" disabled={pending} onClick={() => { setVisibility(saved.visibility); setActiveThemeItemId(saved.activeThemeItemId); setNotice(null); }}>Discard changes</button> : null}
         <AsyncButton
           className="button button-primary"
           type="submit"
@@ -320,6 +317,7 @@ export function ProfileSettingsForm({
         >
           Save settings
         </AsyncButton>
+        </div>
       </footer>
     </form>
   );

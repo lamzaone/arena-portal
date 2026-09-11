@@ -1,5 +1,6 @@
 import { AlertTriangle, Paintbrush, ShieldCheck, Sparkles } from "lucide-react";
 import Link from "next/link";
+import styles from "./skins.module.css";
 
 import { LoadoutEditor } from "@/components/loadout-editor";
 import { SignInRequired } from "@/components/sign-in-required";
@@ -13,7 +14,8 @@ export default async function SkinsPage() {
   // not reachable in normal operation while TAPPED.Inventory owns cosmetics.
   if (process.env.LEGACY_WEAPONSKINS_ENABLED !== "true") {
     return <PortalShell authenticated className="tapped-page">
-      <section className="staff-denied"><ShieldCheck aria-hidden="true" /><p className="tapped-kicker">Legacy system retired</p><h1>The old loadout is disabled.</h1><p>Your cosmetic collection, crates, and equipped items now live in the Token Inventory.</p><Link className="button button-primary" href="/inventory">Open inventory</Link></section>
+      <PageHeading eyebrow={<><Paintbrush aria-hidden="true" /> Player economy</>} title="Your cosmetics" description="Your collection and equipped items have a new home." />
+      <section className={styles.retired}><span className={styles.icon}><ShieldCheck aria-hidden="true" /></span><h2>Manage your items in Inventory</h2><p>Browse your cosmetics, customize items, and open crates in Inventory. Use Loadout to choose what each team equips.</p><div className={styles.actions}><Link className="button button-primary" href="/inventory">Open inventory</Link><Link className="button button-secondary" href="/loadout">Manage loadout</Link></div></section>
     </PortalShell>;
   }
   const session = await getSession();
@@ -35,11 +37,11 @@ export default async function SkinsPage() {
   return (
     <PortalShell authenticated className="tapped-page">
       <PageHeading className="loadout-page-heading" eyebrow={<><Paintbrush aria-hidden="true" /> WeaponSkins</>} title="Loadout panel" description="Preview and queue your TAPPED.RO cosmetics from the website. The live server remains the final authority for permissions and every item selection." actions={<div className="loadout-security-mark"><ShieldCheck aria-hidden="true" /><span>Server-validated</span></div>} />
-      {!profile.sourceConnected ? <div className="notice notice-info"><AlertTriangle aria-hidden="true" /> Configure the read-only game database first to show your saved WeaponSkins loadout.</div> : null}
+      {!profile.sourceConnected ? <div className="notice notice-info"><AlertTriangle aria-hidden="true" /> Your saved loadout is temporarily unavailable. Try again once the game connection is restored.</div> : null}
       <section className="loadout-grid" aria-label="Saved cosmetic loadout">
         {collections.map(([name, count]) => <article key={String(name)} className="loadout-card"><Sparkles aria-hidden="true" /><span>{name}</span><strong>{count}</strong><small>saved selection{Number(count) === 1 ? "" : "s"}</small></article>)}
       </section>
-      {catalogue ? <LoadoutEditor catalogue={catalogue} loadout={loadout} actionToken={createLoadoutActionToken(session)} /> : <section className="panel loadout-bridge"><div><p className="eyebrow"><ShieldCheck aria-hidden="true" /> Waiting for bridge sync</p><h2>The live WeaponSkins catalogue is not available yet.</h2><p>The editor only shows choices imported from the active game plugin. Reload the updated <code>TAPPED.PortalBridge</code> once after applying <code>db/005_loadout_catalogue.sql</code>; it will publish the available weapons, finishes, agents, and music kits to this portal automatically.</p></div><div className="bridge-status"><span className="badge badge-warning">Catalogue pending</span><p>Saved selections can still be counted above. No cosmetic changes are sent until the server catalogue is present.</p></div></section>}
+      {catalogue ? <LoadoutEditor catalogue={catalogue} loadout={loadout} actionToken={createLoadoutActionToken(session)} /> : <section className="panel loadout-bridge"><div><p className="eyebrow"><ShieldCheck aria-hidden="true" /> Catalogue pending</p><h2>Your cosmetic choices are syncing.</h2><p>Your saved selection counts are shown above. Return shortly to preview and change your loadout when the game catalogue is available.</p></div><div className="bridge-status"><Link className="button button-secondary" href="/inventory">View inventory</Link></div></section>}
     </PortalShell>
   );
 }

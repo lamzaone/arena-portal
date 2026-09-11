@@ -42,6 +42,7 @@ import {
   type EconomyItemView,
 } from "@/components/economy/economy-view-model";
 import { TokenBalance } from "@/components/economy/token-balance";
+import styles from "./player-workspace.module.css";
 import { useItemGridLayout } from "@/components/economy/item-grid";
 import { WeaponInspectButton } from "@/components/economy/weapon-inspect-button";
 import { PortalToast } from "@/components/success-toast";
@@ -434,6 +435,9 @@ function MarketplacePurchaseAction({
           <strong>{quoteWear}</strong>
         </div>
       ) : null}
+      {supportsFloat || supportsStattrak ? <details className={styles.purchaseOptions}>
+        <summary><SlidersHorizontal aria-hidden="true" /><span>{supportsFloat ? "Customize finish" : "StatTrak option"}</span><ChevronDown aria-hidden="true" /></summary>
+        <div>
       {supportsStattrak ? (
         <label className="market-purchase-stattrak" htmlFor={stattrakControlId}>
           <input
@@ -495,6 +499,8 @@ function MarketplacePurchaseAction({
           </small>
         </div>
       ) : null}
+        </div>
+      </details> : null}
       {supportsFloat && quote ? (
         <p className="market-quote-evidence" role="status">
           {marketQuoteEvidenceLabel(quote)}
@@ -1292,21 +1298,21 @@ export function MarketplaceBrowser({
   }
 
   return (
-    <section aria-label="Marketplace catalogue">
-      <div className="content-grid">
-        <div className="panel">
-          <p className="eyebrow">
-            <ShoppingBag aria-hidden="true" /> Direct marketplace
-          </p>
-          <h2>Buy the exact item you want.</h2>
-          <p className="empty-copy">
-            Public market data informs Token prices; custom server finishes
-            use staff-set prices. Crates and capsules use their listed base
-            price unless an admin discount is active; no key is needed to open them.
-          </p>
+    <section className={styles.workspace} aria-label="Marketplace catalogue">
+      <header className={styles.overview}>
+        <div className={styles.overviewCopy}>
+          <h2>Find your next item</h2>
+          <p>Purchases go straight to your inventory. Open cases without a key.</p>
+          <details className={styles.help}>
+            <summary>How prices work</summary>
+            <p>Public market data informs Token prices. Custom server finishes use staff-set prices. Crates and capsules use their listed price, including any active discount.</p>
+          </details>
         </div>
-        <TokenBalance wallet={walletView} />
-      </div>
+        <div className={styles.overviewMeta}>
+          <TokenBalance wallet={walletView} compact />
+          <Link href="/inventory">View inventory</Link>
+        </div>
+      </header>
 
       {notice ? (
         <PortalToast
@@ -1329,8 +1335,7 @@ export function MarketplaceBrowser({
               <SlidersHorizontal aria-hidden="true" /> Find an item
             </p>
             <p className="empty-copy">
-              Search item name, public market name, catalogue key, or a category
-              such as weapons or skins.
+              Search by name, then narrow by category and rarity.
             </p>
           </div>
           <span className="tag">Up to {pageSize} items per page</span>

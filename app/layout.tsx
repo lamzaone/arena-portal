@@ -7,6 +7,7 @@ import {
 } from "@/components/profile-theme-slots";
 import { ProgressiveFormRuntime } from "@/components/ui/progressive-form-runtime";
 import { NavigationProgress } from "@/components/ui/navigation-progress";
+import { PanelEffects } from "@/components/ui/panel-effects";
 import { getSession } from "@/lib/auth/session";
 import { rootMetadata } from "@/lib/seo/site";
 import { resolvePortalThemeSurface } from "@/lib/themes/registry";
@@ -19,6 +20,8 @@ import "./themes/ranks.css";
 import "./themes/player-containers.css";
 import "./staff-workspace.css";
 import "./themes/refinements.css";
+import "./panel-system.css";
+import "./public-panels.css";
 import "./themes/accessibility.css";
 import "./form-runtime.css";
 import "./navigation-progress.css";
@@ -36,6 +39,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       className={globalThemeSurface.className}
       data-theme={globalTheme.key}
       data-theme-surface="global"
+      data-scroll-behavior="smooth"
     >
       <body>
         <a className="skip-link" href="#main-content">
@@ -44,6 +48,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <GlobalThemeBackground themeKey={session?.profileThemeKey} />
         <GlobalThemeDocumentEffects themeKey={session?.profileThemeKey} />
         <CursorGridBackground />
+        <PanelEffects />
         <ProgressiveFormRuntime />
         <Suspense fallback={null}>
           <NavigationProgress />

@@ -1,11 +1,13 @@
 "use client";
 
-import { CheckCircle2, Gift, TicketCheck } from "lucide-react";
+import { Archive, ArrowUpRight, CheckCircle2, Gift, TicketCheck } from "lucide-react";
+import Link from "next/link";
 import { FormEvent, useState } from "react";
 
 import { postEconomyAction } from "@/components/economy/economy-request";
 import { PortalToast } from "@/components/success-toast";
 import { AsyncButton } from "@/components/ui/async-button";
+import styles from "./player-workspace.module.css";
 
 type RedeemResult = {
   displayName: string;
@@ -26,6 +28,7 @@ export function RedeemCodeForm({ csrf }: { csrf: string }) {
     setPending(true);
     setError(null);
     setMessage(null);
+    setResult(null);
     try {
       const response = await postEconomyAction("/api/economy/redeem", csrf, {
         code: code.trim(),
@@ -49,12 +52,12 @@ export function RedeemCodeForm({ csrf }: { csrf: string }) {
   }
 
   return (
-    <section className="panel redeem-player-panel">
+    <section className={`panel redeem-player-panel ${styles.redeem}`} aria-labelledby="redeem-form-heading">
       <div className="redeem-player-copy">
         <p className="eyebrow">
           <TicketCheck aria-hidden="true" /> Reward locker
         </p>
-        <h2>Redeem a code</h2>
+        <h2 id="redeem-form-heading">Redeem a code</h2>
         <p>
           Enter a code to add its Tokens and items directly to your account.
           Each code can be claimed only once per player.
@@ -65,8 +68,13 @@ export function RedeemCodeForm({ csrf }: { csrf: string }) {
         <div>
           <input
             id="redeem-code"
+            name="code"
+            required
+            autoComplete="off"
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? "redeem-code-error" : undefined}
             value={code}
-            onChange={(event) => setCode(event.target.value.toUpperCase())}
+            onChange={(event) => { setCode(event.target.value.toUpperCase()); setError(null); }}
             autoCapitalize="characters"
             autoCorrect="off"
             spellCheck={false}
@@ -85,6 +93,7 @@ export function RedeemCodeForm({ csrf }: { csrf: string }) {
             Redeem
           </AsyncButton>
         </div>
+        {error ? <p id="redeem-code-error" className={styles.inlineError} role="alert">{error}</p> : null}
       </form>
       {result ? (
         <article className="redeem-reward-summary" aria-live="polite">
@@ -102,8 +111,11 @@ export function RedeemCodeForm({ csrf }: { csrf: string }) {
           </div>
         </article>
       ) : null}
+      <nav className={styles.redeemLinks} aria-label="Reward destinations">
+        <Link href="/inventory"><Archive aria-hidden="true" /> Your inventory</Link>
+        <Link href="/market">Spend Tokens in Marketplace <ArrowUpRight aria-hidden="true" /></Link>
+      </nav>
       {message ? <PortalToast message={message} onDismiss={() => setMessage(null)} /> : null}
-      {error ? <PortalToast variant="danger" message={error} onDismiss={() => setError(null)} /> : null}
     </section>
   );
 }

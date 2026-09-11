@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import styles from "./player-workspace.module.css";
 
 import { EconomyEmptyState } from "@/components/economy/economy-item-card";
 import { PaginatedItemGrid, useItemGridLayout } from "@/components/economy/item-grid";
@@ -567,21 +568,17 @@ export function TradeManager({
   );
 
   return (
-    <section aria-label="Player trading">
-      <div className="content-grid trade-intro-grid">
-        <div className="panel">
-          <p className="eyebrow">
-            <ArrowLeftRight aria-hidden="true" /> Player trades
-          </p>
-          <h2>Build both sides of the offer.</h2>
-          <p className="empty-copy">
-            Find another player, select what you will give on the left and what
-            you want on the right. Pending offers safely reserve only your own
-            included assets.
-          </p>
+    <section className={styles.workspace} aria-label="Player trading">
+      <header className={styles.overview}>
+        <div className={styles.overviewCopy}>
+          <h2>Build both sides of the offer</h2>
+          <p>Choose a player, then add items or Tokens. Your offered assets are reserved until the trade is resolved.</p>
         </div>
-        <TokenBalance wallet={walletView} />
-      </div>
+        <div className={styles.overviewMeta}>
+          <TokenBalance wallet={walletView} compact />
+          <a href="#trade-activity">Offers ({tradeList.length})</a>
+        </div>
+      </header>
 
       {notice ? (
         <PortalToast
@@ -857,7 +854,7 @@ export function TradeManager({
         </fieldset>
       </section>
 
-      <section className="history-section">
+      <section id="trade-activity" className="history-section" aria-label="Trade activity">
         <div className="section-heading compact">
           <p className="eyebrow">Trade activity</p>
           <h2>Incoming and outgoing offers</h2>

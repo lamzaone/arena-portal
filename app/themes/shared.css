@@ -6,6 +6,14 @@
   display: contents;
 }
 
+/* The hover preview is portalled outside the identity's CSS-module boundary. */
+.player-profile-preview-layer {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  pointer-events: none;
+}
+
 .player-profile-page[data-theme-owner="profile"] {
   min-height: 100vh;
 }
@@ -152,7 +160,7 @@ body:has(.player-profile-page[data-theme-owner="profile"])
 
 :is(
   [data-theme-surface]
-) :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+) :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea):not(:where([data-search-input])) {
   border-color: var(--theme-border);
   border-radius: var(--theme-radius);
   color: var(--theme-text);
@@ -161,14 +169,14 @@ body:has(.player-profile-page[data-theme-owner="profile"])
 
 :is(
   [data-theme-surface]
-) :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea):is(:hover, :focus) {
+) :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea):not(:where([data-search-input])):is(:hover, :focus) {
   border-color: var(--theme-border-strong);
   background-color: var(--theme-control-hover);
 }
 
 :is(
   [data-theme-surface]
-) :where(a, button, summary, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+) :where(a, button, summary, input, select, textarea, [tabindex]:not([tabindex="-1"])):not(:where([data-search-input])):focus-visible {
   outline: 2px solid var(--theme-focus-ring) !important;
   outline-offset: 3px;
 }
@@ -493,8 +501,8 @@ body:has(.player-profile-page[data-theme-owner="profile"])
   box-shadow: var(--theme-shadow);
 }
 
-/* Search implementations share these control hooks even when their data
-   source is client-side, URL-driven or server-backed. */
+/* Search controls own their border, surface and focus ring. Their marked
+   inner inputs stay transparent instead of receiving a second themed field. */
 :where([data-theme][data-theme-surface])
   :is([data-ui="search-field"], [data-ui="player-search"]) {
   color: var(--theme-text);

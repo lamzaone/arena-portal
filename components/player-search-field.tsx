@@ -351,6 +351,7 @@ export function PlayerSearchField({
             className={styles.input}
             id={inputId}
             type="search"
+            data-search-input="true"
             value={query}
             disabled={disabled}
             required={required}
@@ -373,7 +374,7 @@ export function PlayerSearchField({
           />
           {searchState === "loading" ? (
             <span className={styles.trailing} aria-hidden="true"><LoaderCircle className={styles.spinner} /></span>
-          ) : selected || query ? (
+          ) : (selected || query) && !disabled ? (
             <button className={styles.trailing} type="button" onClick={clearSelection} aria-label="Clear player search">
               <X aria-hidden="true" />
             </button>

@@ -2,7 +2,7 @@
   display: grid;
   width: 100%;
   min-width: 0;
-  gap: 7px;
+  gap: 8px;
   margin: 0;
   color: var(--theme-text-muted, var(--muted));
   font-size: 11px;
@@ -11,8 +11,10 @@
   text-transform: uppercase;
 }
 
-.labelText {
+.root .labelText {
   min-width: 0;
+  margin: 0;
+  line-height: 16px;
 }
 
 .control.control {
@@ -36,7 +38,7 @@
 .control.control:focus-within {
   border-color: var(--theme-accent-strong, var(--accent-bright));
   background: var(--theme-control-focus-bg, var(--theme-control-bg, rgba(16, 4, 8, 0.94)));
-  box-shadow: 0 0 0 3px var(--theme-focus-ring, rgba(225, 29, 72, 0.17));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-focus-ring, #ff91a4) 22%, transparent);
 }
 
 .icon {
@@ -47,11 +49,11 @@
   pointer-events: none;
 }
 
-.input.input {
+.root[data-ui="search-field"] [data-part="control"] > .input {
   width: 100%;
   min-width: 0;
-  height: 42px;
-  min-height: 42px;
+  height: 100%;
+  min-height: 0;
   margin: 0;
   padding: 0 4px;
   border: 0;
@@ -64,10 +66,11 @@
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0;
+  line-height: normal;
   text-transform: none;
 }
 
-.input.input:focus {
+.root[data-ui="search-field"] [data-part="control"] > .input:focus {
   border: 0;
   outline: 0;
   box-shadow: none;
@@ -78,7 +81,7 @@
   opacity: 1;
 }
 
-.input.input:disabled {
+.root[data-ui="search-field"] [data-part="control"] > .input:disabled {
   color: var(--theme-text-subtle, var(--subtle));
   cursor: not-allowed;
 }
@@ -112,6 +115,11 @@
   border-color: var(--theme-border-strong, var(--border-bright));
   color: var(--theme-text, var(--text));
   background: var(--theme-control-hover, var(--accent-surface));
+}
+
+.clear.clear:focus-visible {
+  outline: 2px solid var(--theme-focus-ring) !important;
+  outline-offset: -2px;
 }
 
 .clear svg {
@@ -181,7 +189,11 @@
 }
 
 .alignWithLabel.alignWithLabel.alignWithLabel {
-  margin-top: 20px;
+  margin-top: 24px;
+}
+
+@media (max-width: 640px) {
+  .root[data-ui="search-field"] [data-part="control"] > .input { font-size: 16px; }
 }
 
 @keyframes search-field-spin {
