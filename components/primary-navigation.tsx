@@ -11,6 +11,7 @@ const primaryLinks = [
   { href: "/modes", label: "Modes" },
   { href: "/vip", label: "VIP" },
   { href: "/ranking", label: "Ranking" },
+  { href: "/staff", label: "Staff" },
 ] as const;
 
 function PrimaryNavigationLinks({ pathname }: { pathname: string | null }) {

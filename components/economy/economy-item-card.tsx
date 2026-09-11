@@ -1,6 +1,6 @@
 "use client";
 
-import { Box, Coins, LockKeyhole } from "lucide-react";
+import { Box, Coins, Crosshair, LockKeyhole, Music2 } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
@@ -29,6 +29,18 @@ type EconomyItemCardProps = {
   className?: string;
   disabled?: boolean;
 };
+
+export function EconomyItemStatTrak({ item }: { item: Pick<EconomyItemView, "stattrak" | "stattrakCount" | "itemType"> }) {
+  if (!item.stattrak) return null;
+  const isMusicKit = ["music_kit", "music-kit", "musickit"].includes(item.itemType);
+  const count = formatTokens(Math.max(0, item.stattrakCount));
+  return (
+    <span className="tag economy-stattrak-count">
+      {isMusicKit ? <Music2 aria-hidden="true" /> : <Crosshair aria-hidden="true" />}
+      <span>StatTrak™ <strong>{count}</strong> {isMusicKit ? "MVPs" : "kills"}</span>
+    </span>
+  );
+}
 
 export function EconomyItemCard({
   item,
@@ -76,6 +88,7 @@ export function EconomyItemCard({
         </div>
       </div>
       <div className="tag-list" aria-label="Item details">
+        <EconomyItemStatTrak item={item} />
         {item.floatValue !== null ? <span className="tag">Float {item.floatValue.toFixed(6)}</span> : null}
         {item.seed !== null ? <span className="tag">Seed {item.seed}</span> : null}
         {!item.tradable ? (

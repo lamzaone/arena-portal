@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Check, Crosshair, Crown, Gamepad2, Paintbrush, ShieldCheck, Sparkles, Swords, Trophy } from "lucide-react";
+import { ArrowRight, Check, Crosshair, Crown, Gamepad2, Paintbrush, Sparkles, Swords, Trophy } from "lucide-react";
 
+import { BrandEmblem } from "@/components/brand-emblem";
 import { LiveServerPanel } from "@/components/live-server-panel";
 import { PortalShell } from "@/components/ui/portal-shell";
 import { getSession } from "@/lib/auth/session";
@@ -60,11 +61,11 @@ export default async function HomePage() {
         </section>
 
         <section className="tapped-account-callout hero-reveal" aria-label="Player portal">
-          <div><p className="tapped-kicker"><ShieldCheck aria-hidden="true" /> TAPPED.RO player hub</p><h2>One identity.<br /><span>Every advantage.</span></h2></div>
+          <div><p className="tapped-kicker"><BrandEmblem width={28} /> TAPPED.RO player hub</p><h2>One identity.<br /><span>Every advantage.</span></h2></div>
           <div className="account-copy"><p>Use Steam to track your rank, VIP and admin groups, loadout, support tickets, and moderation history—all in one player profile.</p>{session ? <Link className="button button-primary" href={`/players/${session.steamId}`}>Open profile <ArrowRight aria-hidden="true" /></Link> : <a className="button button-primary" href="/api/auth/steam">Create your profile <ArrowRight aria-hidden="true" /></a>}</div>
         </section>
 
-        <footer className="tapped-footer"><span>TAPPED.RO <i /> ARENA.TAPPED.RO</span><a href={connectUrl}>Connect now <ArrowRight aria-hidden="true" /></a></footer>
+        <footer className="tapped-footer"><span><BrandEmblem width={32} /> TAPPED.RO <i /> ARENA.TAPPED.RO</span><a href={connectUrl}>Connect now <ArrowRight aria-hidden="true" /></a></footer>
       </PortalShell>
     </>
   );

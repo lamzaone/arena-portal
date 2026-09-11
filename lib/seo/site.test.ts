@@ -21,6 +21,7 @@ test("publishes only stable public landing pages in the sitemap", async () => {
     "https://tapped.ro/vip",
     "https://tapped.ro/ranking",
     "https://tapped.ro/market",
+    "https://tapped.ro/staff",
   ]);
   assert.equal(urls.some((url) => /\/(?:admin|api|players|inventory|loadout|trades)(?:\/|$)/.test(url)), false);
 });
@@ -69,7 +70,7 @@ test("gives each public discovery page a unique canonical search identity", asyn
   const seo = await import("./site.ts");
 
   assert.equal(typeof seo.buildPageMetadata, "function");
-  const entries = (["/modes", "/vip", "/ranking", "/market"] as const).map((pathname) => ({
+  const entries = (["/modes", "/vip", "/ranking", "/market", "/staff"] as const).map((pathname) => ({
     pathname,
     metadata: seo.buildPageMetadata(pathname),
   }));

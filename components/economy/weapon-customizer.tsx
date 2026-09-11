@@ -9,7 +9,7 @@ import { mergeWeaponPlacements, previewRecord, weaponInspectLink, weaponPreviewI
 import { parseWeaponCustomization } from "@/lib/economy/weapon-customization";
 import styles from "./weapon-customizer.module.css";
 
-type Props = { item: EconomyItemView; inventory: EconomyItemView[]; csrf: string; disabled?: boolean; onSaved: () => void; onBusyChange?: (busy: boolean) => void };
+type Props = { item: EconomyItemView; inventory: EconomyItemView[]; csrf: string; disabled?: boolean; expanded?: boolean; onSaved: () => void; onBusyChange?: (busy: boolean) => void };
 
 export function WeaponCustomizer(props: Props) {
   const initial = useMemo(() => weaponPreviewItem(props.item), [props.item]);
@@ -17,7 +17,7 @@ export function WeaponCustomizer(props: Props) {
   return <WeaponCustomizerReady key={props.item.id} {...props} initial={initial} />;
 }
 
-function WeaponCustomizerReady({ item, inventory, csrf, disabled, onSaved, onBusyChange, initial }: Props & { initial: SkinViewerItem }) {
+function WeaponCustomizerReady({ item, inventory, csrf, disabled, expanded, onSaved, onBusyChange, initial }: Props & { initial: SkinViewerItem }) {
   const [draft, setDraft] = useState(initial);
   const [baseline, setBaseline] = useState(initial);
   const [savedStickerNames, setSavedStickerNames] = useState<Record<number, string>>({});
@@ -103,7 +103,7 @@ function WeaponCustomizerReady({ item, inventory, csrf, disabled, onSaved, onBus
     finally { setBusy(false); onBusyChange?.(false); }
   }
 
-  return <section className={styles.editor} aria-label="3D weapon inspection and customization">
+  return <section className={`${styles.editor}${expanded ? ` ${styles.expanded}` : ""}`} aria-label="3D weapon inspection and customization">
     <header className={styles.toolbar}>
       <div><span className={styles.eyebrow}>WORKBENCH</span><strong>Inspect & customize</strong></div>
       <div className={styles.viewButtons} role="group" aria-label="Inspection view">
@@ -163,7 +163,7 @@ function WeaponCustomizerReady({ item, inventory, csrf, disabled, onSaved, onBus
         {hasLegacySticker && <p>Your legacy sixth sticker is preserved. This viewer shows five slots.</p>}
       </fieldset></div>}
     </div>
-    <div className={styles.identity}><span>Float <b>{item.floatValue}</b></span><span>Pattern <b>{item.seed}</b></span><span>StatTrak <b>{item.stattrak ? item.stattrakCount : "Off"}</b></span>{dirty && <span className={styles.unsaved}>Unsaved placement</span>}</div>
+    {dirty ? <div className={styles.identity} role="status"><span className={styles.unsaved}>Unsaved placement</span></div> : null}
     <footer className={styles.actions}>
       {(slots > 0 || hasCharm) && <><button type="button" className="button button-primary" disabled={locked || !dirty} onClick={() => void save()}>{busy ? <LoaderCircle size={16} /> : <Check size={16} />} {busy ? "Saving…" : "Save placement"}</button>
       <button type="button" className="button button-secondary" disabled={locked || !dirty} onClick={() => { setDraft(baseline); setNewStickers({}); setNewCharm(""); setDirty(false); setNotice(""); }}><RotateCcw size={16} /> Reset</button></>}

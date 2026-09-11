@@ -1,9 +1,10 @@
 "use client";
 
-import { Clock3, Crosshair, ExternalLink, Users, Zap } from "lucide-react";
+import { Clock3, Crosshair, ExternalLink, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { PlayerIdentity } from "@/components/player-identity";
+import { BrandEmblem } from "@/components/brand-emblem";
 import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
 import type { PlayerIdentityData } from "@/lib/player-identities";
 import { browserPollingEnvironment, createVisiblePoller } from "@/lib/server-link/client-polling";
@@ -214,7 +215,7 @@ export function LiveServerPanel() {
       </section>
 
       <div className={styles.bottomline}>
-        <span><Zap aria-hidden="true" /> ARENA.TAPPED.RO</span>
+        <span><BrandEmblem width={24} /> ARENA.TAPPED.RO</span>
         <span>{statusReadFailed ? "Live refresh delayed" : updated ? <>Updated <time dateTime={updated.dateTime}>{updated.label}</time></> : "Waiting for server"}</span>
       </div>
     </aside>

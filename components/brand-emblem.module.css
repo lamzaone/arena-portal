@@ -1,0 +1,22 @@
+.emblem {
+  display: block;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.wordmark {
+  flex-shrink: 0;
+}
+
+.wordmark:focus-visible {
+  outline: 2px solid var(--theme-focus-ring);
+  outline-offset: 6px;
+  border-radius: var(--theme-radius);
+}
+
+@media (max-width: 640px) {
+  .wordmark .emblem {
+    width: 36px;
+    height: 32.4px;
+  }
+}

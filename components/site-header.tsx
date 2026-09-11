@@ -4,6 +4,7 @@ import { LogIn, LogOut, ShieldCheck } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { getAdminAccess } from "@/lib/admin/access";
 import { AccountNav } from "@/components/account-nav";
+import { SiteBrand } from "@/components/brand-emblem";
 import { PlayerIdentity } from "@/components/player-identity";
 import { PrimaryNavigation } from "@/components/primary-navigation";
 import { resolvePlayerIdentities } from "@/lib/player-identities";
@@ -41,10 +42,7 @@ export async function SiteHeader({
         data-theme={globalTheme.key}
         data-theme-surface="global"
       >
-        <Link className="brand" href="/" aria-label="TAPPED.RO home">
-          <span className="brand-mark"><ShieldCheck aria-hidden="true" /></span>
-          <span>TAPPED<span className="brand-accent">.</span>RO</span>
-        </Link>
+        <SiteBrand />
         <PrimaryNavigation />
         {session ? (
           <>

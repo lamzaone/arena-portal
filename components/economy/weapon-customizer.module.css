@@ -1,4 +1,4 @@
-.editor { grid-column: 1 / -1; min-width: 0; margin-block: 12px 18px; border: 1px solid var(--border-bright); border-radius: 10px; overflow: hidden; background: var(--surface); color: var(--text); }
+.editor { container-type: inline-size; grid-column: 1 / -1; min-width: 0; margin-block: 12px 18px; border: 1px solid var(--border-bright); border-radius: 10px; overflow: hidden; background: var(--surface); color: var(--text); }
 .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
 .toolbar strong { display: block; font-size: 18px; }
 .eyebrow { color: var(--accent-bright); font-size: 10px; letter-spacing: .2em; font-weight: 700; }
@@ -33,5 +33,12 @@
 .notice:empty { padding-bottom: 6px; }
 .editor :is(button, select, input, a):focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 3px; }
 .editor button:disabled { opacity: .5; cursor: default; }
+.expanded { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; margin: 0; border: 0; border-radius: 0; }
+.expanded .toolbar, .expanded .actions, .expanded .identity, .expanded .notice { flex: 0 0 auto; }
+.expanded .workspace { flex: 1 1 auto; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+.expanded .stage { height: 100%; min-height: 260px; }
+.expanded .attachments { height: 100%; max-height: none; }
+@media (max-width: 900px), (max-height: 620px) { .expanded { flex: 0 0 auto; overflow: visible; }.expanded .workspace { flex: 0 0 auto; grid-template-rows: auto; }.expanded .stage { height: clamp(320px, 52dvh, 520px); }.expanded .attachments { height: auto; } }
 @media (max-width: 900px) { .workspace { grid-template-columns: 1fr; } .attachments { max-height: none; border-left: 0; border-top: 1px solid var(--border); } }
 @media (max-width: 760px) { .stage { height: clamp(320px, 58dvh, 480px); } .toolbar { flex-wrap: wrap; padding: 12px; } .viewButtons button { padding: 10px 12px; } }
+@container (max-width: 760px) { .workspace { grid-template-columns: 1fr; } .attachments { max-height: none; border-left: 0; border-top: 1px solid var(--border); } .toolbar { flex-wrap: wrap; } }

@@ -1,11 +1,17 @@
 import type { Metadata, MetadataRoute } from "next";
 
 const SITE_ORIGIN = "https://tapped.ro";
+const BRAND_IMAGE = {
+  url: `${SITE_ORIGIN}/images/branding/tapped-emblem-512.png`,
+  width: 512,
+  height: 512,
+  alt: "TAPPED.RO emblem",
+};
 const HOME_TITLE = "CS2 Arena Server Romania | TAPPED.RO";
 const HOME_DESCRIPTION =
   "Join TAPPED.RO, a competitive CS2 arena server in Romania with ranked 1v1 fights, custom duels, monthly rewards, VIP perks, and player loadouts.";
 
-const PUBLIC_ROUTES = ["/", "/modes", "/vip", "/ranking", "/market"] as const;
+const PUBLIC_ROUTES = ["/", "/modes", "/vip", "/ranking", "/market", "/staff"] as const;
 const PRIVATE_ROUTES = [
   "/admin/",
   "/api/",
@@ -18,6 +24,11 @@ const PRIVATE_ROUTES = [
   "/appeals",
 ] as const;
 const PAGE_SEO = {
+  "/staff": {
+    title: "Meet the CS2 Arena Staff | TAPPED.RO",
+    description:
+      "Meet the people behind TAPPED.RO. Explore our CS2 arena staff, browse admin groups, and get to know the team keeping our community connected.",
+  },
   "/modes": {
     title: "CS2 1v1 Arena Modes | TAPPED.RO",
     description:
@@ -80,9 +91,11 @@ export function buildHomeMetadata() {
       title: HOME_TITLE,
       description: HOME_DESCRIPTION,
       locale: "en_RO",
+      images: [BRAND_IMAGE],
     },
     twitter: {
       card: "summary",
+      images: [BRAND_IMAGE.url],
       title: HOME_TITLE,
       description: HOME_DESCRIPTION,
     },
@@ -109,9 +122,11 @@ export function buildPageMetadata(pathname: keyof typeof PAGE_SEO) {
       title: page.title,
       description: page.description,
       locale: "en_RO",
+      images: [BRAND_IMAGE],
     },
     twitter: {
       card: "summary",
+      images: [BRAND_IMAGE.url],
       title: page.title,
       description: page.description,
     },
@@ -121,6 +136,15 @@ export function buildPageMetadata(pathname: keyof typeof PAGE_SEO) {
 export const rootMetadata = {
   metadataBase: canonicalUrl("/"),
   applicationName: "TAPPED.RO",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "16x16 32x32 48x48", type: "image/x-icon" },
+      { url: "/images/branding/tapped-emblem.svg", sizes: "any", type: "image/svg+xml" },
+    ],
+    apple: [{ url: "/images/branding/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  openGraph: { images: [BRAND_IMAGE] },
+  twitter: { card: "summary", images: [BRAND_IMAGE.url] },
   verification: {
     google: "_ovwWYtmuGZdooqPWyzZZlt1ILhzVwd20R8F23ZKhuo",
   },
@@ -152,6 +176,12 @@ export function buildHomeStructuredData() {
         "@id": organizationId,
         url: canonicalUrl("/").href,
         name: "TAPPED.RO",
+        logo: {
+          "@type": "ImageObject",
+          url: BRAND_IMAGE.url,
+          width: BRAND_IMAGE.width,
+          height: BRAND_IMAGE.height,
+        },
       },
       {
         "@type": "Service",

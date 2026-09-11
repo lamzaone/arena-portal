@@ -4,6 +4,7 @@ import Link from "next/link";
 import { AlertTriangle, Home, RotateCcw } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/empty-state";
+import { SiteBrand } from "@/components/brand-emblem";
 
 type ErrorPageProps = {
   error: Error & { digest?: string };
@@ -14,6 +15,7 @@ export default function ErrorPage({ reset }: ErrorPageProps) {
   return (
     <main className="tapped-page ui-error-page">
       <div className="shell">
+        <header className="site-header"><SiteBrand /></header>
         <EmptyState
           headingLevel="h1"
           className="ui-route-error-state"

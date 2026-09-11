@@ -25,6 +25,7 @@ import { useRouter } from "next/navigation";
 import {
   EconomyEmptyState,
   EconomyItemCard,
+  EconomyItemStatTrak,
 } from "@/components/economy/economy-item-card";
 import {
   InventoryBulkCrateOpeningResults,
@@ -38,7 +39,7 @@ import {
 } from "@/components/economy/economy-request";
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
 import { useItemGridLayout } from "@/components/economy/item-grid";
-import { WeaponCustomizer } from "@/components/economy/weapon-customizer";
+import { WeaponCustomizerDialog } from "@/components/economy/weapon-customizer-dialog";
 import { weaponPreviewItem } from "@/lib/economy/weapon-preview";
 import {
   economyItems,
@@ -55,7 +56,6 @@ import {
   itemSupportsStickers,
   type EconomyItemView,
 } from "@/components/economy/economy-view-model";
-import { TokenBalance } from "@/components/economy/token-balance";
 import { PortalToast } from "@/components/success-toast";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { SearchField } from "@/components/ui/search-field";
@@ -208,6 +208,7 @@ export function InventoryManager({
   const [query, setQuery] = useState("");
   const [type, setType] = useState("all");
   const [rarity, setRarity] = useState("all");
+  const [hideEquipped, setHideEquipped] = useState(false);
   const [sort, setSort] = useState<SortMode>("newest");
   const [inventoryPage, setInventoryPage] = useState(1);
   const [selectedId, setSelectedId] = useState("");
@@ -295,11 +296,12 @@ export function InventoryManager({
         return (
           (!normalizedQuery || haystack.includes(normalizedQuery)) &&
           (type === "all" || item.itemType === type) &&
-          (rarity === "all" || item.rarity === rarity)
+          (rarity === "all" || item.rarity === rarity) &&
+          (!hideEquipped || item.equippedSlots.length === 0)
         );
       })
       .sort((left, right) => compareItems(left, right, sort));
-  }, [items, query, rarity, sort, type]);
+  }, [items, query, rarity, sort, type, hideEquipped]);
 
   const inventoryPageCount = Math.max(
     1,
@@ -424,6 +426,13 @@ export function InventoryManager({
     (itemSupportsNametag(selected) ||
       itemSupportsCharm(selected) ||
       itemSupportsStickers(selected));
+  const selectedHasWeaponPreview = selected ? weaponPreviewItem(selected) !== null : false;
+  const selectedHasSimpleLayout = !canCustomize && !selectedHasWeaponPreview && selectedManagementLayout !== "container";
+  const customizationOptions = selected ? [
+    itemSupportsNametag(selected) ? "Name tag" : null,
+    itemSupportsCharm(selected) && !selectedHasWeaponPreview ? "Charm" : null,
+    itemSupportsStickers(selected) && !selectedHasWeaponPreview ? "Stickers" : null,
+  ].filter(Boolean).join(" · ") : "";
   const inventoryMutationBusy =
     pending || customizationBusy || bulkSelling || bulkLocking || crateOpening.busy;
   const inventoryInteractionBlocked =
@@ -464,7 +473,7 @@ export function InventoryManager({
 
   useEffect(() => {
     setInventoryPage(1);
-  }, [query, rarity, sort, type]);
+  }, [query, rarity, sort, type, hideEquipped]);
 
   useEffect(() => {
     setInventoryPage((current) => Math.min(current, inventoryPageCount));
@@ -865,20 +874,25 @@ export function InventoryManager({
 
   return (
     <section className="inventory-manager" aria-label="Inventory manager" aria-busy={pending || bulkSelling || bulkLocking || crateOpening.busy}>
-      <div className="content-grid">
-        <div className="panel">
+      <header className="panel inventory-overview">
+        <div className="inventory-overview-copy">
           <p className="eyebrow">
-            <ShieldCheck aria-hidden="true" /> Token inventory
+            <ShieldCheck aria-hidden="true" /> Your collection
           </p>
-          <h2 id="inventory-manager-heading" tabIndex={-1}>Every item you own, in one place.</h2>
-          <p className="empty-copy">
-            Browse, search, equip, name, and customize eligible items. Changes
-            are checked against your owned item instance before the server
-            loadout is updated.
-          </p>
+          <h2 id="inventory-manager-heading" tabIndex={-1}>Inventory <span>{formatTokens(items.length)} {items.length === 1 ? "item" : "items"}</span></h2>
+          <p className="empty-copy">Equip, customize, and manage your items.</p>
         </div>
-        <TokenBalance wallet={displayWallet} />
-      </div>
+        <div className="inventory-wallet" aria-label="Token wallet">
+          <p><Coins aria-hidden="true" /> Token wallet</p>
+          <strong>{formatTokens(displayWallet.balance)} <small>Tokens</small></strong>
+          {displayWallet.earned !== null || displayWallet.spent !== null ? (
+            <div className="inventory-wallet-history">
+              {displayWallet.earned !== null ? <span>{formatTokens(displayWallet.earned)} earned</span> : null}
+              {displayWallet.spent !== null ? <span>{formatTokens(displayWallet.spent)} spent</span> : null}
+            </div>
+          ) : null}
+        </div>
+      </header>
 
       {notice ? (
         <PortalToast
@@ -888,8 +902,9 @@ export function InventoryManager({
         />
       ) : null}
 
+      <section className="panel inventory-controls" aria-label="Inventory filters and selection">
       <form
-        className="panel form-panel inventory-filter-panel"
+        className="form-panel inventory-filter-panel"
         onSubmit={(event) => event.preventDefault()}
       >
         <div className="form-grid">
@@ -902,20 +917,6 @@ export function InventoryManager({
             autoComplete="off"
             disabled={inventoryInteractionBlocked}
           />
-          <label htmlFor="inventory-sort">
-            Sort by
-            <select
-              id="inventory-sort"
-              value={sort}
-              disabled={inventoryInteractionBlocked}
-              onChange={(event) => setSort(event.target.value as SortMode)}
-            >
-              <option value="newest">Newest first</option>
-              <option value="name">Name</option>
-              <option value="rarity">Rarity</option>
-              <option value="float">Float value</option>
-            </select>
-          </label>
           <label htmlFor="inventory-type">
             Item type
             <select
@@ -948,15 +949,34 @@ export function InventoryManager({
               ))}
             </select>
           </label>
+          <label htmlFor="inventory-sort">
+            Sort by
+            <select
+              id="inventory-sort"
+              value={sort}
+              disabled={inventoryInteractionBlocked}
+              onChange={(event) => setSort(event.target.value as SortMode)}
+            >
+              <option value="newest">Newest first</option>
+              <option value="name">Name</option>
+              <option value="rarity">Rarity</option>
+              <option value="float">Float value</option>
+            </select>
+          </label>
         </div>
         <div className="inventory-filter-summary">
-          <p className="empty-copy">
+          <p className="empty-copy" role="status">
             <Search aria-hidden="true" /> {filtered.length
               ? `${inventoryPageStart + 1}-${inventoryPageEnd} of ${filtered.length}`
               : "0"}{" "}
-            matching items ({items.length} total)
+            {query || type !== "all" || rarity !== "all" || hideEquipped ? "matching items" : "items"}
           </p>
-          {query || type !== "all" || rarity !== "all" || sort !== "newest" ? (
+          <div className="inventory-filter-actions">
+          <label className="inventory-hide-equipped" htmlFor="inventory-hide-equipped">
+            <input id="inventory-hide-equipped" type="checkbox" checked={hideEquipped} disabled={inventoryInteractionBlocked} onChange={(event) => setHideEquipped(event.target.checked)} />
+            Hide equipped
+          </label>
+          {query || type !== "all" || rarity !== "all" || sort !== "newest" || hideEquipped ? (
             <button
               type="button"
               className="button button-secondary"
@@ -966,17 +986,25 @@ export function InventoryManager({
                 setType("all");
                 setRarity("all");
                 setSort("newest");
+                setHideEquipped(false);
               }}
             >
               Clear filters
             </button>
           ) : null}
+          {items.length ? (
+            <button id="inventory-selection-toggle" type="button" className="button button-secondary inventory-selection-toggle" aria-pressed={selectionMode} aria-expanded={selectionMode} aria-controls={selectionMode ? "inventory-selection-actions" : undefined} disabled={inventoryInteractionBlocked} onClick={toggleSelectionMode} title={selectionMode ? "Exit selection mode" : "Select up to 50 items to lock, unlock, sell, or open crates"}>
+              <ListChecks aria-hidden="true" /> {selectionMode ? "Exit selection" : "Select items"}
+            </button>
+          ) : null}
+          </div>
         </div>
       </form>
 
-      {items.length ? (
+      {items.length && selectionMode ? (
         <section
-          className={`panel economy-bulk-toolbar${selectionMode ? " is-active" : ""}`}
+          id="inventory-selection-actions"
+          className="economy-bulk-toolbar is-active"
           aria-label="Inventory selection actions"
           aria-busy={inventoryMutationBusy}
         >
@@ -1059,16 +1087,6 @@ export function InventoryManager({
                 </button>
               </>
             ) : null}
-            <button
-              type="button"
-              className={`button ${selectionMode ? "button-secondary" : "button-primary"}`}
-              aria-pressed={selectionMode}
-              disabled={inventoryInteractionBlocked}
-              onClick={toggleSelectionMode}
-            >
-              <ListChecks aria-hidden="true" />
-              {selectionMode ? "Exit selection" : "Selection mode"}
-            </button>
           </div>
           {selectionMode && bulkSaleConfirming ? (
             <p className="economy-bulk-confirmation" role="alert">
@@ -1085,6 +1103,7 @@ export function InventoryManager({
           ) : null}
         </section>
       ) : null}
+      </section>
 
       <InventoryBulkCrateOpeningResults
         controller={crateOpening}
@@ -1138,7 +1157,7 @@ export function InventoryManager({
             id={`inventory-item-modal-${selected.id}`}
             data-ui="item-modal"
             inert={inventoryClosing}
-            className="panel crate-inline-modal inventory-inline-modal"
+            className={`panel crate-inline-modal inventory-inline-modal${selectedHasSimpleLayout ? " is-simple-item" : ""}`}
             aria-label="Selected item controls"
           >
               <header className="crate-inline-modal-header inventory-inline-modal-header">
@@ -1146,34 +1165,17 @@ export function InventoryManager({
                   <p className="eyebrow"><Sword aria-hidden="true" /> Item management</p>
                   <h3>{selected.displayName}</h3>
                 </div>
+                <EconomyItemStatTrak item={selected} />
                 <button type="button" className="button button-quiet crate-inline-modal-close" onClick={() => closeInventoryItem(selected.id)} disabled={inventoryInteractionBlocked} aria-label={`Close ${selected.displayName} item management`}>
                   <X aria-hidden="true" /> Close
                 </button>
               </header>
               <div
-                className={`inventory-management-workspace is-${selectedManagementLayout}-layout`}
+                className={`inventory-management-workspace is-${selectedManagementLayout}-layout${selectedHasSimpleLayout ? " is-simple-layout" : ""}`}
                 data-layout={selectedManagementLayout}
               >
                 <div className="inventory-management-main">
-                {weaponPreviewItem(selected) ? <WeaponCustomizer item={selected} inventory={items} csrf={csrf} disabled={pending || bulkSelling || bulkLocking || crateOpening.busy || selected.state !== "available"} onSaved={() => router.refresh()} onBusyChange={setCustomizationBusy} /> : null}
-                <div className="inventory-detail-hero" style={weaponPreviewItem(selected) ? { gridTemplateColumns: "1fr" } : undefined}>
-                  {!weaponPreviewItem(selected) ? <MarketplaceItemPreview item={selected} enableMarketPreview /> : null}
-                  <div className="inventory-detail-heading">
-                    <p>
-                      {selected.rarity} · {selectedVipMembership ? "Group membership" : humanize(selected.itemType)}
-                    </p>
-                    {selected.description ? (
-                      <p className="inventory-detail-description">{selected.description}</p>
-                    ) : null}
-                    <div className="tag-list inventory-detail-tags" aria-label="Item details">
-                      <span className="tag">{selectedConsumedByOpening ? "Opened" : humanize(selected.state)}</span>
-                      {selected.floatValue !== null ? <span className="tag">Float {selected.floatValue.toFixed(6)}</span> : null}
-                      {selected.seed !== null ? <span className="tag">Seed {selected.seed}</span> : null}
-                      {selected.equippedSlots.map((slot) => <span key={slot} className="tag tag-vip">Equipped: {humanize(slot)}</span>)}
-                      {selected.marketPriceTokens !== null ? <span className="tag"><Coins aria-hidden="true" /> {formatTokens(selected.marketPriceTokens)} Tokens</span> : null}
-                    </div>
-                  </div>
-                </div>
+                {selected.description ? <p className="inventory-management-description">{selected.description}</p> : null}
                 {isOpenableInventoryCrate(selected) ? (
                   <InventorySingleCrateOpening
                     crate={selected}
@@ -1270,12 +1272,6 @@ export function InventoryManager({
                         Music kits are equipped globally for both sides.
                       </p>
                     )}
-                    {selectedSlot?.slotType === "weapon" ? (
-                      <p className="empty-copy">
-                        This finish will be equipped for weapon definition{" "}
-                        {selectedSlot.definitionIndex}.
-                      </p>
-                    ) : null}
                     <div className="hero-actions">
                       <button
                         type="button"
@@ -1315,14 +1311,25 @@ export function InventoryManager({
                 ) : !selectedVipMembership &&
                   !selectedProfileTheme &&
                   !isOpenableInventoryCrate(selected) ? (
-                  <p className="empty-copy">
-                    This item is kept in your inventory and cannot be equipped
-                    in a loadout slot.
-                  </p>
+                  <section className="inventory-item-usage" aria-labelledby="inventory-item-usage-heading">
+                    <MarketplaceItemPreview item={selected} enableMarketPreview />
+                    <div>
+                      <h4 id="inventory-item-usage-heading">How to use</h4>
+                      <p className="empty-copy">
+                        {selected.itemType === "sticker"
+                          ? "Select a weapon in your inventory, then choose this sticker in its customization controls."
+                          : selected.itemType === "keychain"
+                            ? "Select a weapon in your inventory, then choose this charm in its customization controls."
+                            : selected.itemType === "nametag"
+                              ? "Select an item to customize, enter a name, then choose this name tag as payment."
+                              : "Keep this item in your collection, or manage its sale options here."}
+                      </p>
+                    </div>
+                  </section>
                 ) : null}
                 </div>
 
-                {canCustomize ? (
+                {canCustomize && customizationOptions ? (
                   <section
                     className="inventory-customize-panel"
                     aria-labelledby="inventory-customize-heading"
@@ -1332,12 +1339,12 @@ export function InventoryManager({
                         <Sticker aria-hidden="true" />
                         <h4 id="inventory-customize-heading">Customize</h4>
                       </div>
-                      <small>Name tag, charm, stickers</small>
+                      {customizationOptions.includes(" · ") ? <small>{customizationOptions}</small> : null}
                     </header>
                     <div className="inventory-customize-panel-body">
                 {itemSupportsNametag(selected) ? (
                   <fieldset className="form-panel">
-                    <legend>Name tag</legend>
+                    <legend className="sr-only">Name tag</legend>
                     <label htmlFor="inventory-nametag">
                       Name tag{" "}
                       <small>200 Tokens, or use an owned name-tag item</small>
@@ -1396,7 +1403,7 @@ export function InventoryManager({
                   </fieldset>
                 ) : null}
 
-                {itemSupportsCharm(selected) && !weaponPreviewItem(selected) ? (
+                {itemSupportsCharm(selected) && !selectedHasWeaponPreview ? (
                   <fieldset className="form-panel">
                     <legend>Charm</legend>
                     <label htmlFor="inventory-charm">
@@ -1439,7 +1446,7 @@ export function InventoryManager({
                   </fieldset>
                 ) : null}
 
-                {itemSupportsStickers(selected) && !weaponPreviewItem(selected) ? (
+                {itemSupportsStickers(selected) && !selectedHasWeaponPreview ? (
                   <fieldset className="form-panel">
                     <legend>Apply sticker</legend>
                     <label htmlFor="inventory-sticker">
@@ -1507,6 +1514,9 @@ export function InventoryManager({
                     </div>
                   </section>
                 ) : null}
+                {selectedHasWeaponPreview ? (
+                  <WeaponCustomizerDialog key={selected.id} item={selected} inventory={items} csrf={csrf} triggerDisabled={inventoryInteractionBlocked} disabled={pending || bulkSelling || bulkLocking || crateOpening.busy || selected.state !== "available"} onSaved={() => router.refresh()} onBusyChange={setCustomizationBusy} />
+                ) : null}
                 </div>
                 <aside className="inventory-management-aside" aria-label="Sale protection and market selling options">
                 <section className="inventory-sale-lock-panel" aria-labelledby="inventory-sale-lock-heading">
@@ -1520,8 +1530,8 @@ export function InventoryManager({
                   <div className="inventory-sale-lock-panel-body">
                     <p className="empty-copy">
                       {selected.saleLocked
-                        ? "This item cannot be sold until you unlock it. Other inventory uses remain available."
-                        : "Lock this item to protect it from individual and bulk sale actions."}
+                        ? "Protected from individual and bulk sales. Unlock to sell."
+                        : "Prevent this item from being sold individually or in bulk."}
                     </p>
                     <button
                       type="button"
@@ -1544,13 +1554,7 @@ export function InventoryManager({
                       <Coins aria-hidden="true" />
                       <h4 id="inventory-sell-heading">Sell to market</h4>
                     </div>
-                    <small>
-                      {saleUnavailableReason
-                        ? "Unavailable"
-                        : salePriceIsKnown
-                          ? `${formatTokens(selectedSalePayout)} Tokens`
-                          : "Market quote"}
-                    </small>
+                    {saleUnavailableReason ? <small>Unavailable</small> : null}
                   </header>
                   <div className="inventory-sell-panel-body">
                     {saleUnavailableReason ? (
@@ -1558,7 +1562,7 @@ export function InventoryManager({
                     ) : (
                       <>
                         <div className="inventory-sell-price">
-                          <span>Estimated buyback payout</span>
+                          <span>Estimated payout</span>
                           <strong>
                             {salePriceIsKnown
                               ? `${formatTokens(selectedSalePayout)} Tokens`
@@ -1575,11 +1579,11 @@ export function InventoryManager({
                                   : selected.recordedPurchasePriceTokens !== null
                                     ? `${ECONOMY_SELLBACK_PERCENT_LABEL} of the lower of the current ${formatTokens(selected.marketPriceTokens ?? 0)}-Token market price and your recorded ${formatTokens(selected.recordedPurchasePriceTokens)}-Token purchase price.`
                                     : `${ECONOMY_SELLBACK_PERCENT_LABEL} of the current ${formatTokens(selected.marketPriceTokens ?? 0)}-Token market price.`
-                              : `Your final payout is resolved server-side from a fresh market quote when you sell.`}
+                              : "The final payout is calculated from a fresh market quote when you sell."}
                           </small>
                         </div>
                         <p className="empty-copy">
-                          This is an estimate from the displayed portal Market price or staff-set last-known price; the server resolves the final quote when you sell. Discounted marketplace purchases use the lower of that final price and the recorded amount paid. Selling permanently removes this item from your inventory and clears it from your loadout.
+                          Selling permanently removes this item and unequips it. The final quote is checked at sale; discounted purchases use the lower of that quote and the amount paid.
                         </p>
                         {saleIsConfirming ? (
                           <div className="hero-actions inventory-sell-confirmation">

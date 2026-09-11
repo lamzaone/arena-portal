@@ -6952,8 +6952,13 @@ async function hydrateEconomyInventory(
   >(
     "SELECT item_id, slot_key FROM portal_loadout_slots WHERE item_id IN (" +
       placeholders +
+      ") UNION ALL " +
+      "SELECT i.id AS item_id, 'profile_theme' AS slot_key FROM portal_player_settings AS settings " +
+      "INNER JOIN portal_inventory_items AS i ON i.id = settings.active_theme_item_id AND i.owner_steam_id = settings.steam_id " +
+      "WHERE i.item_type = 'profile_theme' AND i.state = 'available' AND i.id IN (" +
+      placeholders +
       ") ORDER BY item_id, slot_key",
-    ids,
+    [...ids, ...ids],
   );
   const stickersByItem = new Map<string, EconomyInventorySticker[]>();
   for (const row of stickerRows) {

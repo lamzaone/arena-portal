@@ -1243,7 +1243,7 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
   .crate-inline-modal,
   .crate-drop-odds,
   .economy-bulk-toolbar,
-  .inventory-filter-panel,
+  .inventory-controls,
   .inventory-customize-panel,
   .inventory-sell-panel,
   .trade-builder,
