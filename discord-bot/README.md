@@ -13,6 +13,70 @@ A separate persistent Node process that links Discord accounts to the portal's S
 
 No live registration, login, or Discord messages are required by tests.
 
+## Automatic deployment on FreakHosting
+
+The **Discord bot deployment** GitHub Actions workflow builds and uploads one
+compressed release over SSH. It reuses the portal's five `FREAKHOSTING_SSH_*` /
+`FREAKHOSTING_KNOWN_HOSTS` secrets from the [portal deployment setup](../docs/freakhosting-cicd.md#github-configuration).
+You do not need FTP or an npm install on the host for updates.
+
+One-time setup, after these changes are pushed to `main`:
+
+1. In GitHub **Settings > Secrets and variables > Actions > Variables**, add
+   `FREAKHOSTING_BOT_DEPLOY_ENABLED` with value `true`. This is separate from the
+   portal's deployment switch.
+2. Open **Actions > Discord bot deployment > Run workflow**, selecting `main`.
+   The first deployment stages the runtime at `~/arena-discord-bot/current`.
+   It prints **First bot release staged**; the bot starts only after the panel setup.
+3. Create or retain `~/arena-discord-bot/.env` using [.env.example](.env.example).
+   Keep the same token, IDs and bridge secret if you already configured them.
+   Set permissions to `600`. This file stays outside releases and is never
+   uploaded by CI or overwritten during deployment.
+4. If replacing an FTP installation, stop its existing bot application by
+   switching it to Manual mode. Configure the bot's Node.js application as follows:
+
+   | Field | Value |
+   | --- | --- |
+   | Node | `24` |
+   | Working directory | `arena-discord-bot` |
+   | Startup command | `bash start-hosting.sh` |
+   | Mode | Automatic (Production) |
+   | Proxy | Disabled; no application port needed |
+
+5. If `/link` has never been registered, run this once in the hosting terminal
+   with Node 24 selected: `cd ~/arena-discord-bot` followed by
+   `node --env-file=.env current/src/register.mjs`.
+6. Check the bot is online and review its `~/persistent_app_<ID>.log` in Enhance.
+
+After setup, push bot changes to `main`, or use **Run workflow**, to deploy.
+GitHub tests the bot, bundles its dependencies, uploads the archive and switches
+the active release. Enhance restarts the bot automatically. No panel restart is
+needed for routine updates. A short reconnect occurs during the restart.
+
+The deployment checks that the new process connects to Discord, validates its
+guild/channel permissions and reads the portal snapshot. A local heartbeat
+provides readiness without an HTTP port; it does not prove every later role sync
+or notification succeeds. A failed update restores the previous release and
+launcher and reports failure. The launcher prevents overlapping managed bot
+processes. Only the verified bot PID is signalled; the website process is separate.
+Shutdown allows 30 seconds for in-flight work before forcibly stopping a still
+verified bot process. A stopped/crashed release can receive a repair deployment,
+provided Enhance Automatic mode is enabled to start the replacement.
+
+Successful updates retain the active and previous release. Failed releases remain
+available for investigation until a later successful deployment removes them.
+If the recorded PID belongs to an unverified live process or an untracked process
+holds the launcher lock, deployment stops before switching releases: check the
+startup command, `bot.pid` and application log.
+After an SSH disconnect during activation, inspect `~/arena-discord-bot/current`
+and the log before retrying; the remote activation may already have started.
+
+Without `FREAKHOSTING_BOT_DEPLOY_ENABLED=true`, the workflow still tests and saves
+a downloadable artifact but does not contact the host. Neither database migrations
+nor slash-command registration run automatically. Hosting requirements and SSH
+troubleshooting are the same as for the portal. See also
+[Enhance's Node.js process settings](https://enhance.com/docs/website-tools/nodejs).
+
 ## Linking and roles
 
 In Discord, `/link` returns a private, one-use code and expiry. The user signs in with Steam on `/discord-link` and enters the code, or uses `/discordlink CODE` in game. The code belongs to the invoking Discord user and is never logged. The portal owns expiry, replay prevention and account-conflict handling.

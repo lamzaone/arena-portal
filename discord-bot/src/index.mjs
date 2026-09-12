@@ -6,6 +6,7 @@ import { deliverNotifications, resolveAdminRoles } from './notifications.mjs';
 import { handleLink } from './link.mjs';
 import { runLoop } from './scheduler.mjs';
 import { RuntimeError, safeError } from './validation.mjs';
+import { startHealthReporter } from './health.mjs';
 
 const logError = (label, error) => console.error(`[arena-discord] ${label}: ${safeError(error)}`);
 
@@ -17,6 +18,7 @@ async function main() {
     rest: { timeout: 15_000, retries: 2 }, failIfNotExists: false });
   const shutdown = new AbortController();
   let loopTasks = [];
+  let stopHealth = () => {};
   const stop = () => shutdown.abort();
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
@@ -46,6 +48,7 @@ async function main() {
     channelPermissions();
     // Verify the bridge contract before starting either background loop.
     await portal.snapshot();
+    stopHealth = startHealthReporter({ directory: process.env.ARENA_BOT_HEALTH_DIR, ready: () => client.isReady() && !shutdown.signal.aborted });
     const sync = async () => {
       if (!client.isReady()) throw new RuntimeError('Discord is reconnecting');
       const { added, removed } = await reconcileRoles({ guild, portal });
@@ -65,6 +68,7 @@ async function main() {
     await Promise.all(loopTasks);
   } finally {
     shutdown.abort();
+    stopHealth();
     // Release the Gateway and REST sweepers after in-flight cycles settle.
     await client.destroy();
     await Promise.allSettled(loopTasks);

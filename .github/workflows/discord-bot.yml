@@ -1,21 +1,28 @@
-name: Discord bot checks
+name: Discord bot deployment
 
 on:
   push:
     branches: [main]
-    paths: ['discord-bot/**', '.github/workflows/discord-bot.yml']
+    paths: ['discord-bot/**', '.github/workflows/discord-bot.yml', 'scripts/hosting/deploy.sh', 'scripts/hosting/deploy.test.py']
   pull_request:
     branches: [main]
-    paths: ['discord-bot/**', '.github/workflows/discord-bot.yml']
+    paths: ['discord-bot/**', '.github/workflows/discord-bot.yml', 'scripts/hosting/deploy.sh', 'scripts/hosting/deploy.test.py']
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Bot releases have their own queue; never cancel during activation/rollback.
+concurrency:
+  group: freakhosting-discord-bot-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  test:
+  release:
     runs-on: ubuntu-22.04
-    timeout-minutes: 5
+    timeout-minutes: 15
+    env:
+      RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
     defaults:
       run:
         working-directory: discord-bot
@@ -28,6 +35,28 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: discord-bot/package-lock.json
-      - run: npm ci
+      - run: npm ci --omit=dev
       - run: npm run build
       - run: npm test
+      - name: Test deployment and SSH transport without network access
+        run: |
+          python3 hosting/deployment.test.py
+          python3 ../scripts/hosting/deploy.test.py
+      - name: Package bot and Linux dependencies
+        run: bash hosting/package.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: discord-bot-${{ env.RELEASE_ID }}
+          path: dist/freakhosting-discord-bot.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+      - name: Upload and activate bot on FreakHosting
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.FREAKHOSTING_BOT_DEPLOY_ENABLED == 'true'
+        env:
+          SSH_HOST: ${{ secrets.FREAKHOSTING_SSH_HOST }}
+          SSH_PORT: ${{ secrets.FREAKHOSTING_SSH_PORT }}
+          SSH_USER: ${{ secrets.FREAKHOSTING_SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.FREAKHOSTING_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.FREAKHOSTING_KNOWN_HOSTS }}
+        run: bash ../scripts/hosting/deploy.sh --discord-bot

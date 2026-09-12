@@ -4,12 +4,21 @@ set -euo pipefail
 # OpenSSH diagnostics are classified below; keep their language predictable.
 export LC_ALL=C
 mode=deploy
+app_name=arena-portal
+archive=dist/freakhosting-release.tar.gz
+activation=scripts/hosting/activate.sh
 if (($# > 0)); then
-  if [[ "$#" != 1 || "$1" != --check-ssh ]]; then
-    echo 'Usage: bash scripts/hosting/deploy.sh [--check-ssh]' >&2
+  if [[ "$#" != 1 || ("$1" != --check-ssh && "$1" != --discord-bot) ]]; then
+    echo 'Usage: bash scripts/hosting/deploy.sh [--check-ssh|--discord-bot]' >&2
     exit 2
   fi
-  mode=check
+  if [[ "$1" == --check-ssh ]]; then
+    mode=check
+  else
+    app_name=arena-discord-bot
+    archive=dist/freakhosting-discord-bot.tar.gz
+    activation=discord-bot/hosting/activate.sh
+  fi
 fi
 : "${SSH_HOST:?Set FREAKHOSTING_SSH_HOST}"
 : "${SSH_USER:?Set FREAKHOSTING_SSH_USER}"
@@ -36,7 +45,7 @@ if ((SSH_PORT < 1 || SSH_PORT > 65535)); then
   exit 1
 fi
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.."
-if [[ "$mode" == deploy ]] && [[ ! -s dist/freakhosting-release.tar.gz || ! -s scripts/hosting/activate.sh ]]; then
+if [[ "$mode" == deploy ]] && [[ ! -s "$archive" || ! -s "$activation" ]]; then
   echo '::error::The release archive or activation script is missing.' >&2
   exit 1
 fi
@@ -109,19 +118,19 @@ retry_transfer() {
 }
 
 retry_transfer 'Connecting to FreakHosting and preparing the release directory' \
-  ssh "${options[@]}" -p "$SSH_PORT" "$target" 'mkdir -p "$HOME/arena-portal"'
+  ssh "${options[@]}" -p "$SSH_PORT" "$target" "mkdir -p \"\$HOME/$app_name\""
 retry_transfer 'Uploading the release archive to FreakHosting' \
-  scp "${options[@]}" -P "$SSH_PORT" dist/freakhosting-release.tar.gz "$target:arena-portal/$RELEASE_ID.tar.gz"
+  scp "${options[@]}" -P "$SSH_PORT" "$archive" "$target:$app_name/$RELEASE_ID.tar.gz"
 
 echo "Activating release $RELEASE_ID on FreakHosting (one attempt)"
 # A disconnect may occur after the remote script starts. Replaying activation
 # could switch/restart an application while the original attempt is still running.
-if ssh "${options[@]}" -p "$SSH_PORT" "$target" "bash -s -- '$RELEASE_ID'" < scripts/hosting/activate.sh; then
+if ssh "${options[@]}" -p "$SSH_PORT" "$target" "bash -s -- '$RELEASE_ID'" < "$activation"; then
   echo 'Remote activation command completed. See its staging or health-check result above.'
 else
   status=$?
   if [[ "$status" == 255 ]]; then
-    echo '::error::SSH disconnected during activation; the remote release state is unknown. Activation was not retried. Check ~/arena-portal/current and /api/health in the hosting panel before another deployment.' >&2
+    echo "::error::SSH disconnected during activation; the remote release state is unknown. Activation was not retried. Check ~/$app_name/current and its application log in the hosting panel before another deployment." >&2
   else
     echo "::error::Activation failed (exit $status) and was not retried. Check the activation and rollback output above." >&2
   fi

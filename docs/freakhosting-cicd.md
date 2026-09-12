@@ -5,6 +5,12 @@ Linux runner. Pull requests produce a checked artifact; pushes to `main` also
 upload and activate that artifact when deployment is enabled. You do not run npm
 or build the site through the hosting terminal for each update.
 
+The Discord bot has a separate **Discord bot deployment** workflow using the same
+SSH secrets. Enable it with `FREAKHOSTING_BOT_DEPLOY_ENABLED=true`; its runtime
+lives in `~/arena-discord-bot` and requires no proxy port. Follow the
+[bot's one-time setup](../discord-bot/README.md#automatic-deployment-on-freakhosting)
+to enable automatic updates without FTP.
+
 This requires external SSH access with public-key authentication to the same
 website account used by Enhance. A web-panel terminal alone does not establish
 that GitHub can connect. The host must provide Linux x86-64/glibc (Ubuntu 22.04 or

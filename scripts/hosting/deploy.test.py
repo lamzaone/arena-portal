@@ -92,6 +92,18 @@ class TransportTests(unittest.TestCase):
         calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
         return calls if stage is None else [call for call in calls if call["stage"] == stage]
 
+    def test_bot_target_uses_separate_archive_directory_and_activation(self):
+        bot_scripts = self.project / 'discord-bot/hosting'
+        bot_scripts.mkdir(parents=True)
+        (bot_scripts / 'activate.sh').write_text('bot activation fixture')
+        (self.project / 'dist/freakhosting-discord-bot.tar.gz').write_bytes(b'bot release fixture')
+        result = self.deploy(arguments=('--discord-bot',))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('arena-discord-bot', self.calls('prepare')[0]['args'][-1])
+        self.assertEqual(self.calls('upload')[0]['args'][-2], 'dist/freakhosting-discord-bot.tar.gz')
+        self.assertEqual(self.calls('upload')[0]['args'][-1], 'website_user@ssh.example.test:arena-discord-bot/sha-123-2.tar.gz')
+        self.assertEqual((self.root / 'activation-input').read_text(), 'bot activation fixture')
+
     def test_transient_handshake_reset_recovers_before_upload_and_activation(self):
         result = self.deploy({"prepare": [[255, RESET]]})
         self.assertEqual(result.returncode, 0, result.stderr)
