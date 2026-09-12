@@ -97,7 +97,21 @@ The bot responds with an error if the portal is unavailable and preserves roles.
 
 In Discord, `/link` returns a private, one-use code and expiry. The user signs in with Steam on `/discord-link` and enters the code, or uses `/discordlink CODE` in game. The code belongs to the invoking Discord user and is never logged. The portal owns expiry, replay prevention and account-conflict handling.
 
-Every 60 seconds after the previous sync finishes, the bot fetches the full portal snapshot and all guild members. Each enabled group gets a separate Discord role named/colored after that group; membership uses effective, unexpired groups. Disabled groups and stale/unlinked users lose the corresponding managed roles. Unrelated roles remain untouched. Linked users absent from the guild are skipped and receive roles after joining on a later sync.
+The bot detects link/unlink and effective group changes using the existing portal
+poll, normally every five seconds. A changed snapshot triggers automatic role
+sync; no slash command, public webhook endpoint or additional port is required.
+Website links, in-game links, membership expiry, and AdminCore/VIP/custom updates
+are handled once they appear in the portal snapshot. Each enabled group gets a
+separate Discord role named/colored after that group. Disabled groups and
+stale/unlinked users lose the corresponding managed roles. Unrelated roles remain
+untouched. Guild member joins request another sync on the next poll.
+
+Unchanged snapshots skip Discord member/role reconciliation until the one-minute
+full check, which repairs manually changed assignments and deleted roles. A slow
+sync never overlaps another sync, and failed updates retry on later polls without
+marking the snapshot as applied. API latency, outages and Discord rate limits can
+delay completion beyond five seconds. Automatic sync runs independently of alert
+delivery and drains its in-flight work during shutdown.
 
 All enabled **AdminCore, VIP and custom groups** are included, even if they have no
 linked members yet. Membership comes from the portal's effective Arena grants and
@@ -105,7 +119,8 @@ scoped native AdminCore/VIP memberships, including expiry and VIP suppression.
 The snapshot bootstraps the same catalogue used by the portal and returns an error
 if bootstrap or authoritative membership reads fail. External group ranks come
 from the portal's synced definition; custom groups use portal profile priority.
-The bot orders ranked group roles within their existing managed role positions.
+Role ordering is manual: the bot never repositions roles based on portal ranks.
+Arrange AdminCore, VIP and custom roles in Discord as you prefer.
 
 Only persisted role IDs are managed. Existing roles with matching names are never
 adopted. New mappings are persisted before assignment; recreation uses
@@ -132,7 +147,15 @@ The bot aborts on unavailable/malformed snapshots, failed member fetches, protec
 
 ## Staff alerts
 
-The bot polls every five seconds after the previous poll finishes. Before claiming events, it refreshes admin groups and requires all enabled admin-group roles plus every configured `DISCORD_ADMIN_ROLE_IDS` role to exist and be mentionable. If no roles resolve or one cannot be pinged, the bot logs a configuration warning and leaves events queued. Optional fallback roles can be marked mentionable manually, or grant the bot **Mention Everyone** only in the staff channel. Explicit allowed mentions still permit only the resolved admin role IDs; user mentions and `@everyone`/`@here` in submitted content cannot ping.
+The bot polls every five seconds after the previous poll finishes. Alerts mention
+only the saved **TAPPED STAFF** role, whose membership follows active AdminCore
+groups. There is no separate admin-role ID setting: `DISCORD_ADMIN_ROLE_IDS` is
+obsolete and ignored, so it can be removed from existing `.env` files.
+`DISCORD_STAFF_CHANNEL_ID` still selects the **text channel** where alerts are sent.
+Before claiming events, the bot requires TAPPED STAFF to exist and be mentionable
+(or the bot to have Mention Everyone in that channel). Otherwise it leaves events
+queued. Explicit allowed mentions permit only the saved role ID; user mentions and
+`@everyone`/`@here` in submitted content cannot ping.
 
 Reports, `/calladmin`, appeals and tickets use bounded embeds. Only URLs on `PORTAL_URL` become embed links. Messages are acknowledged as complete only after Discord returns a message ID; send failures are retried using the portal's durable lease. A deterministic nonce with `enforceNonce` reduces duplicates after a crash or lost acknowledgement. Discord's deduplication window is limited, so delivery is at least once and an occasional duplicate remains possible. A send/ack failure never silently marks an event sent.
 

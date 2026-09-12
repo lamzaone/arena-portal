@@ -1,23 +1,13 @@
 import { createHash } from 'node:crypto';
 import { RuntimeError, safeError, safePortalUrl, validateEvents, validateSnapshot } from './validation.mjs';
 
-export function resolveAdminRoles(snapshot, roles, fallbackRoleIds, canMentionEveryone, guildId) {
+export function resolveAdminRoles(snapshot, roles, canMentionEveryone, guildId) {
   validateSnapshot(snapshot);
-  const mapping = new Map(snapshot.roles.map(role => [role.groupId, role.discordRoleId]));
-  const ids = new Set();
-  for (const group of snapshot.groups.filter(group => group.enabled && group.isAdmin)) {
-    const id = mapping.get(group.id);
-    if (!id) throw new RuntimeError('Admin group role is not synchronized; notifications remain queued');
-    ids.add(id);
-  }
-  for (const id of fallbackRoleIds) ids.add(id);
-  if (!ids.size) throw new RuntimeError('No admin roles are configured; notifications remain queued');
-  if (ids.size > 75) throw new RuntimeError('Too many admin roles for one notification; notifications remain queued');
-  for (const id of ids) {
-    const role = roles.get(id);
-    if (id === guildId || !role || (!role.mentionable && !canMentionEveryone)) throw new RuntimeError('An admin role is missing or cannot be mentioned; notifications remain queued');
-  }
-  return [...ids];
+  const id = snapshot.staffRoleId;
+  if (!id) throw new RuntimeError('TAPPED STAFF is not synchronized; notifications remain queued');
+  const role = roles.get(id);
+  if (id === guildId || !role || (!role.mentionable && !canMentionEveryone)) throw new RuntimeError('TAPPED STAFF is missing or cannot be mentioned; notifications remain queued');
+  return [id];
 }
 
 export function buildNotification(event, adminRoleIds, portalUrl) {

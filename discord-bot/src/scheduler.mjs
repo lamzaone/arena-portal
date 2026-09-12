@@ -4,10 +4,10 @@ import { RuntimeError } from './validation.mjs';
 /** Shared by scheduled and slash-command sync; never queue stale role snapshots. */
 export function createRoleSync(job) {
   let active = false;
-  return async userId => {
+  return async (userId, snapshot) => {
     if (active) throw new RuntimeError('A role sync is already running. Please try again shortly.');
     active = true;
-    try { return await job(userId); }
+    try { return await job(userId, snapshot); }
     finally { active = false; }
   };
 }

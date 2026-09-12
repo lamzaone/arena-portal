@@ -18,10 +18,10 @@ function assertEditable(role, guildId) {
 }
 
 /** Reconcile only persisted bot-owned role IDs; never match or adopt roles by name. */
-export async function reconcileRoles({ guild, portal, userId, signal }) {
+export async function reconcileRoles({ guild, portal, userId, signal, snapshot: suppliedSnapshot }) {
   const checkRunning = () => signal?.throwIfAborted();
   checkRunning();
-  const snapshot = validateSnapshot(await portal.snapshot());
+  const snapshot = validateSnapshot(suppliedSnapshot ?? await portal.snapshot());
   const [roles, fetched] = await Promise.all([
     roleOperation('Fetching guild roles', () => guild.roles.fetch()),
     roleOperation('Fetching guild members', () => userId ? guild.members.fetch({ user: userId, force: true }) : guild.members.fetch({ time: 30_000 })),
@@ -71,23 +71,7 @@ export async function reconcileRoles({ guild, portal, userId, signal }) {
       await roleOperation(`Updating Staff role ${staff.id}`, () => staff.edit(options));
     }
   }
-  // Reorder only our roles within the slots they already occupy. Custom Discord
-  // roles and the bot's own role are never explicitly moved.
-  const ranked = snapshot.groups.filter(group => group.enabled && Number.isFinite(group.rankWeight) && mapping.has(group.id));
-  if (ranked.length > 1) {
-    checkRunning();
-    const current = await roleOperation('Fetching roles for rank ordering', () => guild.roles.fetch());
-    const ordered = ranked.map(group => ({ group, role: current.get(mapping.get(group.id)) }));
-    for (const item of ordered) {
-      if (!item.role) throw new RuntimeError('A managed role disappeared during synchronization');
-      assertEditable(item.role, guild.id);
-    }
-    ordered.sort((a, b) => a.group.rankWeight - b.group.rankWeight || a.group.id.localeCompare(b.group.id));
-    const slots = ordered.map(item => item.role.position).sort((a, b) => a - b);
-    const positions = ordered.map((item, index) => ({ role: item.role.id, position: slots[index] }));
-    checkRunning();
-    if (ordered.some((item, index) => item.role.position !== slots[index])) await roleOperation('Ordering portal group roles', () => guild.roles.setPositions(positions));
-  }
+  // Role positions are managed manually in Discord, independently of portal rank.
   const enabled = new Set(snapshot.groups.filter(group => group.enabled).map(group => group.id));
   const adminGroups = new Set(snapshot.groups.filter(group => group.enabled && group.isAdmin).map(group => group.id));
   const desiredByUser = new Map(snapshot.members.map(member => {

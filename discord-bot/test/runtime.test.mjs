@@ -6,6 +6,8 @@ import { reconcileRoles } from '../src/roles.mjs';
 import { buildNotification, deliverNotifications, resolveAdminRoles } from '../src/notifications.mjs';
 import { handleLink } from '../src/link.mjs';
 import { safeError } from '../src/validation.mjs';
+import { createAutomaticRoleSync } from '../src/automatic-roles.mjs';
+import { createRoleSync } from '../src/scheduler.mjs';
 
 const guildId = '111111111111111111';
 const roleId = '222222222222222222';
@@ -40,6 +42,18 @@ function fakeGuild({ members = [{ id: userId, roles: [extraId] }], roles = [{ id
   }, members: { cache: memberMap, fetch: async options => options?.user ? memberMap.get(options.user) : memberMap } };
 }
 
+test('a polled link change automatically assigns roles using the supplied snapshot', async () => {
+  const guild = fakeGuild();
+  const portal = { snapshot: async () => assert.fail('must reuse the poll snapshot') };
+  const sync = createRoleSync((userId, snapshot) => reconcileRoles({ guild, portal, userId, snapshot }));
+  const observe = createAutomaticRoleSync({ sync: snapshot => sync(undefined, snapshot) });
+  await observe({ ...snapshot(), members: [] });
+  assert.equal(guild.members.cache.get(userId).roles.cache.has(roleId), false);
+  await observe(snapshot());
+  assert.equal(guild.members.cache.get(userId).roles.cache.has(roleId), true);
+  assert.equal(guild.members.cache.get(userId).roles.cache.has(extraId), true);
+});
+
 test('self sync does not change any other member and AdminCore roles are hoisted', async () => {
   const other = '666666666666666666';
   const guild = fakeGuild({ roles: [{ id: roleId, hoist: false }], members: [{ id: userId, roles: [] }, { id: other, roles: [roleId] }] });
@@ -49,16 +63,16 @@ test('self sync does not change any other member and AdminCore roles are hoisted
   assert.equal(guild.actions.find(action => action[0] === 'edit')[2].hoist, true);
 });
 
-test('managed roles follow portal rank within their existing slots', async () => {
+test('manual role ordering is preserved even when portal ranks differ', async () => {
   const guild = fakeGuild({ roles: [{ id: roleId, position: 2 }, { id: extraId, position: 5 }] });
   const data = snapshot(); data.groups[0].rankWeight = 100;
   data.groups.push({ ...group, id: 'helper', rankWeight: 10 });
   data.roles.push({ groupId: 'helper', discordRoleId: extraId });
   guild.roles.setPositions = async values => guild.actions.push(['positions', values]);
   await reconcileRoles({ guild, portal: { snapshot: async () => data } });
-  assert.deepEqual(guild.actions.find(action => action[0] === 'positions')[1], [
-    { role: extraId, position: 2 }, { role: roleId, position: 5 },
-  ]);
+  assert.equal(guild.actions.some(action => action[0] === 'positions'), false);
+  assert.equal(guild.roles.cache.get(roleId).position, 2);
+  assert.equal(guild.roles.cache.get(extraId).position, 5);
 });
 
 test('Staff is assigned only to active admins while VIP/custom groups and configured permissions are preserved', async () => {
@@ -110,14 +124,13 @@ test('disabled admin membership removes Staff even while a VIP membership remain
   assert.deepEqual([...guild.members.cache.get(userId).roles.cache.keys()], [extraId]);
 });
 
-test('shutdown after fetching role positions cannot reorder or assign roles', async () => {
+test('shutdown after fetching roles cannot mutate or assign roles', async () => {
   const controller = new AbortController();
   const guild = fakeGuild({ roles: [{ id: roleId, position: 2 }, { id: extraId, position: 5 }] });
   const data = snapshot(); data.groups[0].rankWeight = 100;
   data.groups.push({ ...group, id: 'helper', rankWeight: 10 });
   data.roles.push({ groupId: 'helper', discordRoleId: extraId });
-  let fetches = 0;
-  guild.roles.fetch = async () => { if (++fetches === 2) controller.abort(); return guild.roles.cache; };
+  guild.roles.fetch = async () => { controller.abort(); return guild.roles.cache; };
   guild.roles.setPositions = async () => assert.fail('reordered during shutdown');
   await assert.rejects(reconcileRoles({ guild, portal: { snapshot: async () => data }, signal: controller.signal }), { name: 'AbortError' });
   assert.equal(guild.actions.length, 0);
@@ -127,7 +140,7 @@ test('configuration rejects insecure remote HTTP and malformed IDs without expos
   const env = { DISCORD_BOT_TOKEN: 'private-token', DISCORD_BRIDGE_SECRET: 'x'.repeat(32), DISCORD_GUILD_ID: guildId, DISCORD_STAFF_CHANNEL_ID: extraId, PORTAL_URL: 'https://arena.example/' };
   assert.equal(readConfig(env).portalUrl, 'https://arena.example');
   assert.throws(() => readConfig({ ...env, PORTAL_URL: 'http://remote.example' }), /PORTAL_URL/);
-  assert.throws(() => readConfig({ ...env, DISCORD_ADMIN_ROLE_IDS: 'bad' }), /DISCORD_ADMIN_ROLE_IDS/);
+  assert.equal(Object.hasOwn(readConfig({ ...env, DISCORD_ADMIN_ROLE_IDS: 'old-value-is-ignored' }), 'adminRoleIds'), false);
   assert.throws(() => readConfig({ ...env, DISCORD_BRIDGE_SECRET: 'private-token' }), error => !error.message.includes('private-token'));
 });
 
@@ -242,13 +255,15 @@ test('notifications bound text, reject foreign/unsafe links, restrict mentions a
   assert.equal(message.nonce, buildNotification(event, [roleId], config.portalUrl).nonce);
 });
 
-test('all admin mappings plus fallback roles are required before claiming notifications', () => {
-  const data = snapshot(); data.groups.push({ ...group, id: 'owner' });
+test('alerts mention only the mapped TAPPED STAFF role and wait until it can be mentioned', () => {
+  const data = snapshot(); data.staffRoleId = extraId;
   const roles = new Map([[roleId, { id: roleId, mentionable: true }], [extraId, { id: extraId, mentionable: true }]]);
-  assert.throws(() => resolveAdminRoles(data, roles, [extraId], false, guildId));
-  data.roles.push({ groupId: 'owner', discordRoleId: extraId });
-  assert.deepEqual(resolveAdminRoles(data, roles, [extraId], false, guildId), [roleId, extraId]);
-  assert.throws(() => resolveAdminRoles({ groups: [], roles: [], members: [] }, roles, [], false, guildId));
+  assert.deepEqual(resolveAdminRoles(data, roles, false, guildId), [extraId]);
+  assert.throws(() => resolveAdminRoles({ ...data, staffRoleId: null }, roles, false, guildId));
+  assert.throws(() => resolveAdminRoles({ ...data, staffRoleId: guildId }, roles, true, guildId));
+  roles.get(extraId).mentionable = false;
+  assert.throws(() => resolveAdminRoles(data, roles, false, guildId));
+  assert.deepEqual(resolveAdminRoles(data, roles, true, guildId), [extraId]);
 });
 
 test('delivery acknowledges only after successful send and retries failure with lease', async () => {

@@ -23,7 +23,5 @@ export function readConfig(env = process.env, { registrationOnly = false } = {})
   if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
     throw new RuntimeError('PORTAL_URL must be an HTTPS origin (HTTP allowed for localhost only)');
   }
-  const adminRoleIds = [...new Set((env.DISCORD_ADMIN_ROLE_IDS ?? '').split(',').map(value => value.trim()).filter(Boolean))];
-  if (adminRoleIds.some(id => !isSnowflake(id) || id === guildId) || adminRoleIds.length > 75) throw new RuntimeError('Invalid DISCORD_ADMIN_ROLE_IDS');
-  return { token, guildId, secret, portalUrl: url.origin, staffChannelId: snowflake('DISCORD_STAFF_CHANNEL_ID'), adminRoleIds, timeoutMs: 10_000 };
+  return { token, guildId, secret, portalUrl: url.origin, staffChannelId: snowflake('DISCORD_STAFF_CHANNEL_ID'), timeoutMs: 10_000 };
 }

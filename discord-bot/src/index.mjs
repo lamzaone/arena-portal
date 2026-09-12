@@ -7,6 +7,7 @@ import { createCommandHandler, registerCommands } from './commands.mjs';
 import { createRoleSync, runLoop } from './scheduler.mjs';
 import { RuntimeError, safeError } from './validation.mjs';
 import { startHealthReporter } from './health.mjs';
+import { createAutomaticRoleSync } from './automatic-roles.mjs';
 
 const logError = (label, error) => console.error(`[arena-discord] ${label}: ${safeError(error)}`);
 
@@ -20,7 +21,7 @@ async function main() {
   let loopTasks = [];
   let stopHealth = () => {};
   let handleCommand;
-  const commandTasks = new Set();
+  const activeTasks = new Set();
   const stop = () => shutdown.abort();
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
@@ -28,8 +29,8 @@ async function main() {
   client.on(Events.InteractionCreate, interaction => {
     if (!handleCommand || shutdown.signal.aborted) return;
     const task = handleCommand(interaction).catch(error => logError('Slash command', error));
-    commandTasks.add(task);
-    void task.finally(() => commandTasks.delete(task));
+    activeTasks.add(task);
+    void task.finally(() => activeTasks.delete(task));
   });
   try {
     await new Promise((resolve, reject) => {
@@ -51,35 +52,56 @@ async function main() {
       return permissions;
     };
     channelPermissions();
-    const sync = createRoleSync(async userId => {
+    const sync = createRoleSync(async (userId, snapshot) => {
       if (!client.isReady()) throw new RuntimeError('Discord is reconnecting');
-      const result = await reconcileRoles({ guild, portal, userId, signal: shutdown.signal });
+      const result = await reconcileRoles({ guild, portal, userId, snapshot, signal: shutdown.signal });
       if (result.added || result.removed) console.info(`[arena-discord] Roles synchronized: ${result.added} added, ${result.removed} removed`);
       return result;
+    });
+    const automaticSync = createAutomaticRoleSync({ sync: snapshot => sync(undefined, snapshot) });
+    client.on(Events.GuildMemberAdd, member => {
+      if (member.guild.id === config.guildId) automaticSync.invalidate();
     });
     handleCommand = createCommandHandler({ config, portal, sync });
     await registerCommands({ rest: client.rest, applicationId: client.application.id, guildId: config.guildId });
     console.info('[arena-discord] Registered /help, /link, /account, /sync and /sync-all');
-    // Verify the bridge contract before starting either background loop.
+    // Verify the bridge contract before starting portal polling.
     await portal.snapshot();
     stopHealth = startHealthReporter({ directory: process.env.ARENA_BOT_HEALTH_DIR, ready: () => client.isReady() && !shutdown.signal.aborted });
-    const notify = async () => {
-      if (!client.isReady()) throw new RuntimeError('Discord is reconnecting');
-      const [snapshot, roles] = await Promise.all([portal.snapshot(), guild.roles.fetch()]);
-      const adminRoleIds = resolveAdminRoles(snapshot, roles, config.adminRoleIds, channelPermissions().has(PermissionFlagsBits.MentionEveryone), guild.id);
+    const notify = async snapshot => {
+      const roles = await guild.roles.fetch();
+      const adminRoleIds = resolveAdminRoles(snapshot, roles, channelPermissions().has(PermissionFlagsBits.MentionEveryone), guild.id);
       await deliverNotifications({ portal, channel, adminRoleIds, portalUrl: config.portalUrl });
+    };
+    let notificationTask = null;
+    const poll = async () => {
+      if (!client.isReady()) throw new RuntimeError('Discord is reconnecting');
+      const snapshot = await portal.snapshot();
+      shutdown.signal.throwIfAborted();
+      // Use the same snapshot read for change detection and staff alerts. A slow
+      // Discord role update cannot block the notification loop or queue stale syncs.
+      const task = automaticSync(snapshot).catch(error => logError('Role synchronization', error));
+      activeTasks.add(task);
+      void task.finally(() => activeTasks.delete(task));
+      // Slow notification delivery must not delay link/group change detection.
+      // Keep at most one notification batch in flight and drain it on shutdown.
+      if (!notificationTask) {
+        notificationTask = notify(snapshot).catch(error => logError('Notifications', error));
+        const delivery = notificationTask;
+        activeTasks.add(delivery);
+        void delivery.finally(() => { activeTasks.delete(delivery); notificationTask = null; });
+      }
     };
     console.info('[arena-discord] Connected; role synchronization and notification polling started');
     loopTasks = [
-      runLoop(sync, { intervalMs: 60_000, signal: shutdown.signal, onError: error => logError('Role synchronization', error) }),
-      runLoop(notify, { intervalMs: 5_000, signal: shutdown.signal, onError: error => logError('Notifications', error) }),
+      runLoop(poll, { intervalMs: 5_000, signal: shutdown.signal, onError: error => logError('Portal polling', error) }),
     ];
     await Promise.all(loopTasks);
   } finally {
     shutdown.abort();
     stopHealth();
     // Manual syncs and link requests must finish their in-flight writes too.
-    await Promise.allSettled([...loopTasks, ...commandTasks]);
+    await Promise.allSettled([...loopTasks, ...activeTasks]);
     await client.destroy();
     process.removeListener('SIGINT', stop);
     process.removeListener('SIGTERM', stop);
