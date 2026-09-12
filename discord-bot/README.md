@@ -154,6 +154,17 @@ The portal must retain all known group definitions, including disabled/archived 
 
 ## Verification and references
 
+When troubleshooting, bot errors identify the failed operation, for example
+`Portal HTTP 503 (POST notifications claim)` or `Updating group role ...: Discord
+API error 50013`. A 50013 means Discord rejected the operation for missing
+permissions; check Manage Roles and the bot's position above its managed roles.
+It does not identify the same problem as a portal HTTP 503. For a 503, check the
+**website's** Enhance log for `[arena-discord-bridge]`: it records the endpoint and
+a recognized database error code without SQL, credentials or notification text.
+`GET snapshot` failures can involve identity sources, while `POST notifications
+claim` failures involve the notification queue. An `internal_error` is unclassified
+and requires further server-side diagnosis; it is not evidence of a missing table.
+
 `npm run build` checks native ESM syntax. `npm test` exercises configuration, authenticated requests, snapshot failure safety, managed role creation/cleanup, private links, admin mention restrictions, send/ack ordering, retries and serialized polling using controlled Discord/HTTP boundaries without credentials or network.
 
 Pinned dependency: discord.js 14.27.0. Behavior was checked against the installed package declarations and official documentation for [role creation](https://discord.js.org/docs/packages/discord.js/14.27.0/RoleCreateOptions:Interface), [member fetching](https://discord.js.org/docs/packages/discord.js/14.27.0/GuildMemberManager:Class), [message nonce and mentions](https://discord.js.org/docs/packages/discord.js/14.27.0/MessageCreateOptions:Interface), and [Discord role hierarchy](https://docs.discord.com/developers/topics/permissions).

@@ -1,4 +1,12 @@
-import { RuntimeError, validateSnapshot } from './validation.mjs';
+import { RuntimeError, safeError, validateSnapshot } from './validation.mjs';
+
+async function roleOperation(operation, run) {
+  try { return await run(); }
+  catch (error) {
+    const hint = error?.code === 50013 ? '; check Manage Roles and keep the bot above this role in Server Settings > Roles' : '';
+    throw new RuntimeError(`${operation}: ${safeError(error)}${hint}`);
+  }
+}
 
 function roleOptions(group) {
   const color = /^#[0-9a-f]{6}$/i.test(group.color ?? '') ? Number.parseInt(group.color.slice(1), 16) : 0;
@@ -14,7 +22,10 @@ export async function reconcileRoles({ guild, portal, userId, signal }) {
   const checkRunning = () => signal?.throwIfAborted();
   checkRunning();
   const snapshot = validateSnapshot(await portal.snapshot());
-  const [roles, fetched] = await Promise.all([guild.roles.fetch(), userId ? guild.members.fetch({ user: userId, force: true }) : guild.members.fetch({ time: 30_000 })]);
+  const [roles, fetched] = await Promise.all([
+    roleOperation('Fetching guild roles', () => guild.roles.fetch()),
+    roleOperation('Fetching guild members', () => userId ? guild.members.fetch({ user: userId, force: true }) : guild.members.fetch({ time: 30_000 })),
+  ]);
   const members = userId ? new Map([[userId, fetched]]) : fetched;
   const mapping = new Map(snapshot.roles.map(role => [role.groupId, role.discordRoleId]));
   let staffRoleId = snapshot.staffRoleId;
@@ -30,7 +41,7 @@ export async function reconcileRoles({ guild, portal, userId, signal }) {
     if (!role && !group.enabled) continue;
     const options = roleOptions(group);
     if (!role) {
-      role = await guild.roles.create({ ...options, permissions: 0n });
+      role = await roleOperation('Creating portal group role', () => guild.roles.create({ ...options, permissions: 0n }));
       try { await portal.saveRole(group.id, role.id, mapping.get(group.id) ?? null); }
       catch (error) {
         // Avoid adopting an orphan by name on the next run. Rollback is best effort.
@@ -40,7 +51,7 @@ export async function reconcileRoles({ guild, portal, userId, signal }) {
       mapping.set(group.id, role.id);
       roles.set(role.id, role);
     } else if (role.name !== options.name || role.color !== options.colors.primaryColor || role.hoist !== options.hoist || role.mentionable !== options.mentionable) {
-      await role.edit(options);
+      await roleOperation(`Updating group role ${role.id}`, () => role.edit(options));
     }
   }
   // An absent field means the portal is still on the older bridge contract.
@@ -49,7 +60,7 @@ export async function reconcileRoles({ guild, portal, userId, signal }) {
     let staff = roles.get(staffRoleId);
     const options = { name: 'Staff', hoist: true, mentionable: true, reason: 'ARENA AdminCore staff membership' };
     if (!staff) {
-      staff = await guild.roles.create({ ...options, permissions: 0n });
+      staff = await roleOperation('Creating Staff role', () => guild.roles.create({ ...options, permissions: 0n }));
       try { await portal.saveRole('staff', staff.id, staffRoleId ?? null); }
       catch (error) {
         try { await staff.delete('ARENA Staff mapping persistence failed'); } catch { /* Unassigned orphan can be removed manually. */ }
@@ -57,7 +68,7 @@ export async function reconcileRoles({ guild, portal, userId, signal }) {
       }
       staffRoleId = staff.id;
     } else if (staff.name !== options.name || !staff.hoist || !staff.mentionable) {
-      await staff.edit(options);
+      await roleOperation(`Updating Staff role ${staff.id}`, () => staff.edit(options));
     }
   }
   // Reorder only our roles within the slots they already occupy. Custom Discord
@@ -65,7 +76,7 @@ export async function reconcileRoles({ guild, portal, userId, signal }) {
   const ranked = snapshot.groups.filter(group => group.enabled && Number.isFinite(group.rankWeight) && mapping.has(group.id));
   if (ranked.length > 1) {
     checkRunning();
-    const current = await guild.roles.fetch();
+    const current = await roleOperation('Fetching roles for rank ordering', () => guild.roles.fetch());
     const ordered = ranked.map(group => ({ group, role: current.get(mapping.get(group.id)) }));
     for (const item of ordered) {
       if (!item.role) throw new RuntimeError('A managed role disappeared during synchronization');
@@ -75,7 +86,7 @@ export async function reconcileRoles({ guild, portal, userId, signal }) {
     const slots = ordered.map(item => item.role.position).sort((a, b) => a - b);
     const positions = ordered.map((item, index) => ({ role: item.role.id, position: slots[index] }));
     checkRunning();
-    if (ordered.some((item, index) => item.role.position !== slots[index])) await guild.roles.setPositions(positions);
+    if (ordered.some((item, index) => item.role.position !== slots[index])) await roleOperation('Ordering portal group roles', () => guild.roles.setPositions(positions));
   }
   const enabled = new Set(snapshot.groups.filter(group => group.enabled).map(group => group.id));
   const adminGroups = new Set(snapshot.groups.filter(group => group.enabled && group.isAdmin).map(group => group.id));
@@ -94,14 +105,14 @@ export async function reconcileRoles({ guild, portal, userId, signal }) {
     for (const roleId of member.roles.cache.keys()) {
       if (managed.has(roleId) && !desired.has(roleId)) {
         checkRunning();
-        await member.roles.remove(roleId, 'ARENA group expired or link removed');
+        await roleOperation(`Removing member role ${roleId}`, () => member.roles.remove(roleId, 'ARENA group expired or link removed'));
         removed++;
       }
     }
     for (const roleId of desired) {
       if (!member.roles.cache.has(roleId)) {
         checkRunning();
-        await member.roles.add(roleId, 'ARENA effective portal group');
+        await roleOperation(`Assigning member role ${roleId}`, () => member.roles.add(roleId, 'ARENA effective portal group'));
         added++;
       }
     }

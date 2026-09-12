@@ -4,6 +4,8 @@ export class PortalError extends RuntimeError {}
 
 export function createPortalClient(config, fetchImpl = fetch) {
   async function request(path, body) {
+    const action = path === 'notifications' && ['claim', 'complete', 'retry'].includes(body?.action) ? ` ${body.action}` : '';
+    const context = `${body === undefined ? 'GET' : 'POST'} ${path}${action}`;
     try {
       const response = await fetchImpl(`${config.portalUrl}/api/discord/bot/${path}`, {
         method: body === undefined ? 'GET' : 'POST',
@@ -13,23 +15,23 @@ export function createPortalClient(config, fetchImpl = fetch) {
       });
       if (!response.ok) {
         await response.body?.cancel();
-        throw new PortalError(`Portal HTTP ${response.status}`);
+        throw new PortalError(`Portal HTTP ${response.status} (${context})`);
       }
       if (!response.headers.get('content-type')?.includes('application/json')) {
         await response.body?.cancel();
-        throw new PortalError('Portal returned a non-JSON response');
+        throw new PortalError(`Portal returned a non-JSON response (${context})`);
       }
       // Bound memory even when Content-Length is missing or inaccurate.
       const chunks = []; let size = 0;
       for await (const chunk of response.body) {
         size += chunk.byteLength;
-        if (size > 16 * 1024 * 1024) throw new PortalError('Portal response exceeded size limit');
+        if (size > 16 * 1024 * 1024) throw new PortalError(`Portal response exceeded size limit (${context})`);
         chunks.push(chunk);
       }
       return JSON.parse(Buffer.concat(chunks).toString('utf8'));
     } catch (error) {
       if (error instanceof PortalError) throw error;
-      throw new PortalError('Portal request failed or timed out');
+      throw new PortalError(`Portal request failed or timed out (${context})`);
     }
   }
   return {

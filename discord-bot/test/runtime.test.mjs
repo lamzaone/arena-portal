@@ -5,6 +5,7 @@ import { createPortalClient, PortalError } from '../src/portal-client.mjs';
 import { reconcileRoles } from '../src/roles.mjs';
 import { buildNotification, deliverNotifications, resolveAdminRoles } from '../src/notifications.mjs';
 import { handleLink } from '../src/link.mjs';
+import { safeError } from '../src/validation.mjs';
 
 const guildId = '111111111111111111';
 const roleId = '222222222222222222';
@@ -139,6 +140,25 @@ test('portal requests authenticate, refuse redirects, and redact upstream errors
   assert.equal(request.options.redirect, 'error');
   const failed = createPortalClient(config, async () => new Response('private-token', { status: 500 }));
   await assert.rejects(failed.snapshot(), error => error instanceof PortalError && !error.message.includes('private-token'));
+});
+
+test('portal failures identify the endpoint and notification action without logging payloads', async () => {
+  const portal = createPortalClient(config, async () => new Response('private database password', { status: 503 }));
+  await assert.rejects(portal.snapshot(), /Portal HTTP 503.*GET snapshot/);
+  await assert.rejects(portal.claimNotifications(), /Portal HTTP 503.*POST notifications claim/);
+  await assert.rejects(portal.finishNotification({ action: 'complete', leaseToken: 'private-token' }), error => {
+    assert.match(error.message, /POST notifications complete/);
+    return !error.message.includes('private-token');
+  });
+});
+
+test('Discord permission errors identify the failing role operation without exposing raw errors', async () => {
+  const guild = fakeGuild({ roles: [{ id: roleId, name: 'Old name' }] });
+  guild.roles.cache.get(roleId).edit = async () => { throw Object.assign(new Error('private-token'), { code: 50013 }); };
+  await assert.rejects(reconcileRoles({ guild, portal: { snapshot: async () => snapshot() } }), error => {
+    assert.match(safeError(error), /Updating group role.*50013.*Manage Roles/);
+    return !safeError(error).includes('private-token');
+  });
 });
 
 test('portal client accepts dotted event types and sends compare-and-swap role mappings', async () => {

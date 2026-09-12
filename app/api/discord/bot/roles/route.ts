@@ -1,6 +1,7 @@
 import { authorizeDiscordBot } from "@/lib/discord/bot-auth";
 import { botJson, isDatabaseId, isDiscordId, readBotJson } from "@/lib/discord/bot-http";
 import { saveDiscordGroupRole } from "@/lib/discord/bot-service";
+import { reportDiscordFailure } from "@/lib/discord/diagnostics";
 export const runtime = "nodejs";
 export async function POST(request: Request) {
   if (!authorizeDiscordBot(request)) return botJson({ error: "Unauthorized." }, 401);
@@ -10,5 +11,8 @@ export async function POST(request: Request) {
   try {
     const saved = await saveDiscordGroupRole({ groupId: input.groupId, discordRoleId: input.discordRoleId, previousRoleId: input.previousRoleId as string | null ?? null });
     return saved ? botJson({ ok: true }) : botJson({ error: "Role mapping changed. Refresh the snapshot." }, 409);
-  } catch { return botJson({ error: "Role mapping could not be stored." }, 503); }
+  } catch (error) {
+    reportDiscordFailure("roles", error);
+    return botJson({ error: "Role mapping could not be stored." }, 503);
+  }
 }

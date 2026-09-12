@@ -1,6 +1,7 @@
 import { authorizeDiscordBot } from "@/lib/discord/bot-auth";
 import { botJson, isDatabaseId, isDiscordId, readBotJson } from "@/lib/discord/bot-http";
 import { discordNotificationRepository, discordNotificationUrl } from "@/lib/discord/bot-service";
+import { reportDiscordFailure } from "@/lib/discord/diagnostics";
 export const runtime = "nodejs";
 export async function POST(request: Request) {
   if (!authorizeDiscordBot(request)) return botJson({ error: "Unauthorized." }, 401);
@@ -19,5 +20,8 @@ export async function POST(request: Request) {
       messageId: isDiscordId(input.messageId) ? input.messageId : undefined,
     });
     return accepted ? botJson({ ok: true }) : botJson({ error: "Notification lease expired or changed." }, 409);
-  } catch { return botJson({ error: "Notification storage is unavailable." }, 503); }
+  } catch (error) {
+    reportDiscordFailure(input.action === "claim" ? "notifications.claim" : input.action === "retry" ? "notifications.retry" : "notifications.complete", error);
+    return botJson({ error: "Notification storage is unavailable." }, 503);
+  }
 }
