@@ -25,11 +25,14 @@ export function createNotificationRepository(pool: Pool) {
       const connection = await pool.getConnection();
       try {
         await connection.beginTransaction();
+        // MariaDB 10.5 has no SKIP LOCKED. Claim transactions only persist the
+        // lease; Discord delivery happens after commit, so brief serialization
+        // preserves exclusive claims without holding locks during network I/O.
         const [rows] = await connection.query<NotificationRow[]>(
           "SELECT id, event_type, title, body, target_steam_id, target_path, attempts FROM portal_discord_notifications " +
           "WHERE (status = 'pending' AND available_at <= UTC_TIMESTAMP()) " +
           "OR (status = 'processing' AND lease_expires_at <= UTC_TIMESTAMP()) " +
-          "ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED",
+          "ORDER BY id LIMIT 1 FOR UPDATE",
         );
         const events = [];
         for (const row of rows) {

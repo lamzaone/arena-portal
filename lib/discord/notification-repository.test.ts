@@ -16,7 +16,8 @@ function fixture() {
   const sql = (value: string) => value.replaceAll("UTC_TIMESTAMP()", "CURRENT_TIMESTAMP")
     .replace(/DATE_ADD\(CURRENT_TIMESTAMP, INTERVAL (\d+) SECOND\)/g, "datetime('now', '+$1 seconds')")
     .replace("DATE_ADD(CURRENT_TIMESTAMP, INTERVAL ? SECOND)", "datetime('now', '+' || ? || ' seconds')")
-    .replaceAll(" FOR UPDATE SKIP LOCKED", "").replaceAll(" FOR UPDATE", "");
+    // Keep the supported MariaDB 10.5 dialect: do not hide SKIP LOCKED syntax.
+    .replaceAll(" FOR UPDATE", "");
   const executor = {
     async query(statement: string, values: unknown[] = []) { return [db.prepare(sql(statement)).all(...values as string[])]; },
     async execute(statement: string, values: unknown[] = []) {

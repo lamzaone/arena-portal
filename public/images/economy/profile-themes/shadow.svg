@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480" role="img" aria-labelledby="shadow-title shadow-description">
+  <title id="shadow-title">Shadow theme</title>
+  <desc id="shadow-description">Black-on-black TAPPED monogram, embossed graphite, floating shadows and a fine platinum edge light.</desc>
+  <defs>
+    <linearGradient id="canvas" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#151618"/>
+      <stop offset=".38" stop-color="#09090a"/>
+      <stop offset="1" stop-color="#040405"/>
+    </linearGradient>
+    <radialGradient id="ambient" cx="62%" cy="23%" r="67%">
+      <stop stop-color="#4d5158" stop-opacity=".2"/>
+      <stop offset=".56" stop-color="#1b1c20" stop-opacity=".08"/>
+      <stop offset="1" stop-color="#050506" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2=".85" y2="1">
+      <stop stop-color="#797d83"/>
+      <stop offset=".12" stop-color="#383b40"/>
+      <stop offset=".44" stop-color="#141518"/>
+      <stop offset=".72" stop-color="#45484d"/>
+      <stop offset="1" stop-color="#111214"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2=".7">
+      <stop stop-color="#46494f" stop-opacity=".1"/>
+      <stop offset=".35" stop-color="#b5b9c0" stop-opacity=".72"/>
+      <stop offset=".46" stop-color="#f1f2f3" stop-opacity=".86"/>
+      <stop offset=".62" stop-color="#747980" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#303236" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#050506" stop-opacity="0"/>
+      <stop offset=".58" stop-color="#050506" stop-opacity=".04"/>
+      <stop offset="1" stop-color="#050506" stop-opacity=".98"/>
+    </linearGradient>
+    <symbol id="tapped" viewBox="400 190 790 535">
+      <path d="M434 215H1138L1038 308H523ZM729 342H892L628 600V466H603ZM951 321H1035L853 503H771ZM769 515L654 640L546 718L621 637Z"/>
+    </symbol>
+    <pattern id="monogram" width="192" height="192" patternUnits="userSpaceOnUse" patternTransform="translate(-16 -13)">
+      <g fill="#2b2d31" stroke="#41444a" stroke-width="1.5">
+        <use href="#tapped" x="20" y="21" width="56" height="38"/>
+        <use href="#tapped" x="116" y="117" width="56" height="38"/>
+      </g>
+      <path d="m144 33 1.9 5.1L151 40l-5.1 1.9L144 47l-1.9-5.1L137 40l5.1-1.9ZM48 129l1.9 5.1L55 136l-5.1 1.9L48 143l-1.9-5.1L41 136l5.1-1.9Z" fill="#35383d"/>
+    </pattern>
+    <filter id="soft-shadow" x="-40%" y="-40%" width="180%" height="200%">
+      <feGaussianBlur stdDeviation="16"/>
+    </filter>
+  </defs>
+  <rect width="800" height="480" fill="url(#canvas)"/>
+  <rect width="800" height="480" fill="url(#monogram)" opacity=".7"/>
+  <rect width="800" height="480" fill="url(#ambient)"/>
+  <path d="M-80 238C123 139 362 350 643 112S959 140 949 195C654 355 490 186 241 347S-32 353-80 238Z" fill="#020203" opacity=".63" filter="url(#soft-shadow)"/>
+  <g transform="rotate(-24 470 194)">
+    <ellipse cx="470" cy="194" rx="237" ry="88" fill="none" stroke="#070708" stroke-width="16" opacity=".55"/>
+    <ellipse cx="470" cy="194" rx="236" ry="87" fill="none" stroke="url(#rim)" stroke-width=".9"/>
+    <ellipse cx="470" cy="194" rx="251" ry="103" fill="none" stroke="#3c3f44" stroke-opacity=".16" stroke-width=".6"/>
+  </g>
+  <use href="#tapped" x="284" y="130" width="235" height="159" fill="#000" transform="translate(0 15)" filter="url(#soft-shadow)"/>
+  <use href="#tapped" x="284" y="123" width="235" height="159" fill="url(#metal)" stroke="#666b72" stroke-opacity=".4" stroke-width="2"/>
+  <path d="M294 131H503" stroke="url(#rim)" stroke-width="1.2"/>
+  <rect width="800" height="480" fill="url(#shade)"/>
+  <rect x="20.5" y="20.5" width="759" height="439" rx="7" fill="none" stroke="#45484e" stroke-opacity=".34"/>
+  <path d="M126 20.5H661" stroke="url(#rim)" stroke-width="1.1"/>
+  <path d="M20.5 77V28a7.5 7.5 0 0 1 7.5-7.5H78" fill="none" stroke="#969ba3" stroke-opacity=".36"/>
+  <text x="49" y="59" fill="#b1b5bc" font-family="Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="3.1">TAPPED.RO</text>
+  <text x="750" y="59" text-anchor="end" fill="#737880" font-family="Arial, sans-serif" font-size="9" font-weight="700" letter-spacing="2.5">MONOGRAM COLLECTION</text>
+  <text x="51" y="375" fill="#989da5" font-family="Arial, sans-serif" font-size="9" font-weight="600" letter-spacing="4.5">BLACK / GRAPHITE / LIGHT</text>
+  <text x="47" y="430" fill="#e9eaed" font-family="Arial, sans-serif" font-size="47" font-weight="500" letter-spacing="10">SHADOW</text>
+  <path d="M690 411h38m-7-7 7 7-7 7" fill="none" stroke="#adb2bb" stroke-width="1.1"/>
+  <path d="M50 342H749" stroke="#34373c" stroke-width=".7" opacity=".65"/>
+</svg>

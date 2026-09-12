@@ -13,6 +13,7 @@ import { ProfileModerationHistory } from "@/components/profile-moderation-histor
 import { ProfileSettingsForm, type ProfileSettingsValue } from "@/components/profile-settings-form";
 import {
   ProfileThemeAvatarAdornment,
+  ProfileThemeHeroDecoration,
   ProfileThemeBackground,
   ProfileThemeDocumentEffects,
 } from "@/components/profile-theme-slots";
@@ -226,6 +227,7 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
           settingsActive={isOwnProfile && settingsOpen}
         />
         <section className="public-player-hero shared-profile-hero">
+          <ProfileThemeHeroDecoration themeKey={profileTheme.key} />
           <div className="public-player-copy">
             {!isOwnProfile ? <Link className="back-link" href="/ranking"><ArrowLeft aria-hidden="true" /> Server ranking</Link> : null}
             <div className="public-player-identity" data-presence={presence}>

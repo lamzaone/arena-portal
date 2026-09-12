@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" fill="none">
+  <title>Shadow ink aura</title>
+  <desc>Eight irregular black ink tendrils curl upward in hooked, calligraphic strokes. Fine ash edges and detached wisps reveal their silhouettes against black.</desc>
+  <style>
+    .ink-tendrils path, .ink-flicks path {
+      transform-box: fill-box;
+      transform-origin: 50% 100%;
+      animation: ink-curl 4.8s ease-in-out -1.5s infinite alternate;
+    }
+    .ink-tendrils path:nth-child(2n) { animation-duration: 3.7s; animation-delay: -2.4s; animation-direction: alternate-reverse; }
+    .ink-tendrils path:nth-child(3n) { animation-duration: 5.6s; animation-delay: -3.1s; }
+    .ink-tendrils path:nth-child(4n) { animation-duration: 4.2s; animation-delay: -1s; }
+    .ink-flicks path { animation-name: ink-flick; animation-duration: 3.6s; }
+    .ink-flicks path:nth-child(2n) { animation-delay: -2.8s; animation-duration: 4.7s; }
+    @keyframes ink-curl {
+      from { transform: skewX(-8deg) scaleY(.84); }
+      to { transform: skewX(9deg) scaleY(1.08); }
+    }
+    @keyframes ink-flick {
+      from { transform: translate(8px, 14px) rotate(-9deg); opacity: .25; }
+      to { transform: translate(-10px, -16px) rotate(12deg); opacity: .9; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .ink-tendrils path, .ink-flicks path { animation: none; }
+    }
+  </style>
+  <defs>
+    <linearGradient id="ink" x1="600" y1="14" x2="600" y2="300" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#050609"/>
+      <stop offset=".64" stop-color="#020203"/>
+      <stop offset="1" stop-color="#000001"/>
+    </linearGradient>
+    <linearGradient id="ash-edge" x1="600" y1="0" x2="600" y2="294" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4a4e59" stop-opacity=".6"/>
+      <stop offset=".54" stop-color="#4a4e59" stop-opacity=".5"/>
+      <stop offset=".85" stop-color="#4a4e59" stop-opacity=".2"/>
+      <stop offset="1" stop-color="#4a4e59" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="0" y1="259" x2="0" y2="300" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#000001" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000001"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Asymmetric hooks have thick roots and needle-thin returns, like brush ink. -->
+  <g class="ink-tendrils" fill="url(#ink)" stroke="url(#ash-edge)" stroke-width="1.5" stroke-linejoin="round">
+    <path d="M78 303C101 269 111 254 99 232 86 208 95 193 118 178 140 163 137 145 130 132 151 144 159 166 145 186 133 204 133 214 150 223L146 205C178 228 159 263 183 280L187 304Z"/>
+
+    <path d="M182 303C209 266 235 257 217 223 202 194 191 164 215 142 237 122 270 125 267 100 265 85 250 79 251 61 264 84 290 83 295 108 302 143 263 161 256 180L274 174C262 195 258 216 277 235 290 248 299 267 294 281L312 303Z"/>
+
+    <path d="M303 303C330 274 347 255 335 236 320 214 326 197 344 183 363 168 377 172 385 152 393 132 380 122 389 104 390 130 408 132 410 152 414 178 391 190 382 206L395 199C381 225 394 236 410 252 426 268 421 289 443 304Z"/>
+
+    <path d="M418 304C455 274 465 255 446 223 430 195 436 175 459 158 485 138 518 134 509 106 502 85 481 73 486 49 489 34 505 26 507 10 522 34 514 48 532 64 556 85 562 112 548 137 538 156 516 166 511 188L526 178C512 200 518 218 538 236 556 254 552 273 573 304Z"/>
+
+    <path d="M558 304C582 277 600 265 592 242 582 214 604 196 624 184 643 174 653 155 641 138 637 152 628 157 620 157 629 145 621 133 629 121 640 105 662 116 669 131 688 170 658 187 657 207L671 195C676 223 654 235 666 257 674 274 692 284 706 304Z"/>
+
+    <path d="M694 303C716 274 747 267 738 235 730 207 707 190 718 164 729 138 760 143 773 122 785 104 777 91 789 76 786 99 808 106 806 130 804 156 777 165 771 183L786 176C774 200 783 220 803 233 822 246 818 266 848 304Z"/>
+
+    <path d="M835 304C868 277 884 253 869 225 856 200 865 181 885 165 908 146 932 145 930 124 929 108 913 105 917 86 922 74 936 68 937 51 954 78 941 91 958 110 981 135 964 162 944 183L957 177C943 201 947 220 964 238 979 254 975 278 1002 304Z"/>
+
+    <path d="M998 303C1022 277 1038 260 1027 240 1015 218 1021 196 1043 184 1066 172 1065 160 1060 147 1082 161 1088 181 1075 199 1063 215 1062 229 1077 238L1075 222C1096 240 1090 261 1108 278L1120 303Z"/>
+
+  </g>
+
+  <!-- A few separated flicks suggest torn ink, not sparks or particles. -->
+  <g class="ink-flicks" fill="#020203" stroke="#4a4e59" stroke-opacity=".35" stroke-width="1">
+    <path d="M208 113C195 99 199 87 215 78 228 71 232 62 228 52 245 69 235 84 219 91 210 95 204 101 208 113Z"/>
+    <path d="M550 60C568 43 566 30 556 16 578 29 584 43 566 57L550 72Z"/>
+    <path d="M810 190C831 180 837 167 832 153 850 172 838 188 819 195L804 209Z"/>
+    <path d="M974 101C987 83 983 73 972 63 994 72 1004 86 988 99L974 113Z"/>
+  </g>
+
+  <!-- Light catches only the outer shoulder of selected strokes. -->
+  <g stroke="#777e8a" stroke-opacity=".08" stroke-width=".9" stroke-linecap="round">
+    <path d="M213 147C229 131 254 130 263 115"/>
+    <path d="M333 210C342 189 371 185 383 164"/>
+    <path d="M447 184C453 158 495 146 506 128"/>
+    <path d="M512 26C516 45 508 47 523 65"/>
+    <path d="M646 122C668 134 672 154 662 171"/>
+    <path d="M726 156C739 143 761 143 774 128"/>
+    <path d="M877 177C891 158 918 152 927 134"/>
+    <path d="M943 66C948 84 939 92 952 108"/>
+    <path d="M1035 197C1047 182 1065 178 1067 164"/>
+  </g>
+  <path d="M0 260H1200V300H0Z" fill="url(#floor)"/>
+</svg>

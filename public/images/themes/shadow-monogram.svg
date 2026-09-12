@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192" fill="none">
+  <title>Shadow TAPPED monogram</title>
+  <desc>A seamless graphite embossing of the original TAPPED T with alternating four-point cuts.</desc>
+  <defs>
+    <linearGradient id="emboss" x1="0" y1="0" x2=".75" y2="1">
+      <stop stop-color="#383b3f"/>
+      <stop offset=".24" stop-color="#24262a"/>
+      <stop offset=".55" stop-color="#1b1d20"/>
+      <stop offset="1" stop-color="#303237"/>
+    </linearGradient>
+    <linearGradient id="cut" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#43464b"/>
+      <stop offset=".46" stop-color="#25272b"/>
+      <stop offset="1" stop-color="#141517"/>
+    </linearGradient>
+    <symbol id="tapped" viewBox="400 190 790 535">
+      <!-- These four faces come directly from branding/tapped-emblem.svg. -->
+      <path d="M434 215H1138L1038 308H523ZM729 342H892L628 600V466H603ZM951 321H1035L853 503H771ZM769 515L654 640L546 718L621 637Z" fill="url(#emboss)"/>
+      <path d="M434 215H1138M729 342H892M951 321H1035M769 515 621 637" stroke="#64686d" stroke-opacity=".55" stroke-width="8"/>
+      <path d="M523 308H1038M628 600 892 342M771 503H853M654 640 546 718" stroke="#050506" stroke-width="11"/>
+    </symbol>
+    <path id="four-point" d="M0-7 1.9-1.9 7 0 1.9 1.9 0 7-1.9 1.9-7 0-1.9-1.9Z"/>
+  </defs>
+  <use href="#tapped" x="20" y="21" width="56" height="38"/>
+  <use href="#tapped" x="116" y="117" width="56" height="38"/>
+  <g fill="url(#cut)" stroke="#404247" stroke-width=".4">
+    <use href="#four-point" x="144" y="40"/>
+    <use href="#four-point" x="48" y="136"/>
+  </g>
+  <g fill="#34363a" opacity=".6">
+    <circle cx="96" cy="88" r=".85"/>
+    <circle cx="96" cy="184" r=".85"/>
+  </g>
+</svg>

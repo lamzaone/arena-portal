@@ -1,12 +1,14 @@
-import { Crown, Gem, Medal, Shield, ShieldCheck, Sparkles, Zap, type LucideIcon } from "lucide-react";
+import { Crown, Eclipse, Gem, Medal, Shield, ShieldCheck, Sparkles, Zap, type LucideIcon } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 
 import { TapGodRainBackground } from "@/components/tap-god-rain-background";
 import { RankThemeBackground } from "@/components/rank-theme-background";
+import { ShadowProfileAura, ShadowThemeBackground } from "@/components/shadow-theme-background";
 import type {
   PortalThemeBackgroundKey,
   PortalThemeIconKey,
   PortalThemeSurface,
+  PortalThemeProfileSurface,
 } from "@/lib/themes/types";
 
 const themeIcons = {
@@ -17,12 +19,23 @@ const themeIcons = {
   gem: Gem,
   medal: Medal,
   sparkles: Sparkles,
+  eclipse: Eclipse,
 } satisfies Record<PortalThemeIconKey, LucideIcon>;
 
 const themeBackgrounds = {
   tapGodRain: TapGodRainBackground,
   rankAtmosphere: RankThemeBackground,
+  shadowAtmosphere: ShadowThemeBackground,
 } satisfies Record<PortalThemeBackgroundKey, ComponentType<{ themeKey: string }>>;
+
+const themeHeroDecorations = {
+  shadowAura: ShadowProfileAura,
+} satisfies Record<NonNullable<PortalThemeProfileSurface["heroDecoration"]>, ComponentType>;
+
+export function ThemeHeroDecoration({ name }: { name: NonNullable<PortalThemeProfileSurface["heroDecoration"]> }) {
+  const Decoration = themeHeroDecorations[name];
+  return <Decoration />;
+}
 
 type ThemeIconProps = SVGProps<SVGSVGElement> & {
   name: PortalThemeIconKey;

@@ -16,6 +16,15 @@ const { getPortalTheme, getPortalThemeSurface, isOwnedPortalThemeKey, portalThem
 
 const surfaces = ["profile", "global", "smallProfile", "playerContainer"] as const;
 
+test("Shadow is an owned site theme with its own global and profile atmosphere", () => {
+  assert.equal(isOwnedPortalThemeKey("shadow"), true);
+  for (const surface of surfaces) {
+    assert.equal(resolvePortalThemeSurface("shadow", surface).theme.key, "shadow");
+  }
+  assert.equal(getPortalThemeSurface("shadow", "global")?.background, "shadowAtmosphere");
+  assert.equal(getPortalThemeSurface("shadow", "profile")?.background, "shadowAtmosphere");
+});
+
 test("every current theme styles the site, profile and public player surfaces", () => {
   for (const key of Object.keys(portalThemes)) {
     assert.equal(isOwnedPortalThemeKey(key), key !== "default");

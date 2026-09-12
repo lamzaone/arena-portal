@@ -2,12 +2,18 @@ import { ThemeDocumentEffects } from "@/components/theme-document-effects";
 import {
   ThemeBackground,
   ThemeIcon,
+  ThemeHeroDecoration,
 } from "@/components/theme-runtime-assets";
 import { resolvePortalThemeSurface } from "@/lib/themes/registry";
 
 type ThemeSlotProps = {
   themeKey: string | null | undefined;
 };
+
+export function ProfileThemeHeroDecoration({ themeKey }: ThemeSlotProps) {
+  const { surface } = resolvePortalThemeSurface(themeKey, "profile");
+  return surface.heroDecoration ? <ThemeHeroDecoration name={surface.heroDecoration} /> : null;
+}
 
 export function GlobalThemeBackground({ themeKey }: ThemeSlotProps) {
   const { surface, theme } = resolvePortalThemeSurface(themeKey, "global");

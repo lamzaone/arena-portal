@@ -31,7 +31,7 @@ the profile route restores the viewer's effects.
 
 Future themes may set a surface to `false` when they do not provide that feature.
 The renderer then uses the stable ARENA default for that surface. All currently
-registered themes, including BETA TESTER and TAP GOD, define all four surfaces;
+registered themes, including BETA TESTER, TAP GOD and Shadow, define all four surfaces;
 the default theme must always do so.
 
 ## VIP and staff themes
@@ -94,6 +94,29 @@ compatibility, session renewal, membership outages, inventory revocation,
 permanent grants and both equip paths. The
 entitlement tests use isolated SQLite fixtures with the real relational queries;
 they do not claim to exercise MySQL locking or cross-database atomicity.
+
+## Shadow
+
+Shadow is a standalone owned theme for all four surfaces. Its black palette
+uses obsidian panels, an embossed TAPPED monogram, drifting shadow forms and a
+moving platinum edge. It follows the same inventory ownership and equipped
+selection checks as every other registered theme; its name grants no rank or
+permission.
+
+Migration `db/030_shadow_theme.sql` registers the Special-grade **Shadow Theme**
+item with catalogue key `arena:special:profile_theme:shadow` and trusted theme
+key `shadow`. Its thumbnail is `/images/economy/profile-themes/shadow.svg`.
+The first registration is enabled and unlisted (`marketEnabled=false`), with
+no price or inventory grant. Staff can grant it through Items or associate it
+with an existing group reward. A player who owns an available copy can equip
+it through Inventory or Settings.
+
+Run migration 030 against the portal database with the Shadow build available.
+It requires the existing theme/inventory entitlement schema from migrations
+008 and 013-015, and does not require rerunning older product migrations.
+Reruns update presentation metadata while preserving listing status, enabled
+flags, prices, existing IDs, catalogue associations, ownership and equipped
+selections. Registration does not publish the item to Market.
 
 ## Add a theme
 

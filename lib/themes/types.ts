@@ -9,8 +9,8 @@ export type PortalThemeSurface =
  * data so repository and route modules never pull React client components
  * into their server dependency graph.
  */
-export type PortalThemeIconKey = "crown" | "zap" | "shield" | "shieldCheck" | "gem" | "medal" | "sparkles";
-export type PortalThemeBackgroundKey = "tapGodRain" | "rankAtmosphere";
+export type PortalThemeIconKey = "crown" | "zap" | "shield" | "shieldCheck" | "gem" | "medal" | "sparkles" | "eclipse";
+export type PortalThemeBackgroundKey = "tapGodRain" | "rankAtmosphere" | "shadowAtmosphere";
 
 export type PortalThemeBadge = {
   className: string;
@@ -41,6 +41,7 @@ export type PortalThemeGlobalSurface = PortalThemeSurfaceBase & {
 export type PortalThemeProfileSurface = PortalThemeSurfaceBase & {
   avatarAdornment?: PortalThemeAvatarAdornment;
   background?: PortalThemeBackgroundKey;
+  heroDecoration?: "shadowAura";
   documentEffects?: PortalThemeDocumentEffects;
 };
 
