@@ -3,6 +3,7 @@ import type { PortalThemeDefinition } from "@/lib/themes/types";
 export const betaTesterTheme = {
   key: "beta_tester",
   displayName: "BETA TESTER",
+  description: "Blue and yellow circuitry, animated signals and reactive highlights across the site.",
   previewImageUrl: "/images/economy/profile-themes/beta-tester.svg",
   surfaces: {
     global: {
@@ -16,7 +17,7 @@ export const betaTesterTheme = {
       },
       badge: {
         className: "beta-tester-theme-badge",
-        detail: "Profile theme",
+        detail: "Site theme",
         icon: "zap",
         label: "BETA TESTER",
       },

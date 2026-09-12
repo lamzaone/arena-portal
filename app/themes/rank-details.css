@@ -1,0 +1,196 @@
+/* Rank-owned materials. BETA, TAP GOD and default keep their own renderers. */
+:where(.rank-theme, .portal-navigation[data-theme-family]) {
+  --rank-material: linear-gradient(120deg, transparent, color-mix(in srgb, var(--rank-bright) 5%, transparent), transparent);
+  --rank-material-size: auto;
+  --rank-trim: linear-gradient(90deg, transparent, var(--rank-bright), transparent);
+}
+:is([data-theme="vip_silver"], [data-theme-background-theme="vip_silver"]) {
+  --rank-material: repeating-linear-gradient(0deg, #e3e8f108 0 1px, transparent 1px 4px), linear-gradient(115deg, transparent 15%, #e3e8f112 45%, transparent 68%);
+  --rank-trim: linear-gradient(90deg, #69788b, #eff4fc 35%, #8c9eb5 65%, transparent);
+}
+:is([data-theme="vip_gold"], [data-theme-background-theme="vip_gold"]) {
+  --rank-material: repeating-linear-gradient(1deg, #ffe0830a 0 1px, transparent 1px 3px), repeating-linear-gradient(93deg, transparent 0 5px, #d5a83d07 5px 6px), linear-gradient(115deg, transparent 24%, #ffdf781a 48%, transparent 72%);
+  --rank-trim: linear-gradient(90deg, #977035, #ffebaf 28%, #d3a441 55%, #fff0c3 78%, #977035);
+}
+:is([data-theme="vip_diamond"], [data-theme-background-theme="vip_diamond"]) {
+  --rank-material: linear-gradient(125deg, transparent 48%, #89cdff1c 48.1%, transparent 68%), linear-gradient(55deg, transparent 65%, #b7e2ff14 65.1%, transparent 83%), repeating-linear-gradient(125deg, transparent 0 136px, #b7e2ff0e 137px 138px);
+  --rank-trim: linear-gradient(90deg, #58b8ff, #e5f7ff 35%, #89cdff 62%, transparent);
+}
+:is([data-theme="vip_ultimate"], [data-theme-background-theme="vip_ultimate"]) {
+  --rank-material: linear-gradient(153deg, transparent 65%, #ba9aff20 65.1%, transparent 65.4%), linear-gradient(27deg, transparent 81%, #8acbff1c 81.1%, transparent 81.4%), radial-gradient(ellipse at 100% 0, #b46cff21, transparent 60%);
+  --rank-trim: linear-gradient(90deg, transparent, #b46cff 22%, #dfecff 48%, #7dc9ff 69%, transparent);
+}
+:is([data-theme="staff"], [data-theme-background-theme="staff"]) {
+  --rank-material: linear-gradient(#d8ddeb08 1px, transparent 1px), linear-gradient(90deg, #d8ddeb08 1px, transparent 1px);
+  --rank-material-size: 28px 28px;
+  --rank-trim: repeating-linear-gradient(90deg, #d8ddeb 0 22px, #586379 22px 24px, transparent 24px 28px);
+}
+:is([data-theme="moderator"], [data-theme-background-theme="moderator"]) {
+  --rank-material: repeating-linear-gradient(0deg, transparent 0 39px, #91eccf0d 40px 41px), radial-gradient(ellipse at 100% 50%, #6ce5bd1a, transparent 65%);
+  --rank-trim: linear-gradient(90deg, #6ce5bd, #ddfff2 28%, #6ce5bd66 65%, transparent);
+}
+:is([data-theme="administrator"], [data-theme-background-theme="administrator"]) {
+  --rank-material: repeating-linear-gradient(115deg, transparent 0 154px, #ffb56a12 155px 156px, transparent 157px 163px, #ffcb960c 164px 165px), linear-gradient(115deg, transparent 65%, #ffb56a1a 65.1%, transparent 79%);
+  --rank-trim: linear-gradient(90deg, #ce8545, #ffe4c7 32%, #ffb56a 65%, transparent);
+}
+:is([data-theme="senior_administrator"], [data-theme-background-theme="senior_administrator"]) {
+  --rank-material: radial-gradient(ellipse at 90% 130%, transparent 42%, #c7b1ff20 42.2%, transparent 42.6%, transparent 55%, #c7b1ff16 55.2%, transparent 55.6%);
+  --rank-trim: linear-gradient(90deg, #b192ff, #e9ddff 30%, #91baff 60%, transparent);
+}
+:is([data-theme="owner"], [data-theme-background-theme="owner"]) {
+  --rank-material: radial-gradient(ellipse at 90% 135%, transparent 45%, #ff858526 45.2%, transparent 45.6%, transparent 58%, #e6000029 58.2%, transparent 58.6%), linear-gradient(115deg, #e600001a, transparent 62%);
+  --rank-trim: linear-gradient(90deg, #e60000, #ffd0d0 35%, #ff3d3d 65%, #e60000);
+}
+
+/* The site's two navigation levels share one rank finish. */
+.portal-navigation[data-theme-family] {
+  border-color: var(--theme-border-strong);
+  background: color-mix(in srgb, var(--theme-surface) 95%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--rank-bright) 12%, transparent), 0 10px 32px #0004;
+}
+.portal-navigation[data-theme-family] .site-header {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.portal-navigation[data-theme-family]::before {
+  width: clamp(80px, 16vw, 220px);
+  background: var(--rank-trim);
+  opacity: .95;
+}
+.portal-navigation[data-theme-family]::after { background: var(--rank-trim); }
+.portal-navigation[data-theme-tier="2"]::before { height: 2px; }
+.portal-navigation:is([data-theme-tier="3"], [data-theme-tier="4"], [data-theme-tier="5"])::before { height: 2px; filter: drop-shadow(0 0 5px var(--rank-accent)); }
+.portal-navigation[data-theme-tier="5"] { box-shadow: inset 0 0 0 3px var(--rank-bg), inset 0 0 0 4px var(--theme-border), 0 10px 32px #0004; }
+
+/* Existing profile layout and colors stay intact; the material sits beneath text. */
+.player-profile-page.profile-theme-rank[data-theme] .public-player-hero::before {
+  background: var(--rank-material);
+  background-size: var(--rank-material-size);
+}
+.player-profile-page.profile-theme-rank .public-player-hero::after {
+  left: 16px;
+  right: 16px;
+  background: var(--rank-trim);
+  opacity: 1;
+}
+.player-profile-page.profile-theme-rank .public-player-hero {
+  transition: border-color 300ms ease, box-shadow 500ms var(--motion-ease);
+}
+.player-profile-page.profile-theme-rank:is(.rank-level-2, .rank-level-3, .rank-level-4, .rank-level-5) .public-player-hero::after { height: 2px; }
+.player-profile-page.profile-theme-rank.rank-theme-vip-gold .public-player-hero { box-shadow: inset 0 0 0 3px var(--rank-bg), inset 0 0 0 4px #ffe08324, var(--theme-shadow); }
+.player-profile-page.profile-theme-rank.rank-theme-vip-diamond .rank-avatar-mark {
+  border-radius: 3px;
+  transform: rotate(45deg);
+  background: conic-gradient(from 45deg, #263f55, #0b1928, #44647b, #0b1928, #263f55);
+}
+.player-profile-page.profile-theme-rank.rank-theme-vip-diamond .rank-avatar-mark > svg { transform: rotate(-45deg); }
+.player-profile-page.profile-theme-rank.rank-theme-vip-diamond .public-player-hero::after {
+  inset: -7px 28px auto auto;
+  width: 14px;
+  height: 14px;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  background: conic-gradient(from 45deg, #f2fbff, #6092b4, #d8f1ff, #5084a3, #f2fbff);
+}
+.player-profile-page.profile-theme-rank.rank-theme-vip-ultimate .public-player-hero::after {
+  inset: -6px 20px auto auto;
+  width: min(44%, 320px);
+  height: 14px;
+  clip-path: polygon(0 45%, 25% 45%, 32% 0, 38% 75%, 46% 38%, 66% 38%, 73% 7%, 79% 60%, 100% 45%, 79% 77%, 73% 28%, 67% 53%, 47% 53%, 37% 100%, 32% 23%, 26% 60%, 0 60%);
+  filter: drop-shadow(0 0 4px #b46cff);
+}
+.player-profile-page.profile-theme-rank.rank-theme-moderator .public-player-hero { border-left: 2px solid var(--rank-accent); }
+.player-profile-page.profile-theme-rank.rank-theme-administrator .rank-avatar-mark { border-radius: 2px 10px 2px 10px; }
+.player-profile-page.profile-theme-rank.rank-theme-senior-administrator .rank-avatar-mark { box-shadow: 0 0 0 3px var(--rank-bg), 0 0 0 4px var(--rank-bright), 0 0 0 7px var(--rank-bg), 0 0 0 8px var(--theme-border); }
+
+/* Themed surfaces stay readable, with a visible keyboard focus ring. */
+.rank-theme :is(.group-role-empty, .panel-heading > p, .stat-foot) { color: var(--theme-text-muted); }
+.rank-theme :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea):not([data-search-input]) { border-color: var(--theme-border-strong); }
+.rank-theme :is(input, select, textarea):focus-visible { outline: 2px solid var(--theme-focus-ring); outline-offset: 3px; }
+.rank-theme :is(.public-player-stat-grid > article, .combat-stat-grid > div) svg { opacity: .9; }
+html.global-theme-rank .home-page :is(.tapped-lede, .bento-card p, .section-heading p) { color: var(--theme-text-muted); }
+html.global-theme-rank .home-page :is(.tapped-hero h1 span, .bento-icon, .bento-card h3 span, .bento-index span) { color: var(--theme-accent-strong); text-shadow: none; }
+html.global-theme-rank .home-page .bento-card { border-color: var(--theme-border); background: linear-gradient(145deg, var(--theme-surface-raised), var(--theme-surface)); }
+html.global-theme-rank .home-page .bento-icon { border-color: var(--theme-border-strong); background: var(--theme-control-hover); }
+html.global-theme-rank .home-page .bento-card::after { background: var(--theme-control-hover); }
+
+/* Vector scenes sit in the theme's own fixed background layer. */
+.rank-scene-geometry {
+  position: absolute;
+  top: 5vh;
+  right: -4vw;
+  width: clamp(420px, 54vw, 880px);
+  height: auto;
+  overflow: visible;
+  stroke: var(--rank-bright);
+  stroke-width: 1;
+  opacity: .22;
+}
+.rank-scene-geometry :is(path, circle) { vector-effect: non-scaling-stroke; }
+.rank-geometry-metal { opacity: .55; }
+.rank-geometry-gold { opacity: .75; }
+.rank-geometry-facet { fill: color-mix(in srgb, var(--rank-accent) 9%, transparent); }
+.rank-geometry-glint { stroke: #eaf8ff; stroke-width: 2; }
+.rank-geometry-trace { stroke: var(--rank-soft); stroke-width: 2; }
+.rank-geometry-electric { stroke: #b3a0ff; stroke-width: 1.5; }
+.rank-electric-ghost { opacity: .6; }
+.rank-electric-arc { stroke: #dceeff; stroke-width: 2.2; }
+.rank-electric-branch { stroke: #9ccfff; stroke-width: 1.5; }
+.rank-electric-ring { opacity: .4; }
+.rank-geometry-instrument { opacity: .55; }
+.rank-radar-sweep > path:first-child { fill: #6ce5bd28; stroke: none; }
+.rank-radar-target { fill: var(--rank-bright); }
+.rank-circuit-signal { stroke: var(--rank-soft); stroke-width: 2; }
+.rank-orbital-node { fill: var(--rank-bright); }
+.rank-crown-face { fill: #e6000014; stroke-width: 1.5; }
+[data-theme-background-theme="owner"] .rank-scene-geometry { opacity: .35; }
+[data-theme-background-theme="vip_ultimate"] .rank-scene-geometry { opacity: .4; }
+
+@keyframes rank-material-reflection { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.6); } }
+@keyframes rank-diamond-glint { 0%, 76%, 100% { opacity: .65; } 84% { opacity: 1; filter: drop-shadow(0 0 6px #dff6ff); } }
+@keyframes rank-detail-orbit { to { transform: rotate(360deg); } }
+@keyframes rank-signal-travel { 0% { stroke-dashoffset: 100; } 80%, 100% { stroke-dashoffset: -100; } }
+@keyframes rank-electric-discharge {
+  0%, 64%, 100% { stroke-dashoffset: 100; opacity: 0; }
+  67% { opacity: 1; }
+  79% { stroke-dashoffset: 0; opacity: .9; }
+  92% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes rank-electric-edge { 0%, 65%, 100% { opacity: .45; } 76% { opacity: 1; } 87% { opacity: .7; } }
+@keyframes rank-radar-return { 0%, 65%, 100% { opacity: .3; } 78% { opacity: 1; } }
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+  .player-profile-page.profile-theme-rank .public-player-hero:hover { border-color: var(--theme-accent-soft); box-shadow: var(--theme-shadow), 0 0 28px color-mix(in srgb, var(--rank-accent) 15%, transparent); }
+  .player-profile-page.profile-theme-rank:is(.rank-theme-vip-silver, .rank-theme-vip-gold) .public-player-hero:hover::after { animation: rank-material-reflection 1600ms ease-in-out; }
+}
+@media (prefers-reduced-motion: no-preference) and (pointer: fine) {
+  .rank-geometry-gold .rank-geometry-trace { stroke-dasharray: 130 380; animation: rank-signal-travel 12s linear infinite; }
+  .rank-geometry-glint, .player-profile-page.profile-theme-rank.rank-theme-vip-diamond .public-player-hero::after { animation: rank-diamond-glint 8s ease-in-out infinite; }
+  .rank-electric-arc, .rank-electric-branch { stroke-dasharray: 100; animation: rank-electric-discharge 9s linear infinite; }
+  .rank-electric-branch { animation-delay: .25s; }
+  .player-profile-page.profile-theme-rank.rank-theme-vip-ultimate .public-player-hero::after { animation: rank-electric-edge 9s ease-in-out infinite; }
+  .rank-radar-sweep { transform-origin: 300px 300px; animation: rank-detail-orbit 14s linear infinite; }
+  .rank-radar-target { animation: rank-radar-return 14s ease-in-out infinite; }
+  .rank-radar-target:last-child { animation-delay: -7s; }
+  .rank-circuit-signal { stroke-dasharray: 14 86; animation: rank-signal-travel 7s linear infinite; }
+  .rank-orbital-inner, .rank-crown-orbit, .rank-electric-ring { transform-origin: center; transform-box: fill-box; animation: rank-detail-orbit 50s linear infinite; }
+  .rank-orbital-inner { animation-direction: reverse; animation-duration: 36s; }
+  .rank-geometry-crown .rank-geometry-trace { animation: rank-material-reflection 10s ease-in-out infinite; }
+}
+@media (max-width: 640px) {
+  .rank-scene-geometry { top: 7vh; right: -200px; width: 560px; opacity: .16; }
+  [data-theme-background-theme="owner"] .rank-scene-geometry,
+  [data-theme-background-theme="vip_ultimate"] .rank-scene-geometry { opacity: .24; }
+  .player-profile-page.profile-theme-rank.rank-theme-vip-diamond .public-player-hero::after { right: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rank-scene-geometry *, .player-profile-page.profile-theme-rank .public-player-hero::after { animation: none !important; }
+  .rank-electric-arc, .rank-electric-branch { opacity: .65; stroke-dasharray: none; }
+}
+@media (forced-colors: active) {
+  .rank-scene-geometry { display: none; }
+  .portal-navigation[data-theme-family] { border-color: CanvasText; background: Canvas; box-shadow: none; }
+  .portal-navigation[data-theme-family]::before, .portal-navigation[data-theme-family]::after,
+  .player-profile-page.profile-theme-rank .public-player-hero::before,
+  .player-profile-page.profile-theme-rank .public-player-hero::after { display: none; }
+  .player-profile-page.profile-theme-rank .rank-avatar-mark { background: Canvas; color: CanvasText; box-shadow: none; }
+}

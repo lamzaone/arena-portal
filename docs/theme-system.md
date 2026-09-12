@@ -6,7 +6,8 @@ class names, components, or asset paths.
 
 ## Feature surfaces
 
-Every manifest in `lib/themes/` declares four independent surfaces:
+Every current theme styles all four surfaces. Each manifest in `lib/themes/`
+declares them separately so future themes can target individual surfaces:
 
 - `global` styles the signed-in viewer's portal shell, controls, searches,
   panels, tables, and pagination.
@@ -28,9 +29,10 @@ global background is suppressed while a real profile is mounted, and the
 profile document-effect registration outranks the global registration. Leaving
 the profile route restores the viewer's effects.
 
-Set any surface to `false` when a theme does not provide that feature. The
-renderer then uses the stable ARENA default for that surface. The default theme
-must always define all four surfaces.
+Future themes may set a surface to `false` when they do not provide that feature.
+The renderer then uses the stable ARENA default for that surface. All currently
+registered themes, including BETA TESTER and TAP GOD, define all four surfaces;
+the default theme must always do so.
 
 ## VIP and staff themes
 
@@ -39,21 +41,28 @@ new theme. All colors match the group's public badge palette at registration.
 
 | Themes | Coverage | Visual progression |
 | --- | --- | --- |
-| VIP Silver, Staff | Full profile only | Metallic details and avatar crest |
-| VIP Gold, Moderator | Full profile only | Gilded or mint highlights, shimmer or scan |
-| VIP Diamond, Administrator | All four surfaces | Facets or amber beams, illuminated player cards, ambient light |
-| VIP Ultimate, Sr. Administrator | All four surfaces | Aurora, orbital details and drifting particles |
+| VIP Silver | All four surfaces | Brushed silver, satin reflections and a metallic avatar crest |
+| VIP Gold | All four surfaces | Gold grain, gilded borders and moving metallic highlights |
+| VIP Diamond | All four surfaces | Diamond facets, geometric gems and prismatic glints |
+| VIP Ultimate | All four surfaces | Electric amethyst, branching arcs and charged geometry |
+| Staff | All four surfaces | Brushed steel, precise grid details and a shield crest |
+| Moderator | All four surfaces | Jade edges and sweeping scanner details |
+| Administrator | All four surfaces | Amber traces, illuminated geometry and sweeping highlights |
+| Sr. Administrator | All four surfaces | Violet orbital details, layered geometry and drifting particles |
 | Owner | All four surfaces | Crimson crown halo and layered crest |
 
-Profile-only themes resolve to an explicit default boundary for site navigation,
-compact identities and player containers, even inside another player's theme.
-Each theme owns its hover and selected shadow tokens as well as its base colors.
+Every current tier applies to site navigation, compact identities and player
+containers. Each represented player still owns their local theme boundary,
+including hover and selected shadow tokens as well as base colors. Enabling a
+surface does not grant the theme: the player must own its available inventory
+item before selecting it.
 
-`app/themes/ranks.css` owns the palettes, geometry and animation. The shared
-`RankThemeBackground` is decorative server-rendered markup with no animation
-JavaScript. Motion is restrained on touch devices, disabled for reduced motion,
-and decorations disappear in forced-colors mode. SVG previews live under
-`public/images/economy/profile-themes/`.
+`app/themes/ranks.css` owns the palettes and foundational effects;
+`app/themes/rank-details.css` adds tier-specific materials and motion. The
+shared `RankThemeBackground` and `RankThemeGeometry` render decorative markup
+without animation JavaScript. Motion is restrained on touch devices, disabled
+for reduced motion, and decorations disappear in forced-colors mode. SVG
+previews live under `public/images/economy/profile-themes/`.
 
 Migration `db/026_rank_themes.sql` registers the nine enabled, **unlisted** items
 and matching profile themes. `marketEnabled=false` excludes them from public
@@ -63,6 +72,13 @@ assign it through Groups & access. Choose `account_bound` for a reward that
 expires with membership; tradable rewards and direct grants retain normal
 inventory ownership behavior. No theme name implies a permission or forces a
 particular reward group.
+
+Migration `db/029_global_theme_metadata.sql` updates descriptions and canonical
+surface metadata for existing registered BETA TESTER, TAP GOD and rank themes.
+It preserves listing status, enabled flags, prices, rewards, inventory ownership
+and equipped selections. Fresh rank registrations in migration 026 also name
+all four surfaces. Runtime presentation still comes from the trusted registry;
+metadata does not authorize theme access or inject styling.
 
 The selected theme is stored on the account and persists across sessions while
 its registered, enabled theme item remains available in that player's inventory.
@@ -124,8 +140,9 @@ Run `npm run typecheck`, `npm run build`, and `git diff --check` before shipping
   player identities. To show fewer badges beside a name, use `inlineBadgeGroups`;
   this does not filter the badges inside the hover preview.
 - Keep theme-specific geometry and animation inside that theme's stylesheet.
-  Respect the reduced-motion and forced-colors rules imported last from
-  `app/themes/accessibility.css`.
+  Respect the reduced-motion and forced-colors rules in
+  `app/themes/accessibility.css`. Styles imported after that file must include
+  equivalent preference guards, as `app/themes/rank-details.css` does.
 
 Staff pages pass their authorized `StaffSubmenu` through `PortalShell.navigation`.
 The shell provides the `staff-content` size container; responsive Staff module

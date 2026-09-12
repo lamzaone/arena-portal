@@ -13,13 +13,13 @@
   --default-surface-strong: #232326;
   --default-text: #f7f5f4;
   --default-muted: #c5c6c7;
-  --default-subtle: #97999c;
+  --default-subtle: #a9abad;
   --default-accent: #dc143c;
   --default-accent-bright: #ef566f;
   --default-accent-soft: #ee647b;
   --default-accent-text: #f4c1cb;
   --default-accent-muted: #b78d96;
-  --default-border: rgba(151, 153, 156, .24);
+  --default-border: rgba(172, 174, 178, .3);
   --default-border-bright: rgba(240, 71, 99, .58);
   --default-accent-border: rgba(220, 20, 60, .42);
   --default-accent-surface: rgba(220, 20, 60, .14);
@@ -61,7 +61,7 @@
   --theme-table-row: rgba(23, 23, 25, .9);
   --theme-table-hover: rgba(220, 20, 60, .12);
   --theme-radius: 6px;
-  --theme-shadow: 0 12px 34px rgba(0, 0, 0, .22);
+  --theme-shadow: 0 12px 34px rgba(0, 0, 0, .28), inset 0 1px 0 rgba(247, 245, 244, .035);
 }
 
 :is(
@@ -187,4 +187,199 @@ body:has(.player-profile-page[data-theme-owner="profile"].profile-theme-default)
     linear-gradient(90deg, rgba(151, 153, 156, .14) 1px, transparent 1px),
     linear-gradient(rgba(220, 20, 60, .075) 1px, transparent 1px),
     linear-gradient(90deg, rgba(220, 20, 60, .075) 1px, transparent 1px);
+}
+
+/* The house finish: dark steel, a crimson cut edge, and platinum type.
+   Each frame owns its theme explicitly; a default viewer cannot repaint a
+   different player's profile, compact identity, or theme preview. */
+.portal-navigation[data-theme="default"] {
+  border-color: rgba(172, 174, 178, .34);
+  background:
+    linear-gradient(108deg, rgba(247, 245, 244, .045), transparent 28%, rgba(220, 20, 60, .055) 100%),
+    rgba(23, 23, 25, .96);
+  box-shadow: 0 14px 34px #0005, inset 0 1px 0 rgba(247, 245, 244, .065);
+}
+
+.portal-navigation[data-theme="default"]::before,
+.portal-navigation[data-theme="default"]::after {
+  width: 44px;
+  background: linear-gradient(90deg, var(--default-accent), var(--default-accent-bright));
+  box-shadow: 0 0 12px rgba(220, 20, 60, .38);
+  opacity: .95;
+}
+
+.player-profile-page.profile-theme-default .shared-profile-hero {
+  position: relative;
+  isolation: isolate;
+  padding-inline: clamp(18px, 2vw, 28px);
+  border: 1px solid var(--default-border);
+  border-radius: 8px;
+  background:
+    radial-gradient(ellipse at 0 100%, rgba(145, 13, 40, .21), transparent 52%),
+    linear-gradient(116deg, rgba(247, 245, 244, .045), transparent 36% 70%, rgba(220, 20, 60, .06)),
+    linear-gradient(155deg, #222225, #151517 78%);
+  box-shadow: 0 16px 44px #0004, inset 0 1px 0 rgba(247, 245, 244, .06);
+}
+
+.player-profile-page.profile-theme-default .shared-profile-hero::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 18px;
+  right: 18px;
+  height: 1px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, transparent, var(--default-accent) 16%, var(--default-accent-bright) 36%, rgba(216, 215, 215, .24) 65%, transparent);
+  box-shadow: 0 0 14px rgba(220, 20, 60, .25);
+  transform-origin: left;
+  pointer-events: none;
+}
+
+.player-profile-page.profile-theme-default .shared-profile-hero::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 1px;
+  border-radius: inherit;
+  background:
+    linear-gradient(122deg, transparent 68%, rgba(216, 215, 215, .06) 68.1%, transparent 68.3% 76%, rgba(220, 20, 60, .11) 76.1%, transparent 76.4%),
+    repeating-linear-gradient(0deg, transparent 0 3px, rgba(216, 215, 215, .012) 3px 4px);
+  pointer-events: none;
+}
+
+.player-profile-page.profile-theme-default .public-rank-card {
+  border-color: rgba(239, 86, 111, .43);
+  border-radius: 5px;
+  background:
+    linear-gradient(128deg, rgba(220, 20, 60, .14), transparent 62%),
+    linear-gradient(145deg, #28272a, #19191c);
+  box-shadow: inset 0 1px 0 rgba(247, 245, 244, .06), inset 3px 0 0 var(--default-accent);
+}
+
+.player-profile-page.profile-theme-default .public-rank-card::after {
+  border-color: rgba(172, 174, 178, .18);
+}
+
+.player-profile-page.profile-theme-default :is(.public-rank-card > span, .tapped-kicker) {
+  color: var(--default-accent-soft);
+}
+
+.player-profile-page.profile-theme-default :is(
+  .public-rank-card > small,
+  .public-rank-card > div > span,
+  .public-rank-card > div > small,
+  .panel-heading > p,
+  .group-role-empty,
+  .group-role-section > div:first-child > small,
+  .group-membership-cards article > small,
+  .identity-group-tag-summary,
+  .public-player-stat-grid article > span,
+  .combat-stat-grid > div > span,
+  .rank-progress > div > span
+) {
+  color: var(--default-muted);
+}
+
+.player-profile-page.profile-theme-default :is(
+  .group-role-section h3,
+  .combat-stat-grid > div > strong
+) {
+  color: var(--default-text);
+}
+
+.player-profile-page.profile-theme-default :is(.shared-profile-content > .panel, .public-player-stat-grid > article) {
+  border-color: var(--default-border);
+  background:
+    linear-gradient(125deg, rgba(247, 245, 244, .028), transparent 62%),
+    var(--default-surface);
+  box-shadow: inset 0 1px 0 rgba(247, 245, 244, .035), 0 8px 24px #0002;
+}
+
+.player-profile-page.profile-theme-default .public-player-stat-grid > article {
+  border-top-color: rgba(172, 174, 178, .4);
+  transition: border-color 240ms ease, box-shadow 240ms ease;
+}
+
+.player-profile-page.profile-theme-default .public-player-stat-grid > article > svg {
+  color: var(--default-accent-bright);
+  opacity: .7;
+}
+
+.player-profile-page.profile-theme-default .group-role-section {
+  border-color: rgba(172, 174, 178, .2);
+  background: rgba(16, 9, 12, .3);
+}
+
+.global-theme-default .home-page .bento-card {
+  border-top-color: rgba(172, 174, 178, .4);
+  box-shadow: inset 0 1px 0 rgba(247, 245, 244, .035), 0 8px 24px #0002;
+}
+
+/* This tile represents the default theme even when another theme is active. */
+.settings-theme-grid .settings-theme-card .settings-theme-preview.is-default {
+  position: relative;
+  gap: 18px;
+  color: var(--default-text);
+  background:
+    linear-gradient(122deg, transparent 68%, rgba(216, 215, 215, .07) 68.1%, transparent 68.5% 76%, rgba(220, 20, 60, .16) 76.1%, transparent 76.6%),
+    radial-gradient(ellipse at 20% 100%, rgba(145, 13, 40, .28), transparent 70%),
+    linear-gradient(145deg, #252528, #151517);
+  box-shadow: inset 0 1px 0 rgba(247, 245, 244, .08);
+}
+
+.settings-theme-grid .settings-theme-preview.is-default > svg { display: none; }
+
+.settings-theme-grid .settings-theme-preview.is-default::before {
+  content: "";
+  display: block;
+  width: 82px;
+  height: 82px;
+  margin-inline: auto;
+  background: url("/images/branding/tapped-emblem.svg") center / contain no-repeat;
+  filter: drop-shadow(0 0 14px rgba(220, 20, 60, .18));
+}
+
+.settings-theme-grid .settings-theme-preview.is-default .settings-theme-default-label {
+  color: var(--default-text);
+}
+
+@media (hover: hover) {
+  .player-profile-page.profile-theme-default .public-player-stat-grid > article:hover {
+    border-color: rgba(239, 86, 111, .54);
+    box-shadow: inset 0 1px 0 rgba(239, 86, 111, .22), 0 8px 28px #0004;
+  }
+}
+
+@keyframes default-crimson-edge-enter {
+  from { opacity: 0; transform: scaleX(.12); }
+  to { opacity: 1; transform: scaleX(1); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .player-profile-page.profile-theme-default .shared-profile-hero::before {
+    animation: default-crimson-edge-enter 1100ms cubic-bezier(.16, 1, .3, 1) both;
+  }
+}
+
+@media (forced-colors: active) {
+  .portal-navigation[data-theme="default"],
+  .player-profile-page.profile-theme-default :is(.shared-profile-hero, .public-rank-card, .shared-profile-content > .panel, .public-player-stat-grid > article, .group-role-section) {
+    border-color: CanvasText;
+    background: Canvas;
+    box-shadow: none;
+  }
+
+  .portal-navigation[data-theme="default"]::before,
+  .portal-navigation[data-theme="default"]::after,
+  .player-profile-page.profile-theme-default .shared-profile-hero::before,
+  .player-profile-page.profile-theme-default .shared-profile-hero::after,
+  .settings-theme-grid .settings-theme-preview.is-default::before {
+    display: none;
+  }
+
+  .settings-theme-grid .settings-theme-card .settings-theme-preview.is-default {
+    color: CanvasText;
+    background: Canvas;
+    box-shadow: none;
+  }
 }

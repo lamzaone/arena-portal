@@ -205,12 +205,12 @@ export function ProfileSettingsForm({
 
       <fieldset className="panel settings-section" disabled={pending}>
         <legend>
-          <span className="eyebrow">Profile theme</span>
+          <span className="eyebrow">Site theme</span>
           <strong>Select a theme owned by your account.</strong>
         </legend>
         <p className="empty-copy">
-          Choose your look. Each theme lists the areas it styles, including your
-          profile, site interface, and player cards. Membership rewards remain
+          Choose your look across the website, your profile, and player cards.
+          Membership rewards remain
           available while the granting membership is active.
         </p>
         <div className="settings-theme-grid">
@@ -232,8 +232,8 @@ export function ProfileSettingsForm({
             {activeThemeItemId === null ? <span className="settings-theme-selected">Selected</span> : null}
             <span className="settings-theme-copy">
               <strong>ARENA default</strong>
-              <small>The original TAPPED.RO crimson profile.</small>
-              <span className="settings-theme-surfaces"><span>Profile</span></span>
+              <small>Dark steel, platinum type and the TAPPED.RO crimson edge.</small>
+              <span className="settings-theme-surfaces"><span>Profile</span><span>Site UI</span><span>Player mentions</span><span>Player cards</span></span>
             </span>
           </label>
           {initialSettings.ownedThemes.map((theme) => {
@@ -279,7 +279,7 @@ export function ProfileSettingsForm({
                 {activeThemeItemId === theme.inventoryItemId ? <span className="settings-theme-selected">Selected</span> : null}
                 <span className="settings-theme-copy">
                   <strong>{theme.displayName}</strong>
-                  <small>{theme.description}</small>
+                  <small>{configuredTheme.description ?? theme.description}</small>
                   {themedSurfaces.length ? (
                     <span className="settings-theme-surfaces" aria-label="Styles these areas">
                       {themedSurfaces.map((surface) => <span key={surface}>{surface}</span>)}

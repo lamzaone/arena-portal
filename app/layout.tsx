@@ -27,6 +27,7 @@ import "./form-runtime.css";
 import "./navigation-progress.css";
 import "./navigation-system.css";
 import "./motion.css";
+import "./themes/rank-details.css";
 
 export const metadata: Metadata = rootMetadata;
 

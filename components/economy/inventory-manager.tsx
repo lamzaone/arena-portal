@@ -1213,11 +1213,11 @@ export function InventoryManager({
                 ) : null}
                 {selectedProfileTheme ? (
                   <fieldset className="form-panel inventory-profile-theme-equip">
-                    <legend>Equip profile theme</legend>
+                    <legend>Equip site theme</legend>
                     <p className="empty-copy">
-                      Apply this owned theme to your shareable player profile and
-                      every public surface it supports. The item stays in your
-                      inventory and can be changed again from profile settings.
+                      Apply this owned theme across the website, your player
+                      profile, and public player cards. The item stays in your
+                      inventory. You can choose another theme in Settings.
                     </p>
                     <button
                       type="button"

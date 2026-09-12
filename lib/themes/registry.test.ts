@@ -14,24 +14,11 @@ registerHooks({
 
 const { getPortalTheme, getPortalThemeSurface, isOwnedPortalThemeKey, portalThemes, resolvePortalThemeSurface } = await import("./registry.ts");
 
-const profileOnly = ["vip_silver", "vip_gold", "staff", "moderator"];
-const allSurfaces = ["vip_diamond", "vip_ultimate", "administrator", "senior_administrator", "owner"];
 const surfaces = ["profile", "global", "smallProfile", "playerContainer"] as const;
 
-test("Silver, Gold, Staff and Moderator have profile themes with explicit default fallbacks elsewhere", () => {
-  for (const key of profileOnly) {
-    assert.equal(isOwnedPortalThemeKey(key), true, `${key} must be equippable`);
-    assert.equal(resolvePortalThemeSurface(key, "profile").theme.key, key);
-    for (const surface of ["global", "smallProfile", "playerContainer"] as const) {
-      assert.equal(getPortalThemeSurface(key, surface), null, `${key} must not provide ${surface}`);
-      assert.equal(resolvePortalThemeSurface(key, surface).theme.key, "default");
-    }
-  }
-});
-
-test("higher VIP and staff ranks own their global, profile and public player surfaces", () => {
-  for (const key of allSurfaces) {
-    assert.equal(isOwnedPortalThemeKey(key), true);
+test("every current theme styles the site, profile and public player surfaces", () => {
+  for (const key of Object.keys(portalThemes)) {
+    assert.equal(isOwnedPortalThemeKey(key), key !== "default");
     for (const surface of surfaces) {
       assert.equal(resolvePortalThemeSurface(key, surface).theme.key, key);
       assert.ok(getPortalThemeSurface(key, surface)?.className);
@@ -60,7 +47,7 @@ test("registered manifests are serializable and preserve existing themes", () =>
   }
 });
 
-test("rank progression adds features without increasing lower-rank surface access", () => {
+test("both rank ladders add decoration features while every tier has site UI", () => {
   for (const ladder of [["vip_silver", "vip_gold", "vip_diamond", "vip_ultimate"], ["staff", "moderator", "administrator", "senior_administrator", "owner"]]) {
     let previousFeatures: readonly string[] = [];
     for (const [index, key] of ladder.entries()) {

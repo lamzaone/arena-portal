@@ -3,10 +3,12 @@ import { ArrowLeft, SearchX } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { PortalShell } from "@/components/ui/portal-shell";
+import { getSession } from "@/lib/auth/session";
 
-export default function NotFoundPage() {
+export default async function NotFoundPage() {
+  const session = await getSession();
   return (
-    <PortalShell className="tapped-page ui-error-page">
+    <PortalShell authenticated={Boolean(session)} className="tapped-page ui-error-page">
       <EmptyState
         headingLevel="h1"
         className="ui-route-error-state"

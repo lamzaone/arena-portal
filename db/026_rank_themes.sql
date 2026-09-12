@@ -28,15 +28,15 @@ CREATE TEMPORARY TABLE portal_rank_theme_definitions (
 INSERT INTO portal_rank_theme_definitions
   (theme_key, display_name, description, all_surfaces)
 VALUES
-  ('vip_silver', 'VIP Silver', 'A silver profile with brushed-metal details and an avatar crest.', FALSE),
-  ('vip_gold', 'VIP Gold', 'A gold profile with gilded lines, an avatar crest, and animated highlights.', FALSE),
-  ('vip_diamond', 'VIP Diamond', 'Diamond-blue facets, illuminated cards, and ambient light across the profile, site UI, compact profiles, and player containers.', TRUE),
-  ('vip_ultimate', 'VIP Ultimate', 'An amethyst aurora with orbit details and drifting particles across the profile, site UI, compact profiles, and player containers.', TRUE),
-  ('staff', 'Staff', 'A steel profile with a shield crest and a structured grid.', FALSE),
-  ('moderator', 'Moderator', 'A mint profile with a shield crest, edge lighting, and animated highlights.', FALSE),
-  ('administrator', 'Administrator', 'Amber beams and illuminated cards across the profile, site UI, compact profiles, and player containers.', TRUE),
-  ('senior_administrator', 'Sr. Administrator', 'Violet orbit details and drifting particles across the profile, site UI, compact profiles, and player containers.', TRUE),
-  ('owner', 'Owner', 'A crimson crown halo, layered crest, and atmospheric motion across the profile, site UI, compact profiles, and player containers.', TRUE);
+  ('vip_silver', 'VIP Silver', 'Brushed silver, satin reflections, and a metallic avatar crest across the site, profile, and player cards.', TRUE),
+  ('vip_gold', 'VIP Gold', 'Warm gold grain, gilded borders, and moving metallic highlights across the site, profile, and player cards.', TRUE),
+  ('vip_diamond', 'VIP Diamond', 'Diamond-blue facets, geometric gems, and prismatic glints across the site, profile, and player cards.', TRUE),
+  ('vip_ultimate', 'VIP Ultimate', 'Electric amethyst, branching arcs, and charged geometry across the site, profile, and player cards.', TRUE),
+  ('staff', 'Staff', 'Brushed steel, a shield crest, and precise grid details across the site, profile, and player cards.', TRUE),
+  ('moderator', 'Moderator', 'Jade edge lighting, a shield crest, and sweeping scanner details across the site, profile, and player cards.', TRUE),
+  ('administrator', 'Administrator', 'Amber traces, illuminated geometry, and sweeping highlights across the site, profile, and player cards.', TRUE),
+  ('senior_administrator', 'Sr. Administrator', 'Violet orbital details, layered geometry, and drifting particles across the site, profile, and player cards.', TRUE),
+  ('owner', 'Owner', 'A crimson crown halo, layered crest, and atmospheric motion across the site, profile, and player cards.', TRUE);
 
 START TRANSACTION;
 

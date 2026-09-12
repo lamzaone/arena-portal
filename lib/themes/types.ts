@@ -57,6 +57,7 @@ export type PortalThemeSurfaceMap = {
 export type PortalThemeDefinition = {
   key: string;
   displayName: string;
+  description?: string;
   previewImageUrl: string | null;
   progression?: {
     family: "vip" | "staff";

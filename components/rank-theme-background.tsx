@@ -1,5 +1,7 @@
+import { RankThemeGeometry } from "@/components/rank-theme-geometry";
+
 /** Decorative geometry only: no timers, pointer handlers, or client bundle. */
-export function RankThemeBackground() {
+export function RankThemeBackground({ themeKey }: { themeKey: string }) {
   return (
     <div className="rank-theme-backdrop" aria-hidden="true">
       <div className="rank-backdrop-grid" />
@@ -9,6 +11,7 @@ export function RankThemeBackground() {
         {Array.from({ length: 6 }, (_, index) => <i key={index} />)}
       </div>
       <div className="rank-backdrop-halo" />
+      <RankThemeGeometry themeKey={themeKey} />
     </div>
   );
 }

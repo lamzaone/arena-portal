@@ -153,11 +153,11 @@
   --theme-surface-muted: color-mix(in srgb, var(--rank-surface) 90%, transparent);
   --theme-text: #f6f5fa;
   --theme-text-muted: var(--rank-muted);
-  --theme-text-subtle: color-mix(in srgb, var(--rank-muted) 82%, var(--rank-bg));
+  --theme-text-subtle: color-mix(in srgb, var(--rank-muted) 92%, var(--rank-bg));
   --theme-accent: var(--rank-accent);
   --theme-accent-strong: var(--rank-bright);
   --theme-accent-soft: var(--rank-soft);
-  --theme-border: color-mix(in srgb, var(--rank-bright) 24%, var(--rank-surface));
+  --theme-border: color-mix(in srgb, var(--rank-bright) 34%, var(--rank-surface));
   --theme-border-strong: color-mix(in srgb, var(--rank-bright) 62%, var(--rank-surface));
   --theme-panel: var(--theme-surface-raised);
   --theme-panel-subtle: var(--theme-surface-muted);
@@ -527,15 +527,15 @@ body:has(.player-profile-page[data-theme-owner="profile"].profile-theme-rank) .c
 
 /* Navigation is itself a boundary. Consume its own semantic colors so a
    compact identity inside the header can retain a different player's theme. */
-.site-header[data-theme]:is([data-theme="vip_diamond"], [data-theme="vip_ultimate"], [data-theme="administrator"], [data-theme="senior_administrator"], [data-theme="owner"]) {
+.site-header[data-theme]:is([data-theme="vip_silver"], [data-theme="vip_gold"], [data-theme="vip_diamond"], [data-theme="vip_ultimate"], [data-theme="staff"], [data-theme="moderator"], [data-theme="administrator"], [data-theme="senior_administrator"], [data-theme="owner"]) {
   border-color: var(--theme-border);
   background: color-mix(in srgb, var(--theme-page-bg) 94%, transparent);
   box-shadow: 0 12px 36px rgb(0 0 0 / .2), inset 0 -1px 0 color-mix(in srgb, var(--theme-accent) 14%, transparent);
 }
-.site-header[data-theme]:is([data-theme="vip_diamond"], [data-theme="vip_ultimate"], [data-theme="administrator"], [data-theme="senior_administrator"], [data-theme="owner"]) .brand-mark { color: var(--theme-page-bg); background: var(--theme-accent-strong); box-shadow: 0 0 20px color-mix(in srgb, var(--theme-accent) 15%, transparent); }
-.site-header[data-theme]:is([data-theme="vip_diamond"], [data-theme="vip_ultimate"], [data-theme="administrator"], [data-theme="senior_administrator"], [data-theme="owner"]) :is(.brand-accent, .main-nav a.active, .mobile-nav nav a.active) { color: var(--theme-accent-soft); }
-.site-header[data-theme]:is([data-theme="vip_diamond"], [data-theme="vip_ultimate"], [data-theme="administrator"], [data-theme="senior_administrator"], [data-theme="owner"]) :is(.main-nav a, .mobile-nav nav a) { color: var(--theme-text-muted); }
-.site-header[data-theme]:is([data-theme="vip_diamond"], [data-theme="vip_ultimate"], [data-theme="administrator"], [data-theme="senior_administrator"], [data-theme="owner"]) :is(.main-nav a, .mobile-nav nav a):is(:hover, :focus-visible, .active) { color: var(--theme-accent-soft); background: var(--theme-control-hover); }
+.site-header[data-theme]:is([data-theme="vip_silver"], [data-theme="vip_gold"], [data-theme="vip_diamond"], [data-theme="vip_ultimate"], [data-theme="staff"], [data-theme="moderator"], [data-theme="administrator"], [data-theme="senior_administrator"], [data-theme="owner"]) .brand-mark { color: var(--theme-page-bg); background: var(--theme-accent-strong); box-shadow: 0 0 20px color-mix(in srgb, var(--theme-accent) 15%, transparent); }
+.site-header[data-theme]:is([data-theme="vip_silver"], [data-theme="vip_gold"], [data-theme="vip_diamond"], [data-theme="vip_ultimate"], [data-theme="staff"], [data-theme="moderator"], [data-theme="administrator"], [data-theme="senior_administrator"], [data-theme="owner"]) :is(.brand-accent, .main-nav a.active, .mobile-nav nav a.active) { color: var(--theme-accent-soft); }
+.site-header[data-theme]:is([data-theme="vip_silver"], [data-theme="vip_gold"], [data-theme="vip_diamond"], [data-theme="vip_ultimate"], [data-theme="staff"], [data-theme="moderator"], [data-theme="administrator"], [data-theme="senior_administrator"], [data-theme="owner"]) :is(.main-nav a, .mobile-nav nav a) { color: var(--theme-text-muted); }
+.site-header[data-theme]:is([data-theme="vip_silver"], [data-theme="vip_gold"], [data-theme="vip_diamond"], [data-theme="vip_ultimate"], [data-theme="staff"], [data-theme="moderator"], [data-theme="administrator"], [data-theme="senior_administrator"], [data-theme="owner"]) :is(.main-nav a, .mobile-nav nav a):is(:hover, :focus-visible, .active) { color: var(--theme-accent-soft); background: var(--theme-control-hover); }
 
 @keyframes rank-beam-enter {
   from { transform: translate3d(-3%, -2%, 0); }

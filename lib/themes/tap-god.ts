@@ -3,6 +3,7 @@ import type { PortalThemeDefinition } from "@/lib/themes/types";
 export const tapGodTheme = {
   key: "tap_god",
   displayName: "TAP GOD",
+  description: "Gothic crimson, cathedral tracery, blood rain and animated sigils across the site.",
   previewImageUrl: "/images/economy/profile-themes/tap-god.svg",
   surfaces: {
     global: {
@@ -20,7 +21,7 @@ export const tapGodTheme = {
       documentEffects: { cursorGrid: "hidden" },
       badge: {
         className: "tap-god-theme-badge",
-        detail: "Profile theme",
+        detail: "Site theme",
         icon: "crown",
         label: "TAP GOD",
       },

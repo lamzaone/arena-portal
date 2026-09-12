@@ -22,7 +22,7 @@ const themeIcons = {
 const themeBackgrounds = {
   tapGodRain: TapGodRainBackground,
   rankAtmosphere: RankThemeBackground,
-} satisfies Record<PortalThemeBackgroundKey, ComponentType>;
+} satisfies Record<PortalThemeBackgroundKey, ComponentType<{ themeKey: string }>>;
 
 type ThemeIconProps = SVGProps<SVGSVGElement> & {
   name: PortalThemeIconKey;
@@ -50,7 +50,7 @@ export function ThemeBackground({
       data-theme-background-surface={surface}
       data-theme-background-theme={themeKey}
     >
-      <Background />
+      <Background themeKey={themeKey} />
     </div>
   );
 }

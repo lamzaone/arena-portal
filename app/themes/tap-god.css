@@ -1,5 +1,5 @@
-/* TAP GOD is a source-controlled Special theme. Its gothic presentation is
-   intentionally scoped to entitled profile and ranking surfaces. */
+/* TAP GOD is a source-controlled Special theme. The blood moon, rain and
+   gothic architecture remain the canvas for every entitled surface. */
 :is(
   [data-theme="tap_god"],
   .global-theme-tap-god,
@@ -29,14 +29,14 @@
   --theme-text-muted: var(--tap-muted);
   --theme-text-subtle: #ca8996;
   --theme-accent: var(--tap-crimson);
-  --theme-accent-strong: var(--tap-red);
+  --theme-accent-strong: var(--tap-hot);
   --theme-accent-soft: var(--tap-rose);
   --theme-border: var(--tap-border);
   --theme-border-strong: rgba(255, 92, 117, .94);
   --theme-panel: var(--theme-surface-raised);
   --theme-panel-subtle: var(--theme-surface-muted);
   --theme-control: var(--theme-control-bg);
-  --theme-focus-ring: var(--tap-red);
+  --theme-focus-ring: var(--tap-hot);
   --theme-focus: var(--theme-focus-ring);
   --theme-control-bg: rgba(3, 0, 1, .94);
   --theme-control-focus-bg: rgba(24, 0, 6, .98);
@@ -169,10 +169,8 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
 }
 
 @keyframes tap-god-rain-flash {
-  0%, 68%, 72%, 77%, 100% { opacity: 0; }
-  69% { opacity: .3; }
-  70% { opacity: .06; }
-  73% { opacity: .19; }
+  0%, 62%, 86%, 100% { opacity: 0; }
+  73% { opacity: .16; }
 }
 
 @keyframes tap-god-cathedral-rise {
@@ -193,13 +191,13 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
 }
 
 @keyframes tap-god-relic-pulse {
-  0%, 100% { filter: brightness(.92) saturate(1); box-shadow: inset 3px 0 0 var(--identity-badge-color), 0 0 7px color-mix(in srgb, var(--identity-badge-color) 15%, transparent); }
-  50% { filter: brightness(1.13) saturate(1.18); box-shadow: inset 3px 0 0 var(--identity-badge-color), 0 0 18px color-mix(in srgb, var(--identity-badge-color) 37%, transparent), 0 0 7px var(--tap-glow); }
+  0%, 100% { box-shadow: inset 3px 0 0 var(--identity-badge-color), 0 0 7px color-mix(in srgb, var(--identity-badge-color) 15%, transparent); }
+  50% { box-shadow: inset 3px 0 0 var(--identity-badge-color), 0 0 18px color-mix(in srgb, var(--identity-badge-color) 37%, transparent), 0 0 7px var(--tap-glow); }
 }
 
 @keyframes tap-god-frame-pulse {
-  0%, 100% { filter: brightness(.94); box-shadow: inset 3px 0 0 var(--tap-deep), 0 0 10px rgba(225, 29, 72, .14); }
-  50% { filter: brightness(1.13); box-shadow: inset 3px 0 0 var(--tap-red), 0 0 23px rgba(225, 29, 72, .34), 0 0 7px rgba(255, 113, 133, .2); }
+  0%, 100% { box-shadow: inset 3px 0 0 var(--tap-deep), 0 0 10px rgba(225, 29, 72, .14); }
+  50% { box-shadow: inset 3px 0 0 var(--tap-red), 0 0 23px rgba(225, 29, 72, .34), 0 0 7px rgba(255, 113, 133, .2); }
 }
 
 @keyframes tap-god-vertical-scan {
@@ -225,10 +223,8 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
 }
 
 @keyframes tap-god-title-haunt {
-  0%, 7%, 10%, 48%, 51%, 100% { opacity: 1; transform: translateX(0); text-shadow: 3px 2px 0 rgba(127, 5, 35, .72), -2px -1px 0 rgba(255, 51, 79, .2), 0 0 20px rgba(225, 29, 72, .16); }
-  8% { opacity: .82; transform: translateX(-2px); text-shadow: 5px 0 8px rgba(255, 51, 79, .55), -5px 0 7px rgba(71, 4, 20, .8); }
-  9%, 49% { opacity: .95; transform: translateX(2px); }
-  50% { opacity: .72; transform: translateX(-1px); text-shadow: -4px 0 7px rgba(255, 51, 79, .58), 5px 0 8px rgba(72, 5, 24, .84); }
+  0%, 100% { text-shadow: 2px 2px 0 rgba(127, 5, 35, .72), 0 0 20px rgba(225, 29, 72, .16); }
+  50% { text-shadow: 2px 2px 0 rgba(127, 5, 35, .72), 0 0 30px rgba(255, 51, 79, .35), 0 0 5px rgba(255, 92, 117, .18); }
 }
 
 @keyframes tap-god-sigil-turn {
@@ -270,10 +266,9 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
 }
 
 @keyframes tap-god-heartbeat {
-  0%, 38%, 52%, 100% { filter: brightness(.96); }
-  42% { filter: brightness(1.24) saturate(1.22); }
-  46% { filter: brightness(1); }
-  49% { filter: brightness(1.17) saturate(1.15); }
+  0%, 38%, 58%, 100% { border-top-color: var(--tap-hot); }
+  44%, 52% { border-top-color: var(--tap-rose); }
+  48% { border-top-color: var(--tap-hot); }
 }
 
 @keyframes tap-god-row-surge {
@@ -513,7 +508,7 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
     radial-gradient(circle at 46% 46%, #ff3254 0 18%, #ba002b 49%, #4c000f 72%, rgba(1, 0, 1, .2) 73%);
   box-shadow: inset -32px -24px 65px rgba(35, 0, 8, .88), inset 18px 12px 38px rgba(255, 220, 226, .18), 0 0 45px rgba(255, 23, 68, .52), 0 0 130px rgba(134, 0, 31, .44);
   transform-origin: center;
-  animation: tap-god-blood-moon-pulse 7.2s ease-in-out infinite;
+  animation: tap-god-blood-moon-pulse 12s ease-in-out infinite;
 }
 
 .tap-god-blood-moon::before {
@@ -641,7 +636,7 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
     radial-gradient(ellipse at 52% 0%, rgba(255, 239, 242, .78), rgba(255, 23, 68, .3) 23%, transparent 58%);
   mix-blend-mode: screen;
   opacity: 0;
-  animation: tap-god-rain-flash 12.5s ease-out -4.2s infinite;
+  animation: tap-god-rain-flash 18s ease-in-out -4.2s infinite;
 }
 
 /* Navigation reads its effective global theme from the component boundary.
@@ -837,7 +832,7 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
   background: linear-gradient(90deg, transparent, rgba(255, 23, 68, .42), rgba(255, 247, 248, .2), transparent);
   opacity: 0;
   pointer-events: none;
-  animation: tap-god-slash 5.6s ease-in-out infinite;
+  animation: tap-god-slash 9s cubic-bezier(.22, .61, .36, 1) infinite;
 }
 
 .player-profile-page.profile-theme-tap-god .public-player-hero::after {
@@ -869,7 +864,7 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
   font-weight: 900;
   letter-spacing: -.055em;
   text-shadow: 3px 2px 0 var(--tap-deep), -2px -1px 0 rgba(255, 92, 117, .24), 0 0 24px rgba(255, 23, 68, .32);
-  animation: tap-god-title-haunt 6.8s linear infinite;
+  animation: tap-god-title-haunt 8s ease-in-out infinite;
 }
 
 .player-profile-page.profile-theme-tap-god .public-player-avatar {
@@ -991,6 +986,10 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
   box-shadow: inset 3px 0 0 rgba(114, 5, 31, .48);
 }
 
+.player-profile-page.profile-theme-tap-god .public-player-identity[data-presence="unknown"] .profile-presence {
+  color: var(--tap-muted);
+}
+
 .player-profile-page.profile-theme-tap-god .public-player-steam-identity:hover,
 .player-profile-page.profile-theme-tap-god .public-player-steam-identity:focus-visible { color: var(--tap-text); background: rgba(225, 29, 72, .13); box-shadow: inset 3px 0 0 var(--tap-crimson), 0 0 14px rgba(225, 29, 72, .14); }
 
@@ -1023,13 +1022,13 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
   border-color: var(--tap-red);
   border-radius: 0;
   color: var(--tap-text);
-  background: linear-gradient(135deg, var(--tap-red), var(--tap-deep));
+  background: linear-gradient(135deg, #ba0b34, var(--tap-deep));
   background-size: 180% 180%;
   box-shadow: 4px 4px 0 rgba(54, 0, 13, .86), 0 0 21px rgba(255, 23, 68, .36);
 }
 
 .player-profile-page.profile-theme-tap-god .button-primary:not(:where(.site-header *)):hover,
-.player-profile-page.profile-theme-tap-god .button-primary:not(:where(.site-header *)):focus-visible { border-color: var(--tap-rose); color: #fff; background: linear-gradient(135deg, var(--tap-hot), #a40029); box-shadow: 4px 4px 0 rgba(54, 0, 13, .86), 0 0 30px rgba(255, 23, 68, .58); animation: tap-god-bloodline 1.8s linear infinite; }
+.player-profile-page.profile-theme-tap-god .button-primary:not(:where(.site-header *)):focus-visible { border-color: var(--tap-rose); color: #fff; background: linear-gradient(135deg, #d41440, #850020); box-shadow: 4px 4px 0 rgba(54, 0, 13, .86), 0 0 30px rgba(255, 23, 68, .58); animation: tap-god-bloodline 4s linear infinite; }
 
 .player-profile-page.profile-theme-tap-god .button-secondary:not(:where(.site-header *)) {
   border-color: var(--tap-crimson);
@@ -1120,7 +1119,7 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
   transition: border-color .2s ease, box-shadow .2s ease, filter .2s ease;
 }
 
-.player-profile-page.profile-theme-tap-god :where(.public-player-stat-grid article, .panel, .profile-inventory-panel):hover { border-color: var(--tap-hot); box-shadow: inset 3px 0 0 var(--tap-red), inset 0 0 31px rgba(255, 23, 68, .11), 0 0 30px rgba(255, 23, 68, .18); }
+.player-profile-page.profile-theme-tap-god :where(.public-player-stat-grid article, .panel, .profile-inventory-panel):is(:hover, :focus-within) { border-color: var(--tap-hot); box-shadow: inset 3px 0 0 var(--tap-red), inset 0 0 31px rgba(255, 23, 68, .11), 0 0 30px rgba(255, 23, 68, .18); }
 .player-profile-page.profile-theme-tap-god .public-player-stat-grid article:nth-child(even) { box-shadow: inset 3px 0 0 rgba(134, 0, 31, .95), inset 0 1px 0 rgba(255, 247, 248, .05), 0 0 24px rgba(255, 23, 68, .08); }
 .player-profile-page.profile-theme-tap-god .public-player-stat-grid article > span:first-child,
 .player-profile-page.profile-theme-tap-god .public-player-stat-grid .stat-foot,
@@ -1158,7 +1157,8 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
 
 .player-profile-page.profile-theme-tap-god :where(.group-membership-cards article, .combat-stat-grid > div, .hit-map-list > div):hover { border-color: var(--tap-red); background-color: rgba(24, 4, 10, .98); box-shadow: inset 3px 0 0 var(--tap-crimson), 0 0 20px rgba(225, 29, 72, .14); }
 .player-profile-page.profile-theme-tap-god :where(.group-membership-cards article, .combat-stat-grid > div, .hit-map-list > div):hover::before { opacity: 1; transform: translate3d(540%, 0, 0) skewX(-24deg); }
-.player-profile-page.profile-theme-tap-god :where(.group-role-section h3, .combat-stat-grid span, .hit-map-list span, .hit-map-figure figcaption, .hit-map-damage) { color: var(--tap-muted); }
+.player-profile-page.profile-theme-tap-god .group-role-section > div:first-child small,
+.player-profile-page.profile-theme-tap-god :where(.group-role-section h3, .group-role-empty, .group-membership-cards article > small, .combat-stat-grid span, .hit-map-list span, .hit-map-figure figcaption, .hit-map-damage) { color: var(--tap-muted); }
 .player-profile-page.profile-theme-tap-god .hit-map-panel::before { background: radial-gradient(circle at 60% 45%, rgba(225, 29, 72, .17), transparent 62%); }
 .player-profile-page.profile-theme-tap-god .hit-map-figure,
 .player-profile-page.profile-theme-tap-god :where(.record-list li, .hit-map-damage) { border-color: var(--tap-border); }
@@ -1181,6 +1181,37 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
 .player-profile-page.profile-theme-tap-god .profile-inventory-artwork:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--rarity-accent) 34%, transparent), 7px 7px 0 rgba(114, 5, 31, .48), 0 0 18px rgba(225, 29, 72, .13); transform: none; }
 .player-profile-page.profile-theme-tap-god .profile-inventory-tooltip { border-radius: 0; border-color: var(--tap-border); color: var(--tap-text); background: rgba(3, 1, 2, .98); }
 .player-profile-page.profile-theme-tap-god .profile-inventory-empty { border-color: var(--tap-border); color: var(--tap-muted); background: rgba(3, 1, 2, .78); }
+
+.player-profile-page.profile-theme-tap-god :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([data-search-input]), select, textarea) {
+  border-color: color-mix(in srgb, var(--theme-accent-strong) 72%, var(--theme-control-bg));
+  transition: border-color .24s ease, background-color .24s ease, box-shadow .24s ease;
+}
+
+.player-profile-page.profile-theme-tap-god :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([data-search-input]), select, textarea):focus-visible {
+  border-color: var(--theme-focus-ring);
+  background-color: var(--theme-control-focus-bg);
+  box-shadow: inset 3px 0 0 var(--theme-accent), 0 0 0 4px color-mix(in srgb, var(--theme-focus-ring) 12%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tap-god-blood-moon {
+    animation: none;
+    opacity: .74;
+    transform: none;
+    filter: saturate(1.05);
+  }
+
+  .tap-god-blood-moon::before,
+  .tap-god-blood-moon::after,
+  .player-profile-page.profile-theme-tap-god .public-player-identity h1 {
+    animation: none;
+  }
+
+  .player-profile-page.profile-theme-tap-god .public-player-hero::before {
+    animation: none;
+    opacity: 0;
+  }
+}
 
 @media (max-width: 520px) {
   .tap-god-avatar-mark { right: -5px; top: -5px; width: 27px; height: 27px; }
@@ -1287,11 +1318,12 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
   select,
   textarea
 ) {
-  border-color: rgba(255, 23, 68, .58);
+  border-color: rgba(255, 92, 117, .72);
   border-radius: 0;
   color: var(--tap-text);
   background: linear-gradient(145deg, rgba(17, 0, 5, .98), rgba(2, 0, 1, .99));
   box-shadow: inset 3px 0 0 rgba(134, 0, 31, .46);
+  transition: border-color .24s ease, background-color .24s ease, box-shadow .24s ease;
 }
 
 :is(
@@ -1330,7 +1362,7 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
   border-color: var(--tap-hot);
   border-radius: 0;
   color: var(--tap-text);
-  background: linear-gradient(135deg, var(--tap-red), var(--tap-deep) 76%);
+  background: linear-gradient(135deg, #ba0b34, var(--tap-deep) 76%);
   background-size: 180% 180%;
   box-shadow: 4px 4px 0 rgba(54, 0, 13, .86), 0 0 20px rgba(255, 23, 68, .35);
   text-shadow: 0 1px 0 rgba(0, 0, 0, .48), 0 0 8px rgba(255, 247, 248, .2);
@@ -1342,9 +1374,9 @@ html[data-theme="tap_god"][data-theme-surface~="global"]:not(:has(.player-profil
 ):not(:has(.player-profile-page[data-theme-owner="profile"])) body :where(.button-primary):is(:hover, :focus-visible) {
   border-color: var(--tap-rose);
   color: #fff;
-  background: linear-gradient(135deg, var(--tap-hot), #a40029 78%);
+  background: linear-gradient(135deg, #d41440, #850020 78%);
   box-shadow: 4px 4px 0 rgba(54, 0, 13, .86), 0 0 31px rgba(255, 23, 68, .6);
-  animation: tap-god-bloodline 1.8s linear infinite;
+  animation: tap-god-bloodline 4s linear infinite;
 }
 
 :is(
