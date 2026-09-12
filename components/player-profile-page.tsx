@@ -9,6 +9,7 @@ import {
   IdentityGroupBadgeList,
 } from "@/components/identity-group-badge";
 import { ProfileInventoryPreview } from "@/components/profile-inventory-preview";
+import { ProfileModerationHistory } from "@/components/profile-moderation-history";
 import { ProfileSettingsForm, type ProfileSettingsValue } from "@/components/profile-settings-form";
 import {
   ProfileThemeAvatarAdornment,
@@ -17,7 +18,6 @@ import {
 } from "@/components/profile-theme-slots";
 import { ProfileThemeSurfaceBadge } from "@/components/profile-theme-surface-badge";
 import { ProfileTabs } from "@/components/profile-tabs";
-import { PlayerIdentity } from "@/components/player-identity";
 import { ResilientRemoteImage } from "@/components/resilient-remote-image";
 import { SiteHeader } from "@/components/site-header";
 import { getLevelRank, getNextLevelRank, getRankProgress } from "@/lib/content/levelranks";
@@ -263,8 +263,6 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
         <ProfileTabs
           inventory={<ProfileInventoryPreview preview={profileInventory} steamId={steamId} isOwnProfile={isOwnProfile} />}
           inventoryCount={profileInventory.canView ? profileInventory.total : 0}
-          profileHref={`/players/${steamId}`}
-          settingsAvailable={isOwnProfile}
           settingsOpen={showSettings}
           settings={isOwnProfile ? <section className="profile-settings-view" aria-labelledby={showSettings ? "profile-settings-title" : undefined}>
             {showSettings && profileSettings ? <>
@@ -311,13 +309,11 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
           <HitMap stats={profile.hitStats} />
         </section> : null}
 
-        {isOwnProfile && dashboard ? <section className="history-section" aria-labelledby="moderation-title">
-          <div className="section-heading compact"><p className="eyebrow"><ShieldCheck aria-hidden="true" /> Private record</p><h2 id="moderation-title">Moderation history</h2></div>
-          <div className="history-grid">
-            <article className="panel history-panel"><div className="panel-heading"><h3>Bans</h3><Link href="/appeals">Appeals <ArrowRight aria-hidden="true" /></Link></div>{dashboard.bans.length ? <ul className="record-list">{dashboard.bans.map((ban) => { const moderator = ban.adminSteamId ? relatedPlayerIdentities[ban.adminSteamId] : undefined; return <li key={ban.id}><div><strong>{ban.reason}</strong><span>By {moderator ? <PlayerIdentity player={moderator} variant="inline" showSteamId={false} /> : ban.adminName || "Console"} · {formatDate(ban.createdAt)}</span></div><b className={isActiveSanction(ban.expiresAt) ? "badge badge-danger" : "badge"}>{isActiveSanction(ban.expiresAt) ? "Active" : "Expired"}</b></li>; })}</ul> : <p className="empty-copy">No ban history found.</p>}</article>
-            <article className="panel history-panel"><div className="panel-heading"><h3>Gags &amp; mutes</h3><span>{dashboard.sanctions.length} record{dashboard.sanctions.length === 1 ? "" : "s"}</span></div>{dashboard.sanctions.length ? <ul className="record-list">{dashboard.sanctions.map((sanction) => { const moderator = sanction.adminSteamId ? relatedPlayerIdentities[sanction.adminSteamId] : undefined; return <li key={sanction.id}><div><strong>{sanction.kind} · {sanction.reason}</strong><span>By {moderator ? <PlayerIdentity player={moderator} variant="inline" showSteamId={false} /> : sanction.adminName || "Console"} · {formatDate(sanction.createdAt)}</span></div><b className={isActiveSanction(sanction.expiresAt) ? "badge badge-warning" : "badge"}>{isActiveSanction(sanction.expiresAt) ? "Active" : "Expired"}</b></li>; })}</ul> : <p className="empty-copy">No gag or mute history found.</p>}</article>
-          </div>
-        </section> : null}
+        {isOwnProfile && dashboard ? <ProfileModerationHistory
+          bans={dashboard.bans}
+          sanctions={dashboard.sanctions}
+          relatedPlayerIdentities={relatedPlayerIdentities}
+        /> : null}
         </ProfileTabs>
       </div>
     </main>

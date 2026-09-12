@@ -1,4 +1,5 @@
 import "server-only";
+import { CLOSED_APPEAL_STATUSES } from "@/lib/cases/appeal-status";
 import { enqueueDiscordNotification } from "@/lib/discord/notification-repository";
 import { cs2FinishValiditySql, getCs2Finish, getCs2PaintkitWear, isValidCs2Finish, isCs2CatalogueFinishAvailable } from "@/lib/economy/cs2-finish-catalogue";
 
@@ -3048,30 +3049,54 @@ export async function getAppeals(steamId: string): Promise<BanAppeal[]> {
   }
 }
 
+export type AppealEligibility = {
+  eligible: boolean;
+  eligibleAt: string | null;
+  reason: "open-appeal" | "cooldown" | null;
+  openAppealId: number | null;
+};
+
+async function readAppealEligibility(
+  executor: Pick<Pool, "query">,
+  steamId: string,
+  banId: number | null,
+): Promise<AppealEligibility> {
+  const [openAppeals] = await executor.query<Array<RowDataPacket & { id: number }>>(
+    "SELECT id FROM portal_ban_appeals WHERE steam_id = ? AND status NOT IN (?, ?, ?) ORDER BY id DESC LIMIT 1",
+    [steamId, ...CLOSED_APPEAL_STATUSES],
+  );
+  if (openAppeals.length) {
+    return {
+      eligible: false,
+      eligibleAt: null,
+      reason: "open-appeal",
+      openAppealId: Number(openAppeals[0].id),
+    };
+  }
+
+  const [rows] = await executor.query<AppealEligibilityRow[]>(
+    "SELECT COALESCE(closed_at, updated_at) AS decision_at FROM portal_ban_appeals WHERE steam_id = ? AND ban_id <=> ? AND status = 'closed-banned' ORDER BY COALESCE(closed_at, updated_at) DESC LIMIT 1",
+    [steamId, banId],
+  );
+  const decisionAt = rows[0]?.decision_at;
+  if (!decisionAt) return { eligible: true, eligibleAt: null, reason: null, openAppealId: null };
+  const eligibleAt = new Date(decisionAt).getTime() + 7 * 24 * 60 * 60 * 1_000;
+  const eligible = Date.now() >= eligibleAt;
+  return {
+    eligible,
+    eligibleAt: new Date(eligibleAt).toISOString(),
+    reason: eligible ? null : "cooldown",
+    openAppealId: null,
+  };
+}
+
 export async function getAppealEligibility(
   steamId: string,
   banId: number | null,
-) {
+): Promise<AppealEligibility> {
   const pool = getPortalPool();
-  if (!pool) return { eligible: true, eligibleAt: null as string | null };
-  try {
-    const [rows] = await pool.query<AppealEligibilityRow[]>(
-      "SELECT COALESCE(closed_at, updated_at) AS decision_at FROM portal_ban_appeals WHERE steam_id = ? AND ban_id <=> ? AND status = 'closed-banned' ORDER BY COALESCE(closed_at, updated_at) DESC LIMIT 1",
-      [steamId, banId],
-    );
-    const decisionAt = rows[0]?.decision_at;
-    if (!decisionAt)
-      return { eligible: true, eligibleAt: null as string | null };
-    const eligibleAt =
-      new Date(decisionAt).getTime() + 7 * 24 * 60 * 60 * 1_000;
-    return {
-      eligible: Date.now() >= eligibleAt,
-      eligibleAt: new Date(eligibleAt).toISOString(),
-    };
-  } catch {
-    // A portal schema that has not been migrated must not accidentally lock a player out.
-    return { eligible: true, eligibleAt: null as string | null };
-  }
+  if (!pool) throw new Error("Portal storage is not configured.");
+  return readAppealEligibility(pool, steamId, banId);
 }
 
 async function writeAudit(
@@ -3192,6 +3217,17 @@ export async function createAppeal(input: {
   let appealId = 0;
   try {
     await connection.beginTransaction();
+    // The account's primary key serializes submissions even when no appeal
+    // exists yet. InnoDB holds this row lock until commit or rollback.
+    await connection.execute(
+      "INSERT INTO portal_steam_accounts (steam_id) VALUES (?) ON DUPLICATE KEY UPDATE steam_id = VALUES(steam_id)",
+      [input.steamId],
+    );
+    // Keep the first consistent read after the account lock: under REPEATABLE
+    // READ its snapshot then includes any competing submission's commit.
+    // Plain reads also avoid locking empty appeal ranges for unrelated players.
+    const eligibility = await readAppealEligibility(connection, input.steamId, input.banId);
+    if (!eligibility.eligible) throw new Error(eligibility.reason ?? "cooldown");
     const [result] = await connection.execute<ResultSetHeader>(
       "INSERT INTO portal_ban_appeals (steam_id, ban_id, body) VALUES (?, ?, ?)",
       [input.steamId, input.banId, input.body],

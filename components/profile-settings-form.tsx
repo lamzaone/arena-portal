@@ -6,7 +6,6 @@ import {
   LockKeyhole,
   Palette,
   Save,
-  Trophy,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -221,29 +220,33 @@ export function ProfileSettingsForm({
             <input
               type="radio"
               name="activeThemeItemId"
+              aria-label="ARENA default"
               value="default"
               checked={activeThemeItemId === null}
               onChange={() => setActiveThemeItemId(null)}
             />
             <span className="settings-theme-preview is-default">
               <Palette aria-hidden="true" />
+              <span className="settings-theme-default-label">TAPPED.RO</span>
             </span>
-            <span>
+            {activeThemeItemId === null ? <span className="settings-theme-selected">Selected</span> : null}
+            <span className="settings-theme-copy">
               <strong>ARENA default</strong>
               <small>The original TAPPED.RO crimson profile.</small>
+              <span className="settings-theme-surfaces"><span>Profile</span></span>
             </span>
           </label>
           {initialSettings.ownedThemes.map((theme) => {
             const trustedTheme = getTrustedProfileTheme(theme.key);
             const configuredTheme = getPortalTheme(theme.key);
             const themedSurfaces = [
-              configuredTheme.surfaces.profile ? "your profile" : null,
-              configuredTheme.surfaces.global ? "your site UI" : null,
+              configuredTheme.surfaces.profile ? "Profile" : null,
+              configuredTheme.surfaces.global ? "Site UI" : null,
               configuredTheme.surfaces.smallProfile
-                ? "your player mentions"
+                ? "Player mentions"
                 : null,
               configuredTheme.surfaces.playerContainer
-                ? "your public player cards"
+                ? "Player cards"
                 : null,
             ].filter(Boolean);
 
@@ -255,6 +258,7 @@ export function ProfileSettingsForm({
                 <input
                   type="radio"
                   name="activeThemeItemId"
+                  aria-label={theme.displayName}
                   value={theme.inventoryItemId}
                   checked={activeThemeItemId === theme.inventoryItemId}
                   onChange={() => setActiveThemeItemId(theme.inventoryItemId)}
@@ -264,26 +268,22 @@ export function ProfileSettingsForm({
                     <Image
                       src={trustedTheme.previewImageUrl}
                       alt=""
-                      width={108}
-                      height={108}
+                      width={800}
+                      height={480}
+                      sizes="(max-width: 640px) 100vw, (max-width: 1080px) 50vw, 33vw"
                     />
                   ) : (
                     <ImageIcon aria-hidden="true" />
                   )}
                 </span>
-                <span>
+                {activeThemeItemId === theme.inventoryItemId ? <span className="settings-theme-selected">Selected</span> : null}
+                <span className="settings-theme-copy">
                   <strong>{theme.displayName}</strong>
                   <small>{theme.description}</small>
-                  {configuredTheme.progression ? (
-                    <small className="settings-theme-features">
-                      {configuredTheme.progression.features.join(" · ")}
-                    </small>
-                  ) : null}
                   {themedSurfaces.length ? (
-                    <small className="settings-theme-surface-note">
-                      <Trophy aria-hidden="true" /> Styles{" "}
-                      {themedSurfaces.join(", ")}
-                    </small>
+                    <span className="settings-theme-surfaces" aria-label="Styles these areas">
+                      {themedSurfaces.map((surface) => <span key={surface}>{surface}</span>)}
+                    </span>
                   ) : null}
                 </span>
               </label>
@@ -297,7 +297,7 @@ export function ProfileSettingsForm({
         ) : null}
       </fieldset>
 
-      <footer className="settings-save-bar">
+      <footer className={`settings-save-bar${dirty || pending ? " has-changes" : ""}`}>
         <p role="status" aria-live="polite">
           {pending
             ? "Saving your settings…"

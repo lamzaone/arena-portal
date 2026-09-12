@@ -15,7 +15,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./player-workspace.module.css";
 
-import { EconomyEmptyState } from "@/components/economy/economy-item-card";
+import { TradeActivity } from "@/components/economy/trade-activity";
 import { PaginatedItemGrid, useItemGridLayout } from "@/components/economy/item-grid";
 import { postEconomyAction } from "@/components/economy/economy-request";
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
@@ -24,12 +24,10 @@ import {
   economyTrades,
   economyWallet,
   formatTokens,
-  humanize,
   itemIsTradable,
   rarityClass,
   rarityName,
   type EconomyTradeItemView,
-  type EconomyTradeView,
 } from "@/components/economy/economy-view-model";
 import { PlayerIdentity } from "@/components/player-identity";
 import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
@@ -158,52 +156,6 @@ async function responseMessage(response: Response) {
     // A useful local fallback is returned below for non-JSON proxy failures.
   }
   return "The requested player data is unavailable right now.";
-}
-
-function TradeItems({
-  title,
-  items,
-  tokens,
-}: {
-  title: string;
-  items: EconomyTradeView["offeredItems"];
-  tokens: number;
-}) {
-  return (
-    <div className="group-block">
-      <span>{title}</span>
-      {items.length || tokens ? (
-        <div className="trade-asset-list">
-          {tokens ? (
-            <span className="trade-token-asset">
-              <Coins aria-hidden="true" /> {formatTokens(tokens)} tokens
-            </span>
-          ) : null}
-          {items.map((item) => (
-            <article key={item.id} className="trade-item-preview">
-              <MarketplaceItemPreview item={item} enableMarketPreview />
-              <div>
-                <span
-                  className={rarityClass(item.rarityRank)}
-                >
-                  {item.rarity}
-                </span>
-                <strong>{item.displayName}</strong>
-                <p>
-                  {economyItemTypeLabel(item.itemType)}
-                  {item.floatValue !== null
-                    ? ` · Float ${item.floatValue.toFixed(6)}`
-                    : ""}
-                </p>
-              </div>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <em>No items or tokens</em>
-      )}
-    </div>
-  );
 }
 
 function TradeItemButton({
@@ -854,134 +806,14 @@ export function TradeManager({
         </fieldset>
       </section>
 
-      <section id="trade-activity" className="history-section" aria-label="Trade activity">
-        <div className="section-heading compact">
-          <p className="eyebrow">Trade activity</p>
-          <h2>Incoming and outgoing offers</h2>
-        </div>
-        {tradeList.length ? (
-          <div className="history-grid">
-            {tradeList.map((trade) => (
-              <ThemedPlayerContainer
-                as="article"
-                key={trade.id}
-                className="panel trade-history-card"
-                containerKind="record"
-                ownerSteamId={trade.counterpartySteamId}
-                profileThemeKey={counterpartyIdentities[trade.counterpartySteamId]?.profileThemeKey}
-              >
-                <div className="panel-heading">
-                  <div>
-                    <span className="badge">{humanize(trade.status)}</span>
-                    <h3>
-                      {trade.direction === "incoming"
-                        ? "Incoming offer"
-                        : trade.direction === "outgoing"
-                          ? "Sent offer"
-                          : "Trade offer"}
-                    </h3>
-                    <PlayerIdentity
-                      player={counterpartyIdentities[trade.counterpartySteamId] ?? {
-                        steamId: trade.counterpartySteamId,
-                        displayName: trade.counterpartySteamId,
-                        avatarUrl: null,
-                        presence: "unknown",
-                        profileThemeKey: null,
-                        identityGroups: [],
-                      }}
-                      variant="compact"
-                    />
-                  </div>
-                </div>
-                <TradeItems
-                  title="They offer"
-                  items={
-                    trade.direction === "incoming"
-                      ? trade.offeredItems
-                      : trade.requestedItems
-                  }
-                  tokens={
-                    trade.direction === "incoming"
-                      ? trade.offeredTokens
-                      : trade.requestedTokens
-                  }
-                />
-                <TradeItems
-                  title="You offer"
-                  items={
-                    trade.direction === "incoming"
-                      ? trade.requestedItems
-                      : trade.offeredItems
-                  }
-                  tokens={
-                    trade.direction === "incoming"
-                      ? trade.requestedTokens
-                      : trade.offeredTokens
-                  }
-                />
-                {trade.createdAt &&
-                !Number.isNaN(new Date(trade.createdAt).getTime()) ? (
-                  <p className="empty-copy">
-                    Created{" "}
-                    {new Intl.DateTimeFormat(undefined, {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    }).format(new Date(trade.createdAt))}
-                  </p>
-                ) : null}
-                {trade.status.toLowerCase() === "pending" &&
-                trade.direction === "incoming" ? (
-                  <div className="hero-actions">
-                    <AsyncButton
-                      type="button"
-                      className="button button-primary"
-                      disabled={pending}
-                      pending={pendingAction === `accept:${trade.id}`}
-                      pendingLabel="Accepting"
-                      icon={<Check aria-hidden="true" />}
-                      onClick={() => respond(trade.id, "accept")}
-                    >
-                      Accept
-                    </AsyncButton>
-                    <AsyncButton
-                      type="button"
-                      className="button button-secondary"
-                      disabled={pending}
-                      pending={pendingAction === `reject:${trade.id}`}
-                      pendingLabel="Declining"
-                      icon={<X aria-hidden="true" />}
-                      onClick={() => respond(trade.id, "reject")}
-                    >
-                      Decline
-                    </AsyncButton>
-                  </div>
-                ) : null}
-                {trade.status.toLowerCase() === "pending" &&
-                trade.direction === "outgoing" ? (
-                  <div className="hero-actions">
-                    <AsyncButton
-                      type="button"
-                      className="button button-secondary"
-                      disabled={pending}
-                      pending={pendingAction === `cancel:${trade.id}`}
-                      pendingLabel="Cancelling"
-                      icon={<X aria-hidden="true" />}
-                      onClick={() => cancel(trade.id)}
-                    >
-                      Cancel offer
-                    </AsyncButton>
-                  </div>
-                ) : null}
-              </ThemedPlayerContainer>
-            ))}
-          </div>
-        ) : (
-          <EconomyEmptyState
-            title="No trade offers yet"
-            description="Find another player above to exchange eligible inventory items or Tokens."
-          />
-        )}
-      </section>
+      <TradeActivity
+        trades={tradeList}
+        counterpartyIdentities={counterpartyIdentities}
+        pending={pending}
+        pendingAction={pendingAction}
+        onRespond={respond}
+        onCancel={cancel}
+      />
     </section>
   );
 }

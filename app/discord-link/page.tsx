@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Link2 } from "lucide-react";
 
-import { AccountNav } from "@/components/account-nav";
 import { SignInRequired } from "@/components/sign-in-required";
 import { PageHeading } from "@/components/ui/page-heading";
 import { PortalShell } from "@/components/ui/portal-shell";
@@ -19,7 +18,6 @@ export default async function DiscordLinkPage() {
   try { link = await getDiscordLinkForSteam(session.steamId); } catch { available = false; }
   return (
     <PortalShell authenticated>
-      <AccountNav profileHref={`/players/${session.steamId}`} themeKey={session.profileThemeKey ?? "default"} />
       <PageHeading
         eyebrow={<><Link2 aria-hidden="true" /> Your accounts</>}
         title="Link Discord"

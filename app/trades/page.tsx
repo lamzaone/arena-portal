@@ -8,6 +8,7 @@ import { createEconomyActionToken, getSession } from "@/lib/auth/session";
 import { getTokenWallet } from "@/lib/data/portal-repository";
 import { getCompletePlayerEconomyInventory } from "@/lib/economy/player-inventory";
 import { getCompletePlayerEconomyTrades } from "@/lib/economy/player-trades";
+import { tradeCounterpartySteamId } from "@/lib/economy/trade-counterparty";
 import { resolvePlayerIdentities } from "@/lib/player-identities";
 
 export default async function TradesPage() {
@@ -20,7 +21,10 @@ export default async function TradesPage() {
     getCompletePlayerEconomyTrades(session.steamId)
   ]);
   const counterpartyIdentities = await resolvePlayerIdentities(
-    trades.trades.map((trade) => ({ steamId: trade.counterpartySteamId })),
+    trades.trades.flatMap((trade) => {
+      const steamId = tradeCounterpartySteamId(trade);
+      return steamId ? [{ steamId }] : [];
+    }),
   );
 
   return <PortalShell authenticated className="tapped-page">

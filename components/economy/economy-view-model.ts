@@ -5,6 +5,7 @@ import {
 import { economyItemDisplayName } from "@/lib/economy/item-display-name";
 import { resolveEconomySellback } from "@/lib/economy/sellback";
 import { tradeWeaponPreviewFields } from "@/lib/economy/trade-preview";
+import { tradeCounterpartySteamId } from "@/lib/economy/trade-counterparty";
 
 export type EconomyItemView = {
   id: string;
@@ -628,15 +629,7 @@ export function economyTrades(value: unknown): EconomyTradeView[] {
       {
         id,
         status: text(firstDefined(record, ["status", "state"]), "pending"),
-        counterpartySteamId: text(
-          firstDefined(record, [
-            "counterpartySteamId",
-            "otherSteamId",
-            "targetSteamId",
-            "ownerSteamId",
-          ]),
-          "Unknown player",
-        ),
+        counterpartySteamId: tradeCounterpartySteamId(record) ?? "Unknown player",
         direction,
         offeredTokens:
           integer(

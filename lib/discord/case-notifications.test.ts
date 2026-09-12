@@ -8,11 +8,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const db = new DatabaseSync(":memory:");
 let failQueue = false;
+const sqliteSql = (sql: string) => sql.replaceAll("<=>", "IS")
+  .replace("ON DUPLICATE KEY UPDATE steam_id = VALUES(steam_id)", "ON CONFLICT (steam_id) DO UPDATE SET steam_id = excluded.steam_id");
 const executor = {
-  async query(sql: string, values: unknown[] = []) { return [db.prepare(sql).all(...values as string[])]; },
+  async query(sql: string, values: unknown[] = []) { return [db.prepare(sqliteSql(sql)).all(...values as string[])]; },
   async execute(sql: string, values: unknown[] = []) {
     if (failQueue && sql.includes("INSERT INTO portal_discord_notifications")) throw new Error("queue unavailable");
-    const result = db.prepare(sql).run(...values as string[]);
+    const result = db.prepare(sqliteSql(sql)).run(...values as string[]);
     return [{ affectedRows: Number(result.changes), insertId: Number(result.lastInsertRowid) }];
   },
   async getConnection() { return this; }, async beginTransaction() { db.exec("BEGIN"); },
@@ -40,7 +42,8 @@ registerHooks({ resolve(specifier, context, next) {
 const { createTicket, createAppeal } = await import("../data/portal-repository.ts");
 db.exec(`
 CREATE TABLE portal_tickets (id INTEGER PRIMARY KEY AUTOINCREMENT, steam_id TEXT, category TEXT, subject TEXT, body TEXT);
-CREATE TABLE portal_ban_appeals (id INTEGER PRIMARY KEY AUTOINCREMENT, steam_id TEXT, ban_id INTEGER, body TEXT);
+CREATE TABLE portal_steam_accounts (steam_id TEXT PRIMARY KEY);
+CREATE TABLE portal_ban_appeals (id INTEGER PRIMARY KEY AUTOINCREMENT, steam_id TEXT, ban_id INTEGER, body TEXT, status TEXT DEFAULT 'submitted', closed_at TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE portal_discord_notifications (event_type TEXT, title TEXT, body TEXT, target_steam_id TEXT, target_path TEXT);
 CREATE TABLE portal_audit_events (actor_type TEXT, actor_id TEXT, action TEXT, target_type TEXT, target_id TEXT, metadata TEXT);
 `);
@@ -50,7 +53,7 @@ test.after(() => { db.close(); if (previous === undefined) delete process.env.DI
 test.beforeEach(() => {
   failQueue = false;
   process.env.DISCORD_NOTIFICATIONS_ENABLED = "true";
-  db.exec("DELETE FROM portal_tickets; DELETE FROM portal_ban_appeals; DELETE FROM portal_discord_notifications; DELETE FROM portal_audit_events;");
+  db.exec("DELETE FROM portal_tickets; DELETE FROM portal_ban_appeals; DELETE FROM portal_steam_accounts; DELETE FROM portal_discord_notifications; DELETE FROM portal_audit_events;");
 });
 
 test("new tickets and appeals enqueue distinct staff alerts with links", async () => {

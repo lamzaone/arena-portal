@@ -1,4 +1,5 @@
 import { parseCaseScreenshots } from "@/lib/cases/evidence";
+import { isOpenAppeal } from "@/lib/cases/appeal-status";
 import { getSession } from "@/lib/auth/session";
 import { addPlayerCaseReply, createAppeal, getAppealEligibility, getPlayerCaseTarget, getPlayerDashboard } from "@/lib/data/portal-repository";
 import { formActionRedirect } from "@/lib/form-action-response";
@@ -18,10 +19,6 @@ function parseCaseId(value: FormDataEntryValue | null) {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
-function isClosedAppeal(status: string) {
-  return ["closed-banned", "closed-unbanned", "closed"].includes(status);
-}
-
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session) return formActionRedirect(request, "/api/auth/steam");
@@ -37,7 +34,7 @@ export async function POST(request: Request) {
       if (!caseId || (!body && !screenshots.length)) return redirect(request, "error", "validation");
       const appeal = await getPlayerCaseTarget("appeal", caseId, session.steamId);
       if (!appeal) return redirect(request, "error", "case");
-      if (isClosedAppeal(appeal.status)) return redirect(request, "error", "closed");
+      if (!isOpenAppeal(appeal.status)) return redirect(request, "error", "closed");
       await addPlayerCaseReply({ caseType: "appeal", caseId, steamId: session.steamId, body, screenshots });
       return redirect(request, "replied");
     }
@@ -47,10 +44,13 @@ export async function POST(request: Request) {
     const activeBan = dashboard.bans.find((ban) => hasActiveBan(ban.expiresAt));
     if (!activeBan) return redirect(request, "error", "not-banned");
     const eligibility = await getAppealEligibility(session.steamId, activeBan.id);
-    if (!eligibility.eligible) return redirect(request, "error", "cooldown");
+    if (!eligibility.eligible) return redirect(request, "error", eligibility.reason ?? "cooldown");
     await createAppeal({ steamId: session.steamId, banId: activeBan.id, body, screenshots });
     return redirect(request, "submitted");
   } catch (error) {
+    if (error instanceof Error && ["open-appeal", "cooldown"].includes(error.message)) {
+      return redirect(request, "error", error.message);
+    }
     const reason = error instanceof Error && ["screenshot", "too-many-screenshots"].includes(error.message) ? "screenshot" : "storage";
     return redirect(request, "error", reason);
   }
