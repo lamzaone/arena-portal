@@ -36,7 +36,7 @@ export async function SiteHeader({
   );
 
   return (
-    <div className="portal-navigation">
+    <div className="portal-navigation" data-theme={globalTheme.key} data-theme-surface="global">
       {/* The route may override the viewer theme when another surface owns the
           full page, such as a viewed player's profile. */}
       <header

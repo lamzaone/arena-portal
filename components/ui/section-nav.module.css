@@ -2,7 +2,8 @@
   min-width: 0;
   margin: 25px 20px 16px;
   overflow-x: auto;
-  border-bottom: 1px solid var(--theme-border);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius);
   scrollbar-color: var(--theme-accent) transparent;
   scrollbar-width: thin;
 }
@@ -12,17 +13,18 @@
 }
 
 .track.track {
+  position: relative;
+  isolation: isolate;
   display: flex;
   width: max-content;
   min-width: 100%;
   max-width: none;
-  gap: 5px;
-  padding: 4px 4px 0;
-  border: 1px solid var(--theme-border);
-  border-bottom: 0;
-  border-radius: var(--theme-radius) var(--theme-radius) 0 0;
-  background: color-mix(in srgb, var(--theme-surface-raised) 84%, transparent);
-  box-shadow: var(--theme-shadow);
+  gap: 4px;
+  padding: 5px;
+  border: 0;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--theme-surface) 90%, transparent);
+  box-shadow: none;
 }
 
 .item.item {
@@ -36,8 +38,7 @@
   gap: 8px;
   padding: 9px 13px;
   border: 0;
-  border-bottom: 1px solid var(--theme-border);
-  border-radius: max(0px, calc(var(--theme-radius) - 1px)) max(0px, calc(var(--theme-radius) - 1px)) 0 0;
+  border-radius: 3px;
   color: var(--theme-text-muted);
   background: transparent;
   box-shadow: none;
@@ -47,23 +48,25 @@
   font-weight: 850;
   letter-spacing: .055em;
   text-transform: uppercase;
-  transition: color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+  transition: color var(--motion-fast) var(--motion-ease), background-color var(--motion-medium) var(--motion-ease), box-shadow var(--motion-medium) var(--motion-ease);
 }
 
 .item.item::after {
   position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
+  right: 13px;
+  bottom: 0;
+  left: 13px;
   height: 2px;
   content: "";
-  background: transparent;
+  background: var(--theme-accent-strong);
+  transform: scaleX(0);
+  transition: transform var(--motion-medium) var(--motion-ease);
 }
 
 .item.item:hover,
 .item.item:focus-visible {
   color: var(--theme-text);
-  background: var(--theme-control-hover);
+  background: transparent;
   outline: 0;
 }
 
@@ -74,13 +77,13 @@
 .item.item[data-active="true"],
 .item.item[aria-selected="true"] {
   color: var(--theme-text);
-  background: color-mix(in srgb, var(--theme-accent) 20%, var(--theme-control-bg));
+  background: transparent;
 }
 
 .item.item[data-active="true"]::after,
 .item.item[aria-selected="true"]::after {
   background: var(--theme-accent-strong);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--theme-accent) 55%, transparent);
+  transform: scaleX(1);
 }
 
 .item svg {

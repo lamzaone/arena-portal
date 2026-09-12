@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import styles from "@/components/ui/section-nav.module.css";
+import { NavigationIndicator } from "@/components/ui/navigation-indicator";
 
 export type SectionNavItem = {
   key: string;
@@ -35,6 +36,7 @@ export function SectionNav({
       aria-label={ariaLabel}
     >
       <div className={styles.track} data-part="track">
+        <NavigationIndicator />
         {items.map((item) => {
           const Icon = item.icon;
           const active = item.key === activeKey;

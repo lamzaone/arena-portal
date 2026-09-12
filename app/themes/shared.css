@@ -27,6 +27,9 @@ body:has(.player-profile-page[data-theme-owner="profile"])
 
 :where([data-theme][data-theme-surface]) {
   color: var(--theme-text);
+  --theme-button-primary-bg: var(--theme-accent-strong);
+  --theme-button-primary-hover: var(--theme-accent-soft);
+  --theme-button-primary-text: var(--theme-page-bg);
 }
 
 /* Only a global boundary owns the opaque page fallback. Profile and compact
@@ -132,8 +135,8 @@ body:has(.player-profile-page[data-theme-owner="profile"])
 :is(
   [data-theme-surface]
 ) :is(.button-primary, .button:is([data-variant="primary"])) {
-  color: var(--theme-page-bg);
-  background: var(--theme-accent-strong);
+  color: var(--theme-button-primary-text);
+  background: var(--theme-button-primary-bg);
 }
 
 :is(
@@ -147,8 +150,8 @@ body:has(.player-profile-page[data-theme-owner="profile"])
   [data-theme-surface]
 ) .button-primary:is(:hover, :focus-visible) {
   border-color: var(--theme-accent-strong);
-  color: var(--theme-page-bg);
-  background-color: var(--theme-accent-soft);
+  color: var(--theme-button-primary-text);
+  background-color: var(--theme-button-primary-hover);
 }
 
 :is(

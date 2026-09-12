@@ -6,25 +6,27 @@
 :root,
 [data-theme="default"],
 .small-profile-theme-default {
-  --default-bg: #050304;
-  --default-surface: #120709;
-  --default-surface-strong: #1b080b;
-  --default-text: #fff5f5;
-  --default-muted: #d2afb4;
-  --default-subtle: #98767b;
-  --default-accent: #e11d48;
-  --default-accent-bright: #ff7185;
-  --default-accent-soft: #ff91a4;
-  --default-accent-text: #ffd1d8;
-  --default-accent-muted: #a98189;
-  --default-border: rgba(255, 91, 108, .18);
-  --default-border-bright: rgba(255, 72, 94, .52);
-  --default-accent-border: rgba(255, 113, 133, .3);
-  --default-accent-surface: rgba(225, 29, 72, .14);
+  /* Crimson, platinum and gunmetal sampled from tapped-emblem.svg.
+     The lit red bevel remains readable on the darker steel surfaces. */
+  --default-bg: #10090c;
+  --default-surface: #171719;
+  --default-surface-strong: #232326;
+  --default-text: #f7f5f4;
+  --default-muted: #c5c6c7;
+  --default-subtle: #97999c;
+  --default-accent: #dc143c;
+  --default-accent-bright: #ef566f;
+  --default-accent-soft: #ee647b;
+  --default-accent-text: #f4c1cb;
+  --default-accent-muted: #b78d96;
+  --default-border: rgba(151, 153, 156, .24);
+  --default-border-bright: rgba(240, 71, 99, .58);
+  --default-accent-border: rgba(220, 20, 60, .42);
+  --default-accent-surface: rgba(220, 20, 60, .14);
   --theme-page-bg: var(--default-bg);
   --theme-surface: var(--default-surface);
   --theme-surface-raised: var(--default-surface-strong);
-  --theme-surface-muted: rgba(15, 3, 6, .8);
+  --theme-surface-muted: rgba(23, 23, 25, .9);
   --theme-text: var(--default-text);
   --theme-text-muted: var(--default-muted);
   --theme-text-subtle: var(--default-subtle);
@@ -38,23 +40,26 @@
   --theme-control: var(--theme-control-bg);
   --theme-focus-ring: var(--default-accent-soft);
   --theme-focus: var(--theme-focus-ring);
-  --theme-control-bg: rgba(18, 7, 9, .86);
-  --theme-control-focus-bg: rgba(27, 8, 11, .96);
+  --theme-control-bg: rgba(23, 23, 25, .96);
+  --theme-control-focus-bg: rgba(35, 35, 38, .98);
   --theme-control-hover: var(--default-accent-surface);
   --theme-control-radius: var(--theme-radius);
+  --theme-button-primary-bg: #dc143c;
+  --theme-button-primary-hover: #ba1032;
+  --theme-button-primary-text: #f7f5f4;
   --theme-placeholder: var(--theme-text-subtle);
-  --theme-avatar-bg: linear-gradient(135deg, #7f102a, #1b0509);
-  --theme-skeleton: linear-gradient(90deg, rgba(255, 113, 133, .08), rgba(255, 113, 133, .18), rgba(255, 113, 133, .08));
+  --theme-avatar-bg: linear-gradient(135deg, #910d28, #171719);
+  --theme-skeleton: linear-gradient(90deg, rgba(151, 153, 156, .08), rgba(216, 215, 215, .18), rgba(151, 153, 156, .08));
   --theme-success: #68e5b3;
   --theme-success-text: #96e8bd;
   --theme-success-border: rgba(104, 229, 179, .3);
   --theme-success-surface: rgba(6, 78, 59, .18);
   --theme-warning: #f0b35a;
-  --theme-danger: #ff7185;
-  --theme-danger-text: #ff9cac;
-  --theme-table-head: rgba(18, 7, 9, .92);
-  --theme-table-row: rgba(15, 3, 6, .8);
-  --theme-table-hover: rgba(225, 29, 72, .1);
+  --theme-danger: #ef566f;
+  --theme-danger-text: #ee647b;
+  --theme-table-head: rgba(35, 35, 38, .96);
+  --theme-table-row: rgba(23, 23, 25, .9);
+  --theme-table-hover: rgba(220, 20, 60, .12);
   --theme-radius: 6px;
   --theme-shadow: 0 12px 34px rgba(0, 0, 0, .22);
 }
@@ -87,15 +92,16 @@ html:has(.player-profile-page[data-theme-owner="profile"].profile-theme-default)
   background-color: var(--default-bg);
 }
 
+html.global-theme-default:not(:has(.player-profile-page[data-theme-owner="profile"])) body,
 body:has(.player-profile-page[data-theme-owner="profile"].profile-theme-default) {
   background:
-    radial-gradient(circle at 78% 6%, rgba(225, 29, 72, .24), transparent 24rem),
-    radial-gradient(circle at 8% 54%, rgba(127, 12, 29, .18), transparent 26rem),
+    radial-gradient(circle at 78% 6%, rgba(220, 20, 60, .14), transparent 24rem),
+    radial-gradient(circle at 8% 54%, rgba(145, 13, 40, .1), transparent 26rem),
     var(--default-bg);
 }
 
 body:has(.player-profile-page[data-theme-owner="profile"].profile-theme-default)::before {
-  background-image: linear-gradient(rgba(255, 118, 132, .045) 1px, transparent 1px);
+  background-image: linear-gradient(rgba(151, 153, 156, .045) 1px, transparent 1px);
 }
 
 body:has(.player-profile-page[data-theme-owner="profile"].profile-theme-default) .cursor-grid-background {
@@ -137,10 +143,48 @@ body:has(.player-profile-page[data-theme-owner="profile"].profile-theme-default)
   [data-theme="default"][data-theme-surface="player-container"]
 ) {
   --player-container-accent: var(--default-accent-bright);
-  --player-container-bg: linear-gradient(125deg, rgba(50, 6, 13, .58), rgba(12, 3, 6, .9));
-  --player-container-hover: linear-gradient(125deg, rgba(72, 8, 20, .72), rgba(18, 4, 8, .96));
-  --player-container-selected: linear-gradient(105deg, rgba(225, 29, 72, .24), rgba(27, 8, 11, .96));
-  --player-container-shadow: inset 3px 0 0 rgba(255, 113, 133, .42);
+  --player-container-bg: linear-gradient(125deg, rgba(48, 48, 50, .76), rgba(23, 23, 25, .96));
+  --player-container-hover: linear-gradient(125deg, rgba(55, 48, 52, .82), rgba(35, 35, 38, .98));
+  --player-container-selected: linear-gradient(105deg, rgba(220, 20, 60, .22), rgba(35, 35, 38, .98));
+  --player-container-shadow: inset 3px 0 0 rgba(151, 153, 156, .56);
   --player-container-hover-shadow: inset 3px 0 0 var(--theme-accent-strong);
   --player-container-selected-shadow: inset 3px 0 0 var(--theme-accent-strong);
+}
+
+/* Legacy homepage artwork predates semantic theme tokens. */
+.global-theme-default .home-page .tapped-hero h1 span {
+  color: var(--default-accent);
+  text-shadow: 0 0 28px rgba(220, 20, 60, .16);
+}
+.global-theme-default .home-page :is(.tapped-lede, .bento-card p, .section-heading > p) {
+  color: var(--default-muted);
+}
+.global-theme-default .home-page :is(.hero-meta, .bento-index) { color: var(--default-subtle); }
+.global-theme-default .home-page .hero-meta i { background: var(--default-accent); box-shadow: 0 0 8px var(--default-accent); }
+.global-theme-default .home-page .bento-card {
+  border-color: var(--default-border);
+  background: linear-gradient(145deg, var(--default-surface-strong), var(--default-surface));
+}
+.global-theme-default .home-page .bento-card:hover {
+  border-color: var(--default-border-bright);
+  background: linear-gradient(145deg, #303032, var(--default-surface));
+  box-shadow: 0 14px 32px #0004, 0 0 24px rgba(220, 20, 60, .08);
+}
+.global-theme-default .home-page .bento-card::after { background: rgba(220, 20, 60, .08); }
+.global-theme-default .home-page .bento-icon {
+  color: var(--default-accent-bright);
+  border-color: var(--default-accent-border);
+  background: var(--default-accent-surface);
+}
+.global-theme-default .home-page :is(.bento-index span, .bento-card h3 span, .bento-link, .rank-link) {
+  color: var(--default-accent-bright);
+}
+
+html.global-theme-default:not(:has(.player-profile-page[data-theme-owner="profile"])) .cursor-grid-background::before,
+body:has(.player-profile-page[data-theme-owner="profile"].profile-theme-default) .cursor-grid-background::before {
+  background-image:
+    linear-gradient(rgba(151, 153, 156, .14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(151, 153, 156, .14) 1px, transparent 1px),
+    linear-gradient(rgba(220, 20, 60, .075) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(220, 20, 60, .075) 1px, transparent 1px);
 }

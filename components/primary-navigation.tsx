@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { NavigationIndicator } from "@/components/ui/navigation-indicator";
 
 import { isPrimaryNavigationLinkActive } from "./primary-navigation-routes";
 
@@ -16,7 +16,7 @@ const primaryLinks = [
 ] as const;
 
 function PrimaryNavigationLinks({ pathname }: { pathname: string | null }) {
-  return primaryLinks.map(({ href, label }) => {
+  return primaryLinks.map(({ href, label }, index) => {
     const active = isPrimaryNavigationLinkActive(pathname, href);
 
     return (
@@ -26,7 +26,8 @@ function PrimaryNavigationLinks({ pathname }: { pathname: string | null }) {
         className={active ? "active" : ""}
         aria-current={active ? "page" : undefined}
       >
-        {label}
+        <span className="nav-index" aria-hidden="true">0{index + 1}</span>
+        <span>{label}</span>
       </Link>
     );
   });
@@ -34,48 +35,65 @@ function PrimaryNavigationLinks({ pathname }: { pathname: string | null }) {
 
 export function PrimaryNavigation() {
   const pathname = usePathname();
-  const menuRef = useRef<HTMLDetailsElement>(null);
-  const previousPathname = useRef(pathname);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const [openedPath, setOpenedPath] = useState(pathname);
+  const menuId = useId();
+  const expanded = open && openedPath === pathname;
+
+  useEffect(() => { setOpen(false); }, [pathname]);
 
   useEffect(() => {
     const menu = menuRef.current;
     if (!menu) return;
-    if (previousPathname.current !== pathname) menu.open = false;
-    previousPathname.current = pathname;
     const closeOutside = (event: PointerEvent) => {
-      if (event.target instanceof Node && !menu.contains(event.target)) menu.open = false;
+      if (event.target instanceof Node && !menu.contains(event.target)) setOpen(false);
     };
     const closeWithEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && menu.open) {
-        menu.open = false;
-        menu.querySelector("summary")?.focus();
+      if (event.key === "Escape" && expanded) {
+        setOpen(false);
+        triggerRef.current?.focus();
       }
     };
     document.addEventListener("pointerdown", closeOutside);
     document.addEventListener("keydown", closeWithEscape);
+    const desktop = window.matchMedia("(min-width: 1101px)");
+    const closeDesktop = () => { if (desktop.matches) setOpen(false); };
+    desktop.addEventListener("change", closeDesktop);
     return () => {
       document.removeEventListener("pointerdown", closeOutside);
       document.removeEventListener("keydown", closeWithEscape);
+      desktop.removeEventListener("change", closeDesktop);
     };
-  }, [pathname]);
+  }, [expanded]);
 
   return (
     <>
       <nav className="main-nav" aria-label="Primary navigation">
+        <NavigationIndicator />
         <PrimaryNavigationLinks pathname={pathname} />
       </nav>
-      <details ref={menuRef} className="mobile-nav">
-        <summary aria-label="Primary navigation menu">
-          <Menu aria-hidden="true" />
-        </summary>
-        <nav aria-label="Primary navigation" onClick={(event) => {
+      <div ref={menuRef} className="mobile-nav" data-open={expanded}>
+        <button
+          ref={triggerRef}
+          className="mobile-nav-trigger"
+          type="button"
+          aria-label={expanded ? "Close navigation menu" : "Open navigation menu"}
+          aria-expanded={expanded}
+          aria-controls={menuId}
+          onClick={() => { setOpenedPath(pathname); setOpen(!expanded); }}
+        >
+          <span /><span />
+        </button>
+        <nav id={menuId} aria-label="Primary navigation" inert={!expanded} onClick={(event) => {
           if (event.target instanceof Element && event.target.closest("a") && menuRef.current) {
-            menuRef.current.open = false;
+            setOpen(false);
           }
         }}>
           <PrimaryNavigationLinks pathname={pathname} />
         </nav>
-      </details>
+      </div>
     </>
   );
 }

@@ -6,6 +6,7 @@
   overflow: hidden;
   pointer-events: none;
   opacity: 0;
+  transition: opacity 180ms ease;
   color: var(--theme-accent-strong, var(--accent-bright, #ff7185));
   background: color-mix(in srgb, var(--theme-surface-raised, #120709) 72%, transparent);
   box-shadow: 0 1px 0 color-mix(in srgb, currentColor 20%, transparent);

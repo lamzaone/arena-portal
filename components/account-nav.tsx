@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Archive, Crosshair, Coins, Link2, Settings2, Shield, ShoppingBag, Ticket, TicketCheck, UserRound } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { NavigationIndicator } from "@/components/ui/navigation-indicator";
+import { isPrimaryNavigationLinkActive } from "./primary-navigation-routes";
 
 const accountLinks = [
   { href: "/inventory", label: "Inventory", icon: Archive },
@@ -23,6 +26,7 @@ type AccountNavProps = {
 
 export function AccountNav({ profileHref, themeKey, settingsActive = false }: AccountNavProps) {
   const pathname = usePathname();
+  const navRef = useRef<HTMLElement>(null);
   const activeHref = settingsActive ? "/settings" : pathname;
   const links = [
     { href: profileHref, label: "Profile", icon: UserRound },
@@ -30,21 +34,32 @@ export function AccountNav({ profileHref, themeKey, settingsActive = false }: Ac
     { href: "/settings", label: "Settings", icon: Settings2 },
   ];
 
+  useEffect(() => {
+    const nav = navRef.current;
+    const current = nav?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!nav || !current) return;
+    // Scroll only the rail, preserving the page's scroll restoration.
+    nav.scrollTo({ left: current.offsetLeft - (nav.clientWidth - current.offsetWidth) / 2, behavior: "instant" });
+  }, [activeHref]);
+
   return (
     <nav
+      ref={navRef}
       className="account-nav"
       aria-label="Account navigation"
       data-theme={themeKey}
       data-theme-surface="global"
     >
+      <NavigationIndicator />
       {links.map(({ href, label, icon: Icon }) => (
         <Link
           key={href}
           href={href}
-          className={activeHref === href ? "active" : ""}
-          aria-current={activeHref === href ? "page" : undefined}
+          className={isPrimaryNavigationLinkActive(activeHref, href) ? "active" : ""}
+          aria-current={isPrimaryNavigationLinkActive(activeHref, href) ? "page" : undefined}
+          data-group-start={href === "/appeals" || href === "/settings" ? "true" : undefined}
         >
-          <Icon aria-hidden="true" /> {label}
+          <Icon aria-hidden="true" /><span>{label}</span>
         </Link>
       ))}
     </nav>

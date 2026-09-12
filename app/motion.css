@@ -1,0 +1,51 @@
+/* Shared motion language: quick feedback, soft landing, short travel. */
+:root {
+  --motion-fast: 160ms;
+  --motion-medium: 260ms;
+  --motion-slow: 420ms;
+  --motion-ease: cubic-bezier(.22, 1, .36, 1);
+  --motion-exit: cubic-bezier(.4, 0, 1, 1);
+  --ui-ease-out: var(--motion-ease);
+}
+
+.portal-content :is(a, button, summary, input, textarea, select) {
+  transition-timing-function: var(--motion-ease);
+  transition-duration: var(--motion-medium);
+}
+.portal-content :is(.button, .mobile-nav-trigger) {
+  transition-property: color, background-color, border-color, box-shadow, translate;
+}
+.portal-content :is(.button, .mobile-nav-trigger):active:not(:disabled) { translate: 0 1px; transition-duration: 90ms; }
+.portal-content :is(a, button) > svg { transition: color var(--motion-fast) ease, transform var(--motion-medium) var(--motion-ease); }
+
+.portal-content :is(.bento-card, .arena-mode-card, .duel-main-card, [data-ui="vip-tier-card"], .economy-item-card, .stat-grid article) {
+  transition-duration: var(--motion-slow);
+  transition-timing-function: var(--motion-ease);
+}
+.portal-content :is(.record-list li, .ranking-table tbody tr, [data-ui="data-table"] tbody tr) {
+  transition: background-color var(--motion-medium) var(--motion-ease), border-color var(--motion-medium) var(--motion-ease);
+}
+.portal-content :is([role="tabpanel"]:not([hidden]), .ui-empty-state) {
+  animation: portal-surface-arrive var(--motion-slow) var(--motion-ease);
+}
+
+@keyframes portal-surface-arrive {
+  from { opacity: .35; }
+  to { opacity: 1; }
+}
+
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .portal-content .button:hover:not(:disabled) { translate: 0 -1px; }
+  .portal-content .button:hover > .lucide-arrow-right { transform: translateX(3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+  }
+  .portal-content :is(.button, .mobile-nav-trigger) { translate: none !important; }
+}

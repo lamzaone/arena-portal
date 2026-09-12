@@ -4,6 +4,7 @@ import { Package, UserRound } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useId, useState } from "react";
 
 import sectionStyles from "@/components/ui/section-nav.module.css";
+import { NavigationIndicator } from "@/components/ui/navigation-indicator";
 
 type ProfileTab = "overview" | "inventory";
 
@@ -62,6 +63,7 @@ export function ProfileTabs({
     <>
       <nav data-ui="section-nav" className={`${sectionStyles.nav} profile-content-tabs`} aria-label="Player profile sections">
         <div className={sectionStyles.track} data-part="track" role="tablist" aria-orientation="horizontal">
+          <NavigationIndicator />
           <button
             className={sectionStyles.item}
             data-part="item"

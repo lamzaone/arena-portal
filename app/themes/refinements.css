@@ -7,7 +7,6 @@
   --ui-motion-exit: 160ms;
 }
 
-:is([data-theme="default"], .global-theme-default) { --default-subtle: #b18e95; }
 :is([data-theme="beta_tester"], .global-theme-beta-tester) { --theme-text-subtle: #95b3c7; --theme-placeholder: #95b3c7; }
 :where([data-theme][data-theme-surface]) { color-scheme: dark; }
 ::selection { color: var(--theme-page-bg); background: var(--theme-accent-soft); }

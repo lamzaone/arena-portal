@@ -78,6 +78,25 @@ export function NavigationProgress() {
   const [active, setActive] = useState(false);
   const [themeKey, setThemeKey] = useState("default");
 
+  useEffect(() => {
+    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (preference.matches) return;
+    // Fade content, leaving the navigation and fixed-position descendants stable.
+    const sections = document.querySelectorAll<HTMLElement>(
+      ".portal-content .shell > :not(.portal-navigation):not(script):not(style)",
+    );
+    const animations = Array.from(sections).map((section, index) => section.animate(
+      [{ opacity: .45 }, { opacity: 1 }],
+      { duration: 360, delay: Math.min(index * 35, 140), fill: "backwards", easing: "cubic-bezier(.22, 1, .36, 1)" },
+    ));
+    const cancel = () => animations.forEach((animation) => animation.cancel());
+    preference.addEventListener("change", cancel);
+    return () => {
+      cancel();
+      preference.removeEventListener("change", cancel);
+    };
+  }, [routeKey]);
+
   const finish = useCallback(() => {
     if (timeout.current !== null) {
       window.clearTimeout(timeout.current);
