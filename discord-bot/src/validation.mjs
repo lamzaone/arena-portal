@@ -10,6 +10,7 @@ export function validateSnapshot(data) {
   for (const group of data.groups) {
     if (!group || !identifier(group.id) || groups.has(group.id) || typeof group.name !== 'string' || !group.name.trim() || !textOrNull(group.color) || typeof group.enabled !== 'boolean' || typeof group.isAdmin !== 'boolean') throw new RuntimeError('Invalid portal group');
     groups.add(group.id);
+    if (group.rankWeight !== undefined && !Number.isFinite(group.rankWeight)) throw new RuntimeError('Invalid portal group rank');
   }
   const mappedGroups = new Set(), mappedRoles = new Set(), users = new Set();
   for (const role of data.roles) {
@@ -19,7 +20,9 @@ export function validateSnapshot(data) {
   for (const member of data.members) {
     if (!member || !isSnowflake(member.discordUserId) || users.has(member.discordUserId) || !Array.isArray(member.groupIds) || member.groupIds.some(id => !groups.has(id))) throw new RuntimeError('Invalid portal member');
     users.add(member.discordUserId);
+    if (member.steamId !== undefined && (typeof member.steamId !== 'string' || !/^7656119\d{10}$/.test(member.steamId))) throw new RuntimeError('Invalid linked Steam identity');
   }
+  if (data.staffRoleId != null && (!isSnowflake(data.staffRoleId) || mappedRoles.has(data.staffRoleId))) throw new RuntimeError('Invalid Staff role mapping');
   return data;
 }
 

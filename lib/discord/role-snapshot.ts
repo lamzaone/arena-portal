@@ -1,6 +1,7 @@
 export type DiscordGroup = {
   id: string; name: string; color: string | null; isAdmin: boolean; enabled: boolean;
   sourceType: "custom" | "admins_core" | "vipcore"; externalKey: string | null;
+  rankWeight?: number;
 };
 type AuthoritySnapshot = {
   available: boolean;
@@ -17,7 +18,7 @@ export async function resolveDiscordMembers(
   readExternal: (steamId: string) => Promise<ExternalMemberships>,
 ) {
   if (!authority.available) throw new Error("Arena identity authority is unavailable.");
-  const result: { discordUserId: string; groupIds: string[] }[] = [];
+  const result: { discordUserId: string; steamId: string; groupIds: string[] }[] = [];
   // Bound cross-database concurrency; do not open one connection per guild member.
   for (let offset = 0; offset < links.length; offset += 4) {
     result.push(...await Promise.all(links.slice(offset, offset + 4).map(async (link) => {
@@ -27,6 +28,7 @@ export async function resolveDiscordMembers(
       const memberships = authority.membershipsBySteamId.get(link.steamId);
       return {
         discordUserId: link.discordUserId,
+        steamId: link.steamId,
         groupIds: groups.filter((group) => {
           if (!group.enabled) return false;
           if (memberships?.has(Number(group.id))) return true;

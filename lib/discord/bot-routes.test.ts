@@ -15,6 +15,8 @@ const state = {
   authority: { available: true, membershipsBySteamId: new Map<string, Map<number, unknown>>(), suppressedLegacyVipSteamIds: new Set<string>() },
   external: { adminGroupNames: ["Admin"], vipGroupNames: [] as string[] },
   externalFailure: null as Error | null,
+  catalogueCalls: 0,
+  catalogueFailure: null as Error | null,
 };
 (globalThis as typeof globalThis & { __discordBotRouteTest: typeof state }).__discordBotRouteTest = state;
 const source = (path: string) => (extname(path) ? [path] : [`${path}.ts`, `${path}.tsx`]).find(existsSync);
@@ -22,6 +24,7 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     const modules: Record<string, string> = {
       "server-only": "export {};",
+      "@/lib/data/identity-catalogue": `export async function ensureIdentityCatalogue(){const state=globalThis.__discordBotRouteTest;state.catalogueCalls++;if(state.catalogueFailure)throw state.catalogueFailure;}`,
       "@/lib/data/database-pools": `export function getPortalDatabasePool(){const state=globalThis.__discordBotRouteTest;state.poolReads++;return state.pool}`,
       "@/lib/data/identity-groups": `export async function getArenaAuthorityMembershipsForPlayers(){return globalThis.__discordBotRouteTest.authority}`,
       "@/lib/data/portal-repository": `export async function getAuthoritativeExternalIdentityMemberships(){const state=globalThis.__discordBotRouteTest;if(state.externalFailure)throw state.externalFailure;return state.external}`,
@@ -63,12 +66,17 @@ function fixture(t: TestContext) {
   state.authority = { available: true, membershipsBySteamId: new Map(), suppressedLegacyVipSteamIds: new Set() };
   state.external = { adminGroupNames: ["Admin"], vipGroupNames: [] };
   state.externalFailure = null;
+  state.catalogueCalls = 0;
+  state.catalogueFailure = null;
   const db = new DatabaseSync(":memory:");
   // The unique keys mirror db/028_discord_bridge.sql. SQLite exercises actual
   // relational effects/rollback; MySQL lock behavior still needs staging coverage.
   db.exec(`
     CREATE TABLE portal_identity_groups (id INTEGER PRIMARY KEY, display_name TEXT, badge_color TEXT, source_type TEXT, external_key TEXT, enabled INTEGER);
     INSERT INTO portal_identity_groups VALUES (1, 'Admin', '#FF8800', 'admins_core', 'Admin', 1), (2, 'Archived', 'invalid', 'custom', NULL, 0);
+    ALTER TABLE portal_identity_groups ADD COLUMN profile_priority INTEGER DEFAULT 0;
+    CREATE TABLE portal_identity_external_group_definitions (group_id INTEGER PRIMARY KEY, rank_weight INTEGER);
+    INSERT INTO portal_identity_external_group_definitions VALUES (1, 80);
     CREATE TABLE portal_discord_links (steam_id TEXT PRIMARY KEY, discord_user_id TEXT UNIQUE);
     CREATE TABLE portal_discord_group_roles (discord_guild_id TEXT, group_id INTEGER, discord_role_id TEXT,
       PRIMARY KEY (discord_guild_id, group_id), UNIQUE (discord_guild_id, discord_role_id));
@@ -80,6 +88,7 @@ function fixture(t: TestContext) {
       discord_message_id TEXT, last_error TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, processed_at TEXT);
   `);
   const sql = (statement: string) => statement.replaceAll("UTC_TIMESTAMP()", "CURRENT_TIMESTAMP")
+    .replaceAll("INSERT IGNORE", "INSERT OR IGNORE")
     .replace(/DATE_ADD\(CURRENT_TIMESTAMP, INTERVAL (\d+) SECOND\)/g, "datetime('now', '+$1 seconds')")
     .replace("DATE_ADD(CURRENT_TIMESTAMP, INTERVAL ? SECOND)", "datetime('now', '+' || ? || ' seconds')")
     .replaceAll(" FOR UPDATE SKIP LOCKED", "").replaceAll(" FOR UPDATE", "");
@@ -127,7 +136,10 @@ test("snapshot returns guild-scoped role mappings, archived groups and effective
   assertNoStore(response);
   const data = await response.json();
   assert.deepEqual(data.roles, [{ groupId: "1", discordRoleId: roleId }]);
-  assert.deepEqual(data.members, [{ discordUserId: userId, groupIds: ["1"] }]);
+  assert.deepEqual(data.members, [{ discordUserId: userId, steamId, groupIds: ["1"] }]);
+  assert.equal(state.catalogueCalls, 1);
+  assert.equal(data.groups[0].rankWeight, 80);
+  assert.equal(data.staffRoleId, null);
   assert.equal(data.groups.length, 2);
   assert.equal(data.groups[0].isAdmin, true);
   assert.equal(data.groups[1].enabled, false);
@@ -137,16 +149,40 @@ test("snapshot returns guild-scoped role mappings, archived groups and effective
 test("unavailable snapshot providers return 503 rather than an empty membership set", async t => {
   const { db, pool } = fixture(t);
   db.prepare("INSERT INTO portal_discord_links VALUES (?, ?)").run(steamId, userId);
-  for (const failure of ["portal", "authority", "external"]) {
+  for (const failure of ["portal", "authority", "external", "catalogue"]) {
     state.pool = failure === "portal" ? null : pool;
     state.authority.available = failure !== "authority";
     state.externalFailure = failure === "external" ? new Error("private database connection details") : null;
+    state.catalogueFailure = failure === "catalogue" ? new Error("private catalogue details") : null;
     const response = await snapshot(request());
     assert.equal(response.status, 503, failure);
     assertNoStore(response);
     const body = await response.text();
     assert.doesNotMatch(body, /private database|"members"/);
   }
+});
+
+test("Staff mapping is persisted separately from real groups with compare-and-swap", async t => {
+  fixture(t);
+  const create = { groupId: "staff", discordRoleId: roleId, previousRoleId: null };
+  assert.equal((await saveRole(request(create))).status, 200);
+  assert.equal((await saveRole(request(create))).status, 200);
+  assert.equal((await saveRole(request({ ...create, discordRoleId: replacementId }))).status, 409);
+  assert.equal((await saveRole(request({ ...create, discordRoleId: replacementId, previousRoleId: roleId }))).status, 200);
+  const data = await (await snapshot(request())).json();
+  assert.equal(data.staffRoleId, replacementId);
+  assert.deepEqual(data.roles, []);
+  assert.equal(data.groups.length, 2);
+});
+
+test("Staff cannot share a Discord role with a portal group and its audit is transactional", async t => {
+  const { db } = fixture(t);
+  assert.equal((await saveRole(request({ groupId: "1", discordRoleId: roleId, previousRoleId: null }))).status, 200);
+  assert.equal((await saveRole(request({ groupId: "staff", discordRoleId: roleId, previousRoleId: null }))).status, 503);
+  assert.equal((await (await snapshot(request())).json()).staffRoleId, null);
+  db.exec("DROP TABLE portal_audit_events");
+  assert.equal((await saveRole(request({ groupId: "staff", discordRoleId: replacementId, previousRoleId: null }))).status, 503);
+  assert.equal((await (await snapshot(request())).json()).staffRoleId, null);
 });
 
 test("role mapping persists once, accepts idempotent retries and rejects stale previousRoleId with 409", async t => {

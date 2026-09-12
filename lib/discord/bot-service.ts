@@ -1,7 +1,8 @@
 import "server-only";
-import type { RowDataPacket } from "mysql2/promise";
+import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { getPortalDatabasePool } from "@/lib/data/database-pools";
 import { getArenaAuthorityMembershipsForPlayers } from "@/lib/data/identity-groups";
+import { ensureIdentityCatalogue } from "@/lib/data/identity-catalogue";
 import { getAuthoritativeExternalIdentityMemberships } from "@/lib/data/portal-repository";
 import { createNotificationRepository } from "./notification-repository";
 import { resolveDiscordMembers, type DiscordGroup } from "./role-snapshot";
@@ -20,9 +21,14 @@ function configuredGuildId() {
 export async function getDiscordBotSnapshot() {
   const pool = discordPortalPool();
   const guildId = configuredGuildId();
+  // Bootstrap the same native Admins.Core/VIP/custom catalogue used by the portal.
+  // Do not publish a partial snapshot when catalogue discovery fails.
+  await ensureIdentityCatalogue(pool);
   const [[groupRows], [linkRows], [roleRows]] = await Promise.all([
-    pool.query<Array<RowDataPacket & { id: string; display_name: string; badge_color: string; source_type: DiscordGroup["sourceType"]; external_key: string | null; enabled: number }>>(
-      "SELECT id, display_name, badge_color, source_type, external_key, enabled FROM portal_identity_groups ORDER BY id",
+    pool.query<Array<RowDataPacket & { id: string; display_name: string; badge_color: string; source_type: DiscordGroup["sourceType"]; external_key: string | null; enabled: number; rank_weight: number }>>(
+      "SELECT g.id, g.display_name, g.badge_color, g.source_type, g.external_key, g.enabled, " +
+      "COALESCE(d.rank_weight, g.profile_priority) AS rank_weight FROM portal_identity_groups g " +
+      "LEFT JOIN portal_identity_external_group_definitions d ON d.group_id = g.id ORDER BY g.id",
     ),
     pool.query<Array<RowDataPacket & { steam_id: string; discord_user_id: string }>>(
       "SELECT steam_id, discord_user_id FROM portal_discord_links ORDER BY steam_id",
@@ -35,36 +41,54 @@ export async function getDiscordBotSnapshot() {
     id: String(row.id), name: row.display_name, color: /^#[0-9a-f]{6}$/i.test(row.badge_color) ? row.badge_color : null,
     sourceType: row.source_type, externalKey: row.external_key,
     isAdmin: row.source_type === "admins_core", enabled: Boolean(Number(row.enabled)),
+    rankWeight: Number(row.rank_weight),
   }));
   const links = linkRows.map((row) => ({ steamId: row.steam_id, discordUserId: row.discord_user_id }));
   const authority = await getArenaAuthorityMembershipsForPlayers(links.map((link) => link.steamId));
   const members = await resolveDiscordMembers(groups, links, authority, getAuthoritativeExternalIdentityMemberships);
-  return { groups, members, roles: roleRows.map((row) => ({ groupId: String(row.group_id), discordRoleId: row.discord_role_id })) };
+  return { groups, members,
+    staffRoleId: roleRows.find(row => String(row.group_id) === "0")?.discord_role_id ?? null,
+    roles: roleRows.filter(row => String(row.group_id) !== "0").map((row) => ({ groupId: String(row.group_id), discordRoleId: row.discord_role_id })) };
 }
 
 export async function saveDiscordGroupRole(input: { groupId: string; discordRoleId: string; previousRoleId: string | null }) {
   const guildId = configuredGuildId();
   const connection = await discordPortalPool().getConnection();
+  // Identity IDs start at 1. Reserve 0 in the existing mapping table for the
+  // derived Staff role, without creating an assignable portal identity group.
+  const groupId = input.groupId === "staff" ? "0" : input.groupId;
   try {
     await connection.beginTransaction();
-    // Serialize writers by the stable portal group, including first mapping creation.
-    const [groups] = await connection.query<RowDataPacket[]>("SELECT id FROM portal_identity_groups WHERE id = ? FOR UPDATE", [input.groupId]);
-    if (!groups.length) throw new Error("Unknown identity group.");
+    let createdStaff = false;
+    if (input.groupId === "staff") {
+      // The unique guild/group key serializes first-time Staff creation too.
+      const [insert] = await connection.execute<ResultSetHeader>(
+        "INSERT IGNORE INTO portal_discord_group_roles (discord_guild_id, group_id, discord_role_id) VALUES (?, ?, ?)",
+        [guildId, groupId, input.discordRoleId],
+      );
+      createdStaff = insert.affectedRows === 1;
+    } else {
+      const [groups] = await connection.query<RowDataPacket[]>("SELECT id FROM portal_identity_groups WHERE id = ? FOR UPDATE", [groupId]);
+      if (!groups.length) throw new Error("Unknown identity group.");
+    }
     const [rows] = await connection.query<Array<RowDataPacket & { discord_role_id: string }>>(
-      "SELECT discord_role_id FROM portal_discord_group_roles WHERE discord_guild_id = ? AND group_id = ? FOR UPDATE", [guildId, input.groupId],
+      "SELECT discord_role_id FROM portal_discord_group_roles WHERE discord_guild_id = ? AND group_id = ? FOR UPDATE", [guildId, groupId],
     );
-    const current = rows[0]?.discord_role_id ?? null;
+    if (input.groupId === "staff" && !rows.length) throw new Error("Staff role is already mapped to another group.");
+    const current = createdStaff ? null : rows[0]?.discord_role_id ?? null;
     if (current !== input.discordRoleId && current !== input.previousRoleId) { await connection.rollback(); return false; }
     if (current !== input.discordRoleId) {
-      if (current === null) {
+      if (createdStaff) {
+        // Already inserted under the same transaction; audit below.
+      } else if (current === null) {
         await connection.execute(
           "INSERT INTO portal_discord_group_roles (discord_guild_id, group_id, discord_role_id) VALUES (?, ?, ?)",
-          [guildId, input.groupId, input.discordRoleId],
+          [guildId, groupId, input.discordRoleId],
         );
       } else {
         await connection.execute(
           "UPDATE portal_discord_group_roles SET discord_role_id = ? WHERE discord_guild_id = ? AND group_id = ?",
-          [input.discordRoleId, guildId, input.groupId],
+          [input.discordRoleId, guildId, groupId],
         );
       }
       await connection.execute(

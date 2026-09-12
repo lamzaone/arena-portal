@@ -14,7 +14,7 @@ test("role membership combines authoritative custom/admin grants and scoped nati
   const result = await resolveDiscordMembers(groups, links, {
     available: true, membershipsBySteamId: new Map([[links[0].steamId, new Map([[3, {}], [4, {}]])]]), suppressedLegacyVipSteamIds: new Set(),
   }, async () => ({ adminGroupNames: ["ADMIN"], vipGroupNames: ["VIP"] }));
-  assert.deepEqual(result, [{ discordUserId: links[0].discordUserId, groupIds: ["1", "2", "3"] }]);
+  assert.deepEqual(result, [{ discordUserId: links[0].discordUserId, steamId: links[0].steamId, groupIds: ["1", "2", "3"] }]);
 });
 test("VIP suppression excludes legacy tiers without removing custom groups", async () => {
   const result = await resolveDiscordMembers(groups, links, {

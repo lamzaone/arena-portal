@@ -17,7 +17,7 @@ const snapshot = () => ({ groups: [{ ...group }], roles: [{ groupId: 'admin', di
 function fakeGuild({ members = [{ id: userId, roles: [extraId] }], roles = [{ id: roleId }] } = {}) {
   const actions = [];
   const roleMap = new Map(roles.map(data => {
-    const role = { name: 'Admin', color: 0xff8800, permissions: { bitfield: 0n }, mentionable: true, editable: true, managed: false, ...data };
+    const role = { name: 'Admin', color: 0xff8800, permissions: { bitfield: 0n }, hoist: true, mentionable: true, editable: true, managed: false, ...data };
     role.edit = async options => { actions.push(['edit', role.id, options]); Object.assign(role, options); return role; };
     role.delete = async () => { actions.push(['delete', role.id]); roleMap.delete(role.id); };
     return [role.id, role];
@@ -36,8 +36,91 @@ function fakeGuild({ members = [{ id: userId, roles: [extraId] }], roles = [{ id
       roleMap.set(role.id, role);
       return role;
     }
-  }, members: { cache: memberMap, fetch: async () => memberMap } };
+  }, members: { cache: memberMap, fetch: async options => options?.user ? memberMap.get(options.user) : memberMap } };
 }
+
+test('self sync does not change any other member and AdminCore roles are hoisted', async () => {
+  const other = '666666666666666666';
+  const guild = fakeGuild({ roles: [{ id: roleId, hoist: false }], members: [{ id: userId, roles: [] }, { id: other, roles: [roleId] }] });
+  const result = await reconcileRoles({ guild, portal: { snapshot: async () => snapshot() }, userId });
+  assert.equal(result.linked, true);
+  assert.equal(guild.members.cache.get(other).roles.cache.has(roleId), true);
+  assert.equal(guild.actions.find(action => action[0] === 'edit')[2].hoist, true);
+});
+
+test('managed roles follow portal rank within their existing slots', async () => {
+  const guild = fakeGuild({ roles: [{ id: roleId, position: 2 }, { id: extraId, position: 5 }] });
+  const data = snapshot(); data.groups[0].rankWeight = 100;
+  data.groups.push({ ...group, id: 'helper', rankWeight: 10 });
+  data.roles.push({ groupId: 'helper', discordRoleId: extraId });
+  guild.roles.setPositions = async values => guild.actions.push(['positions', values]);
+  await reconcileRoles({ guild, portal: { snapshot: async () => data } });
+  assert.deepEqual(guild.actions.find(action => action[0] === 'positions')[1], [
+    { role: extraId, position: 2 }, { role: roleId, position: 5 },
+  ]);
+});
+
+test('Staff is assigned only to active admins while VIP/custom groups and configured permissions are preserved', async () => {
+  const staffId = '777777777777777777', vipId = '888888888888888888', customId = '999999999999999999';
+  const other = '666666666666666666';
+  const guild = fakeGuild({ roles: [{ id: roleId, name: 'outdated', permissions: { bitfield: 8n } },
+    { id: staffId, name: 'Staff', permissions: { bitfield: 32n } }, { id: vipId }, { id: customId }],
+    members: [{ id: userId, roles: [] }, { id: other, roles: [staffId] }] });
+  const data = snapshot(); data.staffRoleId = staffId;
+  data.groups.push({ ...group, id: 'vip', isAdmin: false }, { ...group, id: 'custom', isAdmin: false });
+  data.roles.push({ groupId: 'vip', discordRoleId: vipId }, { groupId: 'custom', discordRoleId: customId });
+  data.members.push({ discordUserId: other, groupIds: ['vip', 'custom'] });
+  await reconcileRoles({ guild, portal: { snapshot: async () => data } });
+  assert.equal(guild.members.cache.get(userId).roles.cache.has(staffId), true);
+  assert.equal(guild.members.cache.get(other).roles.cache.has(staffId), false);
+  assert.equal(guild.members.cache.get(other).roles.cache.has(vipId), true);
+  assert.equal(guild.members.cache.get(other).roles.cache.has(customId), true);
+  assert.equal(guild.roles.cache.get(roleId).permissions.bitfield, 8n);
+  assert.equal(guild.roles.cache.get(staffId).permissions.bitfield, 32n);
+  assert.ok(guild.actions.filter(action => action[0] === 'edit').every(action => !('permissions' in action[2])));
+});
+
+test('new Staff role is saved before assignment and never adopts a same-name role', async () => {
+  const guild = fakeGuild({ roles: [{ id: roleId }, { id: extraId, name: 'Staff' }] });
+  const data = snapshot(); data.staffRoleId = null;
+  await reconcileRoles({ guild, portal: { snapshot: async () => data, saveRole: async (...args) => guild.actions.push(['save', ...args]) } });
+  const create = guild.actions.find(action => action[0] === 'create');
+  assert.equal(create[1].name, 'Staff'); assert.equal(create[1].permissions, 0n);
+  const save = guild.actions.findIndex(action => action[0] === 'save' && action[1] === 'staff');
+  assert.ok(save >= 0);
+  assert.ok(guild.actions.findIndex(action => action[0] === 'add' && action[2] === '555555555555555555') > save);
+});
+
+test('Staff persistence failure rolls back the new role before membership changes', async () => {
+  const guild = fakeGuild(); const data = snapshot(); data.staffRoleId = null;
+  await assert.rejects(reconcileRoles({ guild, portal: { snapshot: async () => data,
+    saveRole: async () => { throw new Error('database offline'); } } }));
+  assert.deepEqual(guild.actions.map(action => action[0]), ['create', 'delete']);
+});
+
+test('disabled admin membership removes Staff even while a VIP membership remains', async () => {
+  const staffId = '777777777777777777';
+  const guild = fakeGuild({ roles: [{ id: roleId }, { id: staffId, name: 'Staff' }, { id: extraId }],
+    members: [{ id: userId, roles: [roleId, staffId, extraId] }] });
+  const data = snapshot(); data.groups[0].enabled = false; data.staffRoleId = staffId;
+  data.groups.push({ ...group, id: 'vip', isAdmin: false });
+  data.roles.push({ groupId: 'vip', discordRoleId: extraId }); data.members[0].groupIds.push('vip');
+  await reconcileRoles({ guild, portal: { snapshot: async () => data } });
+  assert.deepEqual([...guild.members.cache.get(userId).roles.cache.keys()], [extraId]);
+});
+
+test('shutdown after fetching role positions cannot reorder or assign roles', async () => {
+  const controller = new AbortController();
+  const guild = fakeGuild({ roles: [{ id: roleId, position: 2 }, { id: extraId, position: 5 }] });
+  const data = snapshot(); data.groups[0].rankWeight = 100;
+  data.groups.push({ ...group, id: 'helper', rankWeight: 10 });
+  data.roles.push({ groupId: 'helper', discordRoleId: extraId });
+  let fetches = 0;
+  guild.roles.fetch = async () => { if (++fetches === 2) controller.abort(); return guild.roles.cache; };
+  guild.roles.setPositions = async () => assert.fail('reordered during shutdown');
+  await assert.rejects(reconcileRoles({ guild, portal: { snapshot: async () => data }, signal: controller.signal }), { name: 'AbortError' });
+  assert.equal(guild.actions.length, 0);
+});
 
 test('configuration rejects insecure remote HTTP and malformed IDs without exposing secrets', () => {
   const env = { DISCORD_BOT_TOKEN: 'private-token', DISCORD_BRIDGE_SECRET: 'x'.repeat(32), DISCORD_GUILD_ID: guildId, DISCORD_STAFF_CHANNEL_ID: extraId, PORTAL_URL: 'https://arena.example/' };

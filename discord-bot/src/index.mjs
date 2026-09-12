@@ -3,8 +3,8 @@ import { readConfig } from './config.mjs';
 import { createPortalClient } from './portal-client.mjs';
 import { reconcileRoles } from './roles.mjs';
 import { deliverNotifications, resolveAdminRoles } from './notifications.mjs';
-import { handleLink } from './link.mjs';
-import { runLoop } from './scheduler.mjs';
+import { createCommandHandler, registerCommands } from './commands.mjs';
+import { createRoleSync, runLoop } from './scheduler.mjs';
 import { RuntimeError, safeError } from './validation.mjs';
 import { startHealthReporter } from './health.mjs';
 
@@ -19,12 +19,17 @@ async function main() {
   const shutdown = new AbortController();
   let loopTasks = [];
   let stopHealth = () => {};
+  let handleCommand;
+  const commandTasks = new Set();
   const stop = () => shutdown.abort();
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
   client.on(Events.Error, error => logError('Discord client', error));
   client.on(Events.InteractionCreate, interaction => {
-    void handleLink(interaction, { config, portal }).catch(error => logError('Link command', error));
+    if (!handleCommand || shutdown.signal.aborted) return;
+    const task = handleCommand(interaction).catch(error => logError('Slash command', error));
+    commandTasks.add(task);
+    void task.finally(() => commandTasks.delete(task));
   });
   try {
     await new Promise((resolve, reject) => {
@@ -46,14 +51,18 @@ async function main() {
       return permissions;
     };
     channelPermissions();
+    const sync = createRoleSync(async userId => {
+      if (!client.isReady()) throw new RuntimeError('Discord is reconnecting');
+      const result = await reconcileRoles({ guild, portal, userId, signal: shutdown.signal });
+      if (result.added || result.removed) console.info(`[arena-discord] Roles synchronized: ${result.added} added, ${result.removed} removed`);
+      return result;
+    });
+    handleCommand = createCommandHandler({ config, portal, sync });
+    await registerCommands({ rest: client.rest, applicationId: client.application.id, guildId: config.guildId });
+    console.info('[arena-discord] Registered /help, /link, /account, /sync and /sync-all');
     // Verify the bridge contract before starting either background loop.
     await portal.snapshot();
     stopHealth = startHealthReporter({ directory: process.env.ARENA_BOT_HEALTH_DIR, ready: () => client.isReady() && !shutdown.signal.aborted });
-    const sync = async () => {
-      if (!client.isReady()) throw new RuntimeError('Discord is reconnecting');
-      const { added, removed } = await reconcileRoles({ guild, portal });
-      if (added || removed) console.info(`[arena-discord] Roles synchronized: ${added} added, ${removed} removed`);
-    };
     const notify = async () => {
       if (!client.isReady()) throw new RuntimeError('Discord is reconnecting');
       const [snapshot, roles] = await Promise.all([portal.snapshot(), guild.roles.fetch()]);
@@ -69,9 +78,9 @@ async function main() {
   } finally {
     shutdown.abort();
     stopHealth();
-    // Release the Gateway and REST sweepers after in-flight cycles settle.
+    // Manual syncs and link requests must finish their in-flight writes too.
+    await Promise.allSettled([...loopTasks, ...commandTasks]);
     await client.destroy();
-    await Promise.allSettled(loopTasks);
     process.removeListener('SIGINT', stop);
     process.removeListener('SIGTERM', stop);
   }
