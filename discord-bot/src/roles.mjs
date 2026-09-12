@@ -58,7 +58,7 @@ export async function reconcileRoles({ guild, portal, userId, signal }) {
   if (Object.hasOwn(snapshot, 'staffRoleId')) {
     checkRunning();
     let staff = roles.get(staffRoleId);
-    const options = { name: 'Staff', hoist: true, mentionable: true, reason: 'ARENA AdminCore staff membership' };
+    const options = { name: 'TAPPED STAFF', hoist: true, mentionable: true, reason: 'ARENA AdminCore staff membership' };
     if (!staff) {
       staff = await roleOperation('Creating Staff role', () => guild.roles.create({ ...options, permissions: 0n }));
       try { await portal.saveRole('staff', staff.id, staffRoleId ?? null); }

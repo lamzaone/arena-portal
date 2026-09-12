@@ -115,12 +115,13 @@ when the group name or color changes. Admin group roles are mentionable and show
 separately in the member list. Keep the bot's role above all its managed roles.
 If a role is deleted, its replacement starts with zero permissions again.
 
-The bot also creates a separate **Staff** role and assigns it to linked members
+The bot also creates a separate **TAPPED STAFF** role and assigns it to linked members
 with at least one active AdminCore group. VIP/custom membership alone does not
 qualify. It removes Staff when the last admin membership ends or the account is
-unlinked. Staff is mentionable and shown separately; its configured permissions
+unlinked. TAPPED STAFF is mentionable and shown separately; its configured permissions
 are preserved too. The name and membership are managed by the bot. A portal group
-also named Staff remains a distinct group role.
+also named TAPPED STAFF remains a distinct group role. Existing managed Staff roles
+are renamed in place on the next sync, retaining their role ID and permissions.
 
 Staff uses reserved `group_id=0` in the existing Discord mapping table; actual
 portal group IDs start at 1. This requires **no new migration**. Deploy both the

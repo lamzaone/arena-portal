@@ -82,11 +82,11 @@ test('Staff is assigned only to active admins while VIP/custom groups and config
 });
 
 test('new Staff role is saved before assignment and never adopts a same-name role', async () => {
-  const guild = fakeGuild({ roles: [{ id: roleId }, { id: extraId, name: 'Staff' }] });
+  const guild = fakeGuild({ roles: [{ id: roleId }, { id: extraId, name: 'TAPPED STAFF' }] });
   const data = snapshot(); data.staffRoleId = null;
   await reconcileRoles({ guild, portal: { snapshot: async () => data, saveRole: async (...args) => guild.actions.push(['save', ...args]) } });
   const create = guild.actions.find(action => action[0] === 'create');
-  assert.equal(create[1].name, 'Staff'); assert.equal(create[1].permissions, 0n);
+  assert.equal(create[1].name, 'TAPPED STAFF'); assert.equal(create[1].permissions, 0n);
   const save = guild.actions.findIndex(action => action[0] === 'save' && action[1] === 'staff');
   assert.ok(save >= 0);
   assert.ok(guild.actions.findIndex(action => action[0] === 'add' && action[2] === '555555555555555555') > save);
