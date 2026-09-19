@@ -3172,5 +3172,11 @@
     "seen": 1789832157.808746,
     "ast_hash": "af1ff6ebed38294acb0525e26ee51df7",
     "semantic_hash": ""
+  },
+  "docs/redeem-code-management.md": {
+    "mtime": 1789832205.3645217,
+    "seen": 1789833360.5751553,
+    "ast_hash": "5f07f8c7b0671c794f13d30e23d61127",
+    "semantic_hash": ""
   }
 }

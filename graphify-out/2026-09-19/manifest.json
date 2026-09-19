@@ -150,10 +150,10 @@
     "semantic_hash": "6ac40461750ea4cf9611783e029dc848"
   },
   "app/api/admin/redeem-codes/route.ts": {
-    "mtime": 1787862531.3191593,
-    "seen": 1788353546.5674937,
-    "ast_hash": "ae1f92af0863e27f8893b247ccab7933",
-    "semantic_hash": "ae1f92af0863e27f8893b247ccab7933"
+    "mtime": 1789831780.864842,
+    "seen": 1789832157.7444983,
+    "ast_hash": "45564c217d2debf0f8fec98984858d88",
+    "semantic_hash": ""
   },
   "app/api/admin/staff/route.ts": {
     "mtime": 1788210381.315086,
@@ -168,10 +168,10 @@
     "semantic_hash": "0bd64947a7b99b5b8887c199deaf5353"
   },
   "app/api/appeals/route.ts": {
-    "mtime": 1788059268.0795991,
-    "seen": 1788353546.5674963,
-    "ast_hash": "f9a1a0611a299fa15a0f39bcf55e988e",
-    "semantic_hash": "f9a1a0611a299fa15a0f39bcf55e988e"
+    "mtime": 1789167042.2416842,
+    "seen": 1789832157.7447708,
+    "ast_hash": "b28a27ab1f5651a98ac1f9d315c1c5ca",
+    "semantic_hash": ""
   },
   "app/api/auth/logout/route.ts": {
     "mtime": 1788059268.0876658,
@@ -366,9 +366,9 @@
     "semantic_hash": "98c7bcf1377250c2df1b6e8e64738e8a"
   },
   "app/appeals/page.tsx": {
-    "mtime": 1789161677.1053746,
-    "seen": 1789162874.5795932,
-    "ast_hash": "b8a25d8990952eec0195b460b27c3eb4",
+    "mtime": 1789166972.257843,
+    "seen": 1789832157.7521675,
+    "ast_hash": "9ed63aa79d30086309006b5fa14a59a3",
     "semantic_hash": ""
   },
   "app/crates/page.tsx": {
@@ -396,9 +396,9 @@
     "semantic_hash": "4f03cc421c1b01d7d3b4bf0275f96bb0"
   },
   "app/layout.tsx": {
-    "mtime": 1789161689.0189638,
-    "seen": 1789162874.5803132,
-    "ast_hash": "764b1b01f4871f2d3c22dcc39b614018",
+    "mtime": 1789176329.0498655,
+    "seen": 1789832157.752903,
+    "ast_hash": "26b5e44520d5b7556430033d1aa4c249",
     "semantic_hash": ""
   },
   "app/market/page.tsx": {
@@ -414,10 +414,10 @@
     "semantic_hash": ""
   },
   "app/not-found.tsx": {
-    "mtime": 1787957154.2318132,
-    "seen": 1788353546.5675275,
-    "ast_hash": "96e99d96ff917d13e93cd673dab0a234",
-    "semantic_hash": "96e99d96ff917d13e93cd673dab0a234"
+    "mtime": 1789174565.6697018,
+    "seen": 1789832157.7533948,
+    "ast_hash": "5fada056351cb510f50e04e6b912e376",
+    "semantic_hash": ""
   },
   "app/page.tsx": {
     "mtime": 1789161337.1399164,
@@ -462,10 +462,10 @@
     "semantic_hash": ""
   },
   "app/trades/page.tsx": {
-    "mtime": 1788029394.129349,
-    "seen": 1788353546.567536,
-    "ast_hash": "e160818f5cad606f0a43d0c80cae38f1",
-    "semantic_hash": "e160818f5cad606f0a43d0c80cae38f1"
+    "mtime": 1789167904.2281854,
+    "seen": 1789832157.7550457,
+    "ast_hash": "796671786c5eeecad6aa85e70fef7c1f",
+    "semantic_hash": ""
   },
   "app/vip/page.tsx": {
     "mtime": 1789161726.283114,
@@ -480,9 +480,9 @@
     "semantic_hash": ""
   },
   "components/account-nav.tsx": {
-    "mtime": 1789164041.1709695,
-    "seen": 1789164383.1597407,
-    "ast_hash": "dd3c2501e7d448160b64c5dca3635bfd",
+    "mtime": 1789169357.911327,
+    "seen": 1789832157.7559943,
+    "ast_hash": "52ca52ad68c782c20591ac1d397bac0e",
     "semantic_hash": ""
   },
   "components/adaptive-player-hover-card.tsx": {
@@ -540,15 +540,15 @@
     "semantic_hash": ""
   },
   "components/economy/economy-view-model.ts": {
-    "mtime": 1788669399.8131208,
-    "seen": 1789162874.583672,
-    "ast_hash": "b0b6a3e26d5602738fdcf719886e7824",
+    "mtime": 1789167904.2271867,
+    "seen": 1789832157.757718,
+    "ast_hash": "6bcdb07b222911c9bc178b06bd742861",
     "semantic_hash": ""
   },
   "components/economy/inventory-manager.tsx": {
-    "mtime": 1789161361.3552308,
-    "seen": 1789162874.5838277,
-    "ast_hash": "2890bdf749980fbd808fbf3999be694e",
+    "mtime": 1789174565.668201,
+    "seen": 1789832157.7579808,
+    "ast_hash": "0b5fe012a44c370dc3416ffb94d8899e",
     "semantic_hash": ""
   },
   "components/economy/market-discount-announcement.tsx": {
@@ -570,9 +570,9 @@
     "semantic_hash": ""
   },
   "components/economy/redeem-code-admin.tsx": {
-    "mtime": 1789161456.5594058,
-    "seen": 1789162874.5841184,
-    "ast_hash": "a6c2e6f58289ce08b5cc20e738369e80",
+    "mtime": 1789831711.549801,
+    "seen": 1789832157.7589557,
+    "ast_hash": "3ca370c634b7cc4e4ef669424c10dfc8",
     "semantic_hash": ""
   },
   "components/economy/redeem-code-form.tsx": {
@@ -612,9 +612,9 @@
     "semantic_hash": "4aa7f9b3428ff52e82435a2fe625c83b"
   },
   "components/economy/trade-manager.tsx": {
-    "mtime": 1789161361.3572319,
-    "seen": 1789162874.5847266,
-    "ast_hash": "287498830453c1b40520fdfaa7fb4743",
+    "mtime": 1789168068.1594324,
+    "seen": 1789832157.7602682,
+    "ast_hash": "4fcad50d14edd465a7b20c6a6cca653f",
     "semantic_hash": ""
   },
   "components/formatters.ts": {
@@ -648,9 +648,9 @@
     "semantic_hash": ""
   },
   "components/player-profile-page.tsx": {
-    "mtime": 1789162618.9846053,
-    "seen": 1789162874.585697,
-    "ast_hash": "feaf5f3241d69764fa94146c749cd886",
+    "mtime": 1789827873.820116,
+    "seen": 1789832157.7615294,
+    "ast_hash": "01ea7d4ad5285a3a0d531921438192e0",
     "semantic_hash": ""
   },
   "components/player-search-field.tsx": {
@@ -660,9 +660,9 @@
     "semantic_hash": ""
   },
   "components/primary-navigation.tsx": {
-    "mtime": 1789162391.7702837,
-    "seen": 1789162874.585977,
-    "ast_hash": "ec57171cc8917e5f9d121ca250de5651",
+    "mtime": 1789169917.845974,
+    "seen": 1789832157.761967,
+    "ast_hash": "79475e54d18a569563fd63521cda7473",
     "semantic_hash": ""
   },
   "components/profile-inventory-preview.tsx": {
@@ -672,9 +672,9 @@
     "semantic_hash": ""
   },
   "components/profile-settings-form.tsx": {
-    "mtime": 1789161429.7922623,
-    "seen": 1789162874.5859802,
-    "ast_hash": "9cb720debacb263e73a540ac2a09a35e",
+    "mtime": 1789174992.8379278,
+    "seen": 1789832157.7622323,
+    "ast_hash": "3d06601bfc118477563e5483c626ff4f",
     "semantic_hash": ""
   },
   "components/profile-showcases.tsx": {
@@ -684,16 +684,16 @@
     "semantic_hash": "901a642ad5df92c5edc112ddbc5070bb"
   },
   "components/profile-tabs.tsx": {
-    "mtime": 1788060498.9318807,
-    "seen": 1788353546.5675664,
-    "ast_hash": "70a015c95c2c2d7d775c40844e384acc",
-    "semantic_hash": "70a015c95c2c2d7d775c40844e384acc"
+    "mtime": 1789169357.9128268,
+    "seen": 1789832157.7624996,
+    "ast_hash": "eb13ae50529fbf6b0cdf94aa86214951",
+    "semantic_hash": ""
   },
   "components/profile-theme-slots.tsx": {
-    "mtime": 1788031454.6630647,
-    "seen": 1788353546.567567,
-    "ast_hash": "523ce8fd1721deb59fe372127357497a",
-    "semantic_hash": "523ce8fd1721deb59fe372127357497a"
+    "mtime": 1789177610.7787714,
+    "seen": 1789832157.7625027,
+    "ast_hash": "c692601ca8fb34e96a264d03a0654f43",
+    "semantic_hash": ""
   },
   "components/profile-theme-surface-badge.tsx": {
     "mtime": 1788057556.9162977,
@@ -714,9 +714,9 @@
     "semantic_hash": ""
   },
   "components/site-header.tsx": {
-    "mtime": 1789161877.519858,
-    "seen": 1789162874.586703,
-    "ast_hash": "052be9ba29cbcf584de8a1d3ca12565f",
+    "mtime": 1789174203.2913852,
+    "seen": 1789832157.7632244,
+    "ast_hash": "9cdd586e752d6c9842091973a71ba5b4",
     "semantic_hash": ""
   },
   "components/staff-submenu.tsx": {
@@ -744,9 +744,9 @@
     "semantic_hash": "6e792dfae7ca1aa0d30418edc3db89e3"
   },
   "components/theme-runtime-assets.tsx": {
-    "mtime": 1788644610.7236207,
-    "seen": 1789162874.587197,
-    "ast_hash": "4821ce1ba158c532476d26300b5b93b2",
+    "mtime": 1789177610.7782693,
+    "seen": 1789832157.763765,
+    "ast_hash": "637bc90d44e668cadb8c45cdc44b1ccb",
     "semantic_hash": ""
   },
   "components/ui/admin-page-header.tsx": {
@@ -780,10 +780,10 @@
     "semantic_hash": "8ac1da2c4256c530b318a92466f6e176"
   },
   "components/ui/navigation-progress.tsx": {
-    "mtime": 1788060498.92938,
-    "seen": 1788353546.5675786,
-    "ast_hash": "d0cd6a6744719f7164fc4e6d8feb8ea0",
-    "semantic_hash": "d0cd6a6744719f7164fc4e6d8feb8ea0"
+    "mtime": 1789169926.1220126,
+    "seen": 1789832157.7646282,
+    "ast_hash": "4868d02061b874d8cf9d76c18ba63a5a",
+    "semantic_hash": ""
   },
   "components/ui/page-heading.tsx": {
     "mtime": 1788049052.8709924,
@@ -822,10 +822,10 @@
     "semantic_hash": ""
   },
   "components/ui/section-nav.tsx": {
-    "mtime": 1788048945.5429683,
-    "seen": 1788353546.567583,
-    "ast_hash": "b7aa3a785c6cdc254efa645eb8575be8",
-    "semantic_hash": "b7aa3a785c6cdc254efa645eb8575be8"
+    "mtime": 1789169357.9123273,
+    "seen": 1789832157.7658029,
+    "ast_hash": "ba3d341ab706553522bc35b2e1033108",
+    "semantic_hash": ""
   },
   "components/ui/server-search-field.tsx": {
     "mtime": 1788048397.020415,
@@ -1158,9 +1158,9 @@
     "semantic_hash": "ef8611512f9cda580c7ee968d86e5169"
   },
   "lib/data/portal-repository.ts": {
-    "mtime": 1789164141.3277977,
-    "seen": 1789164383.1791167,
-    "ast_hash": "d86db436294b7dcbe6ad70d70a920ae4",
+    "mtime": 1789831780.8638422,
+    "seen": 1789832157.7732418,
+    "ast_hash": "3af98f4a7a430484c0dbf72e624ae3c1",
     "semantic_hash": ""
   },
   "lib/data/staff-admin-memberships.ts": {
@@ -1374,10 +1374,10 @@
     "semantic_hash": ""
   },
   "lib/themes/beta-tester.ts": {
-    "mtime": 1788057319.8096247,
-    "seen": 1788353546.5676677,
-    "ast_hash": "df3c2eff21c372351bbfa314fe2ce039",
-    "semantic_hash": "df3c2eff21c372351bbfa314fe2ce039"
+    "mtime": 1789174760.5375793,
+    "seen": 1789832157.7935562,
+    "ast_hash": "ddab6fea631daa2682f748d4b47c2a97",
+    "semantic_hash": ""
   },
   "lib/themes/default.ts": {
     "mtime": 1788057249.0336795,
@@ -1386,9 +1386,9 @@
     "semantic_hash": "1acc173ea3579a3885123760ad4f22a4"
   },
   "lib/themes/registry.ts": {
-    "mtime": 1788644610.722621,
-    "seen": 1789162874.6012301,
-    "ast_hash": "4d31080353ebbd77cc538bc105e3c853",
+    "mtime": 1789176329.047855,
+    "seen": 1789832157.7938488,
+    "ast_hash": "191394fcb4a5e98b3e7eb92212fae0f2",
     "semantic_hash": ""
   },
   "lib/themes/runtime.ts": {
@@ -1398,15 +1398,15 @@
     "semantic_hash": "be2511f486d8e31d2ab788aab65e80a9"
   },
   "lib/themes/tap-god.ts": {
-    "mtime": 1788057319.8101244,
-    "seen": 1788353546.5676723,
-    "ast_hash": "b2b6c9895cfca7fe1421127c28c7446c",
-    "semantic_hash": "b2b6c9895cfca7fe1421127c28c7446c"
+    "mtime": 1789174760.538079,
+    "seen": 1789832157.7940032,
+    "ast_hash": "66088c71fde1526d88f18efd9467c7bd",
+    "semantic_hash": ""
   },
   "lib/themes/types.ts": {
-    "mtime": 1788644610.7211213,
-    "seen": 1789162874.6016161,
-    "ast_hash": "f3fdac7e03f532221d709b0012b828a4",
+    "mtime": 1789177610.7757602,
+    "seen": 1789832157.794005,
+    "ast_hash": "4d51b9ff3b97cbf9abc618481488028d",
     "semantic_hash": ""
   },
   "lib/vip-perks/format.ts": {
@@ -1416,8 +1416,8 @@
     "semantic_hash": "4f28624df5517a83b4b9c21a922c0d3d"
   },
   "next-env.d.ts": {
-    "mtime": 1789162845.4030652,
-    "seen": 1789162874.601803,
+    "mtime": 1789832093.210478,
+    "seen": 1789832157.7941415,
     "ast_hash": "b698cdd97fe8e3bd16dcd74899ad7cef",
     "semantic_hash": ""
   },
@@ -1428,9 +1428,9 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1789164326.8251324,
-    "seen": 1789164383.1996026,
-    "ast_hash": "8dbf71cc3fbc0ce151cb9c4b33517c54",
+    "mtime": 1789832069.3524015,
+    "seen": 1789832157.794483,
+    "ast_hash": "f62ce7239791ac60b33787b55740720d",
     "semantic_hash": ""
   },
   "scripts/create-logical-snapshot.mjs": {
@@ -1488,15 +1488,15 @@
     "semantic_hash": "dc8ccd51ac8883a80bb2853caabdad46"
   },
   "docs/discord-bot-plan.md": {
-    "mtime": 1789164326.8271382,
-    "seen": 1789164383.2061145,
-    "ast_hash": "6c020a7efb62c35fb72c02a069d30276",
+    "mtime": 1789184492.5683093,
+    "seen": 1789832157.800563,
+    "ast_hash": "2fe455850907c444b053b7eed1e35dc4",
     "semantic_hash": ""
   },
   "docs/theme-system.md": {
-    "mtime": 1789165004.0044222,
-    "seen": 1789165078.5406559,
-    "ast_hash": "6c99f74c8ec641a13958f730fd7dcc00",
+    "mtime": 1789176331.367202,
+    "seen": 1789832157.8030407,
+    "ast_hash": "9160f4a7c4830fb4245dfbf82f43c95f",
     "semantic_hash": ""
   },
   "docs/vip-perks.md": {
@@ -1944,9 +1944,9 @@
     "semantic_hash": ""
   },
   "components/rank-theme-background.tsx": {
-    "mtime": 1788644610.7231221,
-    "seen": 1789162874.5865407,
-    "ast_hash": "0b8ee04a41aeb51d544806e09c620ffa",
+    "mtime": 1789174184.3061075,
+    "seen": 1789832157.762759,
+    "ast_hash": "836f79382af6c78091edbb58111645c8",
     "semantic_hash": ""
   },
   "components/ui/confirm-submit-button.tsx": {
@@ -2352,15 +2352,15 @@
     "semantic_hash": ""
   },
   "lib/themes/ranks.ts": {
-    "mtime": 1788645475.4535477,
-    "seen": 1789162874.601226,
-    "ast_hash": "59e19de15f1cd4da2d93b31253c46c8e",
+    "mtime": 1789174760.5365784,
+    "seen": 1789832157.793844,
+    "ast_hash": "4dc5d4aef3bac55946e1e64b363c4383",
     "semantic_hash": ""
   },
   "lib/themes/registry.test.ts": {
-    "mtime": 1788645673.2366104,
-    "seen": 1789162874.601228,
-    "ast_hash": "e8e012d8c1d0c2457334303eb34b48f8",
+    "mtime": 1789176284.646704,
+    "seen": 1789832157.7938468,
+    "ast_hash": "62fadb8a7bf924c82c04fff62378b404",
     "semantic_hash": ""
   },
   "open-next.config.ts": {
@@ -2406,15 +2406,15 @@
     "semantic_hash": ""
   },
   "scripts/hosting/deploy.sh": {
-    "mtime": 1788681014.4159122,
-    "seen": 1789162874.6020646,
-    "ast_hash": "7f5aa68e9f0e3282585d0465cd3c555c",
+    "mtime": 1789179066.852655,
+    "seen": 1789832157.7956786,
+    "ast_hash": "6ed64bb0ca085cde3bc4777d73dff4bf",
     "semantic_hash": ""
   },
   "scripts/hosting/deploy.test.py": {
-    "mtime": 1788680948.3935096,
-    "seen": 1789162874.6020658,
-    "ast_hash": "8f71961a6dce99efd5f32fbc8c5a4bb0",
+    "mtime": 1789179014.2367544,
+    "seen": 1789832157.7956803,
+    "ast_hash": "c89b868f6d109eb874f56ccf94262377",
     "semantic_hash": ""
   },
   "scripts/hosting/package.sh": {
@@ -2556,9 +2556,9 @@
     "semantic_hash": ""
   },
   "docs/freakhosting-cicd.md": {
-    "mtime": 1788727884.0044467,
-    "seen": 1789162874.6036668,
-    "ast_hash": "2291b783cb3a0ea488bd5e43999446a9",
+    "mtime": 1789179271.8385115,
+    "seen": 1789832157.8005652,
+    "ast_hash": "b46fce2257bcfe84d09012d03ef213ac",
     "semantic_hash": ""
   },
   "docs/freakhosting-deployment.md": {
@@ -2628,9 +2628,9 @@
     "semantic_hash": ""
   },
   "docs/ui-review-public.md": {
-    "mtime": 1789165665.255059,
-    "seen": 1789165711.6011543,
-    "ast_hash": "aeb0b6da60f87bf2c59d7c64f0d114c8",
+    "mtime": 1789165833.1915498,
+    "seen": 1789832157.8033109,
+    "ast_hash": "39ffbb6507f0276ba1b76cf5e5d40ac9",
     "semantic_hash": ""
   },
   "docs/ui-review-staff.md": {
@@ -2754,21 +2754,21 @@
     "semantic_hash": ""
   },
   "app/api/discord/bot/notifications/route.ts": {
-    "mtime": 1789163997.8310285,
-    "seen": 1789164383.147585,
-    "ast_hash": "c6ed19908570086e952bf5d73eae95eb",
+    "mtime": 1789182171.7633083,
+    "seen": 1789832157.7457025,
+    "ast_hash": "65c12a120f4eb29648be04dcdaa3350a",
     "semantic_hash": ""
   },
   "app/api/discord/bot/roles/route.ts": {
-    "mtime": 1789163997.8295288,
-    "seen": 1789164383.147587,
-    "ast_hash": "e95b419b8f55b7dbf16a2c315823ad11",
+    "mtime": 1789182171.7648087,
+    "seen": 1789832157.745704,
+    "ast_hash": "3b2334477953c9a1e5bd530266c991f7",
     "semantic_hash": ""
   },
   "app/api/discord/bot/snapshot/route.ts": {
-    "mtime": 1789163997.8290296,
-    "seen": 1789164383.1475885,
-    "ast_hash": "58ec534c3f4b781e8dd53821f909f79f",
+    "mtime": 1789182171.7638092,
+    "seen": 1789832157.7457063,
+    "ast_hash": "832695fe51705f795bd6113cbef8654a",
     "semantic_hash": ""
   },
   "app/api/discord/link/route.ts": {
@@ -2784,9 +2784,9 @@
     "semantic_hash": ""
   },
   "app/discord-link/page.tsx": {
-    "mtime": 1789164041.1679535,
-    "seen": 1789164383.1558716,
-    "ast_hash": "824d0641eecdedd21494d153252ecf70",
+    "mtime": 1789166694.8323781,
+    "seen": 1789832157.7525995,
+    "ast_hash": "30405dcf6038cf47d5825a55196f8770",
     "semantic_hash": ""
   },
   "discord-bot/package.json": {
@@ -2802,15 +2802,15 @@
     "semantic_hash": ""
   },
   "discord-bot/src/config.mjs": {
-    "mtime": 1789163953.8581786,
-    "seen": 1789164383.173273,
-    "ast_hash": "dda344a3bb3e77558567a067d496c696",
+    "mtime": 1789219378.7702923,
+    "seen": 1789832157.7668824,
+    "ast_hash": "bd4cec0ca10ec1cb1ef52e0cd35c804f",
     "semantic_hash": ""
   },
   "discord-bot/src/index.mjs": {
-    "mtime": 1789164325.7764287,
-    "seen": 1789164383.1732745,
-    "ast_hash": "22ba50a1f49e4dfe8dce465fd40a2419",
+    "mtime": 1789219497.6772566,
+    "seen": 1789832157.766885,
+    "ast_hash": "2a298b5be90201e7069b8e16298f24e9",
     "semantic_hash": ""
   },
   "discord-bot/src/link.mjs": {
@@ -2820,45 +2820,45 @@
     "semantic_hash": ""
   },
   "discord-bot/src/notifications.mjs": {
-    "mtime": 1789163953.8601797,
-    "seen": 1789164383.173278,
-    "ast_hash": "8f7d737aeae7defed7b56de7c72d8d54",
+    "mtime": 1789219378.7713366,
+    "seen": 1789832157.767021,
+    "ast_hash": "94d73074f587fba627094594e8e8f108",
     "semantic_hash": ""
   },
   "discord-bot/src/portal-client.mjs": {
-    "mtime": 1789163993.5314465,
-    "seen": 1789164383.1732802,
-    "ast_hash": "ec4cf8da0b8587843a355f2493e56904",
+    "mtime": 1789182129.5871367,
+    "seen": 1789832157.767023,
+    "ast_hash": "fd7a10b8a256809961d2f9783334df8d",
     "semantic_hash": ""
   },
   "discord-bot/src/register.mjs": {
-    "mtime": 1789164128.8114989,
-    "seen": 1789164383.1732824,
-    "ast_hash": "73c8994b8c11d02accc76f5ef13199c0",
+    "mtime": 1789180897.9484088,
+    "seen": 1789832157.7670248,
+    "ast_hash": "30e728eb1e6eb5fe9bc8fe3385ae2e2d",
     "semantic_hash": ""
   },
   "discord-bot/src/roles.mjs": {
-    "mtime": 1789163993.532962,
-    "seen": 1789164383.1732843,
-    "ast_hash": "ee94f6c316633f348f27205079f98e9a",
+    "mtime": 1789219378.7755375,
+    "seen": 1789832157.7670262,
+    "ast_hash": "a0ddea74e760ade1a022f7ed4a88a365",
     "semantic_hash": ""
   },
   "discord-bot/src/scheduler.mjs": {
-    "mtime": 1789164128.8074992,
-    "seen": 1789164383.173286,
-    "ast_hash": "b10c3c377db89f30b2623391cffd0a99",
+    "mtime": 1789219378.7744937,
+    "seen": 1789832157.7670276,
+    "ast_hash": "2a72051239d3a009f03629e10bd24c71",
     "semantic_hash": ""
   },
   "discord-bot/src/validation.mjs": {
-    "mtime": 1789164244.4485292,
-    "seen": 1789164383.1732879,
-    "ast_hash": "ca1cb81f4228e9c77bcb00a411551085",
+    "mtime": 1789181065.8399658,
+    "seen": 1789832157.7670288,
+    "ast_hash": "18d781fa9a1d976b28c2f9af5a32ab86",
     "semantic_hash": ""
   },
   "discord-bot/test/runtime.test.mjs": {
-    "mtime": 1789164217.7905397,
-    "seen": 1789164383.1732895,
-    "ast_hash": "b584d20c4b2022771905bc8906922af0",
+    "mtime": 1789219531.6702862,
+    "seen": 1789832157.767033,
+    "ast_hash": "926962339837c4c70d0f6e00838139e1",
     "semantic_hash": ""
   },
   "discord-bot/test/scheduler.test.mjs": {
@@ -2886,15 +2886,15 @@
     "semantic_hash": ""
   },
   "lib/discord/bot-service.ts": {
-    "mtime": 1789164416.2602584,
-    "seen": 1789165078.5124726,
-    "ast_hash": "29550baacd21ee84dc2720cfe0386522",
+    "mtime": 1789181065.836966,
+    "seen": 1789832157.7757125,
+    "ast_hash": "e8023c2ce53b81c66557af567037f6fa",
     "semantic_hash": ""
   },
   "lib/discord/case-notifications.test.ts": {
-    "mtime": 1789164083.7579863,
-    "seen": 1789164383.1805787,
-    "ast_hash": "c27bfa94533e403ffbfb59f6581fdcb9",
+    "mtime": 1789167122.6148088,
+    "seen": 1789832157.7757146,
+    "ast_hash": "571e4911931d1e95bebfb918dfa5cd22",
     "semantic_hash": ""
   },
   "lib/discord/link-http.ts": {
@@ -2934,33 +2934,33 @@
     "semantic_hash": ""
   },
   "lib/discord/notification-repository.test.ts": {
-    "mtime": 1789163805.0867863,
-    "seen": 1789164383.1805913,
-    "ast_hash": "44daf86a6ab6282fe73b1026e1745318",
+    "mtime": 1789176769.205339,
+    "seen": 1789832157.7766294,
+    "ast_hash": "582ff498aba676f14ab57f978c4f1c27",
     "semantic_hash": ""
   },
   "lib/discord/notification-repository.ts": {
-    "mtime": 1789163872.6298456,
-    "seen": 1789164383.180593,
-    "ast_hash": "4effc46ca30a4a8294efaa26d44e7656",
+    "mtime": 1789176786.7612045,
+    "seen": 1789832157.776632,
+    "ast_hash": "565ef12978379de8b19af1e32327adea",
     "semantic_hash": ""
   },
   "lib/discord/role-snapshot.test.ts": {
-    "mtime": 1789163872.630845,
-    "seen": 1789164383.1805944,
-    "ast_hash": "f8d09acae02c19b31ef604cfdd4b505a",
+    "mtime": 1789181014.196898,
+    "seen": 1789832157.7766342,
+    "ast_hash": "4077c5cab2a467262e4c4d108cc62ce0",
     "semantic_hash": ""
   },
   "lib/discord/role-snapshot.ts": {
-    "mtime": 1789163997.8265276,
-    "seen": 1789164383.1805959,
-    "ast_hash": "81077754dd8efe09291ab2a622fcc32e",
+    "mtime": 1789181065.8389645,
+    "seen": 1789832157.776636,
+    "ast_hash": "f1472f7a2c64ced9da055875a998a1f0",
     "semantic_hash": ""
   },
   "discord-bot/README.md": {
-    "mtime": 1789164128.832033,
-    "seen": 1789164383.2057576,
-    "ast_hash": "79d54a15cdae6740940071628e27374a",
+    "mtime": 1789219437.6023104,
+    "seen": 1789832157.8002915,
+    "ast_hash": "f81a5f5c70942cf3978e435ca64d305d",
     "semantic_hash": ""
   },
   "docs/superpowers/plans/2026-09-12-discord-bridge.md": {
@@ -2970,15 +2970,207 @@
     "semantic_hash": ""
   },
   "lib/discord/bot-routes.test.ts": {
-    "mtime": 1789164532.794998,
-    "seen": 1789165078.5124693,
-    "ast_hash": "798725e224acc6884537b0d5f924b4c6",
+    "mtime": 1789181316.8726857,
+    "seen": 1789832157.7757108,
+    "ast_hash": "d1a9ac4dd9dbaf90e245a6fbaeb9ee82",
     "semantic_hash": ""
   },
   ".github/workflows/discord-bot.yml": {
-    "mtime": 1789164416.260757,
-    "seen": 1789165078.5365667,
-    "ast_hash": "3b90534a722b12334b1a4239da49bc2c",
+    "mtime": 1789179066.8536563,
+    "seen": 1789832157.7993903,
+    "ast_hash": "72938e13be6c61749ecfeded24cc6c3b",
+    "semantic_hash": ""
+  },
+  "app/api/admin/redeem-codes/route.test.mjs": {
+    "mtime": 1789831845.589189,
+    "seen": 1789832157.7444954,
+    "ast_hash": "d307cb3649a2e8057c30b8e5e2c17ec9",
+    "semantic_hash": ""
+  },
+  "app/api/appeals/route.test.ts": {
+    "mtime": 1789166978.9836397,
+    "seen": 1789832157.744769,
+    "ast_hash": "8939cfe1f2194cb987b904e9fa97e712",
+    "semantic_hash": ""
+  },
+  "components/economy/redeem-code-admin.browser.test.mjs": {
+    "mtime": 1789831952.3662066,
+    "seen": 1789832157.7589533,
+    "ast_hash": "7e59f1ad0e1ed6d2d5f53ce5ff0a5cb8",
+    "semantic_hash": ""
+  },
+  "components/economy/redeem-code-quantities.test.ts": {
+    "mtime": 1789831602.1218858,
+    "seen": 1789832157.7590888,
+    "ast_hash": "61a345a080781adf77e17a5391a6767c",
+    "semantic_hash": ""
+  },
+  "components/economy/redeem-code-quantities.ts": {
+    "mtime": 1789831659.866885,
+    "seen": 1789832157.7590904,
+    "ast_hash": "b027e3eea495ea039727bb4039c2f364",
+    "semantic_hash": ""
+  },
+  "components/economy/trade-activity.tsx": {
+    "mtime": 1789168003.1501656,
+    "seen": 1789832157.7602663,
+    "ast_hash": "18c8fd168a359f990a6069f27f49a8c8",
+    "semantic_hash": ""
+  },
+  "components/profile-moderation-history.tsx": {
+    "mtime": 1789167018.7568035,
+    "seen": 1789832157.762229,
+    "ast_hash": "b13e390563150243505a2813e9fb5453",
+    "semantic_hash": ""
+  },
+  "components/rank-theme-geometry.tsx": {
+    "mtime": 1789174184.3056068,
+    "seen": 1789832157.762761,
+    "ast_hash": "fc41acf52b1f4c72c5da91c9a5f67eeb",
+    "semantic_hash": ""
+  },
+  "components/shadow-theme-background.tsx": {
+    "mtime": 1789177610.7772694,
+    "seen": 1789832157.7629993,
+    "ast_hash": "ac0af6690d421b85f2d1cc941bb18390",
+    "semantic_hash": ""
+  },
+  "components/ui/navigation-indicator.tsx": {
+    "mtime": 1789169720.838123,
+    "seen": 1789832157.7646263,
+    "ast_hash": "d52280741ac2ecf95a315212e73aaae4",
+    "semantic_hash": ""
+  },
+  "discord-bot/hosting/activate.sh": {
+    "mtime": 1789179389.644104,
+    "seen": 1789832157.766582,
+    "ast_hash": "90713d6e522807603135dc4e806fff52",
+    "semantic_hash": ""
+  },
+  "discord-bot/hosting/deployment.test.py": {
+    "mtime": 1789179389.6456125,
+    "seen": 1789832157.7665844,
+    "ast_hash": "e80980ab45fb4d149e906a4964506597",
+    "semantic_hash": ""
+  },
+  "discord-bot/hosting/package.sh": {
+    "mtime": 1789178987.651939,
+    "seen": 1789832157.7665858,
+    "ast_hash": "75d23ab4763f082b805870b8f4d74f5e",
+    "semantic_hash": ""
+  },
+  "discord-bot/hosting/start-hosting.sh": {
+    "mtime": 1789178987.6524417,
+    "seen": 1789832157.7665868,
+    "ast_hash": "e38ef39a62f999a3ca5531d99c4914b8",
+    "semantic_hash": ""
+  },
+  "discord-bot/src/automatic-roles.mjs": {
+    "mtime": 1789219378.7734332,
+    "seen": 1789832157.7668796,
+    "ast_hash": "3bf55fa776dc1cd0a409b16cdc6434c7",
+    "semantic_hash": ""
+  },
+  "discord-bot/src/commands.mjs": {
+    "mtime": 1789180897.9469025,
+    "seen": 1789832157.7668805,
+    "ast_hash": "16fed7aed25d9571144566da0cfa9e43",
+    "semantic_hash": ""
+  },
+  "discord-bot/src/health.mjs": {
+    "mtime": 1789178987.6479359,
+    "seen": 1789832157.7668836,
+    "ast_hash": "5422cfc13f7c9d827238587fbc8b4b17",
+    "semantic_hash": ""
+  },
+  "discord-bot/test/automatic-roles.test.mjs": {
+    "mtime": 1789219531.6720898,
+    "seen": 1789832157.7670298,
+    "ast_hash": "1ad86ebe2b74a29c13715c113f897da8",
+    "semantic_hash": ""
+  },
+  "discord-bot/test/commands.test.mjs": {
+    "mtime": 1789180814.8012626,
+    "seen": 1789832157.7670307,
+    "ast_hash": "b93b234857aab5b18bd6fdb25ee7b80c",
+    "semantic_hash": ""
+  },
+  "discord-bot/test/health.test.mjs": {
+    "mtime": 1789178884.5071254,
+    "seen": 1789832157.767032,
+    "ast_hash": "b822c36b61d14b8f1c9681a1ffaaf16c",
+    "semantic_hash": ""
+  },
+  "lib/cases/appeal-status.ts": {
+    "mtime": 1789167042.2376826,
+    "seen": 1789832157.7687447,
+    "ast_hash": "a0855000f81534f06151651b2289baef",
+    "semantic_hash": ""
+  },
+  "lib/data/appeals.test.ts": {
+    "mtime": 1789166924.2550359,
+    "seen": 1789832157.7700877,
+    "ast_hash": "f8accfe9a3e54438425d37fa0f63821b",
+    "semantic_hash": ""
+  },
+  "lib/data/lifetime-stats.test.mjs": {
+    "mtime": 1789827831.6608055,
+    "seen": 1789832157.7727985,
+    "ast_hash": "c7e7bf89e2c6d7f6bebc05fcecddd3a4",
+    "semantic_hash": ""
+  },
+  "lib/data/redeem-code-management.test.mjs": {
+    "mtime": 1789831704.3058949,
+    "seen": 1789832157.7738214,
+    "ast_hash": "bd9a042c7f9e681c0983601ef7287919",
+    "semantic_hash": ""
+  },
+  "lib/discord/diagnostics.test.ts": {
+    "mtime": 1789182129.5881393,
+    "seen": 1789832157.7757165,
+    "ast_hash": "c72bc2c8ed44d0869cbc74d3666f9e2c",
+    "semantic_hash": ""
+  },
+  "lib/discord/diagnostics.ts": {
+    "mtime": 1789182171.7623086,
+    "seen": 1789832157.7757177,
+    "ast_hash": "8e3363a1c4bba4d26278a424c92b3c2a",
+    "semantic_hash": ""
+  },
+  "lib/economy/trade-counterparty.test.ts": {
+    "mtime": 1789167866.8335564,
+    "seen": 1789832157.785218,
+    "ast_hash": "dd58ebcff71ef716bc6012ca00c649dc",
+    "semantic_hash": ""
+  },
+  "lib/economy/trade-counterparty.ts": {
+    "mtime": 1789167904.226185,
+    "seen": 1789832157.7852206,
+    "ast_hash": "07c695ec774d575247a3966d79dfbfac",
+    "semantic_hash": ""
+  },
+  "lib/themes/shadow.ts": {
+    "mtime": 1789177610.7767646,
+    "seen": 1789832157.7940009,
+    "ast_hash": "c821301081d6d6ca9f0e8e3cdb228dc6",
+    "semantic_hash": ""
+  },
+  "public/images/economy/profile-themes/shadow.svg": {
+    "mtime": 1789176409.3460069,
+    "seen": 1789832157.806888,
+    "ast_hash": "1bd57134cd5a6cee3636afa8959327cc",
+    "semantic_hash": ""
+  },
+  "public/images/themes/shadow-aura.svg": {
+    "mtime": 1789177889.1652195,
+    "seen": 1789832157.808744,
+    "ast_hash": "b97c806879c493e83aef5a4986295d61",
+    "semantic_hash": ""
+  },
+  "public/images/themes/shadow-monogram.svg": {
+    "mtime": 1789176409.3450048,
+    "seen": 1789832157.808746,
+    "ast_hash": "af1ff6ebed38294acb0525e26ee51df7",
     "semantic_hash": ""
   }
 }
