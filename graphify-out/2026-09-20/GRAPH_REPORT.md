@@ -1,7 +1,7 @@
-# Graph Report - arena-portal  (2026-09-20)
+# Graph Report - arena-portal  (2026-09-19)
 
 ## Corpus Check
-- 510 files · ~933,542 words
+- 510 files · ~933,297 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `2e33c964`
+- Built from commit: `a10c2ca6`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 

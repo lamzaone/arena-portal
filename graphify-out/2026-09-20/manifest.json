@@ -1140,9 +1140,9 @@
     "semantic_hash": "acbe44a1d0ba43d0fef73c263077145e"
   },
   "lib/data/identity-groups.ts": {
-    "mtime": 1789855788.7014873,
-    "seen": 1789855874.853317,
-    "ast_hash": "96babe991f53a38564226dbf1ad35f18",
+    "mtime": 1788644914.963063,
+    "seen": 1789162874.5936668,
+    "ast_hash": "0852933a0ecc679fbfdaeb6bb217e4be",
     "semantic_hash": ""
   },
   "lib/data/mysql-utc-session.test.ts": {
@@ -1494,9 +1494,9 @@
     "semantic_hash": ""
   },
   "docs/theme-system.md": {
-    "mtime": 1789855837.25461,
-    "seen": 1789855874.9026613,
-    "ast_hash": "7dda4af02dba52848debdd95ecd968aa",
+    "mtime": 1789176331.367202,
+    "seen": 1789832157.8030407,
+    "ast_hash": "9160f4a7c4830fb4245dfbf82f43c95f",
     "semantic_hash": ""
   },
   "docs/vip-perks.md": {
@@ -1986,9 +1986,9 @@
     "semantic_hash": ""
   },
   "lib/data/profile-theme-entitlements.test.ts": {
-    "mtime": 1789855731.669202,
-    "seen": 1789855874.854401,
-    "ast_hash": "d5a516dd0de42bc3c9fe2fed02ec549b",
+    "mtime": 1788665553.1764443,
+    "seen": 1789162874.594127,
+    "ast_hash": "5cf9a006593552e7ea8700d661b1ea34",
     "semantic_hash": ""
   },
   "lib/data/profile-theme-entitlements.ts": {

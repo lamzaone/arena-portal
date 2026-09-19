@@ -5,7 +5,7 @@ import { extname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { Pool } from "mysql2/promise";
+import type { Pool, PoolConnection } from "mysql2/promise";
 
 // Execute the real relational SELECTs against an isolated in-memory fixture.
 // Normalize the small MySQL timestamp/locking/upsert syntax differences.
@@ -28,7 +28,8 @@ const executor = {
       .all(...values as Array<string | number | null>), []];
   },
   async execute(sql: string, values: unknown[] = []) {
-    const result = db.prepare(sqliteSql(sql)).run(...values as Array<string | number | null>);
+    const result = db.prepare(sqliteSql(sql)).run(...values.map((value) =>
+      typeof value === "boolean" ? Number(value) : value) as Array<string | number | null>);
     return [{ affectedRows: Number(result.changes), insertId: Number(result.lastInsertRowid) }, []];
   },
   async getConnection() { return this; },
@@ -72,7 +73,7 @@ registerHooks({
   },
 });
 const { getAuthorizedProfileThemeItemIds } = await import("./profile-theme-entitlements.ts");
-await import("./identity-groups.ts");
+const { reconcileIdentityGroupMembershipRewardsInTransaction } = await import("./identity-groups.ts");
 const { createPortalSession, getPlayerSettings, getPlayerProfileThemeKeys, getPortalSession, updatePlayerSettings, equipProfileThemeItem } = await import("./portal-repository.ts");
 const { configuredGameServerGuid } = await import("../admin/server-scope.ts");
 const { economyMutationFailure } = await import("../economy/request.ts");
@@ -90,7 +91,12 @@ db.exec(`
   CREATE TABLE portal_profile_themes (id INTEGER PRIMARY KEY, catalogue_id INTEGER, theme_key TEXT, enabled INTEGER, display_name TEXT DEFAULT 'Theme', description TEXT DEFAULT 'Test theme', preview_image_url TEXT);
   CREATE TABLE portal_inventory_items (id TEXT PRIMARY KEY, owner_steam_id TEXT, catalogue_id INTEGER, item_type TEXT, state TEXT, tradable INTEGER);
   CREATE TABLE portal_identity_group_rewards (id INTEGER PRIMARY KEY, group_id INTEGER, catalogue_id INTEGER, enabled INTEGER, trade_policy TEXT);
-  CREATE TABLE portal_identity_group_reward_awards (reward_id INTEGER, steam_id TEXT, item_id TEXT, entitlement_active INTEGER);
+  CREATE TABLE portal_identity_group_reward_awards (reward_id INTEGER, steam_id TEXT, item_id TEXT, entitlement_active INTEGER, ordinal INTEGER DEFAULT 1, item_revoked_by_entitlement INTEGER DEFAULT 0, entitlement_revoked_at TEXT, entitlement_revoked_by_steam_id TEXT);
+  CREATE TABLE portal_identity_external_group_definitions (group_id INTEGER);
+  CREATE TABLE portal_inventory_item_stickers (weapon_item_id TEXT, sticker_item_id TEXT);
+  CREATE TABLE portal_loadout_slots (owner_steam_id TEXT, item_id TEXT);
+  CREATE TABLE portal_inventory_item_events (item_id TEXT, actor_steam_id TEXT, event_type TEXT, idempotency_key TEXT, line_key TEXT, before_state TEXT, after_state TEXT, metadata TEXT);
+  CREATE TABLE portal_economy_jobs (job_type TEXT, target_steam_id TEXT, payload TEXT, idempotency_key TEXT UNIQUE, id INTEGER PRIMARY KEY);
   CREATE TABLE arena_groups (id INTEGER PRIMARY KEY, legacy_portal_group_id INTEGER, group_type TEXT, vip_family_key TEXT, rank_weight INTEGER, enabled INTEGER, external_key TEXT);
   CREATE TABLE arena_scopes (id INTEGER PRIMARY KEY, scope_type TEXT, enabled INTEGER, admin_server_guid TEXT, vip_server_id INTEGER);
   CREATE TABLE arena_group_scopes (group_id INTEGER, scope_id INTEGER, enabled INTEGER, rank_weight_override INTEGER);
@@ -123,7 +129,7 @@ function reset() {
     db.prepare("INSERT INTO portal_profile_themes (id, catalogue_id, theme_key, enabled) VALUES (?, ?, ?, 1)").run(id, id, key);
     db.prepare("INSERT INTO portal_inventory_items (id, owner_steam_id, catalogue_id, item_type, state, tradable) VALUES (?, ?, ?, 'profile_theme', 'available', 0)").run(item, player, id);
     db.prepare("INSERT INTO portal_identity_group_rewards VALUES (?, ?, ?, 1, 'account_bound')").run(id, id, id);
-    db.prepare("INSERT INTO portal_identity_group_reward_awards VALUES (?, ?, ?, 1)").run(id, player, item);
+    db.prepare("INSERT INTO portal_identity_group_reward_awards (reward_id, steam_id, item_id, entitlement_active) VALUES (?, ?, ?, 1)").run(id, player, item);
     db.prepare("INSERT INTO arena_groups VALUES (?, ?, ?, ?, ?, 1, ?)").run(id, id, type, type === "vip" ? "vip" : null, rank, key);
     db.prepare("INSERT INTO arena_group_scopes VALUES (?, 1, 1, NULL)").run(id);
   }
@@ -387,4 +393,24 @@ test("ordinary themes also require a matching owned, available and trusted inven
   }
   db.exec("UPDATE portal_inventory_items SET state = 'revoked'");
   assert.deepEqual(await getAuthorizedProfileThemeItemIds(executor, [theme]), new Set());
+});
+
+test("reward reconciliation preserves the saved skin while revoked and restores it with inventory", async () => {
+  reset();
+  equippedSilver();
+  await reconcileIdentityGroupMembershipRewardsInTransaction(executor as PoolConnection, {
+    steamId: player,
+    effectiveGroupIds: [],
+    authoritativeSources: ["custom"],
+    actorSteamId: null,
+  });
+  assert.equal(db.prepare("SELECT state FROM portal_inventory_items WHERE id = ?").get(silver.itemId)?.state, "revoked");
+  assert.equal((await getPortalSession("session-token"))?.profileThemeKey, null);
+  assert.equal((await getPlayerSettings(player)).activeThemeItemId, null);
+  assert.equal(db.prepare("SELECT active_theme_item_id FROM portal_player_settings WHERE steam_id = ?").get(player)?.active_theme_item_id, silver.itemId);
+  // The game reconciler owns restoration too; verify the portal uses the
+  // retained selection on its next read, without a settings write.
+  db.prepare("UPDATE portal_inventory_items SET state = 'available' WHERE id = ?").run(silver.itemId);
+  assert.equal((await getPortalSession("session-token"))?.profileThemeKey, "vip_silver");
+  assert.equal((await getPlayerSettings(player)).activeThemeItemId, silver.itemId);
 });

@@ -13696,7 +13696,7 @@
       "file_type": "code",
       "norm_label": "applyidentitygroupmembershiprewards()",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3996"
+      "source_location": "L3999"
     },
     {
       "id": "lib_data_identity_groups_arenagrouptype",
@@ -13744,7 +13744,7 @@
       "file_type": "code",
       "norm_label": "awardrewardsforgroup()",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3826"
+      "source_location": "L3829"
     },
     {
       "id": "lib_data_identity_groups_configuredvipserverid",
@@ -13900,7 +13900,7 @@
       "file_type": "code",
       "norm_label": "reactivateaccountboundrewardsforgroup()",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3745"
+      "source_location": "L3748"
     },
     {
       "id": "lib_data_identity_groups_reactivateidentityrewardawards",
@@ -13912,7 +13912,7 @@
       "file_type": "code",
       "norm_label": "reactivateidentityrewardawards()",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3679"
+      "source_location": "L3682"
     },
     {
       "id": "lib_data_identity_groups_readarenaactivegroupmembersteamids",
@@ -13948,7 +13948,7 @@
       "file_type": "code",
       "norm_label": "reconcileaccountboundrewardentitlements()",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3770"
+      "source_location": "L3773"
     },
     {
       "id": "lib_data_identity_groups_reconcileidentitygroupmembershiprewardsintransaction",
@@ -13960,7 +13960,7 @@
       "file_type": "code",
       "norm_label": "reconcileidentitygroupmembershiprewardsintransaction()",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4037"
+      "source_location": "L4040"
     },
     {
       "id": "lib_data_identity_groups_reconcileidentitygrouprewards",
@@ -13972,7 +13972,7 @@
       "file_type": "code",
       "norm_label": "reconcileidentitygrouprewards()",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4243"
+      "source_location": "L4246"
     },
     {
       "id": "lib_data_identity_groups_recordboolean",
@@ -14008,7 +14008,7 @@
       "file_type": "code",
       "norm_label": "revokeaccountboundrewardsforgroup()",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3612"
+      "source_location": "L3615"
     },
     {
       "id": "lib_data_identity_groups_revokeaccountboundrewardsforreward",
@@ -14020,7 +14020,7 @@
       "file_type": "code",
       "norm_label": "revokeaccountboundrewardsforreward()",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3647"
+      "source_location": "L3650"
     },
     {
       "id": "lib_data_identity_groups_revokeidentityrewardawards",
@@ -15700,7 +15700,7 @@
       "file_type": "code",
       "norm_label": "equippedsilver()",
       "source_file": "lib/data/profile-theme-entitlements.test.ts",
-      "source_location": "L247"
+      "source_location": "L241"
     },
     {
       "id": "lib_data_profile_theme_entitlements_test_founderreward",
@@ -15712,7 +15712,7 @@
       "file_type": "code",
       "norm_label": "founderreward()",
       "source_file": "lib/data/profile-theme-entitlements.test.ts",
-      "source_location": "L308"
+      "source_location": "L302"
     },
     {
       "id": "lib_data_profile_theme_entitlements_test_membership",
@@ -15724,7 +15724,7 @@
       "file_type": "code",
       "norm_label": "membership()",
       "source_file": "lib/data/profile-theme-entitlements.test.ts",
-      "source_location": "L137"
+      "source_location": "L131"
     },
     {
       "id": "lib_data_profile_theme_entitlements_test_reset",
@@ -15736,7 +15736,7 @@
       "file_type": "code",
       "norm_label": "reset()",
       "source_file": "lib/data/profile-theme-entitlements.test.ts",
-      "source_location": "L118"
+      "source_location": "L112"
     },
     {
       "id": "lib_data_profile_theme_entitlements_test_resolve",
@@ -15748,7 +15748,7 @@
       "file_type": "code",
       "norm_label": "resolve()",
       "source_file": "lib/data/profile-theme-entitlements.test.ts",
-      "source_location": "L50"
+      "source_location": "L49"
     },
     {
       "id": "lib_data_profile_theme_entitlements_test_sourcemoduleurl",
@@ -15760,7 +15760,7 @@
       "file_type": "code",
       "norm_label": "sourcemoduleurl()",
       "source_file": "lib/data/profile-theme-entitlements.test.ts",
-      "source_location": "L44"
+      "source_location": "L43"
     },
     {
       "id": "lib_data_profile_theme_entitlements_test_sqlitesql",
@@ -29020,7 +29020,7 @@
       "file_type": "code",
       "norm_label": "addidentitygroupreward()",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4090"
+      "source_location": "L4093"
     },
     {
       "id": "lib_data_identity_groups_attachidentitygroupprivilege",
@@ -29272,7 +29272,7 @@
       "file_type": "code",
       "norm_label": "retireidentitygroupreward()",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4194"
+      "source_location": "L4197"
     },
     {
       "id": "lib_data_identity_groups_revokeidentityplayerprivilege",
@@ -42627,7 +42627,7 @@
       "file_type": "code",
       "norm_label": "gold",
       "source_file": "lib/data/profile-theme-entitlements.test.ts",
-      "source_location": "L84"
+      "source_location": "L83"
     },
     {
       "id": "lib_data_profile_theme_entitlements_test_moderator",
@@ -42638,7 +42638,7 @@
       "file_type": "code",
       "norm_label": "moderator",
       "source_file": "lib/data/profile-theme-entitlements.test.ts",
-      "source_location": "L85"
+      "source_location": "L84"
     },
     {
       "id": "lib_data_profile_theme_entitlements_test_silver",
@@ -42649,7 +42649,7 @@
       "file_type": "code",
       "norm_label": "silver",
       "source_file": "lib/data/profile-theme-entitlements.test.ts",
-      "source_location": "L83"
+      "source_location": "L82"
     },
     {
       "id": "app_api_admin_group_listings_route",
@@ -76542,7 +76542,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4099",
+      "source_location": "L4102",
       "weight": 1.0
     },
     {
@@ -76554,36 +76554,12 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4100",
-      "weight": 1.0
-    },
-    {
-      "source": "lib_data_identity_groups_addidentitygroupreward",
-      "target": "lib_data_identity_groups_identityid",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "context": "call",
-      "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4101",
-      "weight": 1.0
-    },
-    {
-      "source": "lib_data_identity_groups_addidentitygroupreward",
-      "target": "lib_data_identity_groups_identityinteger",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "context": "call",
-      "source_file": "lib/data/identity-groups.ts",
       "source_location": "L4103",
       "weight": 1.0
     },
     {
       "source": "lib_data_identity_groups_addidentitygroupreward",
-      "target": "lib_data_identity_groups_rewardtradepolicy",
+      "target": "lib_data_identity_groups_identityid",
       "relation": "calls",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -76595,7 +76571,7 @@
     },
     {
       "source": "lib_data_identity_groups_addidentitygroupreward",
-      "target": "lib_data_identity_groups_identityerror",
+      "target": "lib_data_identity_groups_identityinteger",
       "relation": "calls",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -76607,6 +76583,30 @@
     },
     {
       "source": "lib_data_identity_groups_addidentitygroupreward",
+      "target": "lib_data_identity_groups_rewardtradepolicy",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "lib/data/identity-groups.ts",
+      "source_location": "L4107",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_data_identity_groups_addidentitygroupreward",
+      "target": "lib_data_identity_groups_identityerror",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "lib/data/identity-groups.ts",
+      "source_location": "L4109",
+      "weight": 1.0
+    },
+    {
+      "source": "lib_data_identity_groups_addidentitygroupreward",
       "target": "lib_data_identity_groups_identitysteamid",
       "relation": "calls",
       "_origin": "ast",
@@ -76614,7 +76614,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4111",
+      "source_location": "L4114",
       "weight": 1.0
     },
     {
@@ -76626,7 +76626,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4115",
+      "source_location": "L4118",
       "weight": 1.0
     },
     {
@@ -76638,7 +76638,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4122",
+      "source_location": "L4125",
       "weight": 1.0
     },
     {
@@ -76650,7 +76650,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4123",
+      "source_location": "L4126",
       "weight": 1.0
     },
     {
@@ -76662,7 +76662,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4124",
+      "source_location": "L4127",
       "weight": 1.0
     },
     {
@@ -76674,7 +76674,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4166",
+      "source_location": "L4169",
       "weight": 1.0
     },
     {
@@ -76686,7 +76686,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4174",
+      "source_location": "L4177",
       "weight": 1.0
     },
     {
@@ -76698,7 +76698,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4005",
+      "source_location": "L4008",
       "weight": 1.0
     },
     {
@@ -76710,7 +76710,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4006",
+      "source_location": "L4009",
       "weight": 1.0
     },
     {
@@ -76722,7 +76722,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4010",
+      "source_location": "L4013",
       "weight": 1.0
     },
     {
@@ -76734,7 +76734,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4011",
+      "source_location": "L4014",
       "weight": 1.0
     },
     {
@@ -76746,7 +76746,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4016",
+      "source_location": "L4019",
       "weight": 1.0
     },
     {
@@ -76758,7 +76758,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4024",
+      "source_location": "L4027",
       "weight": 1.0
     },
     {
@@ -77286,7 +77286,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3856",
+      "source_location": "L3859",
       "weight": 1.0
     },
     {
@@ -77298,7 +77298,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3857",
+      "source_location": "L3860",
       "weight": 1.0
     },
     {
@@ -77310,7 +77310,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3874",
+      "source_location": "L3877",
       "weight": 1.0
     },
     {
@@ -77322,7 +77322,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3879",
+      "source_location": "L3882",
       "weight": 1.0
     },
     {
@@ -77334,7 +77334,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3883",
+      "source_location": "L3886",
       "weight": 1.0
     },
     {
@@ -77346,7 +77346,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3894",
+      "source_location": "L3897",
       "weight": 1.0
     },
     {
@@ -77358,7 +77358,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3981",
+      "source_location": "L3984",
       "weight": 1.0
     },
     {
@@ -79074,7 +79074,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3754",
+      "source_location": "L3757",
       "weight": 1.0
     },
     {
@@ -79086,7 +79086,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3759",
+      "source_location": "L3762",
       "weight": 1.0
     },
     {
@@ -79098,7 +79098,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3763",
+      "source_location": "L3766",
       "weight": 1.0
     },
     {
@@ -79110,7 +79110,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3691",
+      "source_location": "L3694",
       "weight": 1.0
     },
     {
@@ -79122,7 +79122,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3703",
+      "source_location": "L3706",
       "weight": 1.0
     },
     {
@@ -79134,7 +79134,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3708",
+      "source_location": "L3711",
       "weight": 1.0
     },
     {
@@ -79146,7 +79146,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3737",
+      "source_location": "L3740",
       "weight": 1.0
     },
     {
@@ -79230,7 +79230,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3779",
+      "source_location": "L3782",
       "weight": 1.0
     },
     {
@@ -79242,7 +79242,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3787",
+      "source_location": "L3790",
       "weight": 1.0
     },
     {
@@ -79254,7 +79254,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3806",
+      "source_location": "L3809",
       "weight": 1.0
     },
     {
@@ -79266,7 +79266,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3812",
+      "source_location": "L3815",
       "weight": 1.0
     },
     {
@@ -79290,7 +79290,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4046",
+      "source_location": "L4049",
       "weight": 1.0
     },
     {
@@ -79302,7 +79302,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4051",
+      "source_location": "L4054",
       "weight": 1.0
     },
     {
@@ -79314,7 +79314,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4059",
+      "source_location": "L4062",
       "weight": 1.0
     },
     {
@@ -79326,7 +79326,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4070",
+      "source_location": "L4073",
       "weight": 1.0
     },
     {
@@ -79338,7 +79338,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4082",
+      "source_location": "L4085",
       "weight": 1.0
     },
     {
@@ -79350,7 +79350,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4249",
+      "source_location": "L4252",
       "weight": 1.0
     },
     {
@@ -79362,7 +79362,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4250",
+      "source_location": "L4253",
       "weight": 1.0
     },
     {
@@ -79374,7 +79374,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4253",
+      "source_location": "L4256",
       "weight": 1.0
     },
     {
@@ -79386,7 +79386,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4254",
+      "source_location": "L4257",
       "weight": 1.0
     },
     {
@@ -79398,7 +79398,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4262",
+      "source_location": "L4265",
       "weight": 1.0
     },
     {
@@ -79410,7 +79410,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4277",
+      "source_location": "L4280",
       "weight": 1.0
     },
     {
@@ -79422,7 +79422,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4287",
+      "source_location": "L4290",
       "weight": 1.0
     },
     {
@@ -79434,7 +79434,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4296",
+      "source_location": "L4299",
       "weight": 1.0
     },
     {
@@ -79626,7 +79626,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4199",
+      "source_location": "L4202",
       "weight": 1.0
     },
     {
@@ -79638,7 +79638,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4200",
+      "source_location": "L4203",
       "weight": 1.0
     },
     {
@@ -79650,7 +79650,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4201",
+      "source_location": "L4204",
       "weight": 1.0
     },
     {
@@ -79662,7 +79662,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4202",
+      "source_location": "L4205",
       "weight": 1.0
     },
     {
@@ -79674,7 +79674,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4208",
+      "source_location": "L4211",
       "weight": 1.0
     },
     {
@@ -79686,7 +79686,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4215",
+      "source_location": "L4218",
       "weight": 1.0
     },
     {
@@ -79698,7 +79698,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4221",
+      "source_location": "L4224",
       "weight": 1.0
     },
     {
@@ -79710,7 +79710,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3621",
+      "source_location": "L3624",
       "weight": 1.0
     },
     {
@@ -79722,7 +79722,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3636",
+      "source_location": "L3639",
       "weight": 1.0
     },
     {
@@ -79734,7 +79734,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3655",
+      "source_location": "L3658",
       "weight": 1.0
     },
     {
@@ -79746,7 +79746,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3668",
+      "source_location": "L3671",
       "weight": 1.0
     },
     {
@@ -79926,7 +79926,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3604",
+      "source_location": "L3607",
       "weight": 1.0
     },
     {
@@ -95418,7 +95418,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "lib/data/profile-theme-entitlements.test.ts",
-      "source_location": "L65",
+      "source_location": "L64",
       "weight": 1.0
     },
     {
@@ -163587,7 +163587,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3612",
+      "source_location": "L3615",
       "weight": 1.0
     },
     {
@@ -163609,7 +163609,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3647",
+      "source_location": "L3650",
       "weight": 1.0
     },
     {
@@ -163620,7 +163620,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3679",
+      "source_location": "L3682",
       "weight": 1.0
     },
     {
@@ -163664,7 +163664,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3745",
+      "source_location": "L3748",
       "weight": 1.0
     },
     {
@@ -163675,7 +163675,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3770",
+      "source_location": "L3773",
       "weight": 1.0
     },
     {
@@ -163697,7 +163697,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3826",
+      "source_location": "L3829",
       "weight": 1.0
     },
     {
@@ -163730,7 +163730,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L3996",
+      "source_location": "L3999",
       "weight": 1.0
     },
     {
@@ -163752,7 +163752,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4037",
+      "source_location": "L4040",
       "weight": 1.0
     },
     {
@@ -163763,7 +163763,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4090",
+      "source_location": "L4093",
       "weight": 1.0
     },
     {
@@ -163785,7 +163785,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4194",
+      "source_location": "L4197",
       "weight": 1.0
     },
     {
@@ -163807,7 +163807,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/identity-groups.ts",
-      "source_location": "L4243",
+      "source_location": "L4246",
       "weight": 1.0
     },
     {
@@ -170759,7 +170759,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/profile-theme-entitlements.test.ts",
-      "source_location": "L118",
+      "source_location": "L112",
       "weight": 1.0
     },
     {
@@ -170781,7 +170781,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/profile-theme-entitlements.test.ts",
-      "source_location": "L137",
+      "source_location": "L131",
       "weight": 1.0
     },
     {
@@ -170814,7 +170814,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/profile-theme-entitlements.test.ts",
-      "source_location": "L247",
+      "source_location": "L241",
       "weight": 1.0
     },
     {
@@ -170825,7 +170825,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/profile-theme-entitlements.test.ts",
-      "source_location": "L308",
+      "source_location": "L302",
       "weight": 1.0
     },
     {
@@ -170836,7 +170836,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/profile-theme-entitlements.test.ts",
-      "source_location": "L44",
+      "source_location": "L43",
       "weight": 1.0
     },
     {
@@ -170847,7 +170847,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/profile-theme-entitlements.test.ts",
-      "source_location": "L50",
+      "source_location": "L49",
       "weight": 1.0
     },
     {
@@ -170858,7 +170858,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/profile-theme-entitlements.test.ts",
-      "source_location": "L83",
+      "source_location": "L82",
       "weight": 1.0
     },
     {
@@ -170869,7 +170869,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/profile-theme-entitlements.test.ts",
-      "source_location": "L84",
+      "source_location": "L83",
       "weight": 1.0
     },
     {
@@ -170880,7 +170880,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "lib/data/profile-theme-entitlements.test.ts",
-      "source_location": "L85",
+      "source_location": "L84",
       "weight": 1.0
     },
     {
@@ -187755,5 +187755,5 @@
       "source_file": "README.md"
     }
   ],
-  "built_at_commit": "2e33c964c5ddd6a3830524df23212290a7888a1a"
+  "built_at_commit": "a10c2ca6577b728b084b0bc0c61e10f0de2e5221"
 }

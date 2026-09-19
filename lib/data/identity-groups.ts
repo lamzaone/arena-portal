@@ -3551,12 +3551,9 @@ async function revokeIdentityRewardAwards(
         "UPDATE portal_loadout_slots SET item_id = NULL WHERE owner_steam_id = ? AND item_id = ?",
         [input.steamId, itemId],
       );
-      if (row.item_type === "profile_theme") {
-        await connection.execute(
-          "UPDATE portal_player_settings SET active_theme_id = NULL, active_theme_item_id = NULL WHERE steam_id = ? AND active_theme_item_id = ?",
-          [input.steamId, itemId],
-        );
-      }
+      // Preserve the saved appearance preference. Portal theme reads require
+      // owned, available inventory, so revocation hides the skin and restoring
+      // this item resumes it without erasing the player's selection.
       const [itemResult] = await connection.execute<ResultSetHeader>(
         "UPDATE portal_inventory_items SET state = 'revoked' WHERE id = ? AND owner_steam_id = ? AND tradable = FALSE AND state = ?",
         [itemId, input.steamId, row.item_state],

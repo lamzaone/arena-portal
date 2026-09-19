@@ -89,8 +89,15 @@ reward lifecycle remains responsible for revoking membership rewards; once the
 inventory item is revoked, transferred, or otherwise unavailable, it no longer
 authorizes the theme. Selecting ARENA default explicitly remains supported.
 
+Reward reconciliation in both the portal and GlobalChatTags preserves the saved
+theme selection when revoking an item. The revoked item does not render, but
+restoring that same item resumes the selected skin. This prevents a temporary
+runtime membership gap from permanently resetting appearance. An explicit
+selection of another theme or ARENA default still replaces the preference.
+
 `npm run test:themes` covers surface fallbacks, progression, existing-theme
-compatibility, session renewal, membership outages, inventory revocation,
+compatibility, session renewal, membership outages, reward reconciliation,
+inventory revocation and restoration,
 permanent grants and both equip paths. The
 entitlement tests use isolated SQLite fixtures with the real relational queries;
 they do not claim to exercise MySQL locking or cross-database atomicity.
