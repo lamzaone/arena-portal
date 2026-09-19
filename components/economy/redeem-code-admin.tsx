@@ -10,17 +10,21 @@ import {
   Pause,
   Play,
   Plus,
+  RotateCcw,
   Search,
   TicketCheck,
+  Trash2,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { MarketplaceItemPreview } from "@/components/economy/marketplace-item-preview";
 import { PaginatedItemGrid } from "@/components/economy/item-grid";
 import { PortalToast } from "@/components/success-toast";
 import { AsyncButton } from "@/components/ui/async-button";
+import { PortalDialog } from "@/components/ui/portal-dialog";
+import { type DraftReward, validateRewardQuantities } from "./redeem-code-quantities";
 import {
   DEFAULT_SEARCH_DEBOUNCE_MS,
   SearchField,
@@ -30,11 +34,6 @@ import type {
   EconomyRedeemCode,
 } from "@/lib/data/portal-repository";
 import { economyItemTypeLabel } from "@/lib/economy/item-taxonomy";
-
-type SelectedReward = {
-  catalogueId: number;
-  quantity: number;
-};
 
 type RedeemCodeAdminProps = {
   csrf: string;
@@ -54,12 +53,13 @@ function newIdempotencyKey() {
 async function adminAction(
   csrf: string,
   payload: Record<string, unknown>,
+  idempotencyKey: string,
 ) {
   const response = await fetch("/api/admin/redeem-codes", {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
     credentials: "same-origin",
-    body: JSON.stringify({ ...payload, csrf, idempotencyKey: newIdempotencyKey() }),
+    body: JSON.stringify({ ...payload, csrf, idempotencyKey }),
   });
   const result = (await response.json().catch(() => null)) as
     | { ok?: boolean; message?: string; result?: unknown }
@@ -87,7 +87,8 @@ export function RedeemCodeAdmin({
   const [tokens, setTokens] = useState("0");
   const [useMode, setUseMode] = useState<UseMode>("unlimited");
   const [customUses, setCustomUses] = useState("10");
-  const [rewards, setRewards] = useState<SelectedReward[]>([]);
+  const [rewards, setRewards] = useState<DraftReward[]>([]);
+  const [quantityError, setQuantityError] = useState<string | null>(null);
   const [pickerQuery, setPickerQuery] = useState(searchQuery);
   const [campaignQuery, setCampaignQuery] = useState("");
   const [campaignStatus, setCampaignStatus] = useState("all");
@@ -98,6 +99,10 @@ export function RedeemCodeAdmin({
   const [searching, setSearching] = useState(false);
   const [pending, setPending] = useState(false);
   const [activeCodeId, setActiveCodeId] = useState<number | null>(null);
+  const [activeAction, setActiveAction] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<{ action: "restart" | "remove"; item: EconomyRedeemCode } | null>(null);
+  const [campaignError, setCampaignError] = useState<string | null>(null);
+  const actionKeys = useRef(new Map<string, string>());
   const [revealedCode, setRevealedCode] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -118,11 +123,26 @@ export function RedeemCodeAdmin({
       `${campaign.displayName} ${campaign.codeHint}`.toLocaleLowerCase().includes(query));
   });
 
+  async function performAction(payload: Record<string, unknown>) {
+    const fingerprint = JSON.stringify(payload);
+    const key = actionKeys.current.get(fingerprint) ?? newIdempotencyKey();
+    actionKeys.current.set(fingerprint, key);
+    const result = await adminAction(csrf, payload, key);
+    actionKeys.current.delete(fingerprint);
+    return result;
+  }
+
   function addReward(catalogueId: number) {
+    const validated = validateRewardQuantities(rewards);
+    if (validated.error) {
+      setQuantityError(validated.error);
+      return;
+    }
+    setQuantityError(null);
     setRewards((current) => {
       const existing = current.find((reward) => reward.catalogueId === catalogueId);
       const totalItems = current.reduce(
-        (total, reward) => total + reward.quantity,
+        (total, reward) => total + Number(reward.quantity),
         0,
       );
       if (totalItems >= 100) {
@@ -132,40 +152,32 @@ export function RedeemCodeAdmin({
       if (existing)
         return current.map((reward) =>
           reward.catalogueId === catalogueId
-            ? { ...reward, quantity: Math.min(50, reward.quantity + 1) }
+            ? { ...reward, quantity: String(Math.min(50, Number(reward.quantity) + 1)) }
             : reward,
         );
       if (current.length >= 20) {
         setError("A code can contain up to 20 different item rewards.");
         return current;
       }
-      return [...current, { catalogueId, quantity: 1 }];
+      return [...current, { catalogueId, quantity: "1" }];
     });
   }
 
-  function setRewardQuantity(catalogueId: number, quantity: number) {
-    setRewards((current) => {
-      if (quantity < 1)
-        return current.filter((reward) => reward.catalogueId !== catalogueId);
-      const otherItems = current.reduce(
-        (total, reward) =>
-          reward.catalogueId === catalogueId ? total : total + reward.quantity,
-        0,
-      );
-      const nextQuantity = Math.min(50, Math.max(1, 100 - otherItems), quantity);
-      if (nextQuantity < quantity)
-        setError("A code can award up to 100 items in total.");
-      return current.map((reward) =>
-        reward.catalogueId === catalogueId
-          ? { ...reward, quantity: nextQuantity }
-          : reward,
-      );
-    });
+  function setRewardQuantity(catalogueId: number, quantity: string) {
+    setQuantityError(null);
+    setRewards((current) => current.map((reward) =>
+      reward.catalogueId === catalogueId ? { ...reward, quantity } : reward));
   }
 
   async function createCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending) return;
+    const validatedRewards = validateRewardQuantities(rewards);
+    if (validatedRewards.error) {
+      setQuantityError(validatedRewards.error);
+      return;
+    }
+    setQuantityError(null);
     const tokenAmount = Number(tokens);
     const maxRedemptions =
       useMode === "unlimited"
@@ -187,13 +199,13 @@ export function RedeemCodeAdmin({
     setError(null);
     setNotice(null);
     try {
-      const response = (await adminAction(csrf, {
+      const response = (await performAction({
         action: "create",
         code,
         displayName,
         tokenAmount,
         maxRedemptions,
-        rewards,
+        rewards: validatedRewards.rewards,
       })) as { revealedCode?: string };
       setRevealedCode(response?.revealedCode ?? code.trim().toUpperCase());
       setNotice("Redeem code created. Copy it now—the plain code is not stored.");
@@ -269,9 +281,10 @@ export function RedeemCodeAdmin({
   async function toggleCode(item: EconomyRedeemCode) {
     if (activeCodeId !== null) return;
     setActiveCodeId(item.id);
-    setError(null);
+    setActiveAction("set-enabled");
+    setCampaignError(null);
     try {
-      await adminAction(csrf, {
+      await performAction({
         action: "set-enabled",
         codeId: item.id,
         enabled: !item.enabled,
@@ -279,9 +292,31 @@ export function RedeemCodeAdmin({
       setNotice(`${item.displayName} is now ${item.enabled ? "paused" : "live"}.`);
       router.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not update the code.");
+      setCampaignError(cause instanceof Error ? cause.message : "Could not update the code.");
     } finally {
       setActiveCodeId(null);
+      setActiveAction(null);
+    }
+  }
+
+  async function confirmCampaignAction() {
+    if (!confirmation || activeCodeId !== null) return;
+    const { action, item } = confirmation;
+    setActiveCodeId(item.id);
+    setActiveAction(action);
+    setCampaignError(null);
+    try {
+      await performAction({ action, codeId: item.id });
+      setNotice(action === "restart"
+        ? `${item.displayName} restarted. Everyone can claim the code again.`
+        : `${item.displayName} removed.`);
+      setConfirmation(null);
+      router.refresh();
+    } catch (cause) {
+      setCampaignError(cause instanceof Error ? cause.message : `Could not ${action} the code.`);
+    } finally {
+      setActiveCodeId(null);
+      setActiveAction(null);
     }
   }
 
@@ -389,15 +424,26 @@ export function RedeemCodeAdmin({
                     />
                     <span>{item.displayName}</span>
                     <div className="redeem-quantity">
-                      <button type="button" onClick={() => setRewardQuantity(item.id, reward.quantity - 1)} aria-label={`Decrease ${item.displayName} quantity`}><Minus aria-hidden="true" /></button>
-                      <output>{reward.quantity}</output>
-                      <button type="button" onClick={() => setRewardQuantity(item.id, reward.quantity + 1)} disabled={reward.quantity >= 50} aria-label={`Increase ${item.displayName} quantity`}><Plus aria-hidden="true" /></button>
-                      <button type="button" onClick={() => setRewardQuantity(item.id, 0)} aria-label={`Remove ${item.displayName}`}><X aria-hidden="true" /></button>
+                      <button type="button" onClick={() => setRewardQuantity(item.id, String(Math.max(1, Number(reward.quantity) - 1)))} disabled={!reward.quantity || Number(reward.quantity) <= 1} aria-label={`Decrease ${item.displayName} quantity`}><Minus aria-hidden="true" /></button>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={reward.quantity}
+                        aria-label={`Quantity for ${item.displayName}`}
+                        aria-invalid={quantityError ? true : undefined}
+                        aria-describedby="redeem-quantity-help"
+                        onChange={(event) => setRewardQuantity(item.id, event.target.value)}
+                        onBlur={() => setQuantityError(validateRewardQuantities(rewards).error)}
+                      />
+                      <button type="button" onClick={() => setRewardQuantity(item.id, String(Math.min(50, Number(reward.quantity || 0) + 1)))} disabled={Number(reward.quantity) >= 50} aria-label={`Increase ${item.displayName} quantity`}><Plus aria-hidden="true" /></button>
+                      <button type="button" onClick={() => { setRewards((current) => current.filter((entry) => entry.catalogueId !== item.id)); setQuantityError(null); }} aria-label={`Remove ${item.displayName}`}><X aria-hidden="true" /></button>
                     </div>
                   </li>
                 ))}
               </PaginatedItemGrid>
             ) : <p>Use the item catalogue to add cases, skins, stickers, agents, or other existing items.</p>}
+            <p id="redeem-quantity-help">1–50 per item · 100 items total.</p>
+            {quantityError ? <p className="redeem-action-error" role="alert">{quantityError}</p> : null}
           </div>
           <AsyncButton
             className="button button-primary redeem-create-button"
@@ -436,7 +482,7 @@ export function RedeemCodeAdmin({
               return <article key={item.id} className="redeem-picker-item">
                 <MarketplaceItemPreview item={{ ...item, raw: { catalogue: item }, catalogueId: item.id, displayName: item.displayName, floatValue: null, imageUrl: item.imageUrl, itemType: item.itemType, rarityRank: item.rarityRank }} enableMarketPreview={false} />
                 <div><span className={`rarity-rank-${item.rarityRank}`}>{item.rarityName}</span><strong>{item.displayName}</strong><small>{economyItemTypeLabel(item.itemType)} · ID {item.id}</small></div>
-                <button className="button button-secondary" type="button" onClick={() => addReward(item.id)} disabled={selected?.quantity === 50}>
+                <button className="button button-secondary" type="button" onClick={() => addReward(item.id)} disabled={Number(selected?.quantity) >= 50}>
                   <Plus aria-hidden="true" /> {selected ? `Add (${selected.quantity})` : "Add"}
                 </button>
               </article>;
@@ -459,6 +505,7 @@ export function RedeemCodeAdmin({
           <div><p className="eyebrow"><Gift aria-hidden="true" /> Saved campaigns</p><h2>Recent redeem codes</h2></div>
           <span aria-live="polite">{visibleCodes.length} of {codes.length} campaigns</span>
         </div>
+        {campaignError && !confirmation ? <p className="redeem-action-error" role="alert">{campaignError}</p> : null}
         {codes.length ? <div className="staff-campaign-filters">
           <SearchField id="staff-campaign-search" label="Find a campaign" value={campaignQuery} onValueChange={setCampaignQuery} placeholder="Campaign label or code hint" />
           <label>Status<select value={campaignStatus} onChange={(event) => setCampaignStatus(event.target.value)}><option value="all">All campaigns</option><option value="live">Live</option><option value="paused">Paused</option></select></label>
@@ -467,21 +514,55 @@ export function RedeemCodeAdmin({
           <article className={`panel redeem-code-card ${item.enabled ? "is-live" : "is-paused"}`} key={item.id}>
             <header><div><span className="redeem-code-hint">{item.codeHint}</span><h3>{item.displayName}</h3></div><span className={`redeem-code-status ${item.enabled ? "" : "is-paused"}`}>{item.enabled ? "Live" : "Paused"}</span></header>
             <div className="redeem-code-meta"><span><Coins aria-hidden="true" /> {item.tokenAmount.toLocaleString()} Tokens</span><span><TicketCheck aria-hidden="true" /> {usesLabel(item)}</span></div>
-            {item.rewards.length ? <ul className="redeem-card-rewards">{item.rewards.map((reward) => <li key={reward.catalogueId}><span className={`rarity-rank-${reward.rarityRank}`}>{reward.quantity}×</span>{reward.displayName}</li>)}</ul> : <p className="empty-copy">Token-only reward</p>}
+            {item.rewards.length ? <ul className="redeem-card-rewards">{item.rewards.map((reward) => <li key={reward.catalogueId}><span className={`rarity-rank-${reward.rarityRank}`}>{reward.quantity}×</span><span>{reward.displayName}</span></li>)}</ul> : <p className="empty-copy">Token-only reward</p>}
+            <div className="redeem-code-actions">
             <AsyncButton
               className="button button-secondary"
               type="button"
-              disabled={activeCodeId !== null && activeCodeId !== item.id}
+              disabled={activeCodeId !== null}
               icon={item.enabled ? <Pause /> : <Play />}
-              pending={activeCodeId === item.id}
+              pending={activeCodeId === item.id && activeAction === "set-enabled"}
               pendingLabel="Updating code"
               onClick={() => toggleCode(item)}
             >
               {item.enabled ? "Pause code" : "Make live"}
             </AsyncButton>
+            <AsyncButton
+              className="button button-secondary"
+              disabled={activeCodeId !== null}
+              icon={<RotateCcw />}
+              pending={activeCodeId === item.id && activeAction === "restart"}
+              pendingLabel="Restarting"
+              onClick={() => { setCampaignError(null); setConfirmation({ action: "restart", item }); }}
+            >Restart code</AsyncButton>
+            <AsyncButton
+              className="button button-secondary redeem-remove-button"
+              disabled={activeCodeId !== null}
+              icon={<Trash2 />}
+              pending={activeCodeId === item.id && activeAction === "remove"}
+              pendingLabel="Removing"
+              onClick={() => { setCampaignError(null); setConfirmation({ action: "remove", item }); }}
+            >Remove code</AsyncButton>
+            </div>
           </article>
         ))}</PaginatedItemGrid> : <p className="empty-copy">{codes.length ? "No campaigns match these filters. Try a different label or status." : "No redeem campaigns have been created yet."}</p>}
       </section>
+      <PortalDialog
+        open={confirmation !== null}
+        title={confirmation?.action === "restart" ? "Restart this redeem code?" : "Remove this redeem code?"}
+        description={confirmation?.action === "restart"
+          ? `Restart “${confirmation.item.displayName}” with zero claims and make it live. Everyone, including previous claimants, can redeem the same code again. Rewards and the usage limit stay the same; previous rewards and claim history are kept.`
+          : confirmation ? `Remove “${confirmation.item.displayName}” from campaigns and stop future claims. Previously awarded rewards and claim history are kept.` : undefined}
+        tone={confirmation?.action === "remove" ? "danger" : "default"}
+        confirmLabel={activeCodeId !== null
+          ? (confirmation?.action === "restart" ? "Restarting…" : "Removing…")
+          : (confirmation?.action === "restart" ? "Restart code" : "Remove code")}
+        confirmDisabled={activeCodeId !== null}
+        onConfirm={() => void confirmCampaignAction()}
+        onDismiss={() => { if (activeCodeId === null) { setConfirmation(null); setCampaignError(null); } }}
+      >
+        {campaignError ? <p className="redeem-action-error" role="alert">{campaignError}</p> : null}
+      </PortalDialog>
       {notice ? <PortalToast message={notice} onDismiss={() => setNotice(null)} /> : null}
       {error ? <PortalToast variant="danger" message={error} onDismiss={() => setError(null)} /> : null}
     </div>

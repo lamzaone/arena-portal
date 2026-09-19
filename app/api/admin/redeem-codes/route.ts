@@ -4,6 +4,8 @@ import {
   createEconomyRedeemCode,
   getEconomyCatalogue,
   setEconomyRedeemCodeEnabled,
+  restartEconomyRedeemCode,
+  removeEconomyRedeemCode,
 } from "@/lib/data/portal-repository";
 import { economyMutationFailure } from "@/lib/economy/request";
 
@@ -157,6 +159,14 @@ export async function POST(request: Request) {
         rewards: rewards as Array<{ catalogueId: number; quantity: number }>,
         idempotencyKey: key,
       });
+      return Response.json({ ok: true, result });
+    }
+    if (action === "restart" || action === "remove") {
+      const codeId = positiveInteger(body.codeId, Number.MAX_SAFE_INTEGER);
+      if (!codeId)
+        return Response.json({ ok: false, message: "Choose a valid redeem code." }, { status: 400 });
+      const mutate = action === "restart" ? restartEconomyRedeemCode : removeEconomyRedeemCode;
+      const result = await mutate({ actorSteamId: session.steamId, codeId, idempotencyKey: key });
       return Response.json({ ok: true, result });
     }
     if (action === "set-enabled") {

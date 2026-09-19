@@ -299,12 +299,14 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
             </div>
           </article>
           <article className="panel combat-panel">
-            <div className="panel-heading"><h2>Combat performance</h2><p>Lifetime server stats.</p></div>
+            <div className="panel-heading"><h2>Combat performance</h2><p>Current rank stats and lifetime totals.</p></div>
             <div className="combat-stat-grid">
               <div><span>Kills</span><strong>{formatCount(profile.kills)}</strong><Crosshair aria-hidden="true" /></div>
               <div><span>Deaths</span><strong>{formatCount(profile.deaths)}</strong><Ban aria-hidden="true" /></div>
               <div><span>Headshot rate</span><strong>{headshotPercent}%</strong><Target aria-hidden="true" /></div>
               <div><span>Noscopes</span><strong>{formatCount(profile.noscopes)}</strong><UserRound aria-hidden="true" /></div>
+              <div><span>Total kills</span><strong>{formatCount(profile.totalKills)}</strong><Crosshair aria-hidden="true" /></div>
+              <div><span>Total headshots</span><strong>{formatCount(profile.totalHeadshots)}</strong><Target aria-hidden="true" /></div>
             </div>
             <div className="rank-progress" aria-label={`K4 rank progression: ${levelRank.name}`}><div><span>{levelRank.name}</span><strong>{nextLevelRank ? `${formatCount(Math.max(0, nextLevelRank.points - profile.points))} points to ${nextLevelRank.tag}` : "Highest K4 rank"}</strong></div><div className="rank-progress-track" role="progressbar" aria-label="Progress to next rank" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(rankProgress)}><i style={{ width: `${rankProgress}%`, backgroundColor: levelRank.hex }} /></div></div>
           </article>

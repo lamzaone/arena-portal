@@ -74,6 +74,8 @@ type StatRow = RowDataPacket & {
   kills: number;
   deaths: number;
   headshots: number;
+  total_kills: number;
+  total_headshots: number;
   noscopes: number;
   playtime: number;
   game_wins: number;
@@ -472,6 +474,8 @@ export type PlayerDashboard = {
   kills: number;
   deaths: number;
   headshots: number;
+  totalKills: number;
+  totalHeadshots: number;
   noscopes: number;
   hitStats: HitboxStats;
   gamesPlayed: number;
@@ -510,6 +514,8 @@ export type PublicPlayerProfile = {
   kills: number;
   deaths: number;
   headshots: number;
+  totalKills: number;
+  totalHeadshots: number;
   noscopes: number;
   hitStats: HitboxStats;
   vipGroups: GroupMembership[];
@@ -697,6 +703,7 @@ export type StaffModerationPage = {
 
 let mvpColumnPromise: Promise<string | null> | undefined;
 let noscopeColumnPromise: Promise<string | null> | undefined;
+const lifetimeColumnsByPool = new WeakMap<Pool, Set<string>>();
 
 function getGamePool() {
   return getGameDatabasePool();
@@ -914,6 +921,30 @@ async function getNoscopeColumn(pool: Pool) {
     return null;
   })();
   return noscopeColumnPromise;
+}
+
+async function getLifetimeStatSelection(pool: Pool) {
+  let columns = lifetimeColumnsByPool.get(pool);
+  if (!columns) {
+    columns = new Set<string>();
+    lifetimeColumnsByPool.set(pool, columns);
+  }
+  const selections = await Promise.all(["kills", "headshots"].map(async (stat) => {
+    const column = `total_${stat}`;
+    if (!columns.has(column)) {
+      try {
+        await pool.query(`SELECT \`${column}\` FROM lvl_base LIMIT 0`);
+        columns.add(column);
+      } catch {
+        // Retry missing columns on later requests so a running portal notices
+        // the K4 migration, including upgrades that temporarily have one column.
+      }
+    }
+    return columns.has(column)
+      ? `COALESCE(\`${column}\`, ${stat}, 0) AS ${column}`
+      : `${stat} AS ${column}`;
+  }));
+  return selections.join(", ");
 }
 
 export function portalStorageConfigured() {
@@ -1299,6 +1330,8 @@ export async function getPlayerDashboard(
     kills: 0,
     deaths: 0,
     headshots: 0,
+    totalKills: 0,
+    totalHeadshots: 0,
     noscopes: 0,
     hitStats: emptyHitboxStats(),
     gamesPlayed: 0,
@@ -1314,6 +1347,7 @@ export async function getPlayerDashboard(
   if (!pool) return empty;
 
   const noscopeColumn = await getNoscopeColumn(pool);
+  const lifetimeSelection = await getLifetimeStatSelection(pool);
   const noscopeSelection = noscopeColumn
     ? `\`${noscopeColumn}\` AS noscopes`
     : "0 AS noscopes";
@@ -1331,7 +1365,7 @@ export async function getPlayerDashboard(
     hitRows,
   ] = await Promise.all([
     safeGameQuery<StatRow>(
-      `SELECT name, value, rank, kills, deaths, headshots, ${noscopeSelection}, playtime, game_wins, game_losses, games_played FROM lvl_base WHERE steam = ? LIMIT 1`,
+      `SELECT name, value, rank, kills, deaths, headshots, ${lifetimeSelection}, ${noscopeSelection}, playtime, game_wins, game_losses, games_played FROM lvl_base WHERE steam = ? LIMIT 1`,
       [steamId],
     ),
     safeVipCoreRowsForSteamId(steamId),
@@ -1393,6 +1427,8 @@ export async function getPlayerDashboard(
     kills: Number(player?.kills ?? 0),
     deaths: Number(player?.deaths ?? 0),
     headshots: Number(player?.headshots ?? 0),
+    totalKills: Number(player?.total_kills ?? 0),
+    totalHeadshots: Number(player?.total_headshots ?? 0),
     noscopes: Number(player?.noscopes ?? 0),
     hitStats: toHitboxStats(hitRows[0]),
     gamesPlayed: Number(player?.games_played ?? 0),
@@ -1440,12 +1476,13 @@ export async function getPublicPlayerProfile(
   if (!pool) return null;
 
   const noscopeColumn = await getNoscopeColumn(pool);
+  const lifetimeSelection = await getLifetimeStatSelection(pool);
   const noscopeSelection = noscopeColumn
     ? `\`${noscopeColumn}\` AS noscopes`
     : "0 AS noscopes";
   const [rows, vipRows, adminRows, banRows, hitRows] = await Promise.all([
     safeGameQuery<StatRow>(
-      `SELECT name, value, rank, kills, deaths, headshots, ${noscopeSelection}, playtime, game_wins, game_losses, games_played FROM lvl_base WHERE steam = ? LIMIT 1`,
+      `SELECT name, value, rank, kills, deaths, headshots, ${lifetimeSelection}, ${noscopeSelection}, playtime, game_wins, game_losses, games_played FROM lvl_base WHERE steam = ? LIMIT 1`,
       [steamId],
     ),
     safeVipCoreRowsForSteamId(steamId),
@@ -1484,6 +1521,8 @@ export async function getPublicPlayerProfile(
     kills: Number(player.kills ?? 0),
     deaths: Number(player.deaths ?? 0),
     headshots: Number(player.headshots ?? 0),
+    totalKills: Number(player.total_kills ?? 0),
+    totalHeadshots: Number(player.total_headshots ?? 0),
     noscopes: Number(player.noscopes ?? 0),
     hitStats: toHitboxStats(hitRows[0]),
     vipGroups: toVipMemberships(vipRows),
@@ -7494,6 +7533,17 @@ async function ensureEconomyRedeemSchema() {
           "id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, redeem_code_id BIGINT UNSIGNED NOT NULL, steam_id VARCHAR(17) NOT NULL, redeemed_via ENUM('website', 'server') NOT NULL, token_amount BIGINT UNSIGNED NOT NULL DEFAULT 0, item_count INT UNSIGNED NOT NULL DEFAULT 0, idempotency_key VARCHAR(128) NOT NULL, redeemed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id), UNIQUE KEY portal_redeem_code_redemptions_once_per_player (redeem_code_id, steam_id), UNIQUE KEY portal_redeem_code_redemptions_idempotency (idempotency_key), KEY portal_redeem_code_redemptions_player_created (steam_id, redeemed_at, id), CONSTRAINT portal_redeem_code_redemptions_code_fk FOREIGN KEY (redeem_code_id) REFERENCES portal_redeem_codes (id) ON DELETE RESTRICT) ENGINE=InnoDB",
       );
     }
+    const [archiveColumns] = await pool.query<RowDataPacket[]>(
+      "SELECT COLUMN_NAME FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'portal_redeem_codes' AND column_name = 'removed_at'",
+    );
+    if (!archiveColumns.length) {
+      try {
+        await pool.execute("ALTER TABLE portal_redeem_codes ADD COLUMN removed_at DATETIME NULL DEFAULT NULL");
+      } catch (error) {
+        // Another portal process may have completed the same additive upgrade.
+        if ((error as { code?: string }).code !== "ER_DUP_FIELDNAME") throw error;
+      }
+    }
   };
   redeemSchemaReady = initialize().catch((error) => {
     // Allow a later request to retry after a transient database or permission
@@ -7515,9 +7565,9 @@ export async function getEconomyRedeemCodes(input: {
   await ensureEconomyRedeemSchema();
   const [countRows] = await pool.query<
     Array<RowDataPacket & { total: number | string }>
-  >("SELECT COUNT(*) AS total FROM portal_redeem_codes");
+  >("SELECT COUNT(*) AS total FROM portal_redeem_codes WHERE removed_at IS NULL");
   const [rows] = await pool.query<EconomyRedeemCodeRow[]>(
-    "SELECT id, code_hash, code_hint, display_name, token_amount, max_redemptions, redemption_count, enabled, created_by_steam_id, created_at, updated_at FROM portal_redeem_codes ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+    "SELECT id, code_hash, code_hint, display_name, token_amount, max_redemptions, redemption_count, enabled, created_by_steam_id, created_at, updated_at FROM portal_redeem_codes WHERE removed_at IS NULL ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
     [paging.pageSize, paging.offset],
   );
   if (!rows.length)
@@ -7683,7 +7733,7 @@ export async function setEconomyRedeemCodeEnabled(input: {
     request: { codeId, enabled: input.enabled },
     work: async (context) => {
       const [rows] = await context.connection.query<EconomyRedeemCodeRow[]>(
-        "SELECT id, code_hash, code_hint, display_name, token_amount, max_redemptions, redemption_count, enabled, created_by_steam_id, created_at, updated_at FROM portal_redeem_codes WHERE id = ? FOR UPDATE",
+        "SELECT id, code_hash, code_hint, display_name, token_amount, max_redemptions, redemption_count, enabled, created_by_steam_id, created_at, updated_at FROM portal_redeem_codes WHERE id = ? AND removed_at IS NULL FOR UPDATE",
         [codeId],
       );
       const row = rows[0];
@@ -7710,6 +7760,68 @@ export async function setEconomyRedeemCodeEnabled(input: {
   });
 }
 
+type ManageEconomyRedeemCodeInput = {
+  actorSteamId: string;
+  codeId: number;
+  idempotencyKey: string;
+};
+
+export function restartEconomyRedeemCode(input: ManageEconomyRedeemCodeInput) {
+  return archiveEconomyRedeemCode(input, true);
+}
+
+export function removeEconomyRedeemCode(input: ManageEconomyRedeemCodeInput) {
+  return archiveEconomyRedeemCode(input, false);
+}
+
+async function archiveEconomyRedeemCode(input: ManageEconomyRedeemCodeInput, restart: boolean) {
+  const actorSteamId = economySteamId(input.actorSteamId, "Admin Steam ID");
+  const codeId = economyNumber(input.codeId, "Redeem code ID", 1);
+  await ensureEconomyRedeemSchema();
+  return runEconomyMutation({
+    operationName: restart ? "redeem-code.restart" : "redeem-code.remove",
+    actorSteamId,
+    idempotencyKey: input.idempotencyKey,
+    request: { codeId },
+    work: async (context) => {
+      // Claiming and management serialize on the same campaign row.
+      const [rows] = await context.connection.query<EconomyRedeemCodeRow[]>(
+        "SELECT id, code_hash, code_hint, display_name, token_amount, max_redemptions, redemption_count, enabled, created_by_steam_id, created_at, updated_at FROM portal_redeem_codes WHERE id = ? AND removed_at IS NULL FOR UPDATE",
+        [codeId],
+      );
+      const previous = rows[0];
+      if (!previous) economyError("redeem_code_not_found", "That redeem code no longer exists. Refresh the campaign list.");
+      // Keep financial history and old redemptions, but release the public code
+      // hash. The tombstone cannot be entered as a valid redeem code (':' is
+      // forbidden), and remains unique even across repeated restarts.
+      const tombstoneHash = createHash("sha256").update(`removed:${codeId}:${previous.code_hash}`).digest("hex");
+      await context.connection.execute(
+        "UPDATE portal_redeem_codes SET code_hash = ?, enabled = FALSE, removed_at = CURRENT_TIMESTAMP WHERE id = ?",
+        [tombstoneHash, codeId],
+      );
+      let currentCodeId = codeId;
+      if (restart) {
+        const [insert] = await context.connection.execute<ResultSetHeader>(
+          "INSERT INTO portal_redeem_codes (code_hash, code_hint, display_name, token_amount, max_redemptions, redemption_count, enabled, created_by_steam_id) VALUES (?, ?, ?, ?, ?, 0, TRUE, ?)",
+          [previous.code_hash, previous.code_hint, previous.display_name, previous.token_amount, previous.max_redemptions, actorSteamId],
+        );
+        currentCodeId = economyNumber(insert.insertId, "Redeem code ID", 1);
+        await context.connection.execute(
+          "INSERT INTO portal_redeem_code_items (redeem_code_id, catalogue_id, quantity, sort_order) SELECT ?, catalogue_id, quantity, sort_order FROM portal_redeem_code_items WHERE redeem_code_id = ?",
+          [currentCodeId, codeId],
+        );
+      }
+      await writeEconomyAdminAudit({
+        connection: context.connection, actorSteamId,
+        action: restart ? "redeem_code.restarted" : "redeem_code.removed",
+        targetType: "redeem_code", targetId: String(codeId), idempotencyKey: context.idempotencyKey,
+        metadata: { previousCodeId: codeId, codeId: currentCodeId, previousRedemptionCount: economyNumber(previous.redemption_count, "Redeem count"), previousEnabled: economyBoolean(previous.enabled) },
+      });
+      return { codeId: currentCodeId, previousCodeId: codeId, displayName: String(previous.display_name) };
+    },
+  });
+}
+
 export async function redeemEconomyCode(
   input: RedeemEconomyCodeInput,
 ): Promise<RedeemEconomyCodeResult> {
@@ -7726,7 +7838,7 @@ export async function redeemEconomyCode(
     request: { codeHash, redeemedVia: input.redeemedVia },
     work: async (context) => {
       const [codeRows] = await context.connection.query<EconomyRedeemCodeRow[]>(
-        "SELECT id, code_hash, code_hint, display_name, token_amount, max_redemptions, redemption_count, enabled, created_by_steam_id, created_at, updated_at FROM portal_redeem_codes WHERE code_hash = ? FOR UPDATE",
+        "SELECT id, code_hash, code_hint, display_name, token_amount, max_redemptions, redemption_count, enabled, created_by_steam_id, created_at, updated_at FROM portal_redeem_codes WHERE code_hash = ? AND removed_at IS NULL FOR UPDATE",
         [codeHash],
       );
       const redeemCode = codeRows[0];
