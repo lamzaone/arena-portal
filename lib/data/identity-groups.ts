@@ -1,7 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { normalizeChatColor } from "@/lib/chat-colors";
+import { normalizeChatColor, normalizeChatStyle, normalizeChatBadge } from "@/lib/chat-colors";
 
 import {
   type Pool,
@@ -46,6 +46,10 @@ export type IdentityChatTag = {
   colorToken: string;
   nameColorToken: string | null;
   messageColorToken: string | null;
+  tagStyle: string;
+  nameStyle: string;
+  messageStyle: string;
+  badgeKey: string;
   enabled: boolean;
   hidden?: boolean;
 };
@@ -218,6 +222,10 @@ type IdentityTagRow = RowDataPacket & {
   color_token: string;
   name_color_token: string | null;
   message_color_token: string | null;
+  tag_style: string;
+  name_style: string;
+  message_style: string;
+  badge_key: string;
   enabled: number | boolean;
   group_id?: number | string;
   hidden?: number | boolean | null;
@@ -492,6 +500,19 @@ function identityChatColor(value: unknown, field: string, optional = false) {
   }
 }
 
+function identityChatPresentation(input: { tagStyle?: string; nameStyle?: string; messageStyle?: string; badgeKey?: string }) {
+  try {
+    return {
+      tagStyle: normalizeChatStyle(input.tagStyle),
+      nameStyle: normalizeChatStyle(input.nameStyle),
+      messageStyle: normalizeChatStyle(input.messageStyle),
+      badgeKey: normalizeChatBadge(input.badgeKey),
+    };
+  } catch {
+    identityError("invalid_input", "Choose only supported chat styles and badges.");
+  }
+}
+
 function identityRequestKey(value: unknown) {
   const key = String(value ?? "").trim();
   if (!/^[A-Za-z0-9._:-]{8,120}$/.test(key)) {
@@ -590,6 +611,10 @@ function toTag(row: IdentityTagRow): IdentityChatTag {
     messageColorToken: row.message_color_token
       ? String(row.message_color_token)
       : null,
+    tagStyle: String(row.tag_style ?? ""),
+    nameStyle: String(row.name_style ?? ""),
+    messageStyle: String(row.message_style ?? ""),
+    badgeKey: String(row.badge_key ?? ""),
     enabled: asBoolean(row.enabled),
     ...(row.hidden !== undefined ? { hidden: asBoolean(row.hidden) } : {}),
   };
@@ -1317,13 +1342,13 @@ export async function getIdentityAdminSnapshot(): Promise<IdentityAdminSnapshot>
           "FROM portal_identity_groups AS g ORDER BY g.profile_priority DESC, g.display_name, g.id",
       ),
       pool.query<IdentityTagRow[]>(
-        "SELECT id, tag_key, tag_text, color_token, name_color_token, message_color_token, enabled FROM portal_identity_chat_tags ORDER BY enabled DESC, tag_text, id",
+        "SELECT id, tag_key, tag_text, color_token, name_color_token, message_color_token, tag_style, name_style, message_style, badge_key, enabled FROM portal_identity_chat_tags ORDER BY enabled DESC, tag_text, id",
       ),
       pool.query<IdentityPrivilegeRow[]>(
         "SELECT id, privilege_key, scope, display_name, description, is_sensitive, enabled FROM portal_identity_privileges ORDER BY enabled DESC, scope, display_name, id",
       ),
       pool.query<IdentityTagRow[]>(
-        "SELECT links.group_id, tags.id, tags.tag_key, tags.tag_text, tags.color_token, tags.name_color_token, tags.message_color_token, tags.enabled FROM portal_identity_group_chat_tags AS links INNER JOIN portal_identity_chat_tags AS tags ON tags.id = links.tag_id ORDER BY links.group_id, links.sort_order, tags.id",
+        "SELECT links.group_id, tags.id, tags.tag_key, tags.tag_text, tags.color_token, tags.name_color_token, tags.message_color_token, tags.tag_style, tags.name_style, tags.message_style, tags.badge_key, tags.enabled FROM portal_identity_group_chat_tags AS links INNER JOIN portal_identity_chat_tags AS tags ON tags.id = links.tag_id ORDER BY links.group_id, links.sort_order, tags.id",
       ),
       pool.query<IdentityPrivilegeRow[]>(
         "SELECT links.group_id, privileges.id, privileges.privilege_key, privileges.scope, privileges.display_name, privileges.description, privileges.is_sensitive, privileges.enabled FROM portal_identity_group_privileges AS links INNER JOIN portal_identity_privileges AS privileges ON privileges.id = links.privilege_id ORDER BY links.group_id, privileges.scope, privileges.display_name, privileges.id",
@@ -1335,7 +1360,7 @@ export async function getIdentityAdminSnapshot(): Promise<IdentityAdminSnapshot>
         arenaMemberships.available ? arenaMemberships.rows : [],
       ] as [IdentityMembershipRow[]]),
       pool.query<IdentityPlayerTagGrantRow[]>(
-        "SELECT assigned.steam_id, assigned.starts_at, assigned.expires_at, assigned.grant_reason, tags.id, tags.tag_key, tags.tag_text, tags.color_token, tags.name_color_token, tags.message_color_token, tags.enabled FROM portal_identity_player_chat_tags AS assigned INNER JOIN portal_identity_chat_tags AS tags ON tags.id = assigned.tag_id WHERE assigned.revoked_at IS NULL AND assigned.starts_at <= CURRENT_TIMESTAMP AND (assigned.expires_at IS NULL OR assigned.expires_at > CURRENT_TIMESTAMP) ORDER BY assigned.starts_at DESC, assigned.steam_id, tags.id",
+        "SELECT assigned.steam_id, assigned.starts_at, assigned.expires_at, assigned.grant_reason, tags.id, tags.tag_key, tags.tag_text, tags.color_token, tags.name_color_token, tags.message_color_token, tags.tag_style, tags.name_style, tags.message_style, tags.badge_key, tags.enabled FROM portal_identity_player_chat_tags AS assigned INNER JOIN portal_identity_chat_tags AS tags ON tags.id = assigned.tag_id WHERE assigned.revoked_at IS NULL AND assigned.starts_at <= CURRENT_TIMESTAMP AND (assigned.expires_at IS NULL OR assigned.expires_at > CURRENT_TIMESTAMP) ORDER BY assigned.starts_at DESC, assigned.steam_id, tags.id",
       ),
       pool.query<IdentityPlayerPrivilegeGrantRow[]>(
         "SELECT assigned.steam_id, assigned.starts_at, assigned.expires_at, assigned.grant_reason, privileges.id, privileges.privilege_key, privileges.scope, privileges.display_name, privileges.description, privileges.is_sensitive, privileges.enabled FROM portal_identity_player_privileges AS assigned INNER JOIN portal_identity_privileges AS privileges ON privileges.id = assigned.privilege_id WHERE assigned.revoked_at IS NULL AND assigned.starts_at <= CURRENT_TIMESTAMP AND (assigned.expires_at IS NULL OR assigned.expires_at > CURRENT_TIMESTAMP) ORDER BY assigned.starts_at DESC, assigned.steam_id, privileges.id",
@@ -2084,7 +2109,7 @@ async function getEffectiveIdentityUnsafe(input: {
     await Promise.all([
       groupIds.length
         ? pool.query<IdentityTagRow[]>(
-            "SELECT links.group_id, tags.id, tags.tag_key, tags.tag_text, tags.color_token, tags.name_color_token, tags.message_color_token, tags.enabled, preferences.hidden " +
+            "SELECT links.group_id, tags.id, tags.tag_key, tags.tag_text, tags.color_token, tags.name_color_token, tags.message_color_token, tags.tag_style, tags.name_style, tags.message_style, tags.badge_key, tags.enabled, preferences.hidden " +
               "FROM portal_identity_group_chat_tags AS links INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = links.group_id INNER JOIN portal_identity_chat_tags AS tags ON tags.id = links.tag_id AND tags.enabled = TRUE " +
               "LEFT JOIN portal_identity_player_tag_preferences AS preferences ON preferences.steam_id = ? AND preferences.tag_id = tags.id " +
               "WHERE links.group_id IN (" +
@@ -2094,7 +2119,7 @@ async function getEffectiveIdentityUnsafe(input: {
           )
         : Promise.resolve([[], []] as unknown as [IdentityTagRow[], unknown]),
       pool.query<IdentityTagRow[]>(
-        "SELECT tags.id, tags.tag_key, tags.tag_text, tags.color_token, tags.name_color_token, tags.message_color_token, tags.enabled, preferences.hidden " +
+        "SELECT tags.id, tags.tag_key, tags.tag_text, tags.color_token, tags.name_color_token, tags.message_color_token, tags.tag_style, tags.name_style, tags.message_style, tags.badge_key, tags.enabled, preferences.hidden " +
           "FROM portal_identity_player_chat_tags AS assigned INNER JOIN portal_identity_chat_tags AS tags ON tags.id = assigned.tag_id AND tags.enabled = TRUE " +
           "LEFT JOIN portal_identity_player_tag_preferences AS preferences ON preferences.steam_id = assigned.steam_id AND preferences.tag_id = tags.id " +
           "WHERE assigned.steam_id = ? AND assigned.revoked_at IS NULL AND assigned.starts_at <= CURRENT_TIMESTAMP AND (assigned.expires_at IS NULL OR assigned.expires_at > CURRENT_TIMESTAMP) ORDER BY assigned.created_at, tags.id",
@@ -2916,12 +2941,17 @@ export async function createIdentityChatTag(input: {
   colorToken: string;
   nameColorToken?: string | null;
   messageColorToken?: string | null;
+  tagStyle?: string;
+  nameStyle?: string;
+  messageStyle?: string;
+  badgeKey?: string;
 }) {
   const actorSteamId = requireFounder(input.actor);
   const requestKey = identityRequestKey(input.requestKey);
   const key = identityDefinitionKey(input.key, "Tag key");
   const text = identityText(input.text, "Tag text", 64);
   const colorToken = identityChatColor(input.colorToken, "Tag color")!;
+  const presentation = identityChatPresentation(input);
   const nameColorToken = identityChatColor(
     input.nameColorToken,
     "Name color",
@@ -2934,8 +2964,8 @@ export async function createIdentityChatTag(input: {
   );
   return withIdentityTransaction(async (connection) => {
     const [result] = await connection.execute<ResultSetHeader>(
-      "INSERT INTO portal_identity_chat_tags (tag_key, tag_text, color_token, name_color_token, message_color_token, enabled, created_by_steam_id) VALUES (?, ?, ?, ?, ?, TRUE, ?)",
-      [key, text, colorToken, nameColorToken, messageColorToken, actorSteamId],
+      "INSERT INTO portal_identity_chat_tags (tag_key, tag_text, color_token, name_color_token, message_color_token, tag_style, name_style, message_style, badge_key, enabled, created_by_steam_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?)",
+      [key, text, colorToken, nameColorToken, messageColorToken, presentation.tagStyle, presentation.nameStyle, presentation.messageStyle, presentation.badgeKey, actorSteamId],
     );
     const tagId = Number(result.insertId);
     await writeIdentityAudit(connection, {
@@ -2944,7 +2974,7 @@ export async function createIdentityChatTag(input: {
       action: "identity.tag.created",
       targetType: "chat-tag",
       targetId: String(tagId),
-      metadata: { key, text },
+      metadata: { key, text, colorToken, nameColorToken, messageColorToken, ...presentation },
     });
     return { tagId };
   });
@@ -2958,6 +2988,10 @@ export async function updateIdentityChatTag(input: {
   colorToken: string;
   nameColorToken?: string | null;
   messageColorToken?: string | null;
+  tagStyle?: string;
+  nameStyle?: string;
+  messageStyle?: string;
+  badgeKey?: string;
   enabled: boolean;
 }) {
   const actorSteamId = requireFounder(input.actor);
@@ -2965,6 +2999,7 @@ export async function updateIdentityChatTag(input: {
   const tagId = identityId(input.tagId, "Tag ID");
   const text = identityText(input.text, "Tag text", 64);
   const colorToken = identityChatColor(input.colorToken, "Tag color")!;
+  const presentation = identityChatPresentation(input);
   const nameColorToken = identityChatColor(
     input.nameColorToken,
     "Name color",
@@ -2977,12 +3012,16 @@ export async function updateIdentityChatTag(input: {
   );
   return withIdentityTransaction(async (connection) => {
     const [result] = await connection.execute<ResultSetHeader>(
-      "UPDATE portal_identity_chat_tags SET tag_text = ?, color_token = ?, name_color_token = ?, message_color_token = ?, enabled = ? WHERE id = ?",
+      "UPDATE portal_identity_chat_tags SET tag_text = ?, color_token = ?, name_color_token = ?, message_color_token = ?, tag_style = ?, name_style = ?, message_style = ?, badge_key = ?, enabled = ? WHERE id = ?",
       [
         text,
         colorToken,
         nameColorToken,
         messageColorToken,
+        presentation.tagStyle,
+        presentation.nameStyle,
+        presentation.messageStyle,
+        presentation.badgeKey,
         input.enabled,
         tagId,
       ],
@@ -2994,7 +3033,7 @@ export async function updateIdentityChatTag(input: {
       action: "identity.tag.updated",
       targetType: "chat-tag",
       targetId: String(tagId),
-      metadata: { text, enabled: input.enabled },
+      metadata: { text, colorToken, nameColorToken, messageColorToken, ...presentation, enabled: input.enabled },
     });
     return { tagId };
   });

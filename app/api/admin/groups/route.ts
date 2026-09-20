@@ -352,6 +352,10 @@ export async function POST(request: Request) {
           colorToken: text(formData, "colorToken"),
           nameColorToken: text(formData, "nameColorToken"),
           messageColorToken: text(formData, "messageColorToken"),
+          tagStyle: text(formData, "tagStyle"),
+          nameStyle: text(formData, "nameStyle"),
+          messageStyle: text(formData, "messageStyle"),
+          badgeKey: text(formData, "badgeKey"),
         });
         return redirectResult("notice", "tag-created");
 
@@ -364,6 +368,10 @@ export async function POST(request: Request) {
           colorToken: text(formData, "colorToken"),
           nameColorToken: text(formData, "nameColorToken"),
           messageColorToken: text(formData, "messageColorToken"),
+          tagStyle: text(formData, "tagStyle"),
+          nameStyle: text(formData, "nameStyle"),
+          messageStyle: text(formData, "messageStyle"),
+          badgeKey: text(formData, "badgeKey"),
           enabled: bool(formData, "enabled"),
         });
         return redirectResult("notice", "tag-updated");

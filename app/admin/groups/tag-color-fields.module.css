@@ -79,3 +79,31 @@
   .presentation, .colorFields { grid-template-columns: 1fr; }
   .palette { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.identityFields, .channel { display: grid; gap: 14px; min-width: 0; }
+.customColor { display: flex; align-items: end; gap: 8px; margin-bottom: 8px; }
+.form .customColor input[type="color"] { width: 44px; height: 44px; padding: 3px; flex-shrink: 0; cursor: pointer; }
+.colorEntry { display: grid; gap: 6px; min-width: 0; flex: 1; }
+.colorEntry input { font-family: var(--font-mono, monospace); }
+.colorEntry input[aria-invalid="true"] { border-color: #ff8080; }
+.stylePicker { margin: 0; padding: 0; min-width: 0; border: 0; }
+.stylePicker legend { margin-bottom: 8px; color: var(--theme-text-muted); font-size: 11px; font-weight: 700; }
+.styleButtons { display: flex; flex-wrap: wrap; gap: 5px; }
+.styleButtons button { min-height: 36px; padding: 6px 10px; border: 1px solid var(--theme-border); border-radius: 4px; background: var(--theme-surface-raised); color: var(--theme-text-muted); font: inherit; font-size: 11px; text-transform: capitalize; cursor: pointer; }
+.styleButtons button[aria-pressed="true"] { border-color: var(--theme-accent); color: var(--theme-text); background: color-mix(in srgb, var(--theme-accent) 15%, var(--theme-surface)); }
+.styleButtons button:focus-visible { outline: 2px solid var(--theme-accent); outline-offset: 2px; }
+.badge { display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; min-width: 21px; height: 21px; margin-right: 4px; border: 1px solid #f4ce68; border-radius: 4px; background: #41320e; color: #ffe596; font-size: 10px; font-weight: 900; vertical-align: middle; }
+.effect_bold { font-weight: 800; }
+.effect_italic { font-style: italic; }
+.effect_underline { text-decoration: underline; text-underline-offset: 3px; }
+.effect_glow { text-shadow: 0 0 8px currentColor, 0 0 16px currentColor; }
+.effect_gradient { background: linear-gradient(100deg, currentColor, #fff, currentColor); background-clip: text; -webkit-text-fill-color: transparent; }
+.effect_shimmer { background: linear-gradient(100deg, currentColor 25%, #fff 50%, currentColor 75%); background-size: 250% 100%; background-clip: text; -webkit-text-fill-color: transparent; animation: chatShimmer 3s linear infinite; }
+.effect_pulse { animation: chatPulse 2.4s ease-in-out infinite; }
+.effect_shimmer.effect_pulse { animation: chatShimmer 3s linear infinite, chatPulse 2.4s ease-in-out infinite; }
+@keyframes chatShimmer { from { background-position: 150% 0; } to { background-position: -150% 0; } }
+@keyframes chatPulse { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) {
+  .preview .effect_shimmer, .preview .effect_pulse { animation: none; }
+}
+@media (max-width: 680px) { .presentation, .colorFields { grid-template-columns: 1fr; } }

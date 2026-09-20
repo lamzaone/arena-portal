@@ -1202,7 +1202,7 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
 
         {activeTab === "tags" ? <section id="tag-definitions" className="staff-record-section">
           <div className="staff-section-heading"><div><p className="tapped-kicker"><Tags aria-hidden="true" /> GlobalChatTags</p><h2>Tag definitions</h2></div><span>{snapshot.tags.length} tags</span></div>
-          <p className={tagStyles.intro}>Choose from the full in-game palette. Open a color to see its swatches and aliases; the preview updates as you edit. Team color is available for player names.</p>
+          <p className={tagStyles.intro}>Build a Workshop chat look with custom HEX colors, named swatches, text effects and badges. Style the tag, player name and message separately; the preview updates as you edit.</p>
           <form className={tagStyles.form} action="/api/admin/groups" method="post">
             <MutationFields csrf={csrf} action="tag-create" />
             <label>Stable key<input name="tagKey" pattern="[a-z0-9][a-z0-9._:-]{0,63}" required placeholder="group.beta" /></label>
@@ -1215,7 +1215,7 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
                 <MutationFields csrf={csrf} action="tag-update" />
                 <input type="hidden" name="tagId" value={tag.id} />
                 <strong className={tagStyles.tagKey}>{tag.key}</strong>
-                <TagColorFields text={tag.text} color={tag.colorToken} nameColor={tag.nameColorToken} messageColor={tag.messageColorToken} />
+                <TagColorFields text={tag.text} color={tag.colorToken} nameColor={tag.nameColorToken} messageColor={tag.messageColorToken} tagStyle={tag.tagStyle} nameStyle={tag.nameStyle} messageStyle={tag.messageStyle} badgeKey={tag.badgeKey} />
                 <div className={tagStyles.footer}>
                   <label>Status<select name="enabled" defaultValue={tag.enabled ? "true" : "false"}><option value="true">Enabled</option><option value="false">Disabled</option></select></label>
                   <button className="staff-unban-button" type="submit">Save tag</button>
