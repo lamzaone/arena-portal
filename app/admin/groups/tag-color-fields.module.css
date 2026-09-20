@@ -96,14 +96,27 @@
 .effect_bold { font-weight: 800; }
 .effect_italic { font-style: italic; }
 .effect_underline { text-decoration: underline; text-underline-offset: 3px; }
-.effect_glow { text-shadow: 0 0 8px currentColor, 0 0 16px currentColor; }
-.effect_gradient { background: linear-gradient(90deg, #38bdf8, #a78bfa, #f472b6); background-clip: text; -webkit-text-fill-color: transparent; }
-.effect_shimmer { background: linear-gradient(90deg, #38bdf8, #a78bfa, #f472b6); background-size: 200% 100%; background-clip: text; -webkit-text-fill-color: transparent; animation: chatShimmer 3s ease-in-out infinite; }
-.effect_pulse { animation: chatPulse 2s ease-in-out infinite; }
-.effect_shimmer.effect_pulse { animation: chatShimmer 3s ease-in-out infinite, chatPulse 3s ease-in-out infinite; }
-@keyframes chatShimmer { 0%, 100% { background-position: 100% 0; } 50% { background-position: 0% 0; } }
-@keyframes chatPulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.7); } }
+.effect_glow { text-shadow: 0 0 var(--effect-blur, 2px) color-mix(in srgb, var(--effect-glow, currentColor) 60%, transparent); }
+.effect_pulse { animation: chatPulse var(--effect-duration) ease-in-out infinite; }
+.effect_sparkle { animation: chatSparkle var(--effect-duration) ease-in-out infinite; }
+.effect_sparkle.effect_pulse { animation: chatPulseSparkle var(--effect-duration) ease-in-out infinite; }
+@keyframes chatPulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(var(--effect-peak)); } }
+@keyframes chatSparkle { 0%, 14%, 26%, 68%, 80%, 100% { filter: brightness(1); } 18%, 72% { filter: brightness(var(--effect-peak)); } }
+@keyframes chatPulseSparkle { 0%, 26%, 100% { filter: brightness(1); } 18%, 50% { filter: brightness(var(--effect-peak)); } 72% { filter: brightness(var(--effect-combined-peak)); } }
 @media (prefers-reduced-motion: reduce) {
-  .preview .effect_shimmer, .preview .effect_pulse { animation: none; }
+  .preview span { animation: none !important; }
 }
 @media (max-width: 680px) { .presentation, .colorFields { grid-template-columns: 1fr; } }
+
+.effectSettings { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--theme-border); }
+.effectSettings > label { display: grid; gap: 6px; min-width: 0; }
+.effectPalette { grid-column: 1 / -1; display: grid; gap: 8px; }
+.effectPalette > span { display: flex; justify-content: space-between; color: var(--theme-text-muted); font-size: 11px; font-weight: 700; }
+.effectPalette small { font-size: 11px; line-height: 1.5; color: var(--theme-text-muted); }
+.effectColor { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.form .effectColor input[type="color"] { width: 44px; height: 44px; padding: 3px; flex-shrink: 0; cursor: pointer; }
+.effectColor code { color: var(--theme-text); font-size: 11px; }
+.effectColor button { min-height: 44px; margin-left: auto; background: none; border: 0; color: var(--theme-text-muted); cursor: pointer; font-size: 11px; }
+.effectColor button:hover { color: var(--theme-text); }
+.effectColor button:focus-visible { outline: 2px solid var(--theme-accent); outline-offset: 2px; }
+.styleButtons button:disabled { opacity: .45; cursor: default; }

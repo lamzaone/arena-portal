@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { chatColors, chatColorPreview, normalizeChatColor, normalizeChatStyle, normalizeChatBadge } from "./chat-colors.ts";
+import { chatColors, chatColorPreview, normalizeChatColor, normalizeChatStyle, normalizeChatBadge, withChatEffectOptions, chatEffectOptions } from "./chat-colors.ts";
 
 // Named Workshop chat tokens; teamcolor is resolved for names by GlobalChatTags.
 const supported = ["[default]", "[/]", "[white]", "[darkred]", "[lightpurple]", "[green]",
@@ -56,4 +56,15 @@ test("badges only accept installed assets", () => {
   for (const value of ["", "tapped", "vip"]) assert.equal(normalizeChatBadge(value), value);
   assert.equal(normalizeChatBadge(" VIP "), "vip");
   for (const value of ["admin", "../vip", "https://example.com/icon.svg"]) assert.throws(() => normalizeChatBadge(value));
+});
+
+test("effect palettes, frequency and intensity round trip inside existing storage", () => {
+  assert.equal(normalizeChatStyle("glow cycle c=ff0000,00ff00 f=0.5 i=2"), "glow cycle c=FF0000,00FF00 f=0.5 i=2");
+  for (const value of ["cycle c=xyz", "cycle c=", "cycle f=0", "wave f=NaN", "glow i=9", "cycle c=FF0000 c=00FF00", "cycle c=" + Array(7).fill("FF0000").join(",")]) {
+    assert.throws(() => normalizeChatStyle(value));
+  }
+  for (const effect of ["cycle", "wave", "sparkle"]) assert.equal(normalizeChatStyle(effect), effect);
+  const largest = withChatEffectOptions("bold italic underline glow pulse gradient shimmer", { colors: Array(6).fill("#ABCDEF"), frequency: .25, intensity: 3 });
+  assert.ok(largest.length <= 96);
+  assert.deepEqual(chatEffectOptions(largest), { colors: Array(6).fill("#ABCDEF"), frequency: .25, intensity: 3 });
 });

@@ -2,8 +2,9 @@
 
 import { useId, useState } from "react";
 import { Check, ChevronDown, Palette } from "lucide-react";
-import { chatColors, chatColorPreview, chatStyles, normalizeChatColor, type ChatColor } from "@/lib/chat-colors";
+import { chatColors, chatColorPreview, chatStyles, normalizeChatColor, chatEffectOptions, withChatEffectOptions, paletteEffects, effectFrequencies, defaultEffectColors, type ChatColor } from "@/lib/chat-colors";
 import styles from "./tag-color-fields.module.css";
+import { ChatEffectPreview } from "./chat-effect-preview";
 
 function ChatColorPicker({ label, name, value, onChange, optional = false, teamColor = false }: {
   label: string;
@@ -62,22 +63,51 @@ function StylePicker({ label, name, value, onChange }: {
   label: string; name: string; value: string; onChange: (value: string) => void;
 }) {
   const selected = new Set(value.split(" "));
+  const options = chatEffectOptions(value);
+  const update = (next: typeof options) => onChange(withChatEffectOptions(value, next));
+  const hasEffects = chatStyles.some((style) => !["bold", "italic", "underline"].includes(style) && selected.has(style));
   return <fieldset className={styles.stylePicker}>
     <legend>{label}</legend>
     <input type="hidden" name={name} value={value} />
     <div className={styles.styleButtons}>
       {chatStyles.map((style) => <button key={style} type="button" aria-pressed={selected.has(style)}
         onClick={() => {
-          if (selected.has(style)) selected.delete(style); else selected.add(style);
-          onChange(chatStyles.filter((option) => selected.has(option)).join(" "));
+          if (selected.has(style)) selected.delete(style);
+          else {
+            if (paletteEffects.includes(style as typeof paletteEffects[number])) paletteEffects.forEach((effect) => selected.delete(effect));
+            selected.add(style);
+          }
+          onChange(withChatEffectOptions(chatStyles.filter((option) => selected.has(option)).join(" "), options));
         }}>{style}</button>)}
     </div>
+    {hasEffects && <div className={styles.effectSettings}>
+      <label>Frequency
+        <select aria-label={`${label} frequency`} value={options.frequency} onChange={(event) => update({ ...options, frequency: Number(event.target.value) })}>
+          {effectFrequencies.map((rate) => <option key={rate} value={rate}>{rate} Hz · every {1 / rate}s</option>)}
+        </select>
+      </label>
+      <label>Intensity
+        <select aria-label={`${label} intensity`} value={options.intensity} onChange={(event) => update({ ...options, intensity: Number(event.target.value) })}>
+          <option value={1}>Soft</option><option value={2}>Medium</option><option value={3}>Strong</option>
+        </select>
+      </label>
+      <div className={styles.effectPalette}>
+        <span>Effect colors <small>{options.colors.length}/6</small></span>
+        {options.colors.map((color, index) => <div className={styles.effectColor} key={index}>
+          <input type="color" aria-label={`${label} effect color ${index + 1}`} value={color}
+            onChange={(event) => update({ ...options, colors: options.colors.map((entry, i) => i === index ? event.target.value.toUpperCase() : entry) })} />
+          <code>{color}</code>
+          <button type="button" aria-label={`Remove ${label.toLowerCase()} color ${index + 1}`}
+            onClick={() => update({ ...options, colors: options.colors.filter((_, i) => i !== index) })}>Remove</button>
+        </div>)}
+        <div className={styles.styleButtons}>
+          <button type="button" disabled={options.colors.length >= 6} onClick={() => update({ ...options, colors: [...options.colors, defaultEffectColors[options.colors.length % 3]] })}>Add color</button>
+          <button type="button" disabled={!options.colors.length} onClick={() => update({ ...options, colors: [] })}>Reset palette</button>
+        </div>
+        <small>{options.colors.length ? "Colors play in this order. One color stays solid." : "Using default effect colors; glow and pulse follow the text color."} Frequency controls animation; intensity controls glow, pulse, wave and sparkle.</small>
+      </div>
+    </div>}
   </fieldset>;
-}
-
-function effectClasses(value: string) {
-  return value.split(" ").filter((style) => chatStyles.includes(style as typeof chatStyles[number]))
-    .map((style) => styles[`effect_${style}`]).join(" ");
 }
 
 export function TagColorFields({ text = "", color = "[gold]", nameColor = "", messageColor = "",
@@ -116,10 +146,10 @@ export function TagColorFields({ text = "", color = "[gold]", nameColor = "", me
         <div className={styles.preview}>
           <span className={styles.previewLabel}><Palette aria-hidden="true" /> Chat preview</span>
           <p>{badge && <span className={styles.badge} aria-label={`${badge} badge`}>{badge === "vip" ? "VIP" : "T"}</span>}{" "}
-            <span className={effectClasses(tagEffects)} style={{ color: chatColorPreview(tagColor) }}>{tagText || "[TAG]"}</span>{" "}
-            <span className={effectClasses(nameEffects)} style={{ color: chatColorPreview(playerColor, "#B4A0FF") }}>Player</span>
+            <ChatEffectPreview value={tagEffects} color={chatColorPreview(tagColor)} text={tagText || "[TAG]"} />{" "}
+            <ChatEffectPreview value={nameEffects} color={chatColorPreview(playerColor, "#B4A0FF")} text="Player" />
             <span style={{ color: "#ffffff" }}>: </span>
-            <span className={effectClasses(messageEffects)} style={{ color: chatColorPreview(chatColor) }}>Good luck, have fun!</span>
+            <ChatEffectPreview value={messageEffects} color={chatColorPreview(chatColor)} text="Good luck, have fun!" />
           </p>
           <small>Approximate effects and badges. The Workshop HUD maps unsupported HEX colors to its 528-color palette. Inherited colors depend on server/group settings.</small>
         </div>
