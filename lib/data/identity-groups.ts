@@ -174,6 +174,7 @@ export type EffectiveIdentity = {
 };
 
 export type IdentityAdminSnapshot = {
+  richChatTagsAvailable?: boolean;
   groups: IdentityGroup[];
   tags: IdentityChatTag[];
   privileges: IdentityPrivilege[];
@@ -497,6 +498,43 @@ function identityChatColor(value: unknown, field: string, optional = false) {
     return normalizeChatColor(value, optional);
   } catch {
     identityError("invalid_input", `${field} is not a supported chat color.`);
+  }
+}
+
+// Only the four additive presentation fields may fall back during migration 033.
+// Do not treat missing tables, old required columns or connection errors as rollout.
+function missingRichChatTagColumn(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const databaseError = error as { code?: string; errno?: number; sqlMessage?: string; message?: string };
+  if (databaseError.code !== "ER_BAD_FIELD_ERROR" && databaseError.errno !== 1054) return false;
+  return /Unknown column '(?:tags\.)?(?:tag_style|name_style|message_style|badge_key)' in /i
+    .test(databaseError.sqlMessage ?? databaseError.message ?? "");
+}
+
+async function queryIdentityChatTags<T extends RowDataPacket>(
+  pool: Pick<Pool, "query">,
+  sql: string,
+  values: unknown[] = [],
+  onLegacySchema?: () => void,
+) {
+  try {
+    return await pool.query<T[]>(sql, values);
+  } catch (error) {
+    if (!missingRichChatTagColumn(error)) throw error;
+    // These queries only reference rich fields in their SELECT projection.
+    const legacySql = sql.replace(/\b(?:tags\.)?(tag_style|name_style|message_style|badge_key)\b/g, "'' AS $1");
+    const result = await pool.query<T[]>(legacySql, values);
+    onLegacySchema?.();
+    return result;
+  }
+}
+
+async function executeIdentityChatTagWrite(connection: PoolConnection, sql: string, values: Array<string | number | boolean | null>) {
+  try {
+    return await connection.execute<ResultSetHeader>(sql, values);
+  } catch (error) {
+    if (!missingRichChatTagColumn(error)) throw error;
+    identityError("rich_chat_migration_required", "Apply arena-portal/db/033_rich_chat_tag_styles.sql to the Portal database before creating or saving chat tags.");
   }
 }
 
@@ -1333,6 +1371,10 @@ export async function getIdentityAdminSnapshot(): Promise<IdentityAdminSnapshot>
   }
 
   const arenaMemberships = await readArenaIdentityAdminMemberships();
+  let richChatTagsAvailable = true;
+  const readTags = <T extends RowDataPacket>(sql: string) => queryIdentityChatTags<T>(
+    pool, sql, [], () => { richChatTagsAvailable = false; },
+  );
 
   const [groupRows, tagRows, privilegeRows, groupTagRows, groupPrivilegeRows, rewardRows, membershipRows, directTagRows, directPrivilegeRows, externalDefinitionRows, privilegeSourceRows, catalogueStatus] =
     await Promise.all([
@@ -1341,13 +1383,13 @@ export async function getIdentityAdminSnapshot(): Promise<IdentityAdminSnapshot>
           ", 0 AS member_count " +
           "FROM portal_identity_groups AS g ORDER BY g.profile_priority DESC, g.display_name, g.id",
       ),
-      pool.query<IdentityTagRow[]>(
+      readTags<IdentityTagRow>(
         "SELECT id, tag_key, tag_text, color_token, name_color_token, message_color_token, tag_style, name_style, message_style, badge_key, enabled FROM portal_identity_chat_tags ORDER BY enabled DESC, tag_text, id",
       ),
       pool.query<IdentityPrivilegeRow[]>(
         "SELECT id, privilege_key, scope, display_name, description, is_sensitive, enabled FROM portal_identity_privileges ORDER BY enabled DESC, scope, display_name, id",
       ),
-      pool.query<IdentityTagRow[]>(
+      readTags<IdentityTagRow>(
         "SELECT links.group_id, tags.id, tags.tag_key, tags.tag_text, tags.color_token, tags.name_color_token, tags.message_color_token, tags.tag_style, tags.name_style, tags.message_style, tags.badge_key, tags.enabled FROM portal_identity_group_chat_tags AS links INNER JOIN portal_identity_chat_tags AS tags ON tags.id = links.tag_id ORDER BY links.group_id, links.sort_order, tags.id",
       ),
       pool.query<IdentityPrivilegeRow[]>(
@@ -1359,7 +1401,7 @@ export async function getIdentityAdminSnapshot(): Promise<IdentityAdminSnapshot>
       Promise.resolve([
         arenaMemberships.available ? arenaMemberships.rows : [],
       ] as [IdentityMembershipRow[]]),
-      pool.query<IdentityPlayerTagGrantRow[]>(
+      readTags<IdentityPlayerTagGrantRow>(
         "SELECT assigned.steam_id, assigned.starts_at, assigned.expires_at, assigned.grant_reason, tags.id, tags.tag_key, tags.tag_text, tags.color_token, tags.name_color_token, tags.message_color_token, tags.tag_style, tags.name_style, tags.message_style, tags.badge_key, tags.enabled FROM portal_identity_player_chat_tags AS assigned INNER JOIN portal_identity_chat_tags AS tags ON tags.id = assigned.tag_id WHERE assigned.revoked_at IS NULL AND assigned.starts_at <= CURRENT_TIMESTAMP AND (assigned.expires_at IS NULL OR assigned.expires_at > CURRENT_TIMESTAMP) ORDER BY assigned.starts_at DESC, assigned.steam_id, tags.id",
       ),
       pool.query<IdentityPlayerPrivilegeGrantRow[]>(
@@ -1451,6 +1493,7 @@ export async function getIdentityAdminSnapshot(): Promise<IdentityAdminSnapshot>
   return {
     groups,
     tags: tagRows[0].map(toTag),
+    richChatTagsAvailable,
     privileges: privilegeRows[0].map((row) =>
       toPrivilege(row, sourcesByPrivilegeId.get(Number(row.id)) ?? []),
     ),
@@ -2108,7 +2151,7 @@ async function getEffectiveIdentityUnsafe(input: {
   const [groupTagRows, playerTagRows, groupPrivilegeRows, playerPrivilegeRows] =
     await Promise.all([
       groupIds.length
-        ? pool.query<IdentityTagRow[]>(
+        ? queryIdentityChatTags<IdentityTagRow>(pool,
             "SELECT links.group_id, tags.id, tags.tag_key, tags.tag_text, tags.color_token, tags.name_color_token, tags.message_color_token, tags.tag_style, tags.name_style, tags.message_style, tags.badge_key, tags.enabled, preferences.hidden " +
               "FROM portal_identity_group_chat_tags AS links INNER JOIN portal_identity_groups AS identity_group ON identity_group.id = links.group_id INNER JOIN portal_identity_chat_tags AS tags ON tags.id = links.tag_id AND tags.enabled = TRUE " +
               "LEFT JOIN portal_identity_player_tag_preferences AS preferences ON preferences.steam_id = ? AND preferences.tag_id = tags.id " +
@@ -2118,7 +2161,7 @@ async function getEffectiveIdentityUnsafe(input: {
             [steamId, ...groupIds],
           )
         : Promise.resolve([[], []] as unknown as [IdentityTagRow[], unknown]),
-      pool.query<IdentityTagRow[]>(
+      queryIdentityChatTags<IdentityTagRow>(pool,
         "SELECT tags.id, tags.tag_key, tags.tag_text, tags.color_token, tags.name_color_token, tags.message_color_token, tags.tag_style, tags.name_style, tags.message_style, tags.badge_key, tags.enabled, preferences.hidden " +
           "FROM portal_identity_player_chat_tags AS assigned INNER JOIN portal_identity_chat_tags AS tags ON tags.id = assigned.tag_id AND tags.enabled = TRUE " +
           "LEFT JOIN portal_identity_player_tag_preferences AS preferences ON preferences.steam_id = assigned.steam_id AND preferences.tag_id = tags.id " +
@@ -2963,7 +3006,7 @@ export async function createIdentityChatTag(input: {
     true,
   );
   return withIdentityTransaction(async (connection) => {
-    const [result] = await connection.execute<ResultSetHeader>(
+    const [result] = await executeIdentityChatTagWrite(connection,
       "INSERT INTO portal_identity_chat_tags (tag_key, tag_text, color_token, name_color_token, message_color_token, tag_style, name_style, message_style, badge_key, enabled, created_by_steam_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?)",
       [key, text, colorToken, nameColorToken, messageColorToken, presentation.tagStyle, presentation.nameStyle, presentation.messageStyle, presentation.badgeKey, actorSteamId],
     );
@@ -3011,7 +3054,7 @@ export async function updateIdentityChatTag(input: {
     true,
   );
   return withIdentityTransaction(async (connection) => {
-    const [result] = await connection.execute<ResultSetHeader>(
+    const [result] = await executeIdentityChatTagWrite(connection,
       "UPDATE portal_identity_chat_tags SET tag_text = ?, color_token = ?, name_color_token = ?, message_color_token = ?, tag_style = ?, name_style = ?, message_style = ?, badge_key = ?, enabled = ? WHERE id = ?",
       [
         text,

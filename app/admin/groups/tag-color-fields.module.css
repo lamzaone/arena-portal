@@ -97,12 +97,12 @@
 .effect_italic { font-style: italic; }
 .effect_underline { text-decoration: underline; text-underline-offset: 3px; }
 .effect_glow { text-shadow: 0 0 8px currentColor, 0 0 16px currentColor; }
-.effect_gradient { background: linear-gradient(100deg, currentColor, #fff, currentColor); background-clip: text; -webkit-text-fill-color: transparent; }
-.effect_shimmer { background: linear-gradient(100deg, currentColor 25%, #fff 50%, currentColor 75%); background-size: 250% 100%; background-clip: text; -webkit-text-fill-color: transparent; animation: chatShimmer 3s linear infinite; }
-.effect_pulse { animation: chatPulse 2.4s ease-in-out infinite; }
-.effect_shimmer.effect_pulse { animation: chatShimmer 3s linear infinite, chatPulse 2.4s ease-in-out infinite; }
-@keyframes chatShimmer { from { background-position: 150% 0; } to { background-position: -150% 0; } }
-@keyframes chatPulse { 50% { opacity: .55; } }
+.effect_gradient { background: linear-gradient(90deg, #38bdf8, #a78bfa, #f472b6); background-clip: text; -webkit-text-fill-color: transparent; }
+.effect_shimmer { background: linear-gradient(90deg, #38bdf8, #a78bfa, #f472b6); background-size: 200% 100%; background-clip: text; -webkit-text-fill-color: transparent; animation: chatShimmer 3s ease-in-out infinite; }
+.effect_pulse { animation: chatPulse 2s ease-in-out infinite; }
+.effect_shimmer.effect_pulse { animation: chatShimmer 3s ease-in-out infinite, chatPulse 3s ease-in-out infinite; }
+@keyframes chatShimmer { 0%, 100% { background-position: 100% 0; } 50% { background-position: 0% 0; } }
+@keyframes chatPulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.7); } }
 @media (prefers-reduced-motion: reduce) {
   .preview .effect_shimmer, .preview .effect_pulse { animation: none; }
 }

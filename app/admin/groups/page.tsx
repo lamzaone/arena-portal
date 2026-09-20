@@ -170,6 +170,7 @@ const errorMessages: Record<string, string> = {
   catalogue_not_found: "The selected catalogue item is unavailable.",
   reserved_privilege: "Founder and unrestricted wildcard authority are reserved.",
   request_replayed: "That action was already submitted. Refresh before trying again.",
+  rich_chat_migration_required: "Apply arena-portal/db/033_rich_chat_tag_styles.sql to the Portal database before creating or saving chat tags.",
   storage_unavailable: "The connected Arena group storage is not configured.",
   game_group_authority_storage:
     "Arena group authority is unavailable. Apply game migration 001 and check the game database connection.",
@@ -1070,6 +1071,7 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
         {notice ? <PortalToast message={notice} /> : null}
         {error ? <PortalToast variant="danger" message={error} /> : null}
         {storageError ? <PortalToast variant="danger" message="Connected group storage is unavailable. Apply the Arena authority migration and the portal commerce bridge migration, then check both database connections." /> : null}
+        {snapshot.richChatTagsAvailable === false ? <PortalToast variant="danger" message="Existing groups and tags are available. To create or save chat tags, apply arena-portal/db/033_rich_chat_tag_styles.sql to the Portal database." /> : null}
         {externalMembershipError ? <PortalToast variant="danger" message="One or more live Admins.Core/VIPCore membership lists could not be read. Connected group counts may be incomplete until the game database is available." /> : null}
         {adminAssignmentError ? <PortalToast variant="danger" message="Live Admins.Core assignments could not be read. Admin assignment actions are disabled, but available VIP records remain manageable." /> : null}
         {vipAssignmentError ? <PortalToast variant="danger" message="Live VIPCore assignments could not be read. VIP assignment actions are disabled, but available Admin records remain manageable." /> : null}
@@ -1207,7 +1209,7 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
             <MutationFields csrf={csrf} action="tag-create" />
             <label>Stable key<input name="tagKey" pattern="[a-z0-9][a-z0-9._:-]{0,63}" required placeholder="group.beta" /></label>
             <TagColorFields />
-            <div className={tagStyles.footer}><button className="button button-primary" type="submit">Create tag</button></div>
+            <div className={tagStyles.footer}><button className="button button-primary" type="submit" disabled={snapshot.richChatTagsAvailable === false}>Create tag</button></div>
           </form>
           <div className="staff-group-list">
             {snapshot.tags.map((tag) => (
@@ -1218,7 +1220,7 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
                 <TagColorFields text={tag.text} color={tag.colorToken} nameColor={tag.nameColorToken} messageColor={tag.messageColorToken} tagStyle={tag.tagStyle} nameStyle={tag.nameStyle} messageStyle={tag.messageStyle} badgeKey={tag.badgeKey} />
                 <div className={tagStyles.footer}>
                   <label>Status<select name="enabled" defaultValue={tag.enabled ? "true" : "false"}><option value="true">Enabled</option><option value="false">Disabled</option></select></label>
-                  <button className="staff-unban-button" type="submit">Save tag</button>
+                  <button className="staff-unban-button" type="submit" disabled={snapshot.richChatTagsAvailable === false}>Save tag</button>
                 </div>
               </form>
             ))}
