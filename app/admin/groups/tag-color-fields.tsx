@@ -2,9 +2,10 @@
 
 import { useId, useState } from "react";
 import { Check, ChevronDown, Palette } from "lucide-react";
-import { chatColors, chatColorPreview, chatStyles, normalizeChatColor, chatEffectOptions, withChatEffectOptions, paletteEffects, effectFrequencies, defaultEffectColors, type ChatColor } from "@/lib/chat-colors";
+import { chatColors, chatColorPreview, normalizeChatColor, type ChatColor } from "@/lib/chat-colors";
 import styles from "./tag-color-fields.module.css";
 import { ChatEffectPreview } from "./chat-effect-preview";
+import { ChatEffectEditor } from "./chat-effect-editor";
 
 function ChatColorPicker({ label, name, value, onChange, optional = false, teamColor = false }: {
   label: string;
@@ -59,58 +60,7 @@ function ChatColorPicker({ label, name, value, onChange, optional = false, teamC
   );
 }
 
-function StylePicker({ label, name, value, onChange }: {
-  label: string; name: string; value: string; onChange: (value: string) => void;
-}) {
-  const selected = new Set(value.split(" "));
-  const options = chatEffectOptions(value);
-  const update = (next: typeof options) => onChange(withChatEffectOptions(value, next));
-  const hasEffects = chatStyles.some((style) => !["bold", "italic", "underline"].includes(style) && selected.has(style));
-  return <fieldset className={styles.stylePicker}>
-    <legend>{label}</legend>
-    <input type="hidden" name={name} value={value} />
-    <div className={styles.styleButtons}>
-      {chatStyles.map((style) => <button key={style} type="button" aria-pressed={selected.has(style)}
-        onClick={() => {
-          if (selected.has(style)) selected.delete(style);
-          else {
-            if (paletteEffects.includes(style as typeof paletteEffects[number])) paletteEffects.forEach((effect) => selected.delete(effect));
-            selected.add(style);
-          }
-          onChange(withChatEffectOptions(chatStyles.filter((option) => selected.has(option)).join(" "), options));
-        }}>{style}</button>)}
-    </div>
-    {hasEffects && <div className={styles.effectSettings}>
-      <label>Frequency
-        <select aria-label={`${label} frequency`} value={options.frequency} onChange={(event) => update({ ...options, frequency: Number(event.target.value) })}>
-          {effectFrequencies.map((rate) => <option key={rate} value={rate}>{rate} Hz · every {1 / rate}s</option>)}
-        </select>
-      </label>
-      <label>Intensity
-        <select aria-label={`${label} intensity`} value={options.intensity} onChange={(event) => update({ ...options, intensity: Number(event.target.value) })}>
-          <option value={1}>Soft</option><option value={2}>Medium</option><option value={3}>Strong</option>
-        </select>
-      </label>
-      <div className={styles.effectPalette}>
-        <span>Effect colors <small>{options.colors.length}/6</small></span>
-        {options.colors.map((color, index) => <div className={styles.effectColor} key={index}>
-          <input type="color" aria-label={`${label} effect color ${index + 1}`} value={color}
-            onChange={(event) => update({ ...options, colors: options.colors.map((entry, i) => i === index ? event.target.value.toUpperCase() : entry) })} />
-          <code>{color}</code>
-          <button type="button" aria-label={`Remove ${label.toLowerCase()} color ${index + 1}`}
-            onClick={() => update({ ...options, colors: options.colors.filter((_, i) => i !== index) })}>Remove</button>
-        </div>)}
-        <div className={styles.styleButtons}>
-          <button type="button" disabled={options.colors.length >= 6} onClick={() => update({ ...options, colors: [...options.colors, defaultEffectColors[options.colors.length % 3]] })}>Add color</button>
-          <button type="button" disabled={!options.colors.length} onClick={() => update({ ...options, colors: [] })}>Reset palette</button>
-        </div>
-        <small>{options.colors.length ? "Colors play in this order. One color stays solid." : "Using default effect colors; glow and pulse follow the text color."} Frequency controls animation; intensity controls glow, pulse, wave and sparkle.</small>
-      </div>
-    </div>}
-  </fieldset>;
-}
-
-export function TagColorFields({ text = "", color = "[gold]", nameColor = "", messageColor = "",
+function TagColorFieldsEditor({ text = "", color = "[gold]", nameColor = "", messageColor = "",
   tagStyle = "", nameStyle = "", messageStyle = "", badgeKey = "" }: {
   text?: string;
   color?: string;
@@ -129,8 +79,14 @@ export function TagColorFields({ text = "", color = "[gold]", nameColor = "", me
   const [nameEffects, setNameEffects] = useState(nameStyle);
   const [messageEffects, setMessageEffects] = useState(messageStyle);
   const [badge, setBadge] = useState(badgeKey);
+  const dirty = tagText !== text || tagColor !== color || playerColor !== (nameColor ?? "") || chatColor !== (messageColor ?? "") ||
+    tagEffects !== tagStyle || nameEffects !== nameStyle || messageEffects !== messageStyle || badge !== badgeKey;
   return (
     <div className={styles.fields}>
+      <div className={styles.saveBar}>
+        <span role="status">{dirty ? "Unsaved changes — save to apply your settings." : "Showing current settings."}</span>
+        <button type="submit">Save tag settings</button>
+      </div>
       <div className={styles.presentation}>
         <div className={styles.identityFields}>
           <label className={styles.textField}>Tag text
@@ -157,17 +113,22 @@ export function TagColorFields({ text = "", color = "[gold]", nameColor = "", me
       <div className={styles.colorFields}>
         <div className={styles.channel}>
           <ChatColorPicker label="Tag color" name="colorToken" value={tagColor} onChange={setTagColor} />
-          <StylePicker label="Tag styles" name="tagStyle" value={tagEffects} onChange={setTagEffects} />
+          <ChatEffectEditor color={chatColorPreview(tagColor)} label="Tag styles" name="tagStyle" value={tagEffects} onChange={setTagEffects} />
         </div>
         <div className={styles.channel}>
           <ChatColorPicker label="Name color" name="nameColorToken" value={playerColor} onChange={setPlayerColor} optional teamColor />
-          <StylePicker label="Name styles" name="nameStyle" value={nameEffects} onChange={setNameEffects} />
+          <ChatEffectEditor color={chatColorPreview(playerColor, "#B4A0FF")} label="Name styles" name="nameStyle" value={nameEffects} onChange={setNameEffects} />
         </div>
         <div className={styles.channel}>
           <ChatColorPicker label="Message color" name="messageColorToken" value={chatColor} onChange={setChatColor} optional />
-          <StylePicker label="Message styles" name="messageStyle" value={messageEffects} onChange={setMessageEffects} />
+          <ChatEffectEditor color={chatColorPreview(chatColor)} label="Message styles" name="messageStyle" value={messageEffects} onChange={setMessageEffects} />
         </div>
       </div>
     </div>
   );
+}
+
+// Server navigation can replace a saved tag without remounting its form.
+export function TagColorFields(props: Parameters<typeof TagColorFieldsEditor>[0]) {
+  return <TagColorFieldsEditor key={JSON.stringify(props)} {...props} />;
 }

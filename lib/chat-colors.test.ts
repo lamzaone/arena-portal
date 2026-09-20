@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { chatColors, chatColorPreview, normalizeChatColor, normalizeChatStyle, normalizeChatBadge, withChatEffectOptions, chatEffectOptions } from "./chat-colors.ts";
+import { chatColors, chatColorPreview, normalizeChatColor, normalizeChatStyle, normalizeChatBadge, withChatEffectOptions, chatEffectOptions, getChatEffectOptions, updateChatEffect, toggleChatStyle, chatEffectNames } from "./chat-colors.ts";
 
 // Named Workshop chat tokens; teamcolor is resolved for names by GlobalChatTags.
 const supported = ["[default]", "[/]", "[white]", "[darkred]", "[lightpurple]", "[green]",
@@ -67,4 +67,38 @@ test("effect palettes, frequency and intensity round trip inside existing storag
   const largest = withChatEffectOptions("bold italic underline glow pulse gradient shimmer", { colors: Array(6).fill("#ABCDEF"), frequency: .25, intensity: 3 });
   assert.ok(largest.length <= 96);
   assert.deepEqual(chatEffectOptions(largest), { colors: Array(6).fill("#ABCDEF"), frequency: .25, intensity: 3 });
+});
+
+test("effects accept only their own controls and preserve independent saved values", () => {
+  assert.equal(normalizeChatStyle("glow pulse glow.c=ff0000 glow.i=2 glow.r=3 pulse.f=0.25 pulse.i=3"),
+    "glow pulse glow.c=FF0000 glow.i=2 glow.r=3 pulse.f=0.25 pulse.i=3");
+  for (const style of ["glow glow.f=1", "gradient gradient.f=1", "pulse pulse.c=FF0000", "cycle cycle.i=3", "wave wave.d=bad"]) {
+    assert.throws(() => normalizeChatStyle(style));
+  }
+});
+
+test("editing legacy shared settings freezes the other effects and disabling retains each configuration", () => {
+  const before = "glow pulse cycle c=FF0000,00FF00 f=0.25 i=3";
+  const after = updateChatEffect(before, "pulse", { ...getChatEffectOptions(before, "pulse"), frequency: 2, intensity: 1 });
+  assert.equal(getChatEffectOptions(after, "pulse").frequency, 2);
+  assert.equal(getChatEffectOptions(after, "glow").intensity, 3);
+  assert.deepEqual(getChatEffectOptions(after, "cycle").colors, ["#FF0000", "#00FF00"]);
+  assert.equal(getChatEffectOptions(after, "cycle").frequency, .25);
+  assert.equal(toggleChatStyle(toggleChatStyle(after, "pulse"), "pulse"), after);
+  const gradient = toggleChatStyle(after, "gradient");
+  assert.ok(!gradient.split(" ").includes("cycle"));
+  assert.deepEqual(getChatEffectOptions(gradient, "cycle"), getChatEffectOptions(after, "cycle"));
+});
+
+test("every effect can retain maximum palettes and independent settings within expanded storage", () => {
+  let style = "bold italic underline glow pulse wave sparkle";
+  for (const effect of chatEffectNames) {
+    const options = getChatEffectOptions(style, effect);
+    style = updateChatEffect(style, effect, { ...options, frequency: 2, intensity: 3, radius: 3,
+      colors: effect === "glow" ? ["#112233"] : options.colors.length ? Array(6).fill("#ABCDEF") : [], direction: "reverse", mode: "steps" });
+  }
+  assert.ok(style.length > 96 && style.length <= 1024);
+  assert.equal(normalizeChatStyle(style), style);
+  assert.equal(getChatEffectOptions(style, "shimmer").colors.length, 6);
+  assert.equal(getChatEffectOptions(style, "glow").radius, 3);
 });

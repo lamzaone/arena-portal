@@ -96,15 +96,10 @@
 .effect_bold { font-weight: 800; }
 .effect_italic { font-style: italic; }
 .effect_underline { text-decoration: underline; text-underline-offset: 3px; }
-.effect_glow { text-shadow: 0 0 var(--effect-blur, 2px) color-mix(in srgb, var(--effect-glow, currentColor) 60%, transparent); }
-.effect_pulse { animation: chatPulse var(--effect-duration) ease-in-out infinite; }
-.effect_sparkle { animation: chatSparkle var(--effect-duration) ease-in-out infinite; }
-.effect_sparkle.effect_pulse { animation: chatPulseSparkle var(--effect-duration) ease-in-out infinite; }
-@keyframes chatPulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(var(--effect-peak)); } }
-@keyframes chatSparkle { 0%, 14%, 26%, 68%, 80%, 100% { filter: brightness(1); } 18%, 72% { filter: brightness(var(--effect-peak)); } }
-@keyframes chatPulseSparkle { 0%, 26%, 100% { filter: brightness(1); } 18%, 50% { filter: brightness(var(--effect-peak)); } 72% { filter: brightness(var(--effect-combined-peak)); } }
+.previewRun { transition: color .12s linear, filter .12s linear; }
 @media (prefers-reduced-motion: reduce) {
   .preview span { animation: none !important; }
+  .preview .previewRun { transition: none !important; }
 }
 @media (max-width: 680px) { .presentation, .colorFields { grid-template-columns: 1fr; } }
 
@@ -120,3 +115,39 @@
 .effectColor button:hover { color: var(--theme-text); }
 .effectColor button:focus-visible { outline: 2px solid var(--theme-accent); outline-offset: 2px; }
 .styleButtons button:disabled { opacity: .45; cursor: default; }
+
+.effectHelp, .effectDescription { margin: 8px 0; color: var(--theme-text-muted, #bdb6bd); font-size: 11px; line-height: 1.5; }
+.effectCards { display: grid; gap: 10px; }
+.effectCard { min-width: 0; padding: 12px; border: 1px solid var(--theme-border, #42333d); border-radius: 6px; background: var(--theme-surface-raised, #1b1118); }
+.effectCard[data-enabled="true"] { border-left: 3px solid var(--theme-accent, #e11d48); }
+.effectHeading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.effectHeading strong { color: var(--theme-text, #fff5f5); font-size: 13px; }
+.effectHeading button { min-width: 46px; min-height: 32px; border: 1px solid var(--theme-border, #42333d); border-radius: 20px; color: var(--theme-text-muted, #bdb6bd); background: transparent; cursor: pointer; font-size: 11px; }
+.effectHeading button[aria-pressed="true"] { color: #fff; border-color: var(--theme-accent, #e11d48); background: var(--theme-accent, #e11d48); }
+.effectHeading button:focus-visible, .effectCard summary:focus-visible { outline: 2px solid var(--theme-accent, #e11d48); outline-offset: 3px; }
+.effectCurrent { display: grid; gap: 6px; color: var(--theme-text, #fff5f5); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.miniPalette { display: flex; gap: 3px; }
+.miniPalette i { width: 20px; height: 5px; border-radius: 2px; border: 1px solid #ffffff30; }
+.effectCard details > summary { margin-top: 10px; color: var(--theme-text-muted, #bdb6bd); cursor: pointer; font-size: 11px; }
+.effectCard .effectSettings { grid-template-columns: 1fr; }
+.effectCard .effectColor { gap: 4px; }
+.effectColorInputs { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; }
+.form .effectColorInputs input[type="color"] { width: 34px; height: 40px; padding: 2px; flex: 0 0 34px; cursor: pointer; }
+.form .effectColorInputs input[type="text"] { width: 100%; min-width: 0; padding: 7px; font: 11px monospace; }
+.effectColor button { min-width: 28px; margin-left: 0; padding: 3px; font-size: 18px; }
+.effectColor button:disabled { opacity: .3; cursor: default; }
+.form .followColor { display: flex; align-items: center; gap: 7px; }
+.form .followColor input { width: 16px; min-height: 16px; accent-color: var(--theme-accent, #e11d48); }
+.resetEffect { grid-column: 1 / -1; justify-self: start; border: 0; padding: 6px 0; color: var(--theme-text-muted, #bdb6bd); font: inherit; font-size: 11px; background: transparent; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.saveBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border, #34343b);
+  padding-bottom: 12px;
+  font-size: 12px;
+  color: var(--muted, #a6a6ad);
+}
+.saveBar button { flex-shrink: 0; }

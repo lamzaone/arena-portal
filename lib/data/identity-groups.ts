@@ -530,6 +530,15 @@ async function queryIdentityChatTags<T extends RowDataPacket>(
 }
 
 async function executeIdentityChatTagWrite(connection: PoolConnection, sql: string, values: Array<string | number | boolean | null>) {
+  if (values.some((value) => typeof value === "string" && value.length > 96)) {
+    // Check before writing: non-strict MySQL can truncate oversized fields without
+    // throwing, which would destroy the tail of an effect's saved configuration.
+    const [columns] = await connection.query<Array<RowDataPacket & { ready: number }>>(
+      "SELECT COUNT(*) AS ready FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'portal_identity_chat_tags' AND COLUMN_NAME IN ('tag_style','name_style','message_style') AND CHARACTER_MAXIMUM_LENGTH >= 1024",
+    );
+    if (Number(columns[0]?.ready) !== 3) identityError("independent_chat_effects_migration_required",
+      "Apply arena-portal/db/034_independent_chat_effects.sql before saving independent effect settings.");
+  }
   try {
     return await connection.execute<ResultSetHeader>(sql, values);
   } catch (error) {

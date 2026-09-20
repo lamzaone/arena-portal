@@ -171,6 +171,7 @@ const errorMessages: Record<string, string> = {
   reserved_privilege: "Founder and unrestricted wildcard authority are reserved.",
   request_replayed: "That action was already submitted. Refresh before trying again.",
   rich_chat_migration_required: "Apply arena-portal/db/033_rich_chat_tag_styles.sql to the Portal database before creating or saving chat tags.",
+  independent_chat_effects_migration_required: "Apply arena-portal/db/034_independent_chat_effects.sql to save independent effect settings. Your existing settings have been kept.",
   storage_unavailable: "The connected Arena group storage is not configured.",
   game_group_authority_storage:
     "Arena group authority is unavailable. Apply game migration 001 and check the game database connection.",
