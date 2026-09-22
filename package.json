@@ -30,7 +30,7 @@
     "test:chat-colors": "node --experimental-strip-types --test lib/chat-colors.test.ts && node --experimental-transform-types --test lib/data/identity-chat-tags.test.mjs",
     "test:chat-colors:browser": "node --test app/admin/groups/tag-color-fields.browser.test.mjs",
     "test:seo": "node --experimental-strip-types --test lib/seo/site.test.ts",
-    "test:vip": "node --experimental-strip-types --test lib/economy/vip-membership-conversion.test.ts lib/economy/vip-activation-state.test.ts",
+    "test:vip": "node --experimental-strip-types --test lib/economy/vip-membership-conversion.test.ts lib/economy/vip-activation-state.test.ts && node --experimental-transform-types --test lib/data/arena-vip-authority-sync.test.mjs",
     "test:navigation": "node --experimental-strip-types --test components/primary-navigation-routes.test.ts",
     "test:staff": "node --experimental-strip-types --test lib/staff-directory.test.ts lib/data/public-staff-directory.test.mjs",
     "test:loadout": "node --experimental-strip-types --test lib/economy/weapon-categories.test.ts lib/economy/loadout-selection.test.ts lib/economy/weapon-preview.test.ts lib/economy/weapon-model.test.ts lib/economy/weapon-customization.test.ts && node --experimental-transform-types --test lib/data/weapon-customization.test.ts",

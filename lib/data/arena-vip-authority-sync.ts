@@ -246,6 +246,38 @@ export async function synchronizeArenaVipAuthorityForPlayer(
         "ORDER BY scope_id, vip_family_key FOR UPDATE",
       [steamId],
     );
+    const [transitions] = await connection.query<Array<RowDataPacket & { scope_id: string | number }>>(
+      "SELECT DISTINCT scope_id FROM arena_vip_subscription_history WHERE steam_id = ?",
+      [steamId],
+    );
+    const explicitHistoryScopes = new Set(transitions.map((row) => Number(row.scope_id)));
+    const legacyOnlyKeys = new Set(existingMemberships
+      .filter((row) => row.provenance_type === "legacy_vip_users" && !explicitHistoryScopes.has(Number(row.scope_id)))
+      .map((row) => `${Number(row.scope_id)}\0${row.vip_family_key}`));
+    for (const row of existingMemberships) {
+      if (row.provenance_type !== "legacy_vip_users") {
+        legacyOnlyKeys.delete(`${Number(row.scope_id)}\0${row.vip_family_key}`);
+      }
+    }
+    // A removed native mirror is not a portal revocation. Older synchronization
+    // retained its suppression after clearing the membership pointer, which
+    // blocked every later native grant. Repair only known native-only history;
+    // explicit staff/inventory transitions and unknown origins stay protected.
+    for (const subscription of subscriptions) {
+      const key = `${Number(subscription.scope_id)}\0${subscription.vip_family_key}`;
+      if (subscription.status !== "ended" || subscription.membership_uuid || !legacyOnlyKeys.has(key)) continue;
+      if (!subscription.legacy_suppressed_until && !booleanValue(subscription.legacy_suppressed_permanently)) continue;
+      const version = subscriptionVersion(subscription);
+      await connection.execute(
+        "UPDATE arena_vip_subscriptions SET legacy_suppressed_until = NULL, " +
+          "legacy_suppressed_permanently = FALSE, row_version = row_version + 1 " +
+          "WHERE steam_id = ? AND scope_id = ? AND vip_family_key = ? AND row_version = ?",
+        [steamId, Number(subscription.scope_id), subscription.vip_family_key, version],
+      );
+      subscription.legacy_suppressed_until = null;
+      subscription.legacy_suppressed_permanently = false;
+      subscription.row_version = version + 1;
+    }
 
     const targetsByRuntimeKey = new Map<string, TargetRow>(
       targets.map((row) => [
@@ -482,11 +514,20 @@ export async function synchronizeArenaVipAuthorityForPlayer(
         );
       }
 
-      const suppression = suppressionForRows(
-        mappedRawRowsByKey.get(key) ?? [],
-        existingSubscription,
-        preserveExistingAuthority ? referencedBefore ?? null : selected,
-      );
+      // When no authority membership is selected, retain only an existing
+      // revocation marker. Native rows cannot manufacture a new marker: that
+      // would undo "keep native VIP" after an inventory/staff revocation.
+      const suppression = !selected && !preserveExistingAuthority
+        ? {
+            permanent: !legacyOnlyKeys.has(key) && booleanValue(existingSubscription?.legacy_suppressed_permanently),
+            until: legacyOnlyKeys.has(key) ? null : dateValue(existingSubscription?.legacy_suppressed_until ?? null),
+            selectedExpiry: null,
+          }
+        : suppressionForRows(
+            mappedRawRowsByKey.get(key) ?? [],
+            existingSubscription,
+            preserveExistingAuthority ? referencedBefore ?? null : selected,
+          );
       const [scopeIdText, family] = key.split("\0");
       const scopeId = Number(scopeIdText);
       if (!Number.isSafeInteger(scopeId) || scopeId < 1 || !family) {
