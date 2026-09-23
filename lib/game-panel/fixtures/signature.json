@@ -1,0 +1,14 @@
+{
+  "description": "Synthetic cross-language HMAC vector; secret is 32 bytes of value 7, never a deployed key.",
+  "secretBase64": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+  "serverId": "arena-test",
+  "keyId": "a",
+  "path": "/api/game-panel/v1/wallet.read",
+  "actorSteamId": "76561198000000001",
+  "timestamp": "1790164800",
+  "requestId": "11112222333344445555666677778888",
+  "body": "{\"actorSteamId\":\"76561198000000001\",\"operationId\":\"1790164800000_00112233445566778899aabbccddeeff\",\"arguments\":{}}",
+  "bodyHash": "b06551101b9b3f7168b02f9a32776b2db5cded5830781b7bfc45454261cdb018",
+  "canonical": "panel-v1\narena-test\na\nPOST\n/api/game-panel/v1/wallet.read\nb06551101b9b3f7168b02f9a32776b2db5cded5830781b7bfc45454261cdb018\n76561198000000001\n1790164800\n11112222333344445555666677778888",
+  "signature": "933437e45706f26412e992b9147a7970b3aad99a06a8d330de411e7d348a03f2"
+}

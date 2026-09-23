@@ -38,7 +38,7 @@ function isLegacySteamPrice(source: string | null | undefined) {
  * inventory item in one batched lookup. A quote is presentation only; selling
  * still re-resolves it within the authenticated mutation route.
  */
-async function withCurrentMarketPrices(items: EconomyInventoryItem[]) {
+export async function withCurrentMarketPrices(items: EconomyInventoryItem[]) {
   const quoteable = items.filter(
     (item) =>
       item.catalogue !== null &&
@@ -124,10 +124,7 @@ async function withCurrentMarketPrices(items: EconomyInventoryItem[]) {
 // complete server-authoritative collection instead of silently showing only
 // the repository's first default page. The repository still bounds each SQL
 // query to 100 rows.
-export async function getCompletePlayerEconomyInventory(
-  steamId: string,
-  filter: Omit<EconomyInventoryFilter, "page" | "pageSize"> = {},
-): Promise<EconomyInventoryPage> {
+export async function reconcilePlayerInventoryBenefits(steamId: string): Promise<void> {
   try {
     const memberships = await getAuthoritativeExternalIdentityMemberships(
       steamId,
@@ -137,6 +134,19 @@ export async function getCompletePlayerEconomyInventory(
     // Never interpret an unavailable game or identity database as an empty
     // Admin/VIP membership set. The runtime or a later request retries safely.
   }
+}
+
+export async function getPlayerEconomyInventoryPage(steamId: string, filter: EconomyInventoryFilter = {}): Promise<EconomyInventoryPage> {
+  await reconcilePlayerInventoryBenefits(steamId);
+  const result = await getPlayerEconomyInventory(steamId, {...filter, pageSize: Math.min(filter.pageSize ?? 24, 48)});
+  return {...result, items:await withCurrentMarketPrices(result.items)};
+}
+
+export async function getCompletePlayerEconomyInventory(
+  steamId: string,
+  filter: Omit<EconomyInventoryFilter, "page" | "pageSize"> = {},
+): Promise<EconomyInventoryPage> {
+  await reconcilePlayerInventoryBenefits(steamId);
   const first = await getPlayerEconomyInventory(steamId, {
     ...filter,
     page: 1,

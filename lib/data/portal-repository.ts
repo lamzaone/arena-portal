@@ -1784,6 +1784,7 @@ export async function searchTradePlayers(input: {
   query: string;
   excludeSteamId?: string;
   limit?: number;
+  onlineSteamIds?: string[];
 }): Promise<TradePlayerSearchResult[]> {
   const query = input.query.normalize("NFKC").trim();
   if (input.excludeSteamId !== undefined && !isSteamId(input.excludeSteamId))
@@ -1802,16 +1803,19 @@ export async function searchTradePlayers(input: {
   const escaped = escapeLikeSearch(query);
   const containsPattern = `%${escaped}%`;
   const prefixPattern = `${escaped}%`;
+  const onlineSteamIds = input.onlineSteamIds?.map(id => economySteamId(id));
+  if (onlineSteamIds && !onlineSteamIds.length) return [];
   const rows = await safeGameQuery<
     RowDataPacket & { steam_id: string | number; name: string | null }
   >(
     "SELECT CAST(steam AS CHAR) AS steam_id, name FROM lvl_base " +
-      "WHERE name LIKE ? ESCAPE '!' OR CAST(steam AS CHAR) LIKE ? ESCAPE '!' " +
+      "WHERE (name LIKE ? ESCAPE '!' OR CAST(steam AS CHAR) LIKE ? ESCAPE '!') " +
+      (onlineSteamIds ? "AND CAST(steam AS CHAR) IN (" + onlineSteamIds.map(()=>"?").join(",") + ") " : "") +
       "ORDER BY CASE " +
       "WHEN CAST(steam AS CHAR) = ? THEN 0 " +
       "WHEN LOWER(name) = LOWER(?) THEN 1 " +
       "WHEN name LIKE ? ESCAPE '!' THEN 2 ELSE 3 END, value DESC, steam ASC LIMIT ?",
-    [containsPattern, containsPattern, query, query, prefixPattern, limit],
+    [containsPattern, containsPattern, ...(onlineSteamIds ?? []), query, query, prefixPattern, limit],
   );
 
   const matches = new Map<string, string>();
@@ -1828,6 +1832,7 @@ export async function searchTradePlayers(input: {
   // LevelRanks record yet.
   if (
     isSteamId(query) &&
+    (!onlineSteamIds || onlineSteamIds.includes(query)) &&
     query !== input.excludeSteamId &&
     !matches.has(query) &&
     matches.size < limit
@@ -3916,6 +3921,9 @@ export type EconomyCatalogueItem = {
 };
 
 export type EconomyCatalogueFilter = {
+  category?: "rifles" | "snipers" | "pistols" | "smgs" | "shotguns" | "lmgs" | "other";
+  definitionIndex?: number;
+  sort?: "newest" | "name" | "rarity" | "float" | "price";
   query?: string;
   itemTypes?: EconomyItemType[];
   rarityRanks?: number[];
@@ -4120,6 +4128,10 @@ export type EconomyInventoryItem = {
 };
 
 export type EconomyInventoryFilter = {
+  category?: EconomyCatalogueFilter["category"];
+  definitionIndex?: number;
+  sort?: "newest" | "name" | "rarity" | "float" | "price";
+  hideEquipped?: boolean;
   query?: string;
   itemTypes?: EconomyItemType[];
   rarityRanks?: number[];
@@ -4441,6 +4453,7 @@ export type OpenEconomyCrateResult = {
   rewardRarityRank: number;
   reward: {
     id: string;
+    imageUrl?: string | null;
     catalogueId: number | null;
     itemType: EconomyItemType;
     displayName: string;
@@ -6498,6 +6511,14 @@ type EconomyMutationContext = {
   actorSteamId: string;
 };
 
+export async function getEconomyOperationReceipt(input:{actorSteamId:string;idempotencyKey:string;operationName:string}):Promise<{status:"pending"|"completed";result:Record<string,unknown>|null}|null> {
+  const pool=economyStorageRequired();
+  const [rows]=await pool.query<EconomyOperationRow[]>("SELECT operation_name, actor_steam_id, status, result_json FROM portal_economy_operations WHERE idempotency_key = ? LIMIT 1",[economyIdempotencyKey(input.idempotencyKey)]);
+  const row=rows[0];if(!row)return null;
+  if(row.actor_steam_id!==economySteamId(input.actorSteamId)||row.operation_name!==input.operationName) economyError("idempotency_conflict","This operation belongs to another command.");
+  return {status:row.status==="completed"?"completed":"pending",result:economyNullableRecord(row.result_json)};
+}
+
 async function runEconomyMutation<T extends Record<string, unknown>>(input: {
   operationName: string;
   actorSteamId: string;
@@ -6587,6 +6608,10 @@ async function runEconomyMutation<T extends Record<string, unknown>>(input: {
       );
     }
 
+    if (idempotencyKey.startsWith("gp1_")) {
+      const {requireGamePanelAdmission}=await import("./game-panel-admission");
+      await requireGamePanelAdmission(connection, actorSteamId, idempotencyKey, input.operationName);
+    }
     const result = await input.work(mutationContext);
     const persistedResult = input.persistResult
       ? input.persistResult(result)
@@ -7000,6 +7025,9 @@ const economyCataloguePresentationRaritySql = "c.rarity_rank";
 const economyInventoryPresentationRaritySql =
   "COALESCE(c.rarity_rank, i.rarity_rank)";
 
+const economyInventoryBaseNameSql = "COALESCE(NULLIF(c.display_name, ''), NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.displayName'))), ''), NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.customDisplayName'))), ''), i.item_type)";
+const economyInventoryNameSortSql = "CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.souvenir')) = 'true' AND " + economyInventoryBaseNameSql + " NOT LIKE 'Souvenir %' THEN CONCAT('Souvenir ', " + economyInventoryBaseNameSql + ") WHEN i.stattrak = TRUE AND " + economyInventoryBaseNameSql + " NOT LIKE '%StatTrak%' THEN CONCAT('StatTrak ', " + economyInventoryBaseNameSql + ") ELSE " + economyInventoryBaseNameSql + " END ASC, i.id DESC";
+
 function economyFilterStates(values: EconomyItemState[] | undefined) {
   if (!values) return [];
   return [...new Set(values.map((value) => economyItemState(String(value))))];
@@ -7203,6 +7231,28 @@ export async function getTokenLedger(
   };
 }
 
+function applyEconomyWeaponFilter(where: string[], values: unknown[], alias: "i" | "c", filter: Pick<EconomyCatalogueFilter, "category" | "definitionIndex">) {
+  const categories = {rifles:[7,8,10,13,16,39,60],snipers:[9,11,38,40],pistols:[1,2,3,4,30,32,36,61,63,64],smgs:[17,19,23,24,26,33,34],shotguns:[25,27,29,35],lmgs:[14,28]} as const;
+  if (filter.definitionIndex !== undefined) { where.push(alias + ".definition_index = ?"); values.push(economyNumber(filter.definitionIndex, "Weapon definition", 1)); }
+  if (filter.category) {
+    where.push(alias + ".item_type = 'skin'");
+    const definitions = filter.category === "other" ? Object.values(categories).flat() : categories[filter.category];
+    if (!definitions) economyError("invalid_input", "Invalid weapon category.");
+    where.push(alias + ".definition_index " + (filter.category === "other" ? "NOT IN" : "IN") + " (" + definitions.map(()=>"?").join(",") + ")");
+    values.push(...definitions);
+  }
+}
+
+export async function getEconomyMarketplaceBasePrice(catalogueId: number): Promise<number | null> {
+  const item = await getEconomyCatalogueItem(catalogueId);
+  if (!item || !isEconomyMarketplacePurchasable(item)) economyError("catalogue_unavailable", "That marketplace item is unavailable.");
+  if (economyMetadataBoolean(item.metadata, "membershipListingManaged")) {
+    const [rows] = await economyStorageRequired().query<Array<RowDataPacket & {token_price: number | string}>>("SELECT token_price FROM portal_identity_group_listings WHERE catalogue_id = ? AND enabled = TRUE AND market_enabled = TRUE LIMIT 1", [catalogueId]);
+    if (rows[0]) return economyAmount(economyNumber(rows[0].token_price, "Listing price"), "Listing price");
+  }
+  return economyDirectPurchasePrice(item.itemType, item.price);
+}
+
 export async function getEconomyCatalogue(
   filter: EconomyCatalogueFilter = {},
 ): Promise<EconomyCataloguePage> {
@@ -7220,6 +7270,7 @@ export async function getEconomyCatalogue(
   const floatRange = economyFilterFloatRange(filter);
   const where: string[] = [];
   const values: unknown[] = [];
+  applyEconomyWeaponFilter(where, values, "c", filter);
   if (!filter.includeDisabled) where.push("c.enabled = TRUE", economyReleasedFinishSql);
   else if (filter.marketOnly) where.push(economyReleasedFinishSql);
   if (filter.marketOnly) {
@@ -7277,8 +7328,8 @@ export async function getEconomyCatalogue(
     economyCatalogueSelect +
       clause +
       " ORDER BY " +
-      economyCataloguePresentationRaritySql +
-      " DESC, c.display_name ASC, c.id ASC LIMIT ? OFFSET ?",
+      ({newest:"c.created_at DESC, c.id DESC",name:"c.display_name ASC, c.id ASC",rarity:economyCataloguePresentationRaritySql + " DESC, c.display_name ASC, c.id ASC",float:economyCatalogueFloatMinimumSql + " ASC, c.id ASC",price:"(SELECT price.token_price FROM portal_economy_catalogue_prices AS price WHERE price.catalogue_id = c.id AND price.is_current = TRUE LIMIT 1) ASC, c.id ASC"}[filter.sort ?? "rarity"]) +
+      " LIMIT ? OFFSET ?",
     [...values, paging.pageSize, paging.offset],
   );
   return {
@@ -8473,6 +8524,8 @@ export async function getPlayerEconomyInventory(
   const states = economyFilterStates(filter.states);
   const where: string[] = ["i.owner_steam_id = ?"];
   const values: unknown[] = [steamId];
+  applyEconomyWeaponFilter(where, values, "i", filter);
+  if (filter.hideEquipped) where.push("NOT EXISTS (SELECT 1 FROM portal_loadout_slots AS equipped WHERE equipped.item_id = i.id AND equipped.owner_steam_id = i.owner_steam_id)");
   if (states.length) {
     where.push("i.state IN (" + states.map(() => "?").join(", ") + ")");
     values.push(...states);
@@ -8518,7 +8571,7 @@ export async function getPlayerEconomyInventory(
   const [rows] = await pool.query<EconomyInventoryRow[]>(
     economyInventorySelect +
       clause +
-      " ORDER BY i.acquired_at DESC, i.id DESC LIMIT ? OFFSET ?",
+      " ORDER BY " + ({newest:"i.acquired_at DESC, i.id DESC",name:economyInventoryNameSortSql,rarity:economyInventoryPresentationRaritySql + " DESC, c.display_name ASC, i.id DESC",float:"i.float_value IS NULL ASC, i.float_value ASC, i.id DESC",price:"(SELECT price.token_price FROM portal_economy_catalogue_prices AS price WHERE price.catalogue_id = c.id AND price.is_current = TRUE LIMIT 1) ASC, i.id DESC"}[filter.sort ?? "newest"]) + " LIMIT ? OFFSET ?",
     [...values, paging.pageSize, paging.offset],
   );
   return {
@@ -11130,7 +11183,7 @@ export async function purchaseEconomyItem(
       });
       const priceTokens =
         appliedDiscount?.finalPriceTokens ?? basePriceTokens;
-      if (skinLike && expectedUnitPriceTokens !== priceTokens) {
+      if (expectedUnitPriceTokens !== undefined && expectedUnitPriceTokens !== priceTokens) {
         economyError(
           "price_changed",
           "The price changed. Review the refreshed quote before buying. No Tokens were spent.",
@@ -11698,6 +11751,7 @@ export async function sellEconomyItems(
     // committed request and a browser retry. Hash only the logical command so
     // the same idempotency key can replay the original committed result.
     request: { itemIds: requestedItemIds },
+    persistResult: (result) => ({...result, requestedItemIds}),
     work: async (context) => {
       const itemIds = orderedSales.map((sale) => sale.itemId);
       const wallets = await lockTokenAccounts(context.connection, [steamId]);
@@ -12061,7 +12115,7 @@ export async function openEconomyCrate(
           },
         });
       }
-      return {
+      const opening = {
         openingId,
         crateItemId,
         rewardItemId: reward.id,
@@ -12070,6 +12124,7 @@ export async function openEconomyCrate(
         rewardRarityRank: reward.rarityRank,
         reward: {
           id: reward.id,
+          imageUrl: rewardCatalogue.imageUrl,
           catalogueId: reward.catalogueId,
           itemType: reward.itemType,
           displayName: reward.displayName,
@@ -12085,6 +12140,8 @@ export async function openEconomyCrate(
         },
         globalAnnouncementQueued,
       };
+      await saveCrateOpeningSnapshot(context.connection, opening);
+      return opening;
     },
   });
 }
@@ -12095,7 +12152,48 @@ type EconomyCrateOpeningReplayRow = RowDataPacket & {
   loot_table_id: number | string;
   loot_entry_id: number | string;
   reward_item_id: string;
+  reward_snapshot?: unknown;
 };
+
+async function saveCrateOpeningSnapshot(connection: PoolConnection, opening: OpenEconomyCrateResult) {
+  const {serializeOpening}=await import("../game-panel/serialization");
+  await connection.execute("UPDATE portal_crate_openings SET reward_snapshot = ? WHERE id = ?",[JSON.stringify({schema:1,opening:serializeOpening(opening)}),opening.openingId]);
+}
+
+function parseCrateOpeningSnapshot(row: EconomyCrateOpeningReplayRow) {
+  const snapshot=economyNullableRecord(row.reward_snapshot);
+  const opening=snapshot && economyNullableRecord(snapshot.opening);
+  if(snapshot?.schema!==1 || !opening || opening.openingId!==economyNumber(row.id,"opening ID",1) || opening.crateItemId!==row.crate_item_id || opening.rewardItemId!==row.reward_item_id) economyError("opening_snapshot_unavailable","The committed opening exists but its historical reward details are unavailable.");
+  const reward=economyNullableRecord(opening.reward);
+  if(!reward||reward.id!==opening.rewardItemId||reward.catalogueId!==opening.rewardCatalogueId||typeof reward.displayName!=="string"||typeof reward.itemType!=="string"||typeof opening.globalAnnouncementQueued!=="boolean") economyError("invalid_database_value","The saved reward snapshot is invalid.");
+  const integer = (value: unknown, nullable = false): number | null => {
+    if (nullable && value === null) return null;
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) economyError("invalid_database_value", "The saved reward number is invalid.");
+    return value;
+  };
+  const text = (value: unknown, maximum: number, nullable = false): string | null => {
+    if (nullable && value === null) return null;
+    if (typeof value !== "string" || value.length > maximum) economyError("invalid_database_value", "The saved reward text is invalid.");
+    return value;
+  };
+  if (typeof reward.stattrak !== "boolean" || (reward.floatValue !== null && (typeof reward.floatValue !== "number" || !Number.isFinite(reward.floatValue) || reward.floatValue < 0 || reward.floatValue > 1))) economyError("invalid_database_value", "The saved reward variant is invalid.");
+  return {
+    openingId: integer(opening.openingId)!, crateItemId: economyItemId(String(opening.crateItemId)), rewardItemId: economyItemId(String(opening.rewardItemId)),
+    rewardCatalogueId: integer(opening.rewardCatalogueId)!, rewardLootEntryId: integer(opening.rewardLootEntryId)!, rewardRarityRank: integer(opening.rewardRarityRank)!, globalAnnouncementQueued: opening.globalAnnouncementQueued,
+    reward: {id:economyItemId(String(reward.id)), catalogueId:integer(reward.catalogueId,true), itemType:economyItemType(reward.itemType), displayName:text(reward.displayName,512)!, imageUrl:text(reward.imageUrl,2048,true),
+      rarityRank:integer(reward.rarityRank)!, definitionIndex:integer(reward.definitionIndex,true), paintkit:integer(reward.paintkit,true), seed:integer(reward.seed,true), floatValue:reward.floatValue as number|null,
+      stattrak:reward.stattrak, stattrakCount:integer(reward.stattrakCount)!, nametag:text(reward.nametag,128,true)}
+  };
+}
+
+export async function getPlayerCrateOpeningSnapshots(steamId:string,crateItemIds:string[]) {
+  economySteamId(steamId);
+  if(crateItemIds.length<1||crateItemIds.length>10||new Set(crateItemIds).size!==crateItemIds.length) economyError("invalid_input","Choose between one and ten unique containers.");
+  const ids=crateItemIds.map(id=>economyItemId(id));
+  const [rows]=await economyStorageRequired().query<EconomyCrateOpeningReplayRow[]>("SELECT id, crate_item_id, loot_table_id, loot_entry_id, reward_item_id, reward_snapshot FROM portal_crate_openings WHERE steam_id = ? AND crate_item_id IN ("+ids.map(()=>"?").join(",")+")",[steamId,...ids]);
+  const byId=new Map(rows.map(row=>[row.crate_item_id,row]));
+  return {openings:ids.flatMap(id=>byId.has(id)?[parseCrateOpeningSnapshot(byId.get(id)!)]:[]),crateItemIds:ids.filter(id=>byId.has(id)),missingCrateItemIds:ids.filter(id=>!byId.has(id))};
+}
 
 async function restoreOpenEconomyCratesResult(
   storedResult: Record<string, unknown>,
@@ -12135,10 +12233,10 @@ async function restoreOpenEconomyCratesResult(
   const [rows] = await context.connection.query<
     EconomyCrateOpeningReplayRow[]
   >(
-    "SELECT id, crate_item_id, loot_table_id, loot_entry_id, reward_item_id FROM portal_crate_openings WHERE id IN (" +
+    "SELECT id, crate_item_id, loot_table_id, loot_entry_id, reward_item_id, reward_snapshot FROM portal_crate_openings WHERE id IN (" +
       placeholders +
-      ") FOR UPDATE",
-    openingIds,
+      ") AND steam_id = ? FOR UPDATE",
+    [...openingIds, context.actorSteamId],
   );
   if (rows.length !== openingIds.length)
     economyError(
@@ -12169,6 +12267,9 @@ async function restoreOpenEconomyCratesResult(
     );
   }
 
+  if (orderedRows.every(row => row.reward_snapshot != null)) {
+    return {openings:orderedRows.map(row=>{const opening=parseCrateOpeningSnapshot(row);return {...opening,reward:{...opening.reward,itemType:economyItemType(opening.reward.itemType),attributes:{}}};}),crateItemIds,dropPools:[]};
+  }
   const rewardItemIds = orderedRows.map((row) =>
     economyItemId(row.reward_item_id, "reward item ID"),
   );
@@ -12619,6 +12720,7 @@ export async function openEconomyCrates(
           rewardRarityRank: draft.reward.rarityRank,
           reward: {
             id: draft.reward.id,
+            imageUrl: draft.rewardCatalogue.imageUrl,
             catalogueId: draft.reward.catalogueId,
             itemType: draft.reward.itemType,
             displayName: draft.reward.displayName,
@@ -12634,6 +12736,7 @@ export async function openEconomyCrates(
           },
           globalAnnouncementQueued,
         });
+        await saveCrateOpeningSnapshot(context.connection, openings[openings.length - 1]);
       }
       return { openings, crateItemIds, dropPools };
     },

@@ -684,6 +684,10 @@ async function prepareActivation(input: {
       return existing;
     }
 
+    if (input.idempotencyKey.startsWith("gp1_")) {
+      const {requireGamePanelAdmission}=await import("./game-panel-admission");
+      await requireGamePanelAdmission(connection,input.steamId,input.idempotencyKey,OPERATION_NAME);
+    }
     const [itemRows] = await connection.query<PortalInventoryRow[]>(
       "SELECT item.id, item.owner_steam_id, item.catalogue_id, item.item_type, item.rarity_rank, item.state, item.attributes, catalogue.metadata AS catalogue_metadata " +
         "FROM portal_inventory_items AS item LEFT JOIN portal_economy_catalogue AS catalogue ON catalogue.id = item.catalogue_id " +
@@ -1380,81 +1384,16 @@ async function applyArenaVipCommand(job: PortalActivationJobRow): Promise<ArenaR
       }
 
       const itemDurationSeconds = BigInt(payload.itemDurationMinutes) * 60n;
-      const itemRank = asArenaInteger(target.rank_weight, "item VIP rank", -1_000_000);
-      const currentRank = currentTier
-        ? asArenaInteger(currentTier.rank_weight, "current VIP rank", -1_000_000)
-        : null;
-      const currentPermanent = Boolean(subscriptionActive && existingExpiresAt === null);
-      let activationKind: VipMembershipActivationSagaResult["activationKind"];
-      let convertedDurationSeconds = 0n;
-      let conversionSourceSeconds = 0n;
-      let timeDeductedSeconds = 0n;
-      let resultGroupId = itemGroupId;
-      let finalExpiresAt: Date | null;
-      if (!subscriptionActive) {
-        if (payload.itemDurationMinutes === 0) {
-          activationKind = "made-permanent";
-          finalExpiresAt = null;
-        } else {
-          activationKind = "activated";
-          finalExpiresAt = new Date(now.getTime() + Number(itemDurationSeconds) * 1_000);
-        }
-      } else if (currentPermanent) {
-        if (payload.itemDurationMinutes !== 0) {
-          rejection("incompatible_item", `You already have permanent ${currentTier!.display_name} access. This timed item remains in your inventory.`);
-        }
-        if (itemGroupId === currentGroupId || itemRank <= currentRank!) {
-          rejection("incompatible_item", `You already own permanent ${currentTier!.display_name} access. This item was not consumed.`);
-        }
-        activationKind = "permanent-upgrade";
-        finalExpiresAt = null;
-      } else if (payload.itemDurationMinutes === 0) {
-        if (itemGroupId !== currentGroupId && itemRank <= currentRank!) {
-          rejection("incompatible_item", `Permanent ${target.display_name} cannot replace your higher ${currentTier!.display_name} tier. This item was not consumed.`);
-        }
-        activationKind = itemGroupId === currentGroupId ? "made-permanent" : "permanent-upgrade";
-        finalExpiresAt = null;
-      } else {
-        const remainingSeconds = BigInt(Math.max(0, Math.floor((existingExpiresAt!.getTime() - now.getTime()) / 1_000)));
-        if (remainingSeconds <= 0n) rejection("membership_conflict", "The current VIP has no remaining time to convert.");
-        try {
-          const converted = convertTimedVipMembership({
-            current: {
-              groupId: currentGroupId!,
-              rankWeight: currentRank!,
-              remainingSeconds,
-            },
-            item: {
-              groupId: itemGroupId,
-              rankWeight: itemRank,
-              durationSeconds: itemDurationSeconds,
-            },
-            currentRate: ratesByGroupId.get(currentGroupId!),
-            itemRate: ratesByGroupId.get(itemGroupId),
-          });
-          activationKind = converted.kind;
-          resultGroupId = converted.resultGroupId;
-          convertedDurationSeconds = converted.convertedSeconds;
-          conversionSourceSeconds = converted.conversionSourceSeconds;
-          timeDeductedSeconds = converted.timeDeductedSeconds;
-          const resultSeconds = secondsNumber(converted.resultSeconds, "converted VIP duration");
-          const expiryMs = now.getTime() + resultSeconds * 1_000;
-          if (!Number.isSafeInteger(expiryMs) || expiryMs > 253_402_300_799_000) {
-            rejection("invalid_duration", "This VIP extension exceeds the supported expiry date.");
-          }
-          finalExpiresAt = new Date(expiryMs);
-        } catch (error) {
-          if (error instanceof VipMembershipConversionError) {
-            rejection(
-              error.code === "conversion-too-small" ? "conversion_too_small" : "invalid_rate_snapshot",
-              error.code === "conversion-too-small"
-                ? `At the captured marketplace rates, this ${target.display_name} item converts to less than one second of ${currentTier!.display_name}. Nothing was consumed.`
-                : "VIP conversion could not be calculated from the captured marketplace rates.",
-            );
-          }
-          throw error;
-        }
+      const {resolveVipActivationPreview}=await import("../economy/vip-activation-preview");
+      let preview:ReturnType<typeof resolveVipActivationPreview>;
+      try {
+        preview=resolveVipActivationPreview({now,item:{groupId:itemGroupId,rankWeight:asArenaInteger(target.rank_weight,"item VIP rank",-1_000_000),displayName:target.display_name,durationMinutes:payload.itemDurationMinutes},current:subscriptionActive?{groupId:currentGroupId!,rankWeight:asArenaInteger(currentTier!.rank_weight,"current VIP rank",-1_000_000),displayName:currentTier!.display_name,expiresAt:existingExpiresAt}:null,rates:ratesByGroupId});
+      } catch(error) {
+        if(error instanceof VipMembershipConversionError) rejection(error.code==="conversion-too-small"?"conversion_too_small":"invalid_rate_snapshot","VIP conversion could not be calculated from the captured marketplace rates.");
+        if(error instanceof Error && "code" in error) rejection(String(error.code),error.message);
+        throw error;
       }
+      const {activationKind,resultGroupId,convertedDurationSeconds,conversionSourceSeconds,timeDeductedSeconds,finalExpiresAt}=preview;
       const resultTier = tierRows.find((row) => asArenaInteger(row.id, "result VIP group ID", 1) === resultGroupId);
       const resultRateSnapshot = snapshotByGroupId.get(resultGroupId);
       if (!resultTier || !resultRateSnapshot) rejection("stale_rate_schedule", "The resulting VIP tier is missing from the captured rates.");
@@ -1883,6 +1822,206 @@ function throwRejectedJob(job: PortalActivationJobRow): never {
  * in Arena, then consume in Portal. Unknown Arena outcomes are never treated
  * as rejection and therefore never release or consume the reserved item.
  */
+
+export async function previewOwnedVipMembershipActivation(input:{steamId:string;itemId:string}) {
+ const connection=getPortalDatabasePool();const arena=getGameDatabasePool();
+ if(!connection||!arena)fail("storage_unavailable","The VIP authority is unavailable.");
+ const [items]=await connection.query<PortalInventoryRow[]>("SELECT item.id, item.owner_steam_id, item.catalogue_id, item.item_type, item.rarity_rank, item.state, item.attributes, catalogue.metadata AS catalogue_metadata FROM portal_inventory_items AS item LEFT JOIN portal_economy_catalogue AS catalogue ON catalogue.id = item.catalogue_id WHERE item.id = ? AND item.owner_steam_id = ? LIMIT 1",[input.itemId,input.steamId]);
+ const item=items[0];if(!item)fail("item_not_found","That inventory item is unavailable.");
+ if(item.item_type!=="vip_membership"||item.state!=="available")fail("item_unavailable","That membership is not available for activation.");
+ const catalogueId=asInteger(item.catalogue_id,"VIP catalogue ID",1);
+    const attributes = asRecord(item.attributes, "VIP item attributes");
+    const catalogueMetadata = asRecord(item.catalogue_metadata, "VIP catalogue metadata");
+    const durationMinutes = readMetadataInteger(attributes, "membershipDurationMinutes") ??
+      readMetadataInteger(attributes, "vipDurationMinutes");
+    const itemGroupId = readMetadataInteger(attributes, "membershipGroupId");
+    const itemGroupKey = readMetadataString(attributes, "membershipGroupKey")?.toLowerCase() ?? null;
+    const itemScopeUuid = readMetadataString(attributes, "membershipScopeUuid")?.toLowerCase() ?? null;
+    const itemSource = readMetadataString(attributes, "membershipSourceType") ?? "vipcore";
+    const catalogueGroupKey = readMetadataString(
+      catalogueMetadata,
+      "membershipGroupKey",
+    )?.toLowerCase() ?? null;
+    const catalogueSource = readMetadataString(
+      catalogueMetadata,
+      "membershipSourceType",
+    );
+    const catalogueGroupId = readMetadataInteger(catalogueMetadata, "membershipGroupId");
+    const catalogueScopeUuid = readMetadataString(
+      catalogueMetadata,
+      "membershipScopeUuid",
+    )?.toLowerCase() ?? null;
+    if (
+      durationMinutes === null ||
+      durationMinutes < 0 ||
+      durationMinutes > 525_600 ||
+      itemSource !== "vipcore" ||
+      (catalogueSource !== null && catalogueSource !== "vipcore") ||
+      (itemGroupId !== null && catalogueGroupId !== null && itemGroupId !== catalogueGroupId)
+    ) {
+      fail("catalogue_unavailable", "This VIP item has an invalid immutable membership snapshot.");
+    }
+
+    const [targetRows] = await connection.query<PortalTargetRow[]>(
+      "SELECT target.catalogue_id, target.listing_id, target.legacy_portal_group_id, target.arena_group_uuid, target.arena_group_key, target.arena_scope_uuid, target.arena_group_type, target.arena_group_row_version, target.duration_minutes, target.target_snapshot, target.enabled, " +
+        "listing.group_id AS listing_group_id, listing.duration_minutes AS listing_duration_minutes, listing.token_price, listing.market_enabled, listing.enabled AS listing_enabled " +
+        "FROM portal_arena_group_catalogue_targets AS target " +
+        "LEFT JOIN portal_identity_group_listings AS listing ON listing.id = target.listing_id " +
+        "WHERE target.catalogue_id = ? LIMIT 1",
+      [catalogueId],
+    );
+    const targetRow = targetRows[0];
+    if (!targetRow || !asBoolean(targetRow.enabled) || targetRow.arena_group_type !== "vip") {
+      fail("catalogue_unavailable", "This VIP item is not connected to an enabled Arena group target.");
+    }
+    const target = parseTargetSnapshot(targetRow);
+    if (
+      (target.legacyPortalGroupId !== null && itemGroupId !== null && itemGroupId !== target.legacyPortalGroupId) ||
+      (target.legacyPortalGroupId !== null && catalogueGroupId !== null && catalogueGroupId !== target.legacyPortalGroupId) ||
+      (itemGroupKey !== null && itemGroupKey !== target.arenaGroupKey) ||
+      (catalogueGroupKey !== null && catalogueGroupKey !== target.arenaGroupKey) ||
+      (itemScopeUuid !== null && itemScopeUuid !== target.arenaScopeUuid) ||
+      (catalogueScopeUuid !== null && catalogueScopeUuid !== target.arenaScopeUuid)
+    ) {
+      fail("catalogue_unavailable", "This VIP item no longer matches its trusted Arena target.");
+    }
+
+    const [rateRows] = await connection.query<PortalTargetRow[]>(
+      "SELECT target.catalogue_id, target.listing_id, target.legacy_portal_group_id, target.arena_group_uuid, target.arena_group_key, target.arena_scope_uuid, target.arena_group_type, target.arena_group_row_version, target.duration_minutes, target.target_snapshot, target.enabled, " +
+        "listing.group_id AS listing_group_id, listing.duration_minutes AS listing_duration_minutes, listing.token_price, listing.market_enabled, listing.enabled AS listing_enabled " +
+        "FROM portal_arena_group_catalogue_targets AS target " +
+        "INNER JOIN portal_identity_group_listings AS listing ON listing.id = target.listing_id " +
+        "WHERE target.arena_group_type = 'vip' AND target.arena_scope_uuid IN (?, ?) AND target.enabled = TRUE AND listing.enabled = TRUE " +
+        "ORDER BY target.arena_group_uuid, listing.id",
+      [target.arenaScopeUuid, GLOBAL_SCOPE_UUID],
+    );
+    const candidates = new Map<string, Array<VipTierRateListingCandidate & { snapshot: TargetSnapshot }>>();
+    const syntheticIds = new Map<string, number>();
+    for (const row of rateRows) {
+      const snapshot = parseTargetSnapshot(row);
+      if (snapshot.vipFamilyKey !== target.vipFamilyKey) continue;
+      const listingId = asInteger(row.listing_id, "VIP listing ID", 1);
+      const listingMinutes = asInteger(row.listing_duration_minutes, "VIP listing duration");
+      const priceTokens = asBigInt(row.token_price, "VIP listing Token price");
+      if (listingMinutes <= 0 || priceTokens <= 0n) continue;
+      if (listingMinutes !== snapshot.durationMinutes || listingMinutes !== asInteger(row.duration_minutes, "target duration")) {
+        fail("catalogue_unavailable", "A VIP rate listing has a stale Arena target snapshot.");
+      }
+      let syntheticId = syntheticIds.get(snapshot.arenaGroupUuid);
+      if (!syntheticId) {
+        syntheticId = syntheticIds.size + 1;
+        syntheticIds.set(snapshot.arenaGroupUuid, syntheticId);
+      }
+      const groupCandidates = candidates.get(snapshot.arenaGroupUuid) ?? [];
+      groupCandidates.push({
+        groupId: syntheticId,
+        listingId,
+        durationSeconds: BigInt(listingMinutes) * 60n,
+        priceTokens,
+        marketEnabled: asBoolean(row.market_enabled),
+        enabled: asBoolean(row.listing_enabled),
+        snapshot,
+      });
+      candidates.set(snapshot.arenaGroupUuid, groupCandidates);
+    }
+    const selectedRates: Array<{ rate: VipTierRate; snapshot: TargetSnapshot }> = [];
+    for (const groupCandidates of candidates.values()) {
+      const exactScopeCandidates = groupCandidates.filter(
+        (entry) => entry.snapshot.arenaScopeUuid === target.arenaScopeUuid,
+      );
+      const applicableCandidates = exactScopeCandidates.length > 0
+        ? exactScopeCandidates
+        : groupCandidates.filter(
+          (entry) => entry.snapshot.arenaScopeUuid === GLOBAL_SCOPE_UUID,
+        );
+      const selected = selectPreferredVipTierRateListing(applicableCandidates);
+      if (!selected) continue;
+      const first = applicableCandidates[0].snapshot;
+      if (
+        applicableCandidates.some((entry) =>
+          entry.snapshot.arenaGroupKey !== first.arenaGroupKey ||
+          entry.snapshot.rankWeight !== first.rankWeight ||
+          entry.snapshot.arenaGroupRowVersion !== first.arenaGroupRowVersion ||
+          entry.snapshot.legacyPortalGroupId !== first.legacyPortalGroupId
+        )
+      ) {
+        fail("catalogue_unavailable", "VIP listings disagree about their Arena group target.");
+      }
+      selectedRates.push({ rate: selected, snapshot: selected.snapshot });
+    }
+    selectedRates.sort((left, right) =>
+      left.snapshot.rankWeight - right.snapshot.rankWeight ||
+      (left.snapshot.arenaGroupUuid < right.snapshot.arenaGroupUuid
+        ? -1
+        : left.snapshot.arenaGroupUuid > right.snapshot.arenaGroupUuid
+          ? 1
+          : 0)
+    );
+    if (!selectedRates.some((entry) => entry.snapshot.arenaGroupUuid === target.arenaGroupUuid)) {
+      fail("catalogue_unavailable", `${target.displayName} has no live finite marketplace rate.`);
+    }
+    const rankOwners = new Set<number>();
+    for (let index = 0; index < selectedRates.length; index += 1) {
+      const entry = selectedRates[index];
+      if (rankOwners.has(entry.snapshot.rankWeight)) {
+        fail("catalogue_unavailable", "VIP conversion is paused because two tiers have the same rank.");
+      }
+      rankOwners.add(entry.snapshot.rankWeight);
+      if (index > 0) {
+        try {
+          if (compareVipTierRates(selectedRates[index - 1].rate, entry.rate) >= 0) {
+            fail("catalogue_unavailable", "VIP conversion is paused because live tier rates do not increase through the ranks.");
+          }
+        } catch (error) {
+          if (error instanceof VipMembershipConversionError) {
+            fail("catalogue_unavailable", "A live VIP marketplace rate is invalid.");
+          }
+          throw error;
+        }
+      }
+    }
+
+ const [scopes]=await arena.query<ArenaScopeRow[]>("SELECT id, scope_uuid, enabled FROM arena_scopes WHERE scope_uuid = ? LIMIT 1",[target.arenaScopeUuid]);
+ const scope=scopes[0];if(!scope||!asBoolean(scope.enabled))fail("scope_unavailable","The Arena scope is unavailable.");
+ const scopeId=asArenaInteger(scope.id,"Arena scope ID",1);
+ const [tiers]=await arena.query<ArenaGroupRow[]>("SELECT identity_group.id, identity_group.group_uuid, identity_group.legacy_portal_group_id, identity_group.group_key, identity_group.group_type, identity_group.vip_family_key, identity_group.display_name, identity_group.rank_weight, identity_group.row_version, identity_group.enabled FROM arena_groups AS identity_group INNER JOIN arena_group_scopes AS group_scope ON group_scope.group_id = identity_group.id WHERE group_scope.scope_id = ? AND identity_group.group_type = 'vip' AND identity_group.vip_family_key = ? AND identity_group.enabled = TRUE AND group_scope.enabled = TRUE",[scopeId,target.vipFamilyKey]);
+ const targetTier=tiers.find(t=>t.group_uuid===target.arenaGroupUuid);
+ if(!targetTier||targetTier.group_key!==target.arenaGroupKey||asArenaInteger(targetTier.row_version,"Arena group version",1)!==target.arenaGroupRowVersion)fail("stale_group_target","The VIP target changed.");
+ const rates=new Map<number,VipTierRate>();
+ for(const tier of tiers) {
+   const selected=selectedRates.find(r=>r.snapshot.arenaGroupUuid===tier.group_uuid);
+   if(!selected||selected.snapshot.arenaGroupRowVersion!==asArenaInteger(tier.row_version,"VIP group version",1)||selected.snapshot.rankWeight!==asArenaInteger(tier.rank_weight,"VIP rank",-1_000_000))fail("stale_rate_schedule","VIP marketplace rates changed.");
+   const groupId=asArenaInteger(tier.id,"VIP group ID",1);rates.set(groupId,{...selected.rate,groupId});
+ }
+ const [subscriptions]=await arena.query<ArenaSubscriptionRow[]>("SELECT steam_id, scope_id, vip_family_key, group_id, membership_uuid, status, starts_at, expires_at, legacy_suppressed_until, legacy_suppressed_permanently, row_version FROM arena_vip_subscriptions WHERE steam_id = ? AND scope_id = ? AND vip_family_key = ? LIMIT 1",[input.steamId,scopeId,target.vipFamilyKey]);
+ const subscription=subscriptions[0];const now=new Date();const expiry=subscription?asDate(subscription.expires_at,"VIP expiry"):null;const starts=subscription?asDate(subscription.starts_at,"VIP start"):null;
+ const active=Boolean(subscription?.status==="active"&&subscription.group_id!==null&&subscription.membership_uuid&&starts&&starts.getTime()<=now.getTime()&&(expiry===null||expiry>now));
+ if(subscription?.status==="conflict")fail("membership_conflict","The VIP membership needs reconciliation.");
+ const suppression=subscription?asDate(subscription.legacy_suppressed_until,"VIP suppression expiry"):null;
+ if(subscription&&vipSuppressionRequiresReconciliation({subscriptionStatus:subscription.status,subscriptionActive:active,suppressionActive:asBoolean(subscription.legacy_suppressed_permanently)||Boolean(suppression&&suppression>now)}))fail("membership_conflict","The VIP membership needs reconciliation.");
+ const currentTier=active?tiers.find(t=>asArenaInteger(t.id,"VIP group ID",1)===asArenaInteger(subscription.group_id,"current VIP group",1)):null;
+ if(active&&!currentTier)fail("membership_conflict","The current VIP tier is unavailable.");
+ const [memberships]=await arena.query<ArenaMembershipRow[]>("SELECT membership.membership_uuid, membership.group_id, membership.scope_id, membership.steam_id, membership.starts_at, membership.expires_at, membership.status, membership.source_inventory_item_id, membership.row_version FROM arena_group_memberships AS membership INNER JOIN arena_groups AS identity_group ON identity_group.id = membership.group_id WHERE membership.steam_id = ? AND membership.scope_id = ? AND identity_group.group_type = 'vip' AND identity_group.vip_family_key = ?",[input.steamId,scopeId,target.vipFamilyKey]);
+ const effective=memberships.filter(m=>m.status==="active"&&(m.expires_at===null||asDate(m.expires_at,"membership expiry")!>now));
+ if(memberships.some(m=>m.status==="conflict")||effective.length!==(active?1:0)||(active&&effective[0]?.membership_uuid!==subscription.membership_uuid))fail("membership_conflict","The VIP subscription does not match its memberships.");
+ const {resolveVipActivationPreview}=await import("../economy/vip-activation-preview");
+ try {
+  const preview=resolveVipActivationPreview({now,item:{groupId:asArenaInteger(targetTier.id,"target VIP group ID",1),rankWeight:asArenaInteger(targetTier.rank_weight,"target VIP rank",-1_000_000),displayName:targetTier.display_name,durationMinutes},current:currentTier?{groupId:asArenaInteger(currentTier.id,"VIP group ID",1),rankWeight:asArenaInteger(currentTier.rank_weight,"current VIP rank",-1_000_000),displayName:currentTier.display_name,expiresAt:expiry}:null,rates});
+  const resultTier=tiers.find(t=>asArenaInteger(t.id,"VIP group ID",1)===preview.resultGroupId)!;
+  return {itemId:input.itemId,eligible:true,reasonCode:null,activationKind:preview.activationKind,groupName:resultTier.display_name,convertedDurationSeconds:secondsNumber(preview.convertedDurationSeconds,"converted duration"),timeDeductedSeconds:secondsNumber(preview.timeDeductedSeconds,"deducted duration"),expiresAt:preview.finalExpiresAt?.toISOString()??null,quotedAt:now.toISOString(),advisory:true as const};
+ } catch(error) {
+  if(error instanceof Error&&"code" in error)return {itemId:input.itemId,eligible:false,reasonCode:String(error.code),activationKind:null,groupName:currentTier?.display_name??null,convertedDurationSeconds:0,timeDeductedSeconds:0,expiresAt:expiry?.toISOString()??null,quotedAt:now.toISOString(),advisory:true as const};
+  throw error;
+ }
+}
+
+export async function getVipMembershipActivationStatus(input:{steamId:string;idempotencyKey:string}) {
+  const pool=getPortalDatabasePool();if(!pool)fail("storage_unavailable","Portal storage is unavailable.");
+  const [rows]=await pool.query<PortalActivationJobRow[]>(jobSelect()+"WHERE owner_steam_id = ? AND idempotency_key = ? LIMIT 1",[input.steamId,input.idempotencyKey]);
+  const row=rows[0];if(!row)return null;
+  return {status:row.status==="completed"?"completed" as const:row.status==="rejected"?"rejected" as const:row.status==="manual_review"?"manual_review" as const:"pending" as const,result:row.status==="completed"&&row.result_json?parseResult(asRecord(row.result_json,"saved activation result")):null,error:row.error_code?{code:row.error_code,message:row.last_error??"The activation needs reconciliation.",retryable:row.status!=="rejected"}:null};
+}
+
 export async function activateVipMembershipItemWithSaga(
   rawInput: VipMembershipActivationSagaInput,
 ): Promise<VipMembershipActivationSagaResult> {

@@ -14,6 +14,7 @@ const stubs: Record<string, string> = {
   "@/lib/data/portal-repository": `const s=globalThis.__customFinishRoutes;
     export class EconomyRepositoryError extends Error { constructor(code,message){super(message);this.code=code;} }
     export async function getEconomyCatalogueItem(){return s.catalogue;}
+    export async function getEconomyMarketplaceBasePrice(){return s.catalogue.price?.tokenPrice??null;}
     export function isEconomyMarketplacePurchasable(){return true;}
     export function isEconomyProfileTheme(){return false;} export function isEconomyVipMembership(){return false;}
     export async function purchaseEconomyItem(input){s.purchases.push(input);if(s.purchaseFailure)throw new EconomyRepositoryError(s.purchaseFailure,'The price changed. Review the refreshed quote before buying.');return {wallet:{balance:200},itemId:'bought'};}
@@ -48,6 +49,7 @@ const stubs: Record<string, string> = {
 registerHooks({ resolve(specifier, context, next) {
   if (stubs[specifier]) return { url: `data:text/javascript,${encodeURIComponent(stubs[specifier])}`, shortCircuit: true };
   if (specifier === "next/server") return { url: pathToFileURL(resolve("node_modules/next/server.js")).href, shortCircuit: true };
+  if (specifier.startsWith("@/lib/economy/") && !stubs[specifier]) return {url:pathToFileURL(resolve(specifier.slice(2)+".ts")).href,shortCircuit:true};
   return next(specifier, context);
 } });
 const { POST: purchase } = await import("./market/purchase/route.ts");
