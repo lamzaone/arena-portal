@@ -9,11 +9,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 // Run real repository SQL in isolated SQLite; only MySQL syntax is adapted.
 const db = new DatabaseSync(":memory:");
 let activeDiscountRows: Array<Record<string, unknown>> = [];
+let discountQueries = 0;
+let failMarketProviders = false;
+Object.assign(globalThis, { __finishMarketProviders: { shouldFail: () => failMarketProviders } });
 db.function("JSON_UNQUOTE", (value) => value);
-const sql = (query: string) => query.replaceAll(" FOR UPDATE", "").replaceAll("INSERT IGNORE INTO", "INSERT OR IGNORE INTO").replace(/ ON DUPLICATE KEY UPDATE .+$/, " ON CONFLICT DO NOTHING");
+const sql = (query: string) => query.replaceAll(" FOR UPDATE", "").replaceAll(" COLLATE utf8mb4_unicode_ci", " COLLATE NOCASE").replaceAll("INSERT IGNORE INTO", "INSERT OR IGNORE INTO").replace(/ ON DUPLICATE KEY UPDATE .+$/, " ON CONFLICT DO NOTHING");
 const executor = {
   async query(query: string, args: unknown[] = []) {
-    if (query.includes("portal_economy_discount_rules")) return [activeDiscountRows, []];
+    if (query.includes("portal_economy_discount_rules")) { discountQueries += 1; return [activeDiscountRows, []]; }
     return [db.prepare(sql(query)).all(...args as Array<string | number | null>), []];
   },
   async execute(query: string, args: unknown[] = []) {
@@ -35,6 +38,8 @@ registerHooks({ resolve(specifier, context, next) {
     "@/lib/data/identity-catalogue": "export async function ensureIdentityCatalogue(){} export async function getIdentityCatalogueStatus(){} export async function syncIdentityCatalogue(){}",
     "@/lib/data/staff-vip-memberships": "export class StaffVipMembershipError extends Error {}",
     "@/lib/data/vip-membership-activation-saga": "export async function activateVipMembershipItemWithSaga(){}",
+    "@/lib/economy/skinport-prices": "export async function getSkinportHistoricalPrices(inputs){if(inputs.length&&globalThis.__finishMarketProviders.shouldFail())throw Error('provider called');return inputs.map(()=>null);}",
+    "@/lib/economy/external-market-prices": "export async function getExternalMarketPrices(inputs){if(inputs.length&&globalThis.__finishMarketProviders.shouldFail())throw Error('provider called');return inputs.map(()=>null);} export async function getCsfloatExactListingPrice(){return null;}",
   };
   if (stubs[specifier]) return { url: `data:text/javascript,${stubs[specifier]}`, shortCircuit: true };
   if (specifier === "next/server") return { url: pathToFileURL(resolve("node_modules/next/server.js")).href, shortCircuit: true };
@@ -42,11 +47,14 @@ registerHooks({ resolve(specifier, context, next) {
     : specifier.startsWith(".") && context.parentURL?.startsWith("file:") ? moduleUrl(fileURLToPath(new URL(specifier, context.parentURL))) : null;
   return url ? { url, shortCircuit: true } : next(specifier, context);
 } });
-const { getEconomyCatalogue, getEconomyCatalogueItem, getEconomyCrateDropPreview, purchaseEconomyItem, sellEconomyItem, awardEconomyDrop } = await import("./portal-repository.ts");
+const { getEconomyCatalogue, getMarketplaceCatalogue, getEconomyCatalogueItem, getEconomyCrateDropPreview, purchaseEconomyItem, sellEconomyItem, awardEconomyDrop } = await import("./portal-repository.ts");
 db.exec(`
 CREATE TABLE portal_steam_accounts (steam_id TEXT PRIMARY KEY, updated_at TEXT);
 CREATE TABLE portal_economy_catalogue (id INTEGER PRIMARY KEY, catalogue_key TEXT, market_hash_name TEXT, item_type TEXT, definition_index INTEGER, paintkit INTEGER, rarity_rank INTEGER DEFAULT 3, display_name TEXT, metadata TEXT DEFAULT '{}', enabled INTEGER DEFAULT 1, created_at TEXT, updated_at TEXT);
 CREATE TABLE portal_economy_catalogue_prices (id INTEGER PRIMARY KEY, catalogue_id INTEGER, is_current INTEGER, market_price_eur_cents INTEGER, token_price INTEGER, price_source TEXT, source_reference TEXT, observed_at TEXT);
+CREATE TABLE portal_identity_group_listings (catalogue_id INTEGER, group_id INTEGER, enabled INTEGER, market_enabled INTEGER);
+CREATE TABLE portal_identity_groups (id INTEGER, enabled INTEGER, source_type TEXT, external_key TEXT);
+CREATE TABLE portal_identity_external_group_definitions (group_id INTEGER, source_type TEXT, external_key TEXT);
 CREATE TABLE portal_economy_operations (id INTEGER PRIMARY KEY, operation_name TEXT, idempotency_key TEXT UNIQUE, actor_steam_id TEXT, request_hash TEXT, status TEXT DEFAULT 'pending', result_json TEXT, completed_at TEXT);
 CREATE TABLE portal_token_accounts (steam_id TEXT PRIMARY KEY, balance INTEGER DEFAULT 0, lifetime_earned INTEGER DEFAULT 0, lifetime_spent INTEGER DEFAULT 0, created_at TEXT, updated_at TEXT);
 CREATE TABLE portal_loot_tables (id INTEGER PRIMARY KEY, code TEXT, table_type TEXT, container_catalogue_id INTEGER, display_name TEXT, enabled INTEGER DEFAULT 1, metadata TEXT DEFAULT '{}');
@@ -77,6 +85,36 @@ test("public pagination excludes unreleased pairs but retains real unpriced fini
   assert.equal(page.items[0].metadata.marketBaseName, "AK-47 | Case Hardened");
   assert.equal(await getEconomyCatalogueItem(1), null);
   assert.equal((await getEconomyCatalogue({ includeDisabled: true, itemTypes: ["skin"] })).total, 2);
+});
+
+test("market browsing serves a stored price while providers are unavailable", async () => {
+  db.prepare("UPDATE portal_economy_catalogue SET market_hash_name = 'Case' WHERE id = 3").run();
+  db.prepare("INSERT INTO portal_economy_catalogue_prices (id,catalogue_id,is_current,market_price_eur_cents,token_price,price_source,observed_at) VALUES (300,3,1,1250,1250,'skinport',?)").run(new Date().toISOString());
+  failMarketProviders = true;
+  try {
+    const page = await getMarketplaceCatalogue({ itemTypes: ["crate"], pageSize: 1 });
+    assert.deepEqual(page.items.map((item) => item.id), [3]);
+    assert.equal(page.items[0].displayPriceTokens, 1250);
+  } finally {
+    failMarketProviders = false;
+    db.prepare("DELETE FROM portal_economy_catalogue_prices WHERE id = 300").run();
+    db.prepare("UPDATE portal_economy_catalogue SET market_hash_name = NULL WHERE id = 3").run();
+  }
+});
+
+test("market browsing loads active discounts once per page", async () => {
+  discountQueries = 0;
+  await getMarketplaceCatalogue({ itemTypes: ["crate"], pageSize: 1 });
+  assert.equal(discountQueries, 1);
+});
+
+test("market browsing reports catalogue, cache, price, and discount stages", async () => {
+  const stages: string[] = [];
+  await getMarketplaceCatalogue({ itemTypes: ["crate"], pageSize: 1 }, (phase, durationMs) => {
+    assert.ok(Number.isFinite(durationMs) && durationMs >= 0);
+    stages.push(phase);
+  });
+  assert.deepEqual(stages, ["catalogue_sql", "variant_cache", "snapshot_quote", "discount"]);
 });
 
 test("invalid purchases fail before any wallet mutation", async () => {

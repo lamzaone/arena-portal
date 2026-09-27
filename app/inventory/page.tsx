@@ -6,7 +6,7 @@ import { PageHeading } from "@/components/ui/page-heading";
 import { PortalShell } from "@/components/ui/portal-shell";
 import { createEconomyActionToken, getSession } from "@/lib/auth/session";
 import { getPlayerEconomyLoadout, getTokenWallet } from "@/lib/data/portal-repository";
-import { getCompletePlayerEconomyInventory } from "@/lib/economy/player-inventory";
+import { getPlayerEconomyInventoryPage } from "@/lib/economy/player-inventory";
 
 export default async function InventoryPage() {
   const session = await getSession();
@@ -14,7 +14,7 @@ export default async function InventoryPage() {
 
   const [wallet, inventory, loadout] = await Promise.all([
     getTokenWallet(session.steamId),
-    getCompletePlayerEconomyInventory(session.steamId),
+    getPlayerEconomyInventoryPage(session.steamId, { page: 1, pageSize: 20 }),
     getPlayerEconomyLoadout(session.steamId)
   ]);
   const csrf = createEconomyActionToken(session);

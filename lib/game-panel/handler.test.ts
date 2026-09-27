@@ -9,3 +9,16 @@ test('signed handler dispatches accepted actor and rejects cookies without repos
  const unauth=await handle(new Request('https://portal.test/api/game-panel/v1/wallet.read',{method:'POST',headers:{cookie:'portal_session=synthetic','content-type':'application/json'},body:'{}'}),'wallet.read');assert.equal(unauth.status,401);assert.equal(calls,0);assert.equal(unauth.headers.get('cache-control'),'private, no-store');assert.equal((await unauth.json()).operationId,null);
  const valid=await handle(signedRequest(),'wallet.read');assert.equal(valid.status,200);assert.equal(calls,1);assert.equal((await valid.json()).data.balance,'0');
 });
+
+test('signed reads report bounded authentication timing without actor identifiers',async()=>{
+ const storage={claimTransport:async()=>{}} as unknown as PanelStorage;
+ const handle=createPanelHandler({now:()=>1790164800000,readConfiguration:syntheticConfiguration,storage,read:async()=>({balance:'0',lifetimeEarned:'0',lifetimeSpent:'0'}),mutate:async()=>{throw Error('not expected');},receipt:async()=>null,restore:async()=>null});
+ const original=console.info;const records:string[]=[];
+ console.info=(message:string)=>{records.push(message);};
+ try {await handle(signedRequest(),'wallet.read');} finally {console.info=original;}
+ const auth=records.map(value=>JSON.parse(value)).find(value=>value.event==='game_panel_timing'&&value.phase==='auth');
+ assert.equal(auth?.operation,'wallet.read');
+ assert.ok(Number.isFinite(auth?.durationMs));
+ assert.ok(auth.durationMs>=0);
+ assert.equal(JSON.stringify(auth).includes('76561198000000001'),false);
+});

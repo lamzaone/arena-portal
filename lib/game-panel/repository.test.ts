@@ -332,3 +332,39 @@ test("name sorting includes legacy custom display names and StatTrak prefixes", 
     ["Bravo", "StatTrak\u2122 Alpha"],
   );
 });
+
+test("inventory search includes catalogue description, item type and rarity name", async () => {
+  db.prepare(
+    "INSERT INTO portal_economy_catalogue (id,display_name,item_type,rarity_rank,metadata) VALUES (9001,'Test Blade','knife',7,?)",
+  ).run(JSON.stringify({ description: "Carbon forged collectible" }));
+  const itemId = "50000000-0000-4000-8000-000000000001";
+  db.prepare(
+    "INSERT INTO portal_inventory_items (id,owner_steam_id,catalogue_id,item_type,rarity_rank) VALUES (?,?,9001,'knife',7)",
+  ).run(itemId, actor);
+  for (const query of ["carbon forged", "knife", "covert"]) {
+    const page = await getPlayerEconomyInventory(actor, { query });
+    assert.ok(page.items.some((item) => item.id === itemId), query);
+  }
+});
+
+test("inventory rarity filtering uses the player-facing knife and Howl ranks", async () => {
+  db.prepare(
+    "INSERT INTO portal_economy_catalogue (id,display_name,item_type,rarity_rank,metadata) VALUES (9002,'M4A4 | Howl','skin',6,'{}')",
+  ).run();
+  const howlId = "50000000-0000-4000-8000-000000000002";
+  db.prepare(
+    "INSERT INTO portal_inventory_items (id,owner_steam_id,catalogue_id,item_type,rarity_rank) VALUES (?,?,9002,'skin',6)",
+  ).run(howlId, actor);
+  const rolledId = "50000000-0000-4000-8000-000000000003";
+  db.prepare(
+    "INSERT INTO portal_inventory_items (id,owner_steam_id,item_type,rarity_rank,attributes) VALUES (?,?,'skin',4,?)",
+  ).run(rolledId, actor, JSON.stringify({ rarityChanceBps: 64 }));
+  assert.ok((await getPlayerEconomyInventory(actor, { query: rolledId })).items.some((item) => item.id === rolledId));
+  const covert = await getPlayerEconomyInventory(actor, { rarityRanks: [6], pageSize: 100 });
+  const extraordinary = await getPlayerEconomyInventory(actor, { rarityRanks: [7], pageSize: 100 });
+  assert.ok(covert.items.some((item) => item.catalogueId === 9001));
+  assert.ok(!extraordinary.items.some((item) => item.catalogueId === 9001));
+  assert.ok(extraordinary.items.some((item) => item.id === howlId));
+  assert.ok(!covert.items.some((item) => item.id === howlId));
+  assert.ok(covert.items.some((item) => item.id === rolledId));
+});

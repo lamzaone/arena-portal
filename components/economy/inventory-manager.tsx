@@ -58,6 +58,8 @@ import {
 } from "@/components/economy/economy-view-model";
 import { PortalToast } from "@/components/success-toast";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { inventoryPageRequest, pageForInventoryAnchor } from "@/lib/economy/inventory-page-request";
+import { ECONOMY_ITEM_TYPES, ECONOMY_RARITIES } from "@/lib/economy/item-taxonomy";
 import styles from "./player-workspace.module.css";
 import { SearchField } from "@/components/ui/search-field";
 import {
@@ -120,25 +122,6 @@ function slotForItem(
   return null;
 }
 
-function compareItems(
-  left: EconomyItemView,
-  right: EconomyItemView,
-  mode: SortMode,
-) {
-  if (mode === "name") return left.displayName.localeCompare(right.displayName);
-  if (mode === "rarity")
-    return (
-      right.rarityRank - left.rarityRank ||
-      left.displayName.localeCompare(right.displayName)
-    );
-  if (mode === "float")
-    return (
-      (left.floatValue ?? Number.POSITIVE_INFINITY) -
-      (right.floatValue ?? Number.POSITIVE_INFINITY)
-    );
-  return 0;
-}
-
 function gridColumnCount(grid: HTMLElement) {
   return Math.max(
     1,
@@ -174,39 +157,29 @@ export function InventoryManager({
 }: InventoryManagerProps) {
   const router = useRouter();
   const crateOpening = useInventoryCrateOpening({ csrf });
-  const inventoryItems = useMemo(() => economyItems(inventory), [inventory]);
+  const initialRequestKey = inventoryPageRequest({ page: 1, pageSize: 20, query: "", type: "all", rarity: "all", sort: "newest", hideEquipped: false });
+  const [pageRecord, setPageRecord] = useState({ key: initialRequestKey, value: inventory });
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [inventoryError, setInventoryError] = useState("");
+  const [inventoryRevision, setInventoryRevision] = useState(0);
+  const priorInventoryRef = useRef(inventory);
+  const [materialItems, setMaterialItems] = useState<EconomyItemView[]>([]);
+  const [materialsLoaded, setMaterialsLoaded] = useState(false);
+  const [materialsLoading, setMaterialsLoading] = useState(false);
+  const [materialsError, setMaterialsError] = useState("");
+  const [materialsRevision, setMaterialsRevision] = useState(0);
   const [saleLockOverrides, setSaleLockOverrides] = useState<Map<string, SaleLockOverride>>(
     () => new Map(),
   );
   const inventoryRevisionRef = useRef(0);
   const saleLockRequestVersionRef = useRef(0);
   const [soldItemIds, setSoldItemIds] = useState<Set<string>>(() => new Set());
-  const managedItems = useMemo(
-    () => inventoryItems
-      .filter((item) => !soldItemIds.has(item.id))
-      .map((item) => saleLockOverrides.has(item.id)
-        ? { ...item, saleLocked: saleLockOverrides.get(item.id)?.saleLocked ?? item.saleLocked }
-        : item),
-    [inventoryItems, saleLockOverrides, soldItemIds],
-  );
   const selectedItemIndexRef = useRef(0);
-  const items = useMemo(
-    () => inventoryItemsDuringCrateOpening(
-      managedItems,
-      crateOpening.consumedItemIds,
-      crateOpening.retainedSingleCrate,
-      selectedItemIndexRef.current,
-    ),
-    [
-      crateOpening.consumedItemIds,
-      crateOpening.retainedSingleCrate,
-      managedItems,
-    ],
-  );
   const loadoutView = useMemo(() => economyLoadout(loadout), [loadout]);
   const walletView = useMemo(() => economyWallet(wallet), [wallet]);
   const [displayWallet, setDisplayWallet] = useState(walletView);
   const [query, setQuery] = useState("");
+  const [submittedQuery, setSubmittedQuery] = useState("");
   const [type, setType] = useState("all");
   const [rarity, setRarity] = useState("all");
   const [hideEquipped, setHideEquipped] = useState(false);
@@ -221,6 +194,7 @@ export function InventoryManager({
   const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [selectedItemSnapshots, setSelectedItemSnapshots] = useState<Map<string, EconomyItemView>>(() => new Map());
   const [bulkSaleConfirming, setBulkSaleConfirming] = useState(false);
   const [bulkOpenConfirming, setBulkOpenConfirming] = useState(false);
   const [bulkSelling, setBulkSelling] = useState(false);
@@ -239,8 +213,36 @@ export function InventoryManager({
   const [pending, startTransition] = useTransition();
   const [customizationBusy, setCustomizationBusy] = useState(false);
   const inventoryGridRef = useRef<HTMLDivElement | null>(null);
-  const { gridProps, pageSize: inventoryPageSize } = useItemGridLayout();
+  const { gridProps, pageSize: inventoryPageSize, measured: inventoryGridMeasured } = useItemGridLayout();
+  const requestedPageSize = inventoryGridMeasured ? inventoryPageSize : 20;
   const [previousInventoryPageSize, setPreviousInventoryPageSize] = useState(inventoryPageSize);
+  const requestKey = inventoryPageRequest({ page: inventoryPage, pageSize: requestedPageSize, query: submittedQuery, type, rarity, sort, hideEquipped });
+  const activeInventory = pageRecord.key === requestKey ? pageRecord.value : null;
+  const inventoryItems = useMemo(() => economyItems(activeInventory), [activeInventory]);
+  const inventoryTotal = activeInventory && typeof activeInventory === "object" && "total" in activeInventory
+    ? Number(activeInventory.total) || 0 : 0;
+  const managedItems = useMemo(
+    () => inventoryItems
+      .filter((item) => !soldItemIds.has(item.id))
+      .map((item) => saleLockOverrides.has(item.id)
+        ? { ...item, saleLocked: saleLockOverrides.get(item.id)?.saleLocked ?? item.saleLocked }
+        : item),
+    [inventoryItems, saleLockOverrides, soldItemIds],
+  );
+  const items = useMemo(
+    () => inventoryItemsDuringCrateOpening(
+      managedItems,
+      crateOpening.consumedItemIds,
+      crateOpening.retainedSingleCrate,
+      selectedItemIndexRef.current,
+    ),
+    [crateOpening.consumedItemIds, crateOpening.retainedSingleCrate, managedItems],
+  );
+  const customizationItems = useMemo(() => {
+    const byId = new Map(materialItems.map((item) => [item.id, item]));
+    for (const item of items) byId.set(item.id, item);
+    return [...byId.values()];
+  }, [items, materialItems]);
   const measuredGridRef = gridProps.ref;
   const setInventoryGridRef = useCallback((node: HTMLDivElement | null) => {
     inventoryGridRef.current = node;
@@ -273,64 +275,24 @@ export function InventoryManager({
     row.appendChild(inventoryPortalContent.current);
   }, []);
 
-  const types = useMemo(
-    () => [...new Set(items.map((item) => item.itemType))].sort(),
-    [items],
-  );
-  const rarities = useMemo(
-    () => [...new Set(items.map((item) => item.rarity))].sort(),
-    [items],
-  );
-  const filtered = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase();
-    return items
-      .filter((item) => {
-        const haystack = [
-          item.displayName,
-          item.description ?? "",
-          item.itemType,
-          item.rarity,
-          item.nametag ?? "",
-        ]
-          .join(" ")
-          .toLocaleLowerCase();
-        return (
-          (!normalizedQuery || haystack.includes(normalizedQuery)) &&
-          (type === "all" || item.itemType === type) &&
-          (rarity === "all" || item.rarity === rarity) &&
-          (!hideEquipped || item.equippedSlots.length === 0)
-        );
-      })
-      .sort((left, right) => compareItems(left, right, sort));
-  }, [items, query, rarity, sort, type, hideEquipped]);
-
+  const filtered = items;
+  const knownTotal = pageRecord.value && typeof pageRecord.value === "object" && "total" in pageRecord.value
+    ? Number(pageRecord.value.total) || 0 : 0;
   const inventoryPageCount = Math.max(
     1,
-    Math.ceil(filtered.length / inventoryPageSize),
+    Math.ceil(knownTotal / inventoryPageSize),
   );
-  let visibleInventoryPage = Math.min(inventoryPage, inventoryPageCount);
-  if (previousInventoryPageSize !== inventoryPageSize) {
-    // Reconcile before committing children so an open editor keeps its draft on resize.
-    const selectedAnchor = filtered.findIndex((item) => item.id === selectedId);
-    const anchor = selectedAnchor >= 0 ? selectedAnchor : (inventoryPage - 1) * previousInventoryPageSize;
-    visibleInventoryPage = Math.min(inventoryPageCount, Math.floor(anchor / inventoryPageSize) + 1);
-    setPreviousInventoryPageSize(inventoryPageSize);
-    setInventoryPage(visibleInventoryPage);
-  }
+  const visibleInventoryPage = Math.min(inventoryPage, inventoryPageCount);
   const inventoryPageStart =
     (visibleInventoryPage - 1) * inventoryPageSize;
-  const visibleItems = filtered.slice(
-    inventoryPageStart,
-    inventoryPageStart + inventoryPageSize,
-  );
-  const inventoryPageEnd = Math.min(
-    filtered.length,
-    inventoryPageStart + visibleItems.length,
-  );
-  const bulkSelectedItems = items.filter(
-    (item) => bulkSelectedIds.has(item.id) && canSelectForLock(item),
-  );
-  const bulkCrateSelection = crateOnlySelection(items, bulkSelectedIds);
+  const visibleItems = filtered.slice(0, inventoryPageSize);
+  const inventoryPageEnd = Math.min(inventoryTotal, inventoryPageStart + visibleItems.length);
+  const bulkSelectedItems = [...selectedItemSnapshots.values()]
+    .filter((item) => bulkSelectedIds.has(item.id) && canSelectForLock(item))
+    .map((item) => saleLockOverrides.has(item.id)
+      ? { ...item, saleLocked: saleLockOverrides.get(item.id)?.saleLocked ?? item.saleLocked }
+      : item);
+  const bulkCrateSelection = crateOnlySelection(bulkSelectedItems, bulkSelectedIds);
   const bulkOpenableCrates =
     bulkCrateSelection.status === "ready" ? bulkCrateSelection.crates : [];
   const bulkSellableItems = bulkSelectedItems.filter(canBulkSellItem);
@@ -412,14 +374,14 @@ export function InventoryManager({
     ? itemCharmDefinitionIndex(selected)
     : null;
   const stickerSlots = selected ? itemStickerSlotCount(selected) : 0;
-  const stickers = items.filter(
+  const stickers = customizationItems.filter(
     (item) => item.itemType === "sticker" && item.id,
   );
-  const nametagItems = items.filter(
+  const nametagItems = customizationItems.filter(
     (item) =>
       item.itemType === "nametag" && item.state === "available" && item.id,
   );
-  const charms = items.filter(
+  const charms = customizationItems.filter(
     (item) => item.itemType === "keychain" && item.state === "available" && item.id,
   );
   const canCustomize =
@@ -438,6 +400,65 @@ export function InventoryManager({
     pending || customizationBusy || bulkSelling || bulkLocking || crateOpening.busy;
   const inventoryInteractionBlocked =
     inventoryMutationBusy || inventoryClosing || crateOpening.bulk !== null;
+
+  useEffect(() => {
+    if (!canCustomize || materialsLoaded) return;
+    const controller = new AbortController();
+    setMaterialsLoading(true);
+    setMaterialsError("");
+    void (async () => {
+      try {
+        const response = await fetch("/api/economy/inventory?mode=materials", { cache: "no-store", signal: controller.signal });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) throw new Error(result.message || "Attachment items could not be loaded.");
+        if (!controller.signal.aborted) {
+          setMaterialItems(economyItems(result));
+          setMaterialsLoaded(true);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) setMaterialsError(error instanceof Error ? error.message : "Attachment items could not be loaded.");
+      } finally {
+        if (!controller.signal.aborted) setMaterialsLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [canCustomize, materialsLoaded, materialsRevision]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSubmittedQuery(query.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
+    if (priorInventoryRef.current === inventory) return;
+    priorInventoryRef.current = inventory;
+    if (requestKey === initialRequestKey) setPageRecord({ key: initialRequestKey, value: inventory });
+    setInventoryRevision((current) => current + 1);
+    setMaterialsLoaded(false);
+  }, [inventory, initialRequestKey, requestKey]);
+
+  useEffect(() => {
+    if (inventoryRevision === 0 && pageRecord.key === requestKey) return;
+    const controller = new AbortController();
+    setInventoryLoading(true);
+    setInventoryError("");
+    void (async () => {
+      try {
+        const response = await fetch(`/api/economy/inventory?${requestKey}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) throw new Error(result.message || "Inventory could not be loaded.");
+        if (!controller.signal.aborted) setPageRecord({ key: requestKey, value: result });
+      } catch (error) {
+        if (!controller.signal.aborted) setInventoryError(error instanceof Error ? error.message : "Inventory could not be loaded.");
+      } finally {
+        if (!controller.signal.aborted) setInventoryLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [requestKey, inventoryRevision]);
 
   useEffect(() => () => inventoryExitAnimation.current?.cancel(), []);
 
@@ -477,10 +498,17 @@ export function InventoryManager({
   }, [query, rarity, sort, type, hideEquipped]);
 
   useEffect(() => {
-    setInventoryPage((current) => Math.min(current, inventoryPageCount));
-  }, [inventoryPageCount]);
+    if (previousInventoryPageSize === inventoryPageSize) return;
+    setInventoryPage((current) => pageForInventoryAnchor(current, previousInventoryPageSize, inventoryPageSize));
+    setPreviousInventoryPageSize(inventoryPageSize);
+  }, [inventoryPageSize, previousInventoryPageSize]);
 
   useEffect(() => {
+    if (activeInventory) setInventoryPage((current) => Math.min(current, inventoryPageCount));
+  }, [activeInventory, inventoryPageCount]);
+
+  useEffect(() => {
+    if (!activeInventory) return;
     inventoryRevisionRef.current += 1;
     const authoritative = new Map(
       inventoryItems.map((item) => [item.id, item.saleLocked] as const),
@@ -498,17 +526,12 @@ export function InventoryManager({
       );
       return next.size === current.size ? current : next;
     });
-    setBulkSelectedIds((current) => {
-      const next = new Set(
-        [...current].filter((itemId) =>
-          inventoryItems.some(
-            (item) => item.id === itemId && canSelectForLock(item),
-          ),
-        ),
-      );
-      return next.size === current.size ? current : next;
+    setSelectedItemSnapshots((current) => {
+      const next = new Map(current);
+      for (const item of inventoryItems) if (next.has(item.id)) next.set(item.id, item);
+      return next;
     });
-  }, [inventoryItems]);
+  }, [activeInventory, inventoryItems]);
 
   useEffect(() => {
     if (selectionMode) return;
@@ -636,6 +659,12 @@ export function InventoryManager({
       else next.add(item.id);
       return next;
     });
+    setSelectedItemSnapshots((current) => {
+      const next = new Map(current);
+      if (next.has(item.id)) next.delete(item.id);
+      else next.set(item.id, item);
+      return next;
+    });
   }
 
   function selectSellablePage() {
@@ -647,6 +676,11 @@ export function InventoryManager({
         if (next.size >= MAX_BULK_SELL_ITEMS) break;
         if (canSelectForLock(item)) next.add(item.id);
       }
+      return next;
+    });
+    setSelectedItemSnapshots((current) => {
+      const next = new Map(current);
+      for (const item of visibleItems) if (canSelectForLock(item)) next.set(item.id, item);
       return next;
     });
   }
@@ -758,6 +792,7 @@ export function InventoryManager({
       });
       const keepSelectionMode = unsoldIds.length > 0;
       setInternalSelectionMode(keepSelectionMode);
+      router.refresh();
     } catch (error) {
       setNotice({
         type: "error",
@@ -874,13 +909,13 @@ export function InventoryManager({
   }
 
   return (
-    <section className={`inventory-manager ${styles.workspace}`} aria-label="Inventory manager" aria-busy={pending || bulkSelling || bulkLocking || crateOpening.busy}>
+    <section className={`inventory-manager ${styles.workspace}`} aria-label="Inventory manager" aria-busy={inventoryLoading || pending || bulkSelling || bulkLocking || crateOpening.busy}>
       <header className="panel inventory-overview">
         <div className="inventory-overview-copy">
           <p className="eyebrow">
             <ShieldCheck aria-hidden="true" /> Your collection
           </p>
-          <h2 id="inventory-manager-heading" tabIndex={-1}>Inventory <span>{formatTokens(items.length)} {items.length === 1 ? "item" : "items"}</span></h2>
+          <h2 id="inventory-manager-heading" tabIndex={-1}>Inventory <span>{inventoryLoading ? "Loading items" : `${formatTokens(inventoryTotal)} ${inventoryTotal === 1 ? "item" : "items"}`}</span></h2>
           <p className="empty-copy">Equip, customize, and manage your items.</p>
         </div>
         <div className="inventory-wallet" aria-label="Token wallet">
@@ -915,6 +950,7 @@ export function InventoryManager({
             value={query}
             onValueChange={setQuery}
             placeholder="Name, rarity, tag, or item type"
+            maxLength={120}
             autoComplete="off"
             disabled={inventoryInteractionBlocked}
           />
@@ -927,7 +963,7 @@ export function InventoryManager({
               onChange={(event) => setType(event.target.value)}
             >
               <option value="all">All item types</option>
-              {types.map((value) => (
+              {ECONOMY_ITEM_TYPES.map((value) => (
                 <option key={value} value={value}>
                   {humanize(value)}
                 </option>
@@ -943,9 +979,9 @@ export function InventoryManager({
               onChange={(event) => setRarity(event.target.value)}
             >
               <option value="all">All rarities</option>
-              {rarities.map((value) => (
-                <option key={value} value={value}>
-                  {value}
+              {ECONOMY_RARITIES.map((value) => (
+                <option key={value.rank} value={value.rank}>
+                  {value.name}
                 </option>
               ))}
             </select>
@@ -967,9 +1003,9 @@ export function InventoryManager({
         </div>
         <div className="inventory-filter-summary">
           <p className="empty-copy" role="status">
-            <Search aria-hidden="true" /> {filtered.length
-              ? `${inventoryPageStart + 1}-${inventoryPageEnd} of ${filtered.length}`
-              : "0"}{" "}
+            <Search aria-hidden="true" /> {inventoryLoading
+              ? "Loading"
+              : inventoryTotal ? `${inventoryPageStart + 1}-${inventoryPageEnd} of ${inventoryTotal}` : "0"}{" "}
             {query || type !== "all" || rarity !== "all" || hideEquipped ? "matching items" : "items"}
           </p>
           <div className="inventory-filter-actions">
@@ -993,7 +1029,7 @@ export function InventoryManager({
               Clear filters
             </button>
           ) : null}
-          {items.length ? (
+          {inventoryTotal || bulkSelectedIds.size ? (
             <button id="inventory-selection-toggle" type="button" className="button button-secondary inventory-selection-toggle" aria-pressed={selectionMode} aria-expanded={selectionMode} aria-controls={selectionMode ? "inventory-selection-actions" : undefined} disabled={inventoryInteractionBlocked} onClick={toggleSelectionMode} title={selectionMode ? "Exit selection mode" : "Select up to 50 items to lock, unlock, sell, or open crates"}>
               <ListChecks aria-hidden="true" /> {selectionMode ? "Exit selection" : "Select items"}
             </button>
@@ -1002,7 +1038,7 @@ export function InventoryManager({
         </div>
       </form>
 
-      {items.length && selectionMode ? (
+      {(inventoryTotal || bulkSelectedIds.size) && selectionMode ? (
         <section
           id="inventory-selection-actions"
           className="economy-bulk-toolbar is-active"
@@ -1117,8 +1153,10 @@ export function InventoryManager({
         }}
       />
 
-      {items.length ? (
+      {inventoryTotal || inventoryLoading || inventoryError || knownTotal || query || type !== "all" || rarity !== "all" || hideEquipped ? (
         <div className="inventory-layout">
+          {inventoryError ? <p className="empty-copy" role="alert">{inventoryError} <button type="button" className="button button-secondary" onClick={() => setInventoryRevision((current) => current + 1)}>Retry</button></p> : null}
+          {inventoryLoading ? <p className="empty-copy" role="status">Loading inventory...</p> : null}
           <div {...gridProps} ref={setInventoryGridRef} className="feature-grid inventory-item-grid">
             {visibleItems.map((item, index) => (
               <Fragment key={item.id || `${item.catalogueId}-${item.displayName}`}>
@@ -1139,7 +1177,7 @@ export function InventoryManager({
               </Fragment>
             ))}
           </div>
-          {!filtered.length ? (
+          {!inventoryLoading && !inventoryError && !inventoryTotal ? (
             <EconomyEmptyState
               title="No inventory items match"
               description="Clear a filter or search for another item."
@@ -1148,8 +1186,8 @@ export function InventoryManager({
           <PaginationControls
             page={visibleInventoryPage}
             pageSize={inventoryPageSize}
-            totalItems={filtered.length}
-            disabled={inventoryInteractionBlocked}
+            totalItems={inventoryTotal}
+            disabled={inventoryInteractionBlocked || inventoryLoading}
             label="Inventory pages"
             onPageChange={changeInventoryPage}
           />
@@ -1343,6 +1381,8 @@ export function InventoryManager({
                       {customizationOptions.includes(" · ") ? <small>{customizationOptions}</small> : null}
                     </header>
                     <div className="inventory-customize-panel-body">
+                {materialsLoading ? <p className="empty-copy" role="status">Loading owned attachment items...</p> : null}
+                {materialsError ? <p className="empty-copy" role="alert">{materialsError} <button type="button" className="button button-secondary" onClick={() => setMaterialsRevision((current) => current + 1)}>Retry</button></p> : null}
                 {itemSupportsNametag(selected) ? (
                   <fieldset className="form-panel">
                     <legend className="sr-only">Name tag</legend>
@@ -1363,6 +1403,7 @@ export function InventoryManager({
                       <select
                         id="inventory-nametag-item"
                         value={nametagItemId}
+                        disabled={!materialsLoaded}
                         onChange={(event) =>
                           setNametagItemId(event.target.value)
                         }
@@ -1412,6 +1453,7 @@ export function InventoryManager({
                       <select
                         id="inventory-charm"
                         value={charmItemId}
+                        disabled={!materialsLoaded}
                         onChange={(event) => setCharmItemId(event.target.value)}
                       >
                         <option value="">Choose an owned charm</option>
@@ -1455,6 +1497,7 @@ export function InventoryManager({
                       <select
                         id="inventory-sticker"
                         value={stickerId}
+                        disabled={!materialsLoaded}
                         onChange={(event) => setStickerId(event.target.value)}
                       >
                         <option value="">Choose an owned sticker</option>
@@ -1516,7 +1559,7 @@ export function InventoryManager({
                   </section>
                 ) : null}
                 {selectedHasWeaponPreview ? (
-                  <WeaponCustomizerDialog key={selected.id} item={selected} inventory={items} csrf={csrf} triggerDisabled={inventoryInteractionBlocked} disabled={pending || bulkSelling || bulkLocking || crateOpening.busy || selected.state !== "available"} onSaved={() => router.refresh()} onBusyChange={setCustomizationBusy} />
+                  <WeaponCustomizerDialog key={selected.id} item={selected} inventory={customizationItems} csrf={csrf} triggerDisabled={inventoryInteractionBlocked || !materialsLoaded} disabled={pending || bulkSelling || bulkLocking || crateOpening.busy || selected.state !== "available"} onSaved={() => router.refresh()} onBusyChange={setCustomizationBusy} />
                 ) : null}
                 </div>
                 <aside className="inventory-management-aside" aria-label="Sale protection and market selling options">

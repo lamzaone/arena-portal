@@ -589,3 +589,12 @@ export async function getMarketplacePriceQuotes(
     );
   });
 }
+
+/** Browse cards use persisted snapshots; checkout resolves a current quote again. */
+export function getBrowseMarketplacePriceQuotes(
+  inputs: readonly Omit<MarketplacePriceInput, "fallbackOnly">[],
+): Promise<Array<MarketplacePriceQuote | null>> {
+  return getMarketplacePriceQuotes(
+    inputs.map((input) => ({ ...input, fallbackOnly: true })),
+  );
+}

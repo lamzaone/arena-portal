@@ -70,7 +70,6 @@ test("item capabilities project portal equip targets without raw metadata", asyn
 test("private trade inventory exposes neither items nor total", async () => {
   const { createPanelReader } = await import("./reads.ts");
   const reader = createPanelReader({
-    requireStorage: async () => {},
     getTradePartnerInventory: async () => ({
       visibility: "private",
       items: [],
@@ -91,9 +90,19 @@ test("private trade inventory exposes neither items nor total", async () => {
   assert.equal("total" in result, false);
 });
 
+test("panel reads use the authenticated request's storage without an extra readiness query", async () => {
+  const { createPanelReader } = await import("./reads.ts");
+  const reader = createPanelReader({
+    getTokenWallet: async () => ({ steamId: "76561198000000001", balance: 7, lifetimeEarned: 8, lifetimeSpent: 1, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" }),
+  });
+  assert.deepEqual(await reader.run("wallet.read", {}, {
+    actorSteamId: "76561198000000001",
+  } as never), { balance: "7", lifetimeEarned: "8", lifetimeSpent: "1" });
+});
+
 test("offline partner cannot be queried or selected", async () => {
   const { createPanelReader } = await import("./reads.ts");
-  const reader = createPanelReader({ requireStorage: async () => {} });
+  const reader = createPanelReader({});
   await assert.rejects(
     reader.run(
       "trades.inventory",

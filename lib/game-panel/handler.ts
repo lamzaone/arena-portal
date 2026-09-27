@@ -6,6 +6,7 @@ import {createPanelJournal,deriveEconomyKey,repositoryOperationNames,type Journa
 import {hashPanelBody} from './signing.ts';
 import {MysqlPanelStorage,type PanelMutationContext,type PanelStorage} from './storage.ts';
 import {parsePanelRequest} from './validation.ts';
+import {recordPanelTiming} from './timing.ts';
 export type HandlerDependencies = {
  now:()=>number;readConfiguration:()=>PanelServer[];storage:PanelStorage;
  read:(operation:PanelOperation,args:PanelArguments[PanelOperation],principal:PanelPrincipal)=>Promise<unknown>;
@@ -21,7 +22,12 @@ export function createPanelHandler(deps:HandlerDependencies):(request:Request,op
   let operationId:string|null=null;
   try {
    if(!PANEL_OPERATIONS.includes(operation as PanelOperation))throw new PanelApiError(404,'unknown_operation','Operation not found.');
-   const op=operation as PanelOperation,{principal,body}=await authenticatePanelRequest(request,op,deps);
+   const op=operation as PanelOperation;
+   const authStarted=performance.now();
+   let authenticated:Awaited<ReturnType<typeof authenticatePanelRequest>>;
+   try {authenticated=await authenticatePanelRequest(request,op,deps);}
+   finally {recordPanelTiming(op,'auth',performance.now()-authStarted);}
+   const {principal,body}=authenticated;
    const accepted=parsePanelRequest(op,JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(body)));operationId=accepted.operationId;
    let result:unknown;
    if(op==='operations.status')result=await journal.status(principal,(accepted.arguments as PanelArguments['operations.status']).targetOperationId);

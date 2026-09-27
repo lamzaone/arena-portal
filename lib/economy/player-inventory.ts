@@ -12,9 +12,10 @@ import {
   getCachedMarketplaceVariantFallbacks,
 } from "@/lib/economy/market-variant-cache";
 import {
-  getMarketplacePriceQuotes,
+  getBrowseMarketplacePriceQuotes,
   isStattrakMarketplaceItem,
 } from "@/lib/economy/market-pricing";
+import type { PanelTimingReporter } from "@/lib/game-panel/timing";
 
 const INVENTORY_PAGE_SIZE = 100;
 
@@ -34,9 +35,8 @@ function isLegacySteamPrice(source: string | null | undefined) {
 }
 
 /**
- * Applies the same public Market quote used by market cards to every owned
- * inventory item in one batched lookup. A quote is presentation only; selling
- * still re-resolves it within the authenticated mutation route.
+ * Applies stored market snapshots to owned items in one batched lookup. The
+ * displayed value is only an estimate; selling resolves price again.
  */
 export async function withCurrentMarketPrices(items: EconomyInventoryItem[]) {
   const quoteable = items.filter(
@@ -63,7 +63,7 @@ export async function withCurrentMarketPrices(items: EconomyInventoryItem[]) {
       };
     }),
   );
-  const quotes = await getMarketplacePriceQuotes(
+  const quotes = await getBrowseMarketplacePriceQuotes(
     quoteable.map((item, index) => {
       const catalogue = item.catalogue!;
       return {
@@ -124,22 +124,53 @@ export async function withCurrentMarketPrices(items: EconomyInventoryItem[]) {
 // complete server-authoritative collection instead of silently showing only
 // the repository's first default page. The repository still bounds each SQL
 // query to 100 rows.
-export async function reconcilePlayerInventoryBenefits(steamId: string): Promise<void> {
+export async function reconcilePlayerInventoryBenefits(
+  steamId: string,
+  onTiming?: PanelTimingReporter,
+): Promise<void> {
   try {
-    const memberships = await getAuthoritativeExternalIdentityMemberships(
-      steamId,
-    );
-    await reconcileIdentityGroupRewards({ steamId, ...memberships });
+    const membershipStarted = performance.now();
+    let memberships: Awaited<ReturnType<typeof getAuthoritativeExternalIdentityMemberships>>;
+    try {
+      memberships = await getAuthoritativeExternalIdentityMemberships(steamId);
+    } finally {
+      onTiming?.("membership_lookup", performance.now() - membershipStarted);
+    }
+    const reconcileStarted = performance.now();
+    try {
+      await reconcileIdentityGroupRewards({
+        steamId,
+        ...memberships,
+        onLockWait: onTiming ? (durationMs) => onTiming("lock_wait", durationMs) : undefined,
+      });
+    } finally {
+      onTiming?.("reconcile", performance.now() - reconcileStarted);
+    }
   } catch {
     // Never interpret an unavailable game or identity database as an empty
     // Admin/VIP membership set. The runtime or a later request retries safely.
   }
 }
 
-export async function getPlayerEconomyInventoryPage(steamId: string, filter: EconomyInventoryFilter = {}): Promise<EconomyInventoryPage> {
-  await reconcilePlayerInventoryBenefits(steamId);
-  const result = await getPlayerEconomyInventory(steamId, {...filter, pageSize: Math.min(filter.pageSize ?? 24, 48)});
-  return {...result, items:await withCurrentMarketPrices(result.items)};
+export async function getPlayerEconomyInventoryPage(
+  steamId: string,
+  filter: EconomyInventoryFilter = {},
+  onTiming?: PanelTimingReporter,
+): Promise<EconomyInventoryPage> {
+  await reconcilePlayerInventoryBenefits(steamId, onTiming);
+  const sqlStarted = performance.now();
+  let result: EconomyInventoryPage;
+  try {
+    result = await getPlayerEconomyInventory(steamId, {...filter, pageSize: Math.min(filter.pageSize ?? 24, 48)});
+  } finally {
+    onTiming?.("inventory_sql", performance.now() - sqlStarted);
+  }
+  const quoteStarted = performance.now();
+  try {
+    return {...result, items:await withCurrentMarketPrices(result.items)};
+  } finally {
+    onTiming?.("snapshot_quote", performance.now() - quoteStarted);
+  }
 }
 
 export async function getCompletePlayerEconomyInventory(

@@ -54,6 +54,7 @@ import { isIndividualSteamId64 } from "@/lib/steam/steam-id";
 import {
   adjustedMarketplaceEuroCents,
   deriveMarketplacePriceIdentity,
+  getBrowseMarketplacePriceQuotes,
   getMarketplacePriceQuotes,
   MAXIMUM_MARKETPLACE_FALLBACK_AGE_MS,
   marketplaceFloatDiscountBps,
@@ -66,6 +67,7 @@ import {
   resolveEconomySellback,
 } from "@/lib/economy/sellback";
 import type { VipTimedConversionKind } from "@/lib/economy/vip-membership-conversion";
+import type { PanelTimingReporter } from "@/lib/game-panel/timing";
 
 type StatRow = RowDataPacket & {
   name: string;
@@ -7022,10 +7024,22 @@ const economyCatalogueFloatMaximumSql =
 // crate previews all use the exact rank obtained from the catalogue source.
 const economyCataloguePresentationRaritySql = "c.rarity_rank";
 
-const economyInventoryPresentationRaritySql =
-  "COALESCE(c.rarity_rank, i.rarity_rank)";
-
 const economyInventoryBaseNameSql = "COALESCE(NULLIF(c.display_name, ''), NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.displayName'))), ''), NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.customDisplayName'))), ''), i.item_type)";
+const economyInventoryRolledRaritySql = "CAST(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.rarityChanceBps')), JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.rarityChanceBps'))) AS SIGNED)";
+const economyInventoryPresentationRaritySql =
+  "CASE WHEN i.item_type IN ('knife', 'glove') THEN 6 " +
+  "WHEN LOWER(" + economyInventoryBaseNameSql + ") LIKE '%m4a4 | howl%' THEN 7 " +
+  "WHEN CAST(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.rareSpecial')), JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.rareSpecial'))) AS CHAR) IN ('true', '1') THEN 6 " +
+  "WHEN " + economyInventoryRolledRaritySql + " = 7992 THEN 3 " +
+  "WHEN " + economyInventoryRolledRaritySql + " = 1598 THEN 4 " +
+  "WHEN " + economyInventoryRolledRaritySql + " = 320 THEN 5 " +
+  "WHEN " + economyInventoryRolledRaritySql + " IN (64, 26) THEN 6 " +
+  "ELSE COALESCE(c.rarity_rank, i.rarity_rank) END";
+const economyInventoryRarityNameSql =
+  "CASE " + economyInventoryPresentationRaritySql +
+  " WHEN 0 THEN 'Standard' WHEN 1 THEN 'Consumer Grade' WHEN 2 THEN 'Industrial Grade'" +
+  " WHEN 3 THEN 'Mil-Spec Grade' WHEN 4 THEN 'Restricted' WHEN 5 THEN 'Classified'" +
+  " WHEN 6 THEN 'Covert' WHEN 7 THEN 'Extraordinary' WHEN 8 THEN 'Special' ELSE '' END";
 const economyInventoryNameSortSql = "CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.souvenir')) = 'true' AND " + economyInventoryBaseNameSql + " NOT LIKE 'Souvenir %' THEN CONCAT('Souvenir ', " + economyInventoryBaseNameSql + ") WHEN i.stattrak = TRUE AND " + economyInventoryBaseNameSql + " NOT LIKE '%StatTrak%' THEN CONCAT('StatTrak ', " + economyInventoryBaseNameSql + ") ELSE " + economyInventoryBaseNameSql + " END ASC, i.id DESC";
 
 function economyFilterStates(values: EconomyItemState[] | undefined) {
@@ -7255,6 +7269,7 @@ export async function getEconomyMarketplaceBasePrice(catalogueId: number): Promi
 
 export async function getEconomyCatalogue(
   filter: EconomyCatalogueFilter = {},
+  options: { applyDiscounts?: boolean } = {},
 ): Promise<EconomyCataloguePage> {
   const pool = getPortalPool();
   const paging = economyPage(filter.page, filter.pageSize);
@@ -7333,10 +7348,9 @@ export async function getEconomyCatalogue(
     [...values, paging.pageSize, paging.offset],
   );
   return {
-    items: await applyEconomyCatalogueDiscounts(
-      pool,
-      rows.map(toEconomyCatalogueItem),
-    ),
+    items: options.applyDiscounts === false
+      ? rows.map(toEconomyCatalogueItem)
+      : await applyEconomyCatalogueDiscounts(pool, rows.map(toEconomyCatalogueItem)),
     total: economyCount(countRows),
     page: paging.page,
     pageSize: paging.pageSize,
@@ -7350,7 +7364,9 @@ export async function getEconomyCatalogue(
  */
 export async function getMarketplaceCatalogue(
   filter: EconomyCatalogueFilter = {},
+  onTiming?: PanelTimingReporter,
 ): Promise<EconomyCataloguePage> {
+  const catalogueStarted = performance.now();
   const catalogue = await getEconomyCatalogue({
     ...filter,
     marketOnly: true,
@@ -7358,11 +7374,12 @@ export async function getMarketplaceCatalogue(
       filter.pageSize === undefined
         ? 50
         : Math.min(Math.max(1, filter.pageSize), 50),
-  });
+  }, { applyDiscounts: false });
+  onTiming?.("catalogue_sql", performance.now() - catalogueStarted);
   const pool = getPortalPool();
   if (!pool || !catalogue.items.length) return catalogue;
-  // One cached public price snapshot prices every matching card on this
-  // marketplace page. Legacy weapon finishes intentionally do not have a
+  // Stored public price snapshots price matching cards on this marketplace
+  // page. Legacy weapon finishes intentionally do not have a
   // fixed hash: their public identity includes the selected exterior, which
   // the price resolver derives from `marketBaseName` and its display float.
   // We deliberately do not write buyer-specific float quotes into the one
@@ -7383,6 +7400,7 @@ export async function getMarketplaceCatalogue(
   let cachedVariants: Array<EconomyMarketVariantPrice | null> = catalogue.items.map(
     () => null,
   );
+  const cacheStarted = performance.now();
   try {
     const populatedLookups = variantLookups.flatMap((lookup, index) =>
       lookup ? [{ lookup, index }] : [],
@@ -7396,7 +7414,9 @@ export async function getMarketplaceCatalogue(
     // The public snapshot remains usable during the narrow rollout window
     // before a game server creates the persistent variant-cache table.
   }
-  const publicPrices = await getMarketplacePriceQuotes(
+  onTiming?.("variant_cache", performance.now() - cacheStarted);
+  const quoteStarted = performance.now();
+  const publicPrices = await getBrowseMarketplacePriceQuotes(
     catalogue.items.map((item, index) => ({
       itemType: item.itemType,
       displayName: item.displayName,
@@ -7422,15 +7442,9 @@ export async function getMarketplaceCatalogue(
             }
           : null,
       ),
-      // Portal-managed products have an explicit staff price and no public
-      // CS2 market identity. Never let a coincidentally matching item name
-      // replace the listing's configured Token price.
-      fallbackOnly: item.metadata.customServerFinish === true || economyMetadataBoolean(
-        item.metadata,
-        "membershipListingManaged",
-      ),
     })),
   );
+  onTiming?.("snapshot_quote", performance.now() - quoteStarted);
   const quotedItems = catalogue.items.map((item, index) => {
       if (item.metadata.customServerFinish === true) return item;
       const price = publicPrices[index];
@@ -7472,9 +7486,12 @@ export async function getMarketplaceCatalogue(
       }
       return item;
     });
+  const discountStarted = performance.now();
+  const discountedItems = await applyEconomyCatalogueDiscounts(pool, quotedItems);
+  onTiming?.("discount", performance.now() - discountStarted);
   return {
     ...catalogue,
-    items: await applyEconomyCatalogueDiscounts(pool, quotedItems),
+    items: discountedItems,
   };
 }
 
@@ -8555,10 +8572,20 @@ export async function getPlayerEconomyInventory(
   if (filter.query?.trim()) {
     const query =
       "%" + economyText(filter.query, "Inventory search", 120) + "%";
-    where.push(
-      "(i.id LIKE ? OR c.display_name LIKE ? OR c.market_hash_name LIKE ? OR i.nametag LIKE ? OR JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.displayName')) LIKE ?)",
-    );
-    values.push(query, query, query, query, query);
+    const fields = [
+      "i.id", "c.display_name", "c.market_hash_name", "i.nametag",
+      "JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.displayName'))",
+      "JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.customDisplayName'))",
+      "JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.description'))",
+      "JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.details'))",
+      "JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.description'))",
+      "JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.details'))",
+      "REPLACE(i.item_type, '_', ' ')",
+      "CASE WHEN i.item_type = 'skin' THEN 'skin skins weapon weapons' ELSE '' END",
+      economyInventoryRarityNameSql,
+    ];
+    where.push("(" + fields.map((field) => field + " LIKE ?").join(" OR ") + ")");
+    values.push(...fields.map(() => query));
   }
   const clause = " WHERE " + where.join(" AND ");
   const [countRows] = await pool.query<

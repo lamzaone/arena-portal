@@ -65,7 +65,10 @@ on every request. Missing or malformed configuration fails closed.
 
 Apply migration `db/035_game_panel_adapter.sql` as a separate deployment step.
 It includes the case snapshot column; apply it before deploying the changed portal
-opening code. This implementation has not applied it to hosting. Nonces are unique per server, retained ten minutes, and claimed
+opening code. On September 23, 2026, it was applied to the configured
+`s6702_portal` database after a complete local logical backup at
+`D:/ARENA/backups/portal-before-035-20260923T172553Z`. The portal application
+and signing configuration are separate deployment steps. Nonces are unique per server, retained ten minutes, and claimed
 transactionally with rate counters. Limits per minute: 600/server, 60/actor,
 12 mutations/actor. Indexed cleanup removes at most 1000 rows in one batch per request.
 

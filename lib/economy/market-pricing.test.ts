@@ -4,26 +4,31 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
-const state = { failCache: false, cached: null as Record<string, unknown> | null, writes: [] as unknown[], exact: null as Record<string, unknown> | null, exactCalls: [] as unknown[] };
+const state = { failCache: false, failProviders: false, cached: null as Record<string, unknown> | null, writes: [] as unknown[], exact: null as Record<string, unknown> | null, exactCalls: [] as unknown[] };
 Object.assign(globalThis, { __marketPricingTest: state });
 const stubs: Record<string,string> = {
   "server-only": "export{}",
-  "@/lib/economy/skinport-prices": "export async function getSkinportHistoricalPrices(inputs){return inputs.map(()=>null);}",
+  "@/lib/economy/skinport-prices": "export async function getSkinportHistoricalPrices(inputs){if(inputs.length&&globalThis.__marketPricingTest.failProviders)throw Error('provider called');return inputs.map(()=>null);}",
   "@/lib/economy/external-market-prices": `const s=globalThis.__marketPricingTest;
-    export async function getExternalMarketPrices(inputs){return inputs.map(()=>null);}
+    export async function getExternalMarketPrices(inputs){if(inputs.length&&s.failProviders)throw Error('provider called');return inputs.map(()=>null);}
     export async function getCsfloatExactListingPrice(input){s.exactCalls.push(input);return s.exact;}`,
   "@/lib/data/portal-repository": `const s=globalThis.__marketPricingTest;
     export async function getEconomyMarketVariantPrice(){if(s.failCache)throw Error('offline');return s.cached;}
     export async function getEconomyMarketVariantPrices(inputs){if(s.failCache)throw Error('offline');return inputs.map(()=>s.cached);}
-    export async function recordEconomyMarketVariantPrices(inputs){s.writes.push(...inputs);}`,
+    export async function recordEconomyMarketVariantPrices(inputs){s.writes.push(...inputs);}
+    export async function getAuthoritativeExternalIdentityMemberships(){return {};}
+    export async function getPlayerEconomyInventory(){return {items:[{id:'owned',itemType:'crate',displayName:'Case',catalogueId:1,floatValue:null,seed:null,stattrak:false,catalogue:{marketHashName:'Case',metadata:{},price:{euroCents:1250,source:'skinport',sourceReference:null}}}],total:1,page:1,pageSize:24};}`,
+  "@/lib/data/identity-groups": "export async function reconcileIdentityGroupRewards(input){input.onLockWait?.(3.25);}",
 };
 registerHooks({ resolve(specifier,context,next){
   if(stubs[specifier])return {url:`data:text/javascript,${encodeURIComponent(stubs[specifier])}`,shortCircuit:true};
   if(specifier==="@/lib/economy/market-pricing")return {url:pathToFileURL(resolve("lib/economy/market-pricing.ts")).href,shortCircuit:true};
+  if(specifier==="@/lib/economy/market-variant-cache")return {url:pathToFileURL(resolve("lib/economy/market-variant-cache.ts")).href,shortCircuit:true};
   return next(specifier,context);
 } });
-const { getMarketplacePriceQuotes, selectMarketplacePriceFallback } = await import("./market-pricing.ts");
+const { getMarketplacePriceQuotes, getBrowseMarketplacePriceQuotes, selectMarketplacePriceFallback } = await import("./market-pricing.ts");
 const { getCachedMarketplaceVariantFallback, getCachedMarketplaceVariantFallbacks, cacheMarketplaceVariantQuote } = await import("./market-variant-cache.ts");
+const { getPlayerEconomyInventoryPage } = await import("./player-inventory.ts");
 const input = {itemType:"skin",displayName:"AK-47 | Case Hardened",marketHashName:null,metadata:{},minFloat:0,maxFloat:1,floatValue:0.2,seed:661,stattrak:false,exactPatternQuote:true};
 const exact = {eurCents:50_000,source:"csfloat-exact-listing",sourceReference:"seed661-listing",marketHashName:"AK-47 | Case Hardened (Field-Tested)",exactFloat:true,exactSeed:true};
 
@@ -53,4 +58,38 @@ test("ordinary market fallback echoes seed but never claims seed-specific eviden
   const [quote]=await getMarketplacePriceQuotes([{...input,seed:700,fallbackPrice:{eurCents:1_000,source:"skinport"}}]);
   assert.equal(quote?.seed,700); assert.equal(quote?.seedMatched,false);
   assert.equal(quote?.pricingRule,"float-linear-v1"); assert.equal(quote?.fromFallback,true);
+});
+
+test("browse quotes use stored prices without waiting for public providers",async()=>{
+  state.failProviders=true;
+  try {
+    const [quote]=await getBrowseMarketplacePriceQuotes([{
+      itemType:"crate",displayName:"Case",marketHashName:"Case",metadata:{},
+      minFloat:null,maxFloat:null,fallbackPrice:{eurCents:1_250,source:"skinport"},
+    }]);
+    assert.equal(quote?.eurCents,1_250);
+    assert.equal(quote?.fromFallback,true);
+  } finally {
+    state.failProviders=false;
+  }
+});
+
+test("inventory page prices owned items from snapshots without contacting providers",async()=>{
+  state.failProviders=true;
+  try {
+    const page=await getPlayerEconomyInventoryPage("76561198000000001");
+    assert.equal(page.items[0].marketPriceTokens,1250);
+    assert.equal(page.total,1);
+  } finally {
+    state.failProviders=false;
+  }
+});
+
+test("inventory page reports membership, lock, SQL, and snapshot stages",async()=>{
+  const stages:string[]=[];
+  await getPlayerEconomyInventoryPage("76561198000000001",{},(phase,durationMs)=>{
+    assert.ok(Number.isFinite(durationMs)&&durationMs>=0);
+    stages.push(phase);
+  });
+  assert.deepEqual(stages,["membership_lookup","lock_wait","reconcile","inventory_sql","snapshot_quote"]);
 });

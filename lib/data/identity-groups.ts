@@ -708,6 +708,7 @@ function emptyGroup(row: IdentityGroupRow): IdentityGroup {
 
 async function withIdentityTransaction<T>(
   work: (connection: PoolConnection) => Promise<T>,
+  onLockWait?: (durationMs: number) => void,
 ) {
   const pool = getIdentityPool();
   if (!pool) {
@@ -719,8 +720,12 @@ async function withIdentityTransaction<T>(
   const connection = await pool.getConnection();
   let catalogueLockAcquired = false;
   try {
-    catalogueLockAcquired =
-      await acquireIdentityCatalogueMutationLock(connection);
+    const lockStarted = performance.now();
+    try {
+      catalogueLockAcquired = await acquireIdentityCatalogueMutationLock(connection);
+    } finally {
+      onLockWait?.(performance.now() - lockStarted);
+    }
     if (!catalogueLockAcquired) {
       identityError(
         "storage_unavailable",
@@ -4336,6 +4341,7 @@ export async function reconcileIdentityGroupRewards(input: {
   vipGroupNames?: string[];
   adminGroupNames?: string[];
   requestKey?: string;
+  onLockWait?: (durationMs: number) => void;
 }) {
   const steamId = identitySteamId(input.steamId);
   const requestKey = identityRequestKey(
@@ -4408,5 +4414,5 @@ export async function reconcileIdentityGroupRewards(input: {
       deactivatedItemIds: entitlementResult.deactivatedItemIds,
       reactivatedItemIds: entitlementResult.reactivatedItemIds,
     };
-  });
+  }, input.onLockWait);
 }

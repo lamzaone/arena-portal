@@ -5,6 +5,7 @@ import type {
   PanelArguments,
 } from "./contracts";
 import { PanelApiError } from "./errors";
+import { recordPanelTiming } from "./timing";
 import {
   serializeWallet,
   serializeItem,
@@ -20,7 +21,6 @@ type ReadDependencies = Pick<
   | "getTokenWallet"
   | "getPlayerEconomyInventoryItem"
   | "getPlayerEconomyLoadout"
-  | "getEconomyCatalogue"
   | "getEconomyCatalogueItem"
   | "isEconomyMarketplacePurchasable"
   | "getEconomyCrateDropPreview"
@@ -30,7 +30,7 @@ type ReadDependencies = Pick<
   | "getTradePartnerInventory"
   | "getPlayerCrateOpeningSnapshots"
 > & {
-  requireStorage: () => Promise<void>;
+  getMarketplaceCatalogue: typeof Repository.getMarketplaceCatalogue;
   getPlayerEconomyInventoryPage: typeof import("../economy/player-inventory").getPlayerEconomyInventoryPage;
   quoteMarketplaceSelection: typeof import("../economy/market-service").quoteMarketplaceSelection;
   getOwnedVipActivationQuote: typeof import("../economy/vip-activation-preview").getOwnedVipActivationQuote;
@@ -73,7 +73,6 @@ export function createPanelReader(deps: Partial<ReadDependencies>) {
       args: PanelArguments[PanelOperation],
       principal: PanelPrincipal,
     ): Promise<unknown> {
-      await d.requireStorage();
       const actor = principal.actorSteamId;
       switch (operation) {
         case "wallet.read":
@@ -87,7 +86,7 @@ export function createPanelReader(deps: Partial<ReadDependencies>) {
               ? ["crate", "capsule"]
               : filter.itemTypes) as Repository.EconomyItemType[],
             sort: filter.sort as Repository.EconomyInventoryFilter["sort"],
-          });
+          }, (phase, durationMs) => recordPanelTiming(operation, phase, durationMs));
           return { ...page, items: page.items.map(serializeItem) };
         }
         case "inventory.detail": {
@@ -100,13 +99,13 @@ export function createPanelReader(deps: Partial<ReadDependencies>) {
         }
         case "market.read": {
           const filter = args as PanelArguments["market.read"];
-          const page = await d.getEconomyCatalogue({
+          const page = await d.getMarketplaceCatalogue({
             ...filter,
             itemTypes: filter.itemTypes as Repository.EconomyItemType[],
             sort: filter.sort as Repository.EconomyCatalogueFilter["sort"],
             marketOnly: true,
             includeDisabled: false,
-          });
+          }, (phase, durationMs) => recordPanelTiming("market.read", phase, durationMs));
           return { ...page, items: page.items.map(serializeProduct) };
         }
         case "market.detail": {
@@ -251,21 +250,8 @@ export async function readPanelOperation(
   const vip = await import("../economy/vip-activation-preview");
   return createPanelReader({
     ...repository,
-    getEconomyCatalogue: repository.getMarketplaceCatalogue,
     ...inventory,
     ...market,
     ...vip,
-    requireStorage: async () => {
-      const { getPortalDatabasePool } = await import("../data/database-pools");
-      const pool = getPortalDatabasePool();
-      if (!pool)
-        throw new PanelApiError(
-          503,
-          "storage_unavailable",
-          "Portal storage is unavailable.",
-          true,
-        );
-      await pool.query("SELECT 1");
-    },
   }).run(operation, args, principal);
 }
