@@ -3925,7 +3925,7 @@ export type EconomyCatalogueItem = {
 export type EconomyCatalogueFilter = {
   category?: "rifles" | "snipers" | "pistols" | "smgs" | "shotguns" | "lmgs" | "other";
   definitionIndex?: number;
-  sort?: "newest" | "name" | "rarity" | "float" | "price";
+  sort?: "newest" | "name" | "rarity" | "float" | "price" | "itemType" | "weaponType";
   query?: string;
   itemTypes?: EconomyItemType[];
   rarityRanks?: number[];
@@ -4132,7 +4132,7 @@ export type EconomyInventoryItem = {
 export type EconomyInventoryFilter = {
   category?: EconomyCatalogueFilter["category"];
   definitionIndex?: number;
-  sort?: "newest" | "name" | "rarity" | "float" | "price";
+  sort?: EconomyCatalogueFilter["sort"];
   hideEquipped?: boolean;
   query?: string;
   itemTypes?: EconomyItemType[];
@@ -7041,6 +7041,26 @@ const economyInventoryRarityNameSql =
   " WHEN 3 THEN 'Mil-Spec Grade' WHEN 4 THEN 'Restricted' WHEN 5 THEN 'Classified'" +
   " WHEN 6 THEN 'Covert' WHEN 7 THEN 'Extraordinary' WHEN 8 THEN 'Special' ELSE '' END";
 const economyInventoryNameSortSql = "CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(i.attributes, '$.souvenir')) = 'true' AND " + economyInventoryBaseNameSql + " NOT LIKE 'Souvenir %' THEN CONCAT('Souvenir ', " + economyInventoryBaseNameSql + ") WHEN i.stattrak = TRUE AND " + economyInventoryBaseNameSql + " NOT LIKE '%StatTrak%' THEN CONCAT('StatTrak ', " + economyInventoryBaseNameSql + ") ELSE " + economyInventoryBaseNameSql + " END ASC, i.id DESC";
+const economyWeaponCategoryDefinitions = {
+  pistols: [1, 2, 3, 4, 30, 32, 36, 61, 63, 64],
+  smgs: [17, 19, 23, 24, 26, 33, 34],
+  rifles: [7, 8, 10, 13, 16, 39, 60],
+  snipers: [9, 11, 38, 40],
+  shotguns: [25, 27, 29, 35],
+  lmgs: [14, 28],
+} as const;
+const economyItemTypeSortSql = (alias: "i" | "c") =>
+  "CASE " + alias + ".item_type " + ECONOMY_ITEM_TYPES.map((type, index) => "WHEN '" + type + "' THEN " + index).join(" ") + " ELSE " + ECONOMY_ITEM_TYPES.length + " END";
+const economyWeaponCategorySortSql = (alias: "i" | "c") =>
+  "CASE WHEN " + alias + ".item_type = 'skin' THEN CASE " +
+  Object.values(economyWeaponCategoryDefinitions).map((definitions, index) =>
+    "WHEN " + alias + ".definition_index IN (" + definitions.join(",") + ") THEN " + index,
+  ).join(" ") + " ELSE 6 END ELSE 7 END";
+const economyGunNameSortSql = (nameSql: string) =>
+  "LOWER(TRIM(COALESCE(NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(c.metadata, '$.weaponName'))), ''), " +
+  "CASE WHEN INSTR(" + nameSql + ", '|') > 0 THEN SUBSTR(" + nameSql + ", 1, INSTR(" + nameSql + ", '|') - 1) ELSE " + nameSql + " END)))";
+const economyCatalogueWeaponSortSql = economyWeaponCategorySortSql("c") + ", " + economyGunNameSortSql("c.display_name") + ", c.display_name ASC, c.id ASC";
+const economyInventoryWeaponSortSql = economyWeaponCategorySortSql("i") + ", " + economyGunNameSortSql(economyInventoryBaseNameSql) + ", " + economyInventoryBaseNameSql + " ASC, i.id DESC";
 
 function economyFilterStates(values: EconomyItemState[] | undefined) {
   if (!values) return [];
@@ -7246,11 +7266,10 @@ export async function getTokenLedger(
 }
 
 function applyEconomyWeaponFilter(where: string[], values: unknown[], alias: "i" | "c", filter: Pick<EconomyCatalogueFilter, "category" | "definitionIndex">) {
-  const categories = {rifles:[7,8,10,13,16,39,60],snipers:[9,11,38,40],pistols:[1,2,3,4,30,32,36,61,63,64],smgs:[17,19,23,24,26,33,34],shotguns:[25,27,29,35],lmgs:[14,28]} as const;
   if (filter.definitionIndex !== undefined) { where.push(alias + ".definition_index = ?"); values.push(economyNumber(filter.definitionIndex, "Weapon definition", 1)); }
   if (filter.category) {
     where.push(alias + ".item_type = 'skin'");
-    const definitions = filter.category === "other" ? Object.values(categories).flat() : categories[filter.category];
+    const definitions = filter.category === "other" ? Object.values(economyWeaponCategoryDefinitions).flat() : economyWeaponCategoryDefinitions[filter.category];
     if (!definitions) economyError("invalid_input", "Invalid weapon category.");
     where.push(alias + ".definition_index " + (filter.category === "other" ? "NOT IN" : "IN") + " (" + definitions.map(()=>"?").join(",") + ")");
     values.push(...definitions);
@@ -7343,7 +7362,7 @@ export async function getEconomyCatalogue(
     economyCatalogueSelect +
       clause +
       " ORDER BY " +
-      ({newest:"c.created_at DESC, c.id DESC",name:"c.display_name ASC, c.id ASC",rarity:economyCataloguePresentationRaritySql + " DESC, c.display_name ASC, c.id ASC",float:economyCatalogueFloatMinimumSql + " ASC, c.id ASC",price:"(SELECT price.token_price FROM portal_economy_catalogue_prices AS price WHERE price.catalogue_id = c.id AND price.is_current = TRUE LIMIT 1) ASC, c.id ASC"}[filter.sort ?? "rarity"]) +
+      ({newest:"c.created_at DESC, c.id DESC",name:"c.display_name ASC, c.id ASC",rarity:economyCataloguePresentationRaritySql + " DESC, c.display_name ASC, c.id ASC",float:economyCatalogueFloatMinimumSql + " ASC, c.id ASC",price:"(SELECT price.token_price FROM portal_economy_catalogue_prices AS price WHERE price.catalogue_id = c.id AND price.is_current = TRUE LIMIT 1) ASC, c.id ASC",itemType:economyItemTypeSortSql("c") + ", c.display_name ASC, c.id ASC",weaponType:economyCatalogueWeaponSortSql}[filter.sort ?? "rarity"]) +
       " LIMIT ? OFFSET ?",
     [...values, paging.pageSize, paging.offset],
   );
@@ -8598,7 +8617,7 @@ export async function getPlayerEconomyInventory(
   const [rows] = await pool.query<EconomyInventoryRow[]>(
     economyInventorySelect +
       clause +
-      " ORDER BY " + ({newest:"i.acquired_at DESC, i.id DESC",name:economyInventoryNameSortSql,rarity:economyInventoryPresentationRaritySql + " DESC, c.display_name ASC, i.id DESC",float:"i.float_value IS NULL ASC, i.float_value ASC, i.id DESC",price:"(SELECT price.token_price FROM portal_economy_catalogue_prices AS price WHERE price.catalogue_id = c.id AND price.is_current = TRUE LIMIT 1) ASC, i.id DESC"}[filter.sort ?? "newest"]) + " LIMIT ? OFFSET ?",
+      " ORDER BY " + ({newest:"i.acquired_at DESC, i.id DESC",name:economyInventoryNameSortSql,rarity:economyInventoryPresentationRaritySql + " DESC, c.display_name ASC, i.id DESC",float:"i.float_value IS NULL ASC, i.float_value ASC, i.id DESC",price:"(SELECT price.token_price FROM portal_economy_catalogue_prices AS price WHERE price.catalogue_id = c.id AND price.is_current = TRUE LIMIT 1) ASC, i.id DESC",itemType:economyItemTypeSortSql("i") + ", " + economyInventoryBaseNameSql + " ASC, i.id DESC",weaponType:economyInventoryWeaponSortSql}[filter.sort ?? "newest"]) + " LIMIT ? OFFSET ?",
     [...values, paging.pageSize, paging.offset],
   );
   return {

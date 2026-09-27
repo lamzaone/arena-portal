@@ -16,6 +16,11 @@ test('global music slots cannot contain a team and slots cannot repeat', () => {
 test('filters support full-result sorts, category and definition index', () => {
   const parsed = parsePanelRequest('market.read', request({sort:'name',category:'rifles',definitionIndex:7}));
   assert.equal((parsed.arguments as {sort:string}).sort,'name');
+  for (const operation of ['inventory.read','cases.read','market.read']) {
+    for (const sort of ['itemType','weaponType']) {
+      assert.equal((parsePanelRequest(operation,request({sort})).arguments as {sort:string}).sort,sort);
+    }
+  }
   assert.throws(() => parsePanelRequest('market.read',request({sort:'random'})));
   assert.throws(() => parsePanelRequest('market.read',request({itemTypes:['admin_override']})));
   assert.throws(() => parsePanelRequest('market.read',request({rarityRanks:[9]})));

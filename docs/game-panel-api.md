@@ -9,7 +9,12 @@ The complete operation and DTO table is in
 The executable schemas are `lib/game-panel/validation.ts`. Additions to that plan:
 
 - Inventory, cases and market support `sort`, `category`, and `definitionIndex`.
-  Sort values are `newest`, `name`, `rarity`, `float`, `price`. Category values are
+  Sort values are `newest`, `name`, `rarity`, `float`, `price`, `itemType`,
+  `weaponType`. These sort the full filtered result before pagination.
+  `itemType` follows the economy item-type order, then item name. `weaponType`
+  groups skins by pistols, SMGs, rifles, snipers, shotguns, LMGs, and other
+  definitions, then by gun and item name; non-skins follow the skin groups.
+  Category values are
   `rifles`, `snipers`, `pistols`, `smgs`, `shotguns`, `lmgs`, `other`.
 - `trades.partners`, `trades.inventory`, and `trades.create` require signed
   `arguments.onlineSteamIds`, at most 64 unique connected player SteamIDs. The

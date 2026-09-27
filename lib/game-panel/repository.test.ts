@@ -93,6 +93,7 @@ registerHooks({
 const {
   getPlayerCrateOpeningSnapshots,
   getEconomyOperationReceipt,
+  getEconomyCatalogue,
   getPlayerEconomyInventory,
   purchaseEconomyItem,
 } = await import("../data/portal-repository.ts");
@@ -367,4 +368,56 @@ test("inventory rarity filtering uses the player-facing knife and Howl ranks", a
   assert.ok(extraordinary.items.some((item) => item.id === howlId));
   assert.ok(!covert.items.some((item) => item.id === howlId));
   assert.ok(covert.items.some((item) => item.id === rolledId));
+});
+
+test("item type sorting orders the full inventory before page boundaries", async () => {
+  const insert = db.prepare(
+    "INSERT INTO portal_inventory_items (id,owner_steam_id,item_type,attributes) VALUES (?,?,?,?)",
+  );
+  const prefix = "60000000-0000-4000-8000-";
+  for (let n = 1; n <= 12; n++)
+    insert.run(prefix + String(n).padStart(12, "0"), actor, "crate", JSON.stringify({ displayName: "Case " + n }));
+  insert.run(prefix + "000000000013", actor, "glove", JSON.stringify({ displayName: "Gloves" }));
+  insert.run(prefix + "000000000014", actor, "skin", JSON.stringify({ displayName: "Zebra" }));
+  insert.run(prefix + "000000000015", actor, "skin", JSON.stringify({ displayName: "Alpha" }));
+  const first = await getPlayerEconomyInventory(actor, { sort: "itemType", query: "60000000", pageSize: 12 });
+  const second = await getPlayerEconomyInventory(actor, { sort: "itemType", query: "60000000", page: 2, pageSize: 12 });
+  assert.equal(first.total, 15);
+  assert.deepEqual(first.items.slice(0, 3).map((item) => item.displayName), ["Alpha", "Zebra", "Gloves"]);
+  assert.deepEqual(second.items.map((item) => item.displayName), ["Case 7", "Case 8", "Case 9"]);
+});
+
+test("weapon type sorting groups definitions and exact guns before pagination", async () => {
+  const insert = db.prepare(
+    "INSERT INTO portal_inventory_items (id,owner_steam_id,item_type,definition_index,attributes) VALUES (?,?,'skin',?,?)",
+  );
+  const prefix = "70000000-0000-4000-8000-";
+  const weapons = [
+    [7, "AK-47 | Redline"], [9, "AWP | Asiimov"], [24, "UMP-45 | Fade"],
+    [25, "XM1014 | Blue"], [14, "M249 | Green"], [500, "Unknown | White"],
+    [61, "USP-S | Orange"], [1, "Desert Eagle | Yellow"], [2, "Dual Berettas | Cyan"],
+    [3, "Five-SeveN | Violet"], [4, "Glock-18 | Black"], [30, "Tec-9 | Silver"],
+    [32, "P2000 | Gray"], [36, "P250 | Gold"], [63, "CZ75-Auto | Rose"],
+  ] as const;
+  for (const [index, [definitionIndex, displayName]] of weapons.entries())
+    insert.run(prefix + String(index + 1).padStart(12, "0"), actor, definitionIndex, JSON.stringify({ displayName }));
+  const first = await getPlayerEconomyInventory(actor, { sort: "weaponType", query: "70000000", pageSize: 12 });
+  const second = await getPlayerEconomyInventory(actor, { sort: "weaponType", query: "70000000", page: 2, pageSize: 12 });
+  assert.equal(first.total, 15);
+  assert.deepEqual([...first.items, ...second.items].map((item) => item.id),
+    [15, 8, 9, 10, 11, 13, 14, 12, 7, 3, 1, 2, 4, 5, 6].map((n) => prefix + String(n).padStart(12, "0")));
+});
+
+test("catalogue item and weapon type sorts order the full result before pagination", async () => {
+  const insert = db.prepare(
+    "INSERT INTO portal_economy_catalogue (id,display_name,item_type,definition_index,rarity_rank,metadata,enabled,created_at) VALUES (?,?,?,?,4,'{}',1,'2026-01-01')",
+  );
+  for (let n = 1; n <= 12; n++) insert.run(9100 + n, "SortCase " + n, "crate", null);
+  insert.run(9113, "SortGun AK-47 | Blue", "skin", 7);
+  insert.run(9114, "SortGun USP-S | Red", "skin", 61);
+  const first = await getEconomyCatalogue({ sort: "itemType", query: "Sort", pageSize: 12 });
+  assert.equal(first.total, 14);
+  assert.deepEqual(first.items.slice(0, 2).map((item) => item.id), [9113, 9114]);
+  const guns = await getEconomyCatalogue({ sort: "weaponType", itemTypes: ["skin"], query: "SortGun", pageSize: 12 });
+  assert.deepEqual(guns.items.map((item) => item.id), [9114, 9113]);
 });
