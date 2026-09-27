@@ -26,6 +26,7 @@ type ReadDependencies = Pick<
   | "getEconomyCrateDropPreview"
   | "getPlayerEconomyTrades"
   | "getEconomyTrade"
+  | "getEconomyPlayerDisplayNames"
   | "searchTradePlayers"
   | "getTradePartnerInventory"
   | "getPlayerCrateOpeningSnapshots"
@@ -80,14 +81,16 @@ export function createPanelReader(deps: Partial<ReadDependencies>) {
         case "inventory.read":
         case "cases.read": {
           const filter = args as PanelArguments["inventory.read"];
-          const page = await d.getPlayerEconomyInventoryPage(actor, {
-            ...filter,
+          const { includeWallet, ...listingFilter } = filter;
+          const [page, wallet] = await Promise.all([d.getPlayerEconomyInventoryPage(actor, {
+            ...listingFilter,
             itemTypes: (operation === "cases.read"
               ? ["crate", "capsule"]
-              : filter.itemTypes) as Repository.EconomyItemType[],
-            sort: filter.sort as Repository.EconomyInventoryFilter["sort"],
-          }, (phase, durationMs) => recordPanelTiming(operation, phase, durationMs));
-          return { ...page, items: page.items.map(serializeItem) };
+              : listingFilter.itemTypes) as Repository.EconomyItemType[],
+            sort: listingFilter.sort as Repository.EconomyInventoryFilter["sort"],
+          }, (phase, durationMs) => recordPanelTiming(operation, phase, durationMs), { quotePrices: false }),
+          includeWallet ? d.getTokenWallet(actor) : Promise.resolve(null)]);
+          return { ...page, items: page.items.map(serializeItem), ...(wallet ? { wallet: serializeWallet(wallet) } : {}) };
         }
         case "inventory.detail": {
           const item = await d.getPlayerEconomyInventoryItem(
@@ -95,18 +98,24 @@ export function createPanelReader(deps: Partial<ReadDependencies>) {
             (args as PanelArguments["inventory.detail"]).itemId,
           );
           if (!item || item.ownerSteamId !== actor) return missing();
-          return serializeItemDetail(item);
+          const { nativeInspectCommand } = await import("./native-inspect");
+          return { ...serializeItemDetail(item), inspectCommand: nativeInspectCommand({
+            ...item,
+            raw: { attributes: item.attributes, catalogue: item.catalogue, stickers: item.stickers },
+          }) };
         }
         case "market.read": {
           const filter = args as PanelArguments["market.read"];
-          const page = await d.getMarketplaceCatalogue({
-            ...filter,
-            itemTypes: filter.itemTypes as Repository.EconomyItemType[],
-            sort: filter.sort as Repository.EconomyCatalogueFilter["sort"],
+          const { includeWallet, ...listingFilter } = filter;
+          const [page, wallet] = await Promise.all([d.getMarketplaceCatalogue({
+            ...listingFilter,
+            itemTypes: listingFilter.itemTypes as Repository.EconomyItemType[],
+            sort: listingFilter.sort as Repository.EconomyCatalogueFilter["sort"],
             marketOnly: true,
             includeDisabled: false,
-          }, (phase, durationMs) => recordPanelTiming("market.read", phase, durationMs));
-          return { ...page, items: page.items.map(serializeProduct) };
+          }, (phase, durationMs) => recordPanelTiming("market.read", phase, durationMs)),
+          includeWallet ? d.getTokenWallet(actor) : Promise.resolve(null)]);
+          return { ...page, items: page.items.map(serializeProduct), ...(wallet ? { wallet: serializeWallet(wallet) } : {}) };
         }
         case "market.detail": {
           const item = await d.getEconomyCatalogueItem(
@@ -194,6 +203,7 @@ export function createPanelReader(deps: Partial<ReadDependencies>) {
             partnerSteamId,
             { query, page, pageSize },
           );
+          const native = result.visibility === "public" ? await import("./native-inspect") : null;
           return result.visibility !== "public"
             ? {
                 visibility: "private",
@@ -203,7 +213,8 @@ export function createPanelReader(deps: Partial<ReadDependencies>) {
               }
             : {
                 visibility: "public",
-                items: result.items.map(serializeTradePreview),
+                items: result.items.map(item => ({ ...serializeTradePreview(item),
+                  inspectCommand: native!.nativeInspectCommand({ ...item, raw: item }) })),
                 total: result.total,
                 page: result.page,
                 pageSize: result.pageSize,
@@ -214,8 +225,14 @@ export function createPanelReader(deps: Partial<ReadDependencies>) {
             actor,
             args as PanelArguments["trades.read"],
           );
+          const names = page.trades.length ? await d.getEconomyPlayerDisplayNames(
+            page.trades.map((trade) => trade.creatorSteamId === actor
+              ? trade.counterpartySteamId : trade.creatorSteamId),
+          ) : new Map<string, string>();
           return {
-            items: page.trades.map(serializeTrade),
+            items: page.trades.map((trade) => serializeTrade(trade,
+              names.get(trade.creatorSteamId === actor ? trade.counterpartySteamId : trade.creatorSteamId)
+                ?? "Player")),
             total: page.total,
             page: page.page,
             pageSize: page.pageSize,
@@ -227,7 +244,12 @@ export function createPanelReader(deps: Partial<ReadDependencies>) {
             actor,
           );
           if (!trade) return missing();
-          return serializeTrade(trade);
+          const partnerSteamId = trade.creatorSteamId === actor
+            ? trade.counterpartySteamId : trade.creatorSteamId;
+          const names = await d.getEconomyPlayerDisplayNames([partnerSteamId]);
+          const { nativeInspectCommand } = await import("./native-inspect");
+          return serializeTrade(trade, names.get(partnerSteamId) ?? "Player", item =>
+            nativeInspectCommand({ ...item, raw: item }));
         }
         default:
           throw new PanelApiError(
@@ -239,19 +261,27 @@ export function createPanelReader(deps: Partial<ReadDependencies>) {
     },
   };
 }
+export function requiredPanelReadModule(operation: PanelOperation): "inventory" | "market" | "vip" | null {
+  if (operation === "inventory.read" || operation === "cases.read") return "inventory";
+  if (operation === "market.quote") return "market";
+  if (operation === "benefits.vip-quote") return "vip";
+  return null;
+}
+
 export async function readPanelOperation(
   operation: PanelOperation,
   args: PanelArguments[PanelOperation],
   principal: PanelPrincipal,
 ) {
   const repository = await import("../data/portal-repository");
-  const inventory = await import("../economy/player-inventory");
-  const market = await import("../economy/market-service");
-  const vip = await import("../economy/vip-activation-preview");
-  return createPanelReader({
-    ...repository,
-    ...inventory,
-    ...market,
-    ...vip,
-  }).run(operation, args, principal);
+  switch (requiredPanelReadModule(operation)) {
+    case "inventory":
+      return createPanelReader({ ...repository, ...await import("../economy/player-inventory") }).run(operation, args, principal);
+    case "market":
+      return createPanelReader({ ...repository, ...await import("../economy/market-service") }).run(operation, args, principal);
+    case "vip":
+      return createPanelReader({ ...repository, ...await import("../economy/vip-activation-preview") }).run(operation, args, principal);
+    default:
+      return createPanelReader(repository).run(operation, args, principal);
+  }
 }

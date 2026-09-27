@@ -28,10 +28,19 @@ export class MysqlPanelStorage implements PanelStorage {
   await this.transaction(async c=>{
    const minute=Math.floor(input.nowMs/60000);
    const caps:[string,number][]=[['all',600],[`r:${input.actorSteamId}`,60]];if(input.mutation)caps.push([`m:${input.actorSteamId}`,12]);
+   await c.execute(
+    'INSERT INTO portal_game_panel_rate_windows (server_id,subject,window_started,request_count) VALUES '+caps.map(()=>'(?,?,?,1)').join(',')+' ON DUPLICATE KEY UPDATE request_count=request_count+1',
+    caps.flatMap(([subject])=>[input.serverId,subject,minute]),
+   );
+   const [rows]=await c.execute<Array<RowDataPacket&{subject:string;request_count:number|string}>>(
+    'SELECT subject,request_count FROM portal_game_panel_rate_windows WHERE server_id=? AND window_started=? AND subject IN ('+caps.map(()=>'?').join(',')+') FOR UPDATE',
+    [input.serverId,minute,...caps.map(([subject])=>subject)],
+   );
+   const counts=new Map(rows.map(row=>[String(row.subject),Number(row.request_count)]));
    for(const [subject,limit] of caps){
-    await c.execute('INSERT INTO portal_game_panel_rate_windows (server_id,subject,window_started,request_count) VALUES (?,?,?,1) ON DUPLICATE KEY UPDATE request_count=request_count+1',[input.serverId,subject,minute]);
-    const [rows]=await c.execute<RowDataPacket[]>('SELECT request_count FROM portal_game_panel_rate_windows WHERE server_id=? AND subject=? AND window_started=? FOR UPDATE',[input.serverId,subject,minute]);
-    if(Number(rows[0]?.request_count)>limit)throw new PanelApiError(429,'rate_limited','Please wait before trying again.',true,60000-input.nowMs%60000);
+    const count=counts.get(subject);
+    if(count===undefined||!Number.isSafeInteger(count))throw unavailable();
+    if(count>limit)throw new PanelApiError(429,'rate_limited','Please wait before trying again.',true,60000-input.nowMs%60000);
    }
    try {await c.execute('INSERT INTO portal_game_panel_nonces (server_id,request_id,expires_at) VALUES (?,?,?)',[input.serverId,input.requestId,new Date(input.nowMs+600000)]);}catch(e){if((e as {code?:string}).code==='ER_DUP_ENTRY')throw new PanelApiError(409,'request_replayed','Use a fresh transport request ID.');throw e;}
    // Rotate the single bounded cleanup batch among indexed expiration tables.

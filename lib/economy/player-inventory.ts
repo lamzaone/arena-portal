@@ -156,6 +156,7 @@ export async function getPlayerEconomyInventoryPage(
   steamId: string,
   filter: EconomyInventoryFilter = {},
   onTiming?: PanelTimingReporter,
+  options: { quotePrices?: boolean } = {},
 ): Promise<EconomyInventoryPage> {
   await reconcilePlayerInventoryBenefits(steamId, onTiming);
   const sqlStarted = performance.now();
@@ -166,6 +167,7 @@ export async function getPlayerEconomyInventoryPage(
     onTiming?.("inventory_sql", performance.now() - sqlStarted);
   }
   const quoteStarted = performance.now();
+  if (options.quotePrices === false) return result;
   try {
     return {...result, items:await withCurrentMarketPrices(result.items)};
   } finally {

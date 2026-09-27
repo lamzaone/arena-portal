@@ -28,9 +28,9 @@ export function parsePanelRequest(operation:string,value:unknown):PanelRequest<P
   const envelope=object(value,{actorSteamId:steam,operationId,arguments:()=>{}}), args=envelope.arguments;
   switch(operation as PanelOperation){
     case 'wallet.read':case 'loadout.read':object(args,{});break;
-    case 'inventory.read':object(args,{}, {...filters,hideEquipped:boolean});break;
-    case 'cases.read':object(args,{},filters);break;
-    case 'market.read':{const a=object(args,{}, {...filters,minFloat:fraction,maxFloat:fraction});if(typeof a.minFloat==='number'&&typeof a.maxFloat==='number'&&a.minFloat>a.maxFloat)invalid();break;}
+    case 'inventory.read':object(args,{}, {...filters,hideEquipped:boolean,includeWallet:boolean});break;
+    case 'cases.read':object(args,{}, {...filters,includeWallet:boolean});break;
+    case 'market.read':{const a=object(args,{}, {...filters,minFloat:fraction,maxFloat:fraction,includeWallet:boolean});if(typeof a.minFloat==='number'&&typeof a.maxFloat==='number'&&a.minFloat>a.maxFloat)invalid();break;}
     case 'inventory.detail':case 'benefits.vip-quote':case 'benefits.vip-activate':case 'benefits.theme-equip':object(args,{itemId:id});break;
     case 'inventory.protect':object(args,{itemIds:ids,saleLocked:boolean});break;
     case 'inventory.sell':object(args,{itemIds:ids});break;

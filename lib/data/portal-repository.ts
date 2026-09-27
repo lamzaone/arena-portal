@@ -4169,13 +4169,17 @@ export type EconomyLoadoutSlotInput =
 
 export type EconomyLoadoutItem = {
   id: string;
+  catalogueId: number | null;
   itemType: EconomyItemType;
   displayName: string;
+  imageUrl: string | null;
   definitionIndex: number | null;
   paintkit: number | null;
   floatValue: number | null;
+  seed: number | null;
   nametag: string | null;
   stattrak: boolean;
+  stattrakCount: number;
   rarityRank: number;
   attributes: Record<string, unknown>;
 };
@@ -5195,14 +5199,18 @@ type EconomyLoadoutSlotRow = RowDataPacket & {
   team: string | null;
   definition_index: number | string | null;
   item_id: string | null;
+  item_catalogue_id: number | string | null;
+  item_catalogue_metadata: unknown;
   updated_at: Date | string;
   item_type: string | null;
   display_name: string | null;
   item_definition_index: number | string | null;
   item_paintkit: number | string | null;
   float_value: number | string | null;
+  seed: number | string | null;
   nametag: string | null;
   stattrak: number | boolean | null;
+  stattrak_count: number | string | null;
   rarity_rank: number | string | null;
   catalogue_rarity_rank: number | string | null;
   attributes: unknown;
@@ -8751,7 +8759,7 @@ export async function getPlayerEconomyLoadout(
   if (!pool) return [];
   const [rows] = await pool.query<EconomyLoadoutSlotRow[]>(
     "SELECT l.owner_steam_id, l.slot_key, l.slot_type, l.team, l.definition_index, l.item_id, l.updated_at, " +
-      "i.item_type, c.display_name, i.definition_index AS item_definition_index, i.paintkit AS item_paintkit, i.float_value, i.nametag, i.stattrak, i.rarity_rank, c.rarity_rank AS catalogue_rarity_rank, i.attributes " +
+      "i.catalogue_id AS item_catalogue_id, c.metadata AS item_catalogue_metadata, i.item_type, c.display_name, i.definition_index AS item_definition_index, i.paintkit AS item_paintkit, i.float_value, i.seed, i.nametag, i.stattrak, i.stattrak_count, i.rarity_rank, c.rarity_rank AS catalogue_rarity_rank, i.attributes " +
       "FROM portal_loadout_slots AS l " +
       "LEFT JOIN portal_inventory_items AS i ON i.id = l.item_id " +
       "LEFT JOIN portal_economy_catalogue AS c ON c.id = i.catalogue_id " +
@@ -8794,8 +8802,11 @@ export async function getPlayerEconomyLoadout(
       itemId && row.item_type
         ? ({
           id: itemId,
+            catalogueId: economyOptionalInteger(row.item_catalogue_id, "loadout catalogue ID"),
             itemType: economyItemType(String(row.item_type)),
             displayName: itemDisplayName ?? economyItemType(String(row.item_type)),
+            imageUrl: economyMetadataImageUrl(itemAttributes ?? {}) ??
+              economyMetadataImageUrl(economyRecord(row.item_catalogue_metadata)),
             definitionIndex: economyOptionalInteger(
               row.item_definition_index,
               "loadout item definition index",
@@ -8805,8 +8816,10 @@ export async function getPlayerEconomyLoadout(
               "loadout item paintkit",
             ),
             floatValue: economyDecimal(row.float_value, "loadout item float"),
+            seed: economyOptionalInteger(row.seed, "loadout item seed"),
             nametag: row.nametag ? String(row.nametag) : null,
             stattrak: itemStattrak,
+            stattrakCount: economyNumber(row.stattrak_count, "loadout item StatTrak count"),
             rarityRank: economyPresentationRarity(
               economyItemType(String(row.item_type)),
               row.display_name
@@ -9688,7 +9701,7 @@ async function getEconomyPlayerDisplayName(steamId: string) {
   return rows[0]?.name?.trim() || steamId;
 }
 
-async function getEconomyPlayerDisplayNames(steamIds: string[]) {
+export async function getEconomyPlayerDisplayNames(steamIds: string[]) {
   const uniqueSteamIds = [...new Set(steamIds)].filter((steamId) =>
     /^7656119\d{10}$/.test(steamId),
   );
@@ -12929,13 +12942,18 @@ function economyLoadoutResult(
   const loadoutItem = item
     ? {
         id: item.id,
+        catalogueId: item.catalogueId,
         itemType: item.itemType,
         displayName: item.displayName,
+        imageUrl: economyMetadataImageUrl(item.attributes) ??
+          economyMetadataImageUrl(item.catalogue?.metadata ?? {}),
         definitionIndex: item.definitionIndex,
         paintkit: item.paintkit,
         floatValue: item.floatValue,
+        seed: item.seed,
         nametag: item.nametag,
         stattrak: item.stattrak,
+        stattrakCount: item.stattrakCount,
         rarityRank: item.rarityRank,
         attributes: item.attributes,
       }

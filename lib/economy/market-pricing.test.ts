@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
-const state = { failCache: false, failProviders: false, cached: null as Record<string, unknown> | null, writes: [] as unknown[], exact: null as Record<string, unknown> | null, exactCalls: [] as unknown[] };
+const state = { failCache: false, failProviders: false, cached: null as Record<string, unknown> | null, writes: [] as unknown[], exact: null as Record<string, unknown> | null, exactCalls: [] as unknown[], variantCalls: 0 };
 Object.assign(globalThis, { __marketPricingTest: state });
 const stubs: Record<string,string> = {
   "server-only": "export{}",
@@ -14,7 +14,7 @@ const stubs: Record<string,string> = {
     export async function getCsfloatExactListingPrice(input){s.exactCalls.push(input);return s.exact;}`,
   "@/lib/data/portal-repository": `const s=globalThis.__marketPricingTest;
     export async function getEconomyMarketVariantPrice(){if(s.failCache)throw Error('offline');return s.cached;}
-    export async function getEconomyMarketVariantPrices(inputs){if(s.failCache)throw Error('offline');return inputs.map(()=>s.cached);}
+    export async function getEconomyMarketVariantPrices(inputs){s.variantCalls++;if(s.failCache)throw Error('offline');return inputs.map(()=>s.cached);}
     export async function recordEconomyMarketVariantPrices(inputs){s.writes.push(...inputs);}
     export async function getAuthoritativeExternalIdentityMemberships(){return {};}
     export async function getPlayerEconomyInventory(){return {items:[{id:'owned',itemType:'crate',displayName:'Case',catalogueId:1,floatValue:null,seed:null,stattrak:false,catalogue:{marketHashName:'Case',metadata:{},price:{euroCents:1250,source:'skinport',sourceReference:null}}}],total:1,page:1,pageSize:24};}`,
@@ -83,6 +83,15 @@ test("inventory page prices owned items from snapshots without contacting provid
   } finally {
     state.failProviders=false;
   }
+});
+
+test("panel inventory grid omits price enrichment while website pages retain it",async()=>{
+  state.variantCalls=0;
+  const page=await getPlayerEconomyInventoryPage("76561198000000001",{},undefined,{quotePrices:false});
+  assert.equal(page.total,1);
+  assert.equal(state.variantCalls,0);
+  await getPlayerEconomyInventoryPage("76561198000000001");
+  assert.equal(state.variantCalls,1);
 });
 
 test("inventory page reports membership, lock, SQL, and snapshot stages",async()=>{

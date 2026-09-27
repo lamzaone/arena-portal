@@ -42,6 +42,36 @@ test("Token projection rejects unsafe numbers and excludes identity fields", asy
   );
 });
 
+test("native inspect commands are available only for valid CS2 weapon finishes", async () => {
+  const { nativeInspectCommand } = await import("./native-inspect.ts");
+  const skin = { itemType: "skin", definitionIndex: 7, paintkit: 1,
+    floatValue: 0.123456, seed: 441, stattrak: true, stattrakCount: 73,
+    nametag: "TAPPED", raw: { attributes: {}, catalogue: { metadata: {} }, stickers: [] } };
+  assert.match(nativeInspectCommand(skin)!, /^csgo_econ_action_preview [0-9A-F]{40,}$/);
+  assert.match(nativeInspectCommand({ ...skin, floatValue: 0.125, seed: 42,
+    stattrak: false, stattrakCount: 0, nametag: null })!, /^csgo_econ_action_preview [0-9A-F]{16,}$/);
+  assert.equal(nativeInspectCommand({ ...skin, itemType: "crate" }), null);
+  assert.equal(nativeInspectCommand({ ...skin, floatValue: null }), null);
+  assert.equal(nativeInspectCommand({ ...skin, seed: 1001 }), null);
+});
+
+test("inventory detail exposes native inspect without slowing inventory grid serialization", async () => {
+  const { createPanelReader } = await import("./reads.ts");
+  const { serializeItem } = await import("./serialization.ts");
+  const item = { id: "owned", ownerSteamId: "76561198000000001", catalogueId: 7,
+    itemType: "skin", displayName: "AK-47 | TAPPED", rarityRank: 4,
+    definitionIndex: 7, paintkit: 1, floatValue: 0.125, seed: 42,
+    stattrak: false, stattrakCount: 0, nametag: null, state: "available",
+    saleLocked: false, tradable: true, equippedSlotKeys: [],
+    marketPriceTokens: null, attributes: {}, stickers: [],
+    catalogue: { metadata: {} } };
+  assert.equal("inspectCommand" in serializeItem(item as never), false);
+  const reader = createPanelReader({ getPlayerEconomyInventoryItem: async () => item } as never);
+  const detail = await reader.run("inventory.detail", { itemId: "owned" },
+    { actorSteamId: item.ownerSteamId } as never) as Record<string, unknown>;
+  assert.match(String(detail.inspectCommand), /^csgo_econ_action_preview [0-9A-F]{16,}$/);
+});
+
 test("market capabilities respect authoritative StatTrak metadata", async () => {
   const { serializeProduct } = await import("./serialization.ts");
   const item = { id: 1, itemType: "skin", displayName: "Finish", imageUrl: null, rarityRank: 3,
@@ -65,6 +95,37 @@ test("item capabilities project portal equip targets without raw metadata", asyn
   assert.deepEqual(targets({ ...item, itemType: "music_kit" }), ["global"]);
   assert.deepEqual(targets({ ...item, itemType: "crate" }), []);
   assert.equal("raw" in serializeItem(item as never), false);
+});
+
+test("loadout slots include the equipped item artwork and inspect fields", async () => {
+  const { serializeLoadout } = await import("./serialization.ts");
+  const result = serializeLoadout([{ slotType: "weapon", team: "CT", definitionIndex: 7,
+    slotKey: "CT:weapon:7", itemId: "item-1", item: { id: "item-1", catalogueId: 23,
+      itemType: "skin", displayName: "TAPPED AK", imageUrl: "/images/economy/ak.png",
+      rarityRank: 5, definitionIndex: 7, paintkit: 12, floatValue: 0.123, seed: 88,
+      stattrak: true, stattrakCount: 14, nametag: "Mine", attributes: {} } }] as never);
+  assert.deepEqual(result.slots[0].item, {
+    id: "item-1", catalogueId: 23, itemType: "skin", displayName: "TAPPED AK",
+    imageUrl: "/images/economy/ak.png", rarityRank: 5, definitionIndex: 7,
+    paintkit: 12, floatValue: 0.123, seed: 88, stattrak: true,
+    stattrakCount: 14, nametag: "Mine",
+  });
+});
+
+test("trade serialization carries a bounded partner name and item previews", async () => {
+  const { serializeTrade } = await import("./serialization.ts");
+  const preview = { catalogueId: 9, itemType: "skin", displayName: "Custom AK",
+    imageUrl: "/images/economy/ak.png", rarityRank: 4, definitionIndex: 7,
+    paintkit: 1, floatValue: 0.2, seed: 6, stattrak: false, stattrakCount: 0,
+    nametag: null };
+  const trade = { id: "trade-1", creatorSteamId: "76561198000000001",
+    counterpartySteamId: "76561198000000002", direction: "outgoing", status: "pending",
+    offered: { steamId: "76561198000000001", tokens: 0, items: [{ itemId: "item-1", item: preview }] },
+    requested: { steamId: "76561198000000002", tokens: 0, items: [] },
+    expiresAt: null, updatedAt: "2026-09-27T00:00:00.000Z" };
+  const result = serializeTrade(trade as never, "Other Player");
+  assert.equal(result.partnerDisplayName, "Other Player");
+  assert.equal(result.offered.items[0]?.imageUrl, "/images/economy/ak.png");
 });
 
 test("private trade inventory exposes neither items nor total", async () => {
@@ -98,6 +159,50 @@ test("panel reads use the authenticated request's storage without an extra readi
   assert.deepEqual(await reader.run("wallet.read", {}, {
     actorSteamId: "76561198000000001",
   } as never), { balance: "7", lifetimeEarned: "8", lifetimeSpent: "1" });
+});
+
+test("read module routing keeps unrelated economy modules off simple requests", async () => {
+  const { requiredPanelReadModule } = await import("./reads.ts");
+  assert.equal(requiredPanelReadModule("wallet.read"), null);
+  assert.equal(requiredPanelReadModule("trades.read"), null);
+  assert.equal(requiredPanelReadModule("inventory.read"), "inventory");
+  assert.equal(requiredPanelReadModule("cases.read"), "inventory");
+  assert.equal(requiredPanelReadModule("market.read"), null);
+  assert.equal(requiredPanelReadModule("market.quote"), "market");
+  assert.equal(requiredPanelReadModule("benefits.vip-quote"), "vip");
+});
+
+test("inventory page returns the wallet in the same read and skips grid price enrichment", async () => {
+  const { createPanelReader } = await import("./reads.ts");
+  const calls: unknown[] = [];
+  const reader = createPanelReader({
+    getTokenWallet: async () => ({ balance: 7, lifetimeEarned: 8, lifetimeSpent: 1 }),
+    getPlayerEconomyInventoryPage: async (_actor: string, filter: Record<string, unknown>, _timing: unknown, options: { quotePrices?: boolean }) => {
+      calls.push({ filter, options });
+      return { items: [], total: 0, page: 1, pageSize: 12 };
+    },
+  } as never);
+  const result = await reader.run("inventory.read", { page: 1, pageSize: 12, includeWallet: true }, {
+    actorSteamId: "76561198000000001",
+  } as never) as Record<string, unknown>;
+  assert.deepEqual(result.wallet, { balance: "7", lifetimeEarned: "8", lifetimeSpent: "1" });
+  assert.deepEqual(result.items, []);
+  assert.deepEqual(calls, [{ filter: { page: 1, pageSize: 12, itemTypes: undefined, sort: undefined }, options: { quotePrices: false } }]);
+});
+
+test("cases and market pages can return the wallet without a second request", async () => {
+  const { createPanelReader } = await import("./reads.ts");
+  const reader = createPanelReader({
+    getTokenWallet: async () => ({ balance: 5, lifetimeEarned: 5, lifetimeSpent: 0 }),
+    getPlayerEconomyInventoryPage: async () => ({ items: [], total: 0, page: 1, pageSize: 12 }),
+    getMarketplaceCatalogue: async () => ({ items: [], total: 0, page: 1, pageSize: 12 }),
+  } as never);
+  const principal = { actorSteamId: "76561198000000001" } as never;
+  for (const operation of ["cases.read", "market.read"] as const) {
+    const result = await reader.run(operation, { page: 1, pageSize: 12, includeWallet: true }, principal) as Record<string, unknown>;
+    assert.deepEqual(result.wallet, { balance: "5", lifetimeEarned: "5", lifetimeSpent: "0" });
+    assert.deepEqual(result.items, []);
+  }
 });
 
 test("offline partner cannot be queried or selected", async () => {

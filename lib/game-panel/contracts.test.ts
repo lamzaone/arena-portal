@@ -25,6 +25,13 @@ test('filters support full-result sorts, category and definition index', () => {
   assert.throws(() => parsePanelRequest('market.read',request({itemTypes:['admin_override']})));
   assert.throws(() => parsePanelRequest('market.read',request({rarityRanks:[9]})));
 });
+test('page reads accept an optional wallet projection and reject non-boolean values', () => {
+  for (const operation of ['inventory.read', 'cases.read', 'market.read']) {
+    const parsed = parsePanelRequest(operation, request({page: 1, pageSize: 12, includeWallet: true}));
+    assert.equal((parsed.arguments as {includeWallet:boolean}).includeWallet, true);
+    assert.throws(() => parsePanelRequest(operation, request({includeWallet: 'yes'})));
+  }
+});
 test('text controls, non-finite numbers and online identity forgery are rejected',()=>{
  const id='10000000-0000-4000-8000-000000000001';
  for(const nametag of ['', 'a'.repeat(129), 'name\ncommand']) assert.throws(()=>parsePanelRequest('customize.rename',request({itemId:id,nametag})));

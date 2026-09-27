@@ -148,6 +148,21 @@ export function serializeLoadout(slots: EconomyLoadoutSlot[]) {
             },
       slotKey: s.slotKey,
       itemId: s.itemId,
+      item: s.item ? {
+        id: s.item.id,
+        catalogueId: integerOrNull(s.item.catalogueId),
+        itemType: s.item.itemType,
+        displayName: text(s.item.displayName),
+        imageUrl: s.item.imageUrl,
+        rarityRank: safeInteger(s.item.rarityRank),
+        definitionIndex: integerOrNull(s.item.definitionIndex),
+        paintkit: integerOrNull(s.item.paintkit),
+        floatValue: s.item.floatValue,
+        seed: integerOrNull(s.item.seed),
+        stattrak: s.item.stattrak,
+        stattrakCount: safeInteger(s.item.stattrakCount),
+        nametag: s.item.nametag === null ? null : text(s.item.nametag),
+      } : null,
     })),
   };
 }
@@ -168,18 +183,21 @@ export function serializeTradePreview(item: TradePartnerInventoryItem) {
     nametag: item.nametag,
   };
 }
-export function serializeTrade(trade: EconomyTrade) {
+export function serializeTrade(trade: EconomyTrade, partnerDisplayName = "Player",
+  inspectCommand?: (item: NonNullable<EconomyTrade["offered"]["items"][number]["item"]>) => string | null) {
   const side = (value: EconomyTrade["offered"]) => ({
     steamId: value.steamId,
     tokens: tokenText(value.tokens),
     items: value.items.flatMap((i) =>
-      i.item ? [serializeTradePreview({ ...i.item, id: i.itemId })] : [],
+      i.item ? [{ ...serializeTradePreview({ ...i.item, id: i.itemId }),
+        ...(inspectCommand ? { inspectCommand: inspectCommand(i.item) } : {}) }] : [],
     ),
   });
   return {
     id: trade.id,
     creatorSteamId: trade.creatorSteamId,
     counterpartySteamId: trade.counterpartySteamId,
+    partnerDisplayName: text(partnerDisplayName),
     direction: trade.direction,
     status: trade.status,
     offered: side(trade.offered),
