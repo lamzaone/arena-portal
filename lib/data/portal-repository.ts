@@ -6163,7 +6163,10 @@ function toEconomyCatalogueItem(
   );
   const price = toEconomyCataloguePrice(row);
   const metadata = { ...economyRecord(row.metadata), customServerFinish: economyIsSkinLike(itemType) && finish === null, ...(economyIsSkinLike(itemType) ? getCs2PaintkitWear(paintkit) : {}), ...(finish ? {
-    marketBaseName: finish.name, minFloat: finish.minFloat, maxFloat: finish.maxFloat,
+    marketBaseName: finish.marketBaseName ?? finish.name,
+    ...(finish.marketVersion ? { marketVersion: finish.marketVersion } : {}),
+    ...(finish.vanillaKnife ? { vanillaKnife: true, imageUrl: finish.imageUrl } : {}),
+    minFloat: finish.minFloat, maxFloat: finish.maxFloat,
     supportsStattrak: finish.supportsStattrak,
   } : {}) };
   const floatRange = economyCatalogueFloatRange(itemType, metadata);
@@ -6296,7 +6299,10 @@ function toEconomyInventoryItem(
             rarityRank: catalogueRarityRank,
             displayName,
             metadata: { ...economyRecord(row.catalogue_metadata), customServerFinish: economyIsSkinLike(itemType) && finish === null, ...(finish ? {
-              marketBaseName: finish.name, minFloat: finish.minFloat, maxFloat: finish.maxFloat,
+              marketBaseName: finish.marketBaseName ?? finish.name,
+              ...(finish.marketVersion ? { marketVersion: finish.marketVersion } : {}),
+              ...(finish.vanillaKnife ? { vanillaKnife: true, imageUrl: finish.imageUrl } : {}),
+              minFloat: finish.minFloat, maxFloat: finish.maxFloat,
               supportsStattrak: finish.supportsStattrak,
             } : {}) },
             enabled: economyBoolean(row.catalogue_enabled),
@@ -7416,6 +7422,7 @@ export async function getMarketplaceCatalogue(
       itemType: item.itemType,
       minFloat: item.minFloat,
       maxFloat: item.maxFloat,
+      metadata: item.metadata,
     });
     // Stickers, charms, music kits, cases, and other non-wearable items are
     // quoted as their one "Standard" market variant. Keeping them in this

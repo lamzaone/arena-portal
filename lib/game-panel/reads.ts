@@ -34,6 +34,7 @@ type ReadDependencies = Pick<
   getMarketplaceCatalogue: typeof Repository.getMarketplaceCatalogue;
   getPlayerEconomyInventoryPage: typeof import("../economy/player-inventory").getPlayerEconomyInventoryPage;
   quoteMarketplaceSelection: typeof import("../economy/market-service").quoteMarketplaceSelection;
+  quoteInventorySaleSelection: typeof import("../economy/sell-service").quoteInventorySaleSelection;
   getOwnedVipActivationQuote: typeof import("../economy/vip-activation-preview").getOwnedVipActivationQuote;
 };
 export function requireOnlinePartner(
@@ -103,6 +104,10 @@ export function createPanelReader(deps: Partial<ReadDependencies>) {
             ...item,
             raw: { attributes: item.attributes, catalogue: item.catalogue, stickers: item.stickers },
           }) };
+        }
+        case "inventory.sell-quote": {
+          const quote = await d.quoteInventorySaleSelection({ steamId: actor, ...(args as PanelArguments["inventory.sell-quote"]) });
+          return { payoutTokens: String(quote.payoutTokens), skippedItemIds: quote.skippedItemIds, quotedAt: quote.quotedAt };
         }
         case "market.read": {
           const filter = args as PanelArguments["market.read"];
@@ -261,9 +266,10 @@ export function createPanelReader(deps: Partial<ReadDependencies>) {
     },
   };
 }
-export function requiredPanelReadModule(operation: PanelOperation): "inventory" | "market" | "vip" | null {
+export function requiredPanelReadModule(operation: PanelOperation): "inventory" | "market" | "vip" | "sale" | null {
   if (operation === "inventory.read" || operation === "cases.read") return "inventory";
   if (operation === "market.quote") return "market";
+  if (operation === "inventory.sell-quote") return "sale";
   if (operation === "benefits.vip-quote") return "vip";
   return null;
 }
@@ -279,6 +285,8 @@ export async function readPanelOperation(
       return createPanelReader({ ...repository, ...await import("../economy/player-inventory") }).run(operation, args, principal);
     case "market":
       return createPanelReader({ ...repository, ...await import("../economy/market-service") }).run(operation, args, principal);
+    case "sale":
+      return createPanelReader({ ...repository, ...await import("../economy/sell-service") }).run(operation, args, principal);
     case "vip":
       return createPanelReader({ ...repository, ...await import("../economy/vip-activation-preview") }).run(operation, args, principal);
     default:

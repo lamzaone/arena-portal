@@ -1,7 +1,7 @@
 {
   "source": "https://cdn.skinhub.gg/data/skins.json",
-  "generatedAt": "2026-09-06T03:12:01.595Z",
-  "sha256": "596e416f6afa7be1b9cea54642c7192d45b8ca29cdd5189e0d5039f2bc8dd950",
+  "generatedAt": "2026-09-30T08:31:47.819Z",
+  "sha256": "97f29707340848c9568cd61a354f88c68187958147931d7b46c53dac18ee2337",
   "finishes": {
     "1:0": {
       "name": "Desert Eagle | Default",
@@ -9327,6 +9327,13 @@
       "maxFloat": 1,
       "supportsStattrak": false
     },
+    "49:0": {
+      "name": "C4 Explosive | Default",
+      "itemType": "skin",
+      "minFloat": null,
+      "maxFloat": null,
+      "supportsStattrak": false
+    },
     "60:0": {
       "name": "M4A1-S | Default",
       "itemType": "skin",
@@ -10445,7 +10452,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_bayonet_png.png"
     },
     "500:5": {
       "name": "★ Bayonet | Forest DDPAT",
@@ -10567,53 +10576,67 @@
       "supportsStattrak": true
     },
     "500:415": {
-      "name": "★ Bayonet | Doppler",
+      "name": "★ Bayonet | Doppler (Ruby)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bayonet | Doppler",
+      "marketVersion": "Ruby"
     },
     "500:416": {
-      "name": "★ Bayonet | Doppler",
+      "name": "★ Bayonet | Doppler (Sapphire)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bayonet | Doppler",
+      "marketVersion": "Sapphire"
     },
     "500:417": {
-      "name": "★ Bayonet | Doppler",
+      "name": "★ Bayonet | Doppler (Black Pearl)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bayonet | Doppler",
+      "marketVersion": "Black Pearl"
     },
     "500:418": {
-      "name": "★ Bayonet | Doppler",
+      "name": "★ Bayonet | Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bayonet | Doppler",
+      "marketVersion": "Phase 1"
     },
     "500:419": {
-      "name": "★ Bayonet | Doppler",
+      "name": "★ Bayonet | Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bayonet | Doppler",
+      "marketVersion": "Phase 2"
     },
     "500:420": {
-      "name": "★ Bayonet | Doppler",
+      "name": "★ Bayonet | Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bayonet | Doppler",
+      "marketVersion": "Phase 3"
     },
     "500:421": {
-      "name": "★ Bayonet | Doppler",
+      "name": "★ Bayonet | Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bayonet | Doppler",
+      "marketVersion": "Phase 4"
     },
     "500:558": {
       "name": "★ Bayonet | Lore",
@@ -10630,39 +10653,49 @@
       "supportsStattrak": true
     },
     "500:568": {
-      "name": "★ Bayonet | Gamma Doppler",
+      "name": "★ Bayonet | Gamma Doppler (Emerald)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bayonet | Gamma Doppler",
+      "marketVersion": "Emerald"
     },
     "500:569": {
-      "name": "★ Bayonet | Gamma Doppler",
+      "name": "★ Bayonet | Gamma Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bayonet | Gamma Doppler",
+      "marketVersion": "Phase 1"
     },
     "500:570": {
-      "name": "★ Bayonet | Gamma Doppler",
+      "name": "★ Bayonet | Gamma Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bayonet | Gamma Doppler",
+      "marketVersion": "Phase 2"
     },
     "500:571": {
-      "name": "★ Bayonet | Gamma Doppler",
+      "name": "★ Bayonet | Gamma Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bayonet | Gamma Doppler",
+      "marketVersion": "Phase 3"
     },
     "500:572": {
-      "name": "★ Bayonet | Gamma Doppler",
+      "name": "★ Bayonet | Gamma Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bayonet | Gamma Doppler",
+      "marketVersion": "Phase 4"
     },
     "500:573": {
       "name": "★ Bayonet | Autotronic",
@@ -10690,7 +10723,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_knife_css_png.png"
     },
     "503:5": {
       "name": "★ Classic Knife | Forest DDPAT",
@@ -10781,7 +10816,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_knife_flip_png.png"
     },
     "505:5": {
       "name": "★ Flip Knife | Forest DDPAT",
@@ -10903,53 +10940,67 @@
       "supportsStattrak": true
     },
     "505:415": {
-      "name": "★ Flip Knife | Doppler",
+      "name": "★ Flip Knife | Doppler (Ruby)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Flip Knife | Doppler",
+      "marketVersion": "Ruby"
     },
     "505:416": {
-      "name": "★ Flip Knife | Doppler",
+      "name": "★ Flip Knife | Doppler (Sapphire)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Flip Knife | Doppler",
+      "marketVersion": "Sapphire"
     },
     "505:417": {
-      "name": "★ Flip Knife | Doppler",
+      "name": "★ Flip Knife | Doppler (Black Pearl)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Flip Knife | Doppler",
+      "marketVersion": "Black Pearl"
     },
     "505:418": {
-      "name": "★ Flip Knife | Doppler",
+      "name": "★ Flip Knife | Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Flip Knife | Doppler",
+      "marketVersion": "Phase 1"
     },
     "505:419": {
-      "name": "★ Flip Knife | Doppler",
+      "name": "★ Flip Knife | Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Flip Knife | Doppler",
+      "marketVersion": "Phase 2"
     },
     "505:420": {
-      "name": "★ Flip Knife | Doppler",
+      "name": "★ Flip Knife | Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Flip Knife | Doppler",
+      "marketVersion": "Phase 3"
     },
     "505:421": {
-      "name": "★ Flip Knife | Doppler",
+      "name": "★ Flip Knife | Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Flip Knife | Doppler",
+      "marketVersion": "Phase 4"
     },
     "505:559": {
       "name": "★ Flip Knife | Lore",
@@ -10966,39 +11017,49 @@
       "supportsStattrak": true
     },
     "505:568": {
-      "name": "★ Flip Knife | Gamma Doppler",
+      "name": "★ Flip Knife | Gamma Doppler (Emerald)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Flip Knife | Gamma Doppler",
+      "marketVersion": "Emerald"
     },
     "505:569": {
-      "name": "★ Flip Knife | Gamma Doppler",
+      "name": "★ Flip Knife | Gamma Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Flip Knife | Gamma Doppler",
+      "marketVersion": "Phase 1"
     },
     "505:570": {
-      "name": "★ Flip Knife | Gamma Doppler",
+      "name": "★ Flip Knife | Gamma Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Flip Knife | Gamma Doppler",
+      "marketVersion": "Phase 2"
     },
     "505:571": {
-      "name": "★ Flip Knife | Gamma Doppler",
+      "name": "★ Flip Knife | Gamma Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Flip Knife | Gamma Doppler",
+      "marketVersion": "Phase 3"
     },
     "505:572": {
-      "name": "★ Flip Knife | Gamma Doppler",
+      "name": "★ Flip Knife | Gamma Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Flip Knife | Gamma Doppler",
+      "marketVersion": "Phase 4"
     },
     "505:574": {
       "name": "★ Flip Knife | Autotronic",
@@ -11026,7 +11087,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_knife_gut_png.png"
     },
     "506:5": {
       "name": "★ Gut Knife | Forest DDPAT",
@@ -11148,53 +11211,67 @@
       "supportsStattrak": true
     },
     "506:415": {
-      "name": "★ Gut Knife | Doppler",
+      "name": "★ Gut Knife | Doppler (Ruby)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Gut Knife | Doppler",
+      "marketVersion": "Ruby"
     },
     "506:416": {
-      "name": "★ Gut Knife | Doppler",
+      "name": "★ Gut Knife | Doppler (Sapphire)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Gut Knife | Doppler",
+      "marketVersion": "Sapphire"
     },
     "506:417": {
-      "name": "★ Gut Knife | Doppler",
+      "name": "★ Gut Knife | Doppler (Black Pearl)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Gut Knife | Doppler",
+      "marketVersion": "Black Pearl"
     },
     "506:418": {
-      "name": "★ Gut Knife | Doppler",
+      "name": "★ Gut Knife | Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Gut Knife | Doppler",
+      "marketVersion": "Phase 1"
     },
     "506:419": {
-      "name": "★ Gut Knife | Doppler",
+      "name": "★ Gut Knife | Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Gut Knife | Doppler",
+      "marketVersion": "Phase 2"
     },
     "506:420": {
-      "name": "★ Gut Knife | Doppler",
+      "name": "★ Gut Knife | Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Gut Knife | Doppler",
+      "marketVersion": "Phase 3"
     },
     "506:421": {
-      "name": "★ Gut Knife | Doppler",
+      "name": "★ Gut Knife | Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Gut Knife | Doppler",
+      "marketVersion": "Phase 4"
     },
     "506:560": {
       "name": "★ Gut Knife | Lore",
@@ -11211,39 +11288,49 @@
       "supportsStattrak": true
     },
     "506:568": {
-      "name": "★ Gut Knife | Gamma Doppler",
+      "name": "★ Gut Knife | Gamma Doppler (Emerald)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Gut Knife | Gamma Doppler",
+      "marketVersion": "Emerald"
     },
     "506:569": {
-      "name": "★ Gut Knife | Gamma Doppler",
+      "name": "★ Gut Knife | Gamma Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Gut Knife | Gamma Doppler",
+      "marketVersion": "Phase 1"
     },
     "506:570": {
-      "name": "★ Gut Knife | Gamma Doppler",
+      "name": "★ Gut Knife | Gamma Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Gut Knife | Gamma Doppler",
+      "marketVersion": "Phase 2"
     },
     "506:571": {
-      "name": "★ Gut Knife | Gamma Doppler",
+      "name": "★ Gut Knife | Gamma Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Gut Knife | Gamma Doppler",
+      "marketVersion": "Phase 3"
     },
     "506:572": {
-      "name": "★ Gut Knife | Gamma Doppler",
+      "name": "★ Gut Knife | Gamma Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Gut Knife | Gamma Doppler",
+      "marketVersion": "Phase 4"
     },
     "506:575": {
       "name": "★ Gut Knife | Autotronic",
@@ -11271,7 +11358,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_knife_karambit_png.png"
     },
     "507:5": {
       "name": "★ Karambit | Forest DDPAT",
@@ -11393,53 +11482,67 @@
       "supportsStattrak": true
     },
     "507:415": {
-      "name": "★ Karambit | Doppler",
+      "name": "★ Karambit | Doppler (Ruby)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Karambit | Doppler",
+      "marketVersion": "Ruby"
     },
     "507:416": {
-      "name": "★ Karambit | Doppler",
+      "name": "★ Karambit | Doppler (Sapphire)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Karambit | Doppler",
+      "marketVersion": "Sapphire"
     },
     "507:417": {
-      "name": "★ Karambit | Doppler",
+      "name": "★ Karambit | Doppler (Black Pearl)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Karambit | Doppler",
+      "marketVersion": "Black Pearl"
     },
     "507:418": {
-      "name": "★ Karambit | Doppler",
+      "name": "★ Karambit | Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Karambit | Doppler",
+      "marketVersion": "Phase 1"
     },
     "507:419": {
-      "name": "★ Karambit | Doppler",
+      "name": "★ Karambit | Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Karambit | Doppler",
+      "marketVersion": "Phase 2"
     },
     "507:420": {
-      "name": "★ Karambit | Doppler",
+      "name": "★ Karambit | Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Karambit | Doppler",
+      "marketVersion": "Phase 3"
     },
     "507:421": {
-      "name": "★ Karambit | Doppler",
+      "name": "★ Karambit | Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Karambit | Doppler",
+      "marketVersion": "Phase 4"
     },
     "507:561": {
       "name": "★ Karambit | Lore",
@@ -11456,39 +11559,49 @@
       "supportsStattrak": true
     },
     "507:568": {
-      "name": "★ Karambit | Gamma Doppler",
+      "name": "★ Karambit | Gamma Doppler (Emerald)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Karambit | Gamma Doppler",
+      "marketVersion": "Emerald"
     },
     "507:569": {
-      "name": "★ Karambit | Gamma Doppler",
+      "name": "★ Karambit | Gamma Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Karambit | Gamma Doppler",
+      "marketVersion": "Phase 1"
     },
     "507:570": {
-      "name": "★ Karambit | Gamma Doppler",
+      "name": "★ Karambit | Gamma Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Karambit | Gamma Doppler",
+      "marketVersion": "Phase 2"
     },
     "507:571": {
-      "name": "★ Karambit | Gamma Doppler",
+      "name": "★ Karambit | Gamma Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Karambit | Gamma Doppler",
+      "marketVersion": "Phase 3"
     },
     "507:572": {
-      "name": "★ Karambit | Gamma Doppler",
+      "name": "★ Karambit | Gamma Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Karambit | Gamma Doppler",
+      "marketVersion": "Phase 4"
     },
     "507:576": {
       "name": "★ Karambit | Autotronic",
@@ -11516,7 +11629,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_knife_m9_bayonet_png.png"
     },
     "508:5": {
       "name": "★ M9 Bayonet | Forest DDPAT",
@@ -11638,53 +11753,67 @@
       "supportsStattrak": true
     },
     "508:415": {
-      "name": "★ M9 Bayonet | Doppler",
+      "name": "★ M9 Bayonet | Doppler (Ruby)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ M9 Bayonet | Doppler",
+      "marketVersion": "Ruby"
     },
     "508:416": {
-      "name": "★ M9 Bayonet | Doppler",
+      "name": "★ M9 Bayonet | Doppler (Sapphire)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ M9 Bayonet | Doppler",
+      "marketVersion": "Sapphire"
     },
     "508:417": {
-      "name": "★ M9 Bayonet | Doppler",
+      "name": "★ M9 Bayonet | Doppler (Black Pearl)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ M9 Bayonet | Doppler",
+      "marketVersion": "Black Pearl"
     },
     "508:418": {
-      "name": "★ M9 Bayonet | Doppler",
+      "name": "★ M9 Bayonet | Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ M9 Bayonet | Doppler",
+      "marketVersion": "Phase 1"
     },
     "508:419": {
-      "name": "★ M9 Bayonet | Doppler",
+      "name": "★ M9 Bayonet | Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ M9 Bayonet | Doppler",
+      "marketVersion": "Phase 2"
     },
     "508:420": {
-      "name": "★ M9 Bayonet | Doppler",
+      "name": "★ M9 Bayonet | Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ M9 Bayonet | Doppler",
+      "marketVersion": "Phase 3"
     },
     "508:421": {
-      "name": "★ M9 Bayonet | Doppler",
+      "name": "★ M9 Bayonet | Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ M9 Bayonet | Doppler",
+      "marketVersion": "Phase 4"
     },
     "508:562": {
       "name": "★ M9 Bayonet | Lore",
@@ -11701,39 +11830,49 @@
       "supportsStattrak": true
     },
     "508:568": {
-      "name": "★ M9 Bayonet | Gamma Doppler",
+      "name": "★ M9 Bayonet | Gamma Doppler (Emerald)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ M9 Bayonet | Gamma Doppler",
+      "marketVersion": "Emerald"
     },
     "508:569": {
-      "name": "★ M9 Bayonet | Gamma Doppler",
+      "name": "★ M9 Bayonet | Gamma Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ M9 Bayonet | Gamma Doppler",
+      "marketVersion": "Phase 1"
     },
     "508:570": {
-      "name": "★ M9 Bayonet | Gamma Doppler",
+      "name": "★ M9 Bayonet | Gamma Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ M9 Bayonet | Gamma Doppler",
+      "marketVersion": "Phase 2"
     },
     "508:571": {
-      "name": "★ M9 Bayonet | Gamma Doppler",
+      "name": "★ M9 Bayonet | Gamma Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ M9 Bayonet | Gamma Doppler",
+      "marketVersion": "Phase 3"
     },
     "508:572": {
-      "name": "★ M9 Bayonet | Gamma Doppler",
+      "name": "★ M9 Bayonet | Gamma Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ M9 Bayonet | Gamma Doppler",
+      "marketVersion": "Phase 4"
     },
     "508:577": {
       "name": "★ M9 Bayonet | Autotronic",
@@ -11761,7 +11900,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_knife_tactical_png.png"
     },
     "509:5": {
       "name": "★ Huntsman Knife | Forest DDPAT",
@@ -11876,88 +12017,112 @@
       "supportsStattrak": true
     },
     "509:415": {
-      "name": "★ Huntsman Knife | Doppler",
+      "name": "★ Huntsman Knife | Doppler (Ruby)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Huntsman Knife | Doppler",
+      "marketVersion": "Ruby"
     },
     "509:416": {
-      "name": "★ Huntsman Knife | Doppler",
+      "name": "★ Huntsman Knife | Doppler (Sapphire)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Huntsman Knife | Doppler",
+      "marketVersion": "Sapphire"
     },
     "509:417": {
-      "name": "★ Huntsman Knife | Doppler",
+      "name": "★ Huntsman Knife | Doppler (Black Pearl)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Huntsman Knife | Doppler",
+      "marketVersion": "Black Pearl"
     },
     "509:418": {
-      "name": "★ Huntsman Knife | Doppler",
+      "name": "★ Huntsman Knife | Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Huntsman Knife | Doppler",
+      "marketVersion": "Phase 1"
     },
     "509:419": {
-      "name": "★ Huntsman Knife | Doppler",
+      "name": "★ Huntsman Knife | Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Huntsman Knife | Doppler",
+      "marketVersion": "Phase 2"
     },
     "509:420": {
-      "name": "★ Huntsman Knife | Doppler",
+      "name": "★ Huntsman Knife | Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Huntsman Knife | Doppler",
+      "marketVersion": "Phase 3"
     },
     "509:421": {
-      "name": "★ Huntsman Knife | Doppler",
+      "name": "★ Huntsman Knife | Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Huntsman Knife | Doppler",
+      "marketVersion": "Phase 4"
     },
     "509:568": {
-      "name": "★ Huntsman Knife | Gamma Doppler",
+      "name": "★ Huntsman Knife | Gamma Doppler (Emerald)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Huntsman Knife | Gamma Doppler",
+      "marketVersion": "Emerald"
     },
     "509:569": {
-      "name": "★ Huntsman Knife | Gamma Doppler",
+      "name": "★ Huntsman Knife | Gamma Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Huntsman Knife | Gamma Doppler",
+      "marketVersion": "Phase 1"
     },
     "509:570": {
-      "name": "★ Huntsman Knife | Gamma Doppler",
+      "name": "★ Huntsman Knife | Gamma Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Huntsman Knife | Gamma Doppler",
+      "marketVersion": "Phase 2"
     },
     "509:571": {
-      "name": "★ Huntsman Knife | Gamma Doppler",
+      "name": "★ Huntsman Knife | Gamma Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Huntsman Knife | Gamma Doppler",
+      "marketVersion": "Phase 3"
     },
     "509:572": {
-      "name": "★ Huntsman Knife | Gamma Doppler",
+      "name": "★ Huntsman Knife | Gamma Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Huntsman Knife | Gamma Doppler",
+      "marketVersion": "Phase 4"
     },
     "509:579": {
       "name": "★ Huntsman Knife | Bright Water",
@@ -12006,7 +12171,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_knife_falchion_png.png"
     },
     "512:5": {
       "name": "★ Falchion Knife | Forest DDPAT",
@@ -12121,88 +12288,112 @@
       "supportsStattrak": true
     },
     "512:415": {
-      "name": "★ Falchion Knife | Doppler",
+      "name": "★ Falchion Knife | Doppler (Ruby)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Falchion Knife | Doppler",
+      "marketVersion": "Ruby"
     },
     "512:416": {
-      "name": "★ Falchion Knife | Doppler",
+      "name": "★ Falchion Knife | Doppler (Sapphire)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Falchion Knife | Doppler",
+      "marketVersion": "Sapphire"
     },
     "512:417": {
-      "name": "★ Falchion Knife | Doppler",
+      "name": "★ Falchion Knife | Doppler (Black Pearl)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Falchion Knife | Doppler",
+      "marketVersion": "Black Pearl"
     },
     "512:418": {
-      "name": "★ Falchion Knife | Doppler",
+      "name": "★ Falchion Knife | Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Falchion Knife | Doppler",
+      "marketVersion": "Phase 1"
     },
     "512:419": {
-      "name": "★ Falchion Knife | Doppler",
+      "name": "★ Falchion Knife | Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Falchion Knife | Doppler",
+      "marketVersion": "Phase 2"
     },
     "512:420": {
-      "name": "★ Falchion Knife | Doppler",
+      "name": "★ Falchion Knife | Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Falchion Knife | Doppler",
+      "marketVersion": "Phase 3"
     },
     "512:421": {
-      "name": "★ Falchion Knife | Doppler",
+      "name": "★ Falchion Knife | Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Falchion Knife | Doppler",
+      "marketVersion": "Phase 4"
     },
     "512:568": {
-      "name": "★ Falchion Knife | Gamma Doppler",
+      "name": "★ Falchion Knife | Gamma Doppler (Emerald)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Falchion Knife | Gamma Doppler",
+      "marketVersion": "Emerald"
     },
     "512:569": {
-      "name": "★ Falchion Knife | Gamma Doppler",
+      "name": "★ Falchion Knife | Gamma Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Falchion Knife | Gamma Doppler",
+      "marketVersion": "Phase 1"
     },
     "512:570": {
-      "name": "★ Falchion Knife | Gamma Doppler",
+      "name": "★ Falchion Knife | Gamma Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Falchion Knife | Gamma Doppler",
+      "marketVersion": "Phase 2"
     },
     "512:571": {
-      "name": "★ Falchion Knife | Gamma Doppler",
+      "name": "★ Falchion Knife | Gamma Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Falchion Knife | Gamma Doppler",
+      "marketVersion": "Phase 3"
     },
     "512:572": {
-      "name": "★ Falchion Knife | Gamma Doppler",
+      "name": "★ Falchion Knife | Gamma Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Falchion Knife | Gamma Doppler",
+      "marketVersion": "Phase 4"
     },
     "512:579": {
       "name": "★ Falchion Knife | Bright Water",
@@ -12251,7 +12442,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_knife_survival_bowie_png.png"
     },
     "514:5": {
       "name": "★ Bowie Knife | Forest DDPAT",
@@ -12373,88 +12566,112 @@
       "supportsStattrak": true
     },
     "514:415": {
-      "name": "★ Bowie Knife | Doppler",
+      "name": "★ Bowie Knife | Doppler (Ruby)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bowie Knife | Doppler",
+      "marketVersion": "Ruby"
     },
     "514:416": {
-      "name": "★ Bowie Knife | Doppler",
+      "name": "★ Bowie Knife | Doppler (Sapphire)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bowie Knife | Doppler",
+      "marketVersion": "Sapphire"
     },
     "514:417": {
-      "name": "★ Bowie Knife | Doppler",
+      "name": "★ Bowie Knife | Doppler (Black Pearl)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bowie Knife | Doppler",
+      "marketVersion": "Black Pearl"
     },
     "514:418": {
-      "name": "★ Bowie Knife | Doppler",
+      "name": "★ Bowie Knife | Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bowie Knife | Doppler",
+      "marketVersion": "Phase 1"
     },
     "514:419": {
-      "name": "★ Bowie Knife | Doppler",
+      "name": "★ Bowie Knife | Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bowie Knife | Doppler",
+      "marketVersion": "Phase 2"
     },
     "514:420": {
-      "name": "★ Bowie Knife | Doppler",
+      "name": "★ Bowie Knife | Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bowie Knife | Doppler",
+      "marketVersion": "Phase 3"
     },
     "514:421": {
-      "name": "★ Bowie Knife | Doppler",
+      "name": "★ Bowie Knife | Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bowie Knife | Doppler",
+      "marketVersion": "Phase 4"
     },
     "514:568": {
-      "name": "★ Bowie Knife | Gamma Doppler",
+      "name": "★ Bowie Knife | Gamma Doppler (Emerald)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bowie Knife | Gamma Doppler",
+      "marketVersion": "Emerald"
     },
     "514:569": {
-      "name": "★ Bowie Knife | Gamma Doppler",
+      "name": "★ Bowie Knife | Gamma Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bowie Knife | Gamma Doppler",
+      "marketVersion": "Phase 1"
     },
     "514:570": {
-      "name": "★ Bowie Knife | Gamma Doppler",
+      "name": "★ Bowie Knife | Gamma Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bowie Knife | Gamma Doppler",
+      "marketVersion": "Phase 2"
     },
     "514:571": {
-      "name": "★ Bowie Knife | Gamma Doppler",
+      "name": "★ Bowie Knife | Gamma Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bowie Knife | Gamma Doppler",
+      "marketVersion": "Phase 3"
     },
     "514:572": {
-      "name": "★ Bowie Knife | Gamma Doppler",
+      "name": "★ Bowie Knife | Gamma Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Bowie Knife | Gamma Doppler",
+      "marketVersion": "Phase 4"
     },
     "514:579": {
       "name": "★ Bowie Knife | Bright Water",
@@ -12496,7 +12713,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_knife_butterfly_png.png"
     },
     "515:5": {
       "name": "★ Butterfly Knife | Forest DDPAT",
@@ -12618,67 +12837,85 @@
       "supportsStattrak": true
     },
     "515:415": {
-      "name": "★ Butterfly Knife | Doppler",
+      "name": "★ Butterfly Knife | Doppler (Ruby)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Butterfly Knife | Doppler",
+      "marketVersion": "Ruby"
     },
     "515:418": {
-      "name": "★ Butterfly Knife | Doppler",
+      "name": "★ Butterfly Knife | Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Butterfly Knife | Doppler",
+      "marketVersion": "Phase 1"
     },
     "515:420": {
-      "name": "★ Butterfly Knife | Doppler",
+      "name": "★ Butterfly Knife | Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Butterfly Knife | Doppler",
+      "marketVersion": "Phase 3"
     },
     "515:421": {
-      "name": "★ Butterfly Knife | Doppler",
+      "name": "★ Butterfly Knife | Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Butterfly Knife | Doppler",
+      "marketVersion": "Phase 4"
     },
     "515:568": {
-      "name": "★ Butterfly Knife | Gamma Doppler",
+      "name": "★ Butterfly Knife | Gamma Doppler (Emerald)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Butterfly Knife | Gamma Doppler",
+      "marketVersion": "Emerald"
     },
     "515:569": {
-      "name": "★ Butterfly Knife | Gamma Doppler",
+      "name": "★ Butterfly Knife | Gamma Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Butterfly Knife | Gamma Doppler",
+      "marketVersion": "Phase 1"
     },
     "515:570": {
-      "name": "★ Butterfly Knife | Gamma Doppler",
+      "name": "★ Butterfly Knife | Gamma Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Butterfly Knife | Gamma Doppler",
+      "marketVersion": "Phase 2"
     },
     "515:571": {
-      "name": "★ Butterfly Knife | Gamma Doppler",
+      "name": "★ Butterfly Knife | Gamma Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Butterfly Knife | Gamma Doppler",
+      "marketVersion": "Phase 3"
     },
     "515:572": {
-      "name": "★ Butterfly Knife | Gamma Doppler",
+      "name": "★ Butterfly Knife | Gamma Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Butterfly Knife | Gamma Doppler",
+      "marketVersion": "Phase 4"
     },
     "515:579": {
       "name": "★ Butterfly Knife | Bright Water",
@@ -12695,25 +12932,31 @@
       "supportsStattrak": true
     },
     "515:617": {
-      "name": "★ Butterfly Knife | Doppler",
+      "name": "★ Butterfly Knife | Doppler (Black Pearl)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Butterfly Knife | Doppler",
+      "marketVersion": "Black Pearl"
     },
     "515:618": {
-      "name": "★ Butterfly Knife | Doppler",
+      "name": "★ Butterfly Knife | Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Butterfly Knife | Doppler",
+      "marketVersion": "Phase 2"
     },
     "515:619": {
-      "name": "★ Butterfly Knife | Doppler",
+      "name": "★ Butterfly Knife | Doppler (Sapphire)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Butterfly Knife | Doppler",
+      "marketVersion": "Sapphire"
     },
     "515:1105": {
       "name": "★ Butterfly Knife | Lore",
@@ -12741,7 +12984,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_knife_push_png.png"
     },
     "516:5": {
       "name": "★ Shadow Daggers | Forest DDPAT",
@@ -12863,67 +13108,85 @@
       "supportsStattrak": true
     },
     "516:415": {
-      "name": "★ Shadow Daggers | Doppler",
+      "name": "★ Shadow Daggers | Doppler (Ruby)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Shadow Daggers | Doppler",
+      "marketVersion": "Ruby"
     },
     "516:418": {
-      "name": "★ Shadow Daggers | Doppler",
+      "name": "★ Shadow Daggers | Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Shadow Daggers | Doppler",
+      "marketVersion": "Phase 1"
     },
     "516:420": {
-      "name": "★ Shadow Daggers | Doppler",
+      "name": "★ Shadow Daggers | Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Shadow Daggers | Doppler",
+      "marketVersion": "Phase 3"
     },
     "516:421": {
-      "name": "★ Shadow Daggers | Doppler",
+      "name": "★ Shadow Daggers | Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Shadow Daggers | Doppler",
+      "marketVersion": "Phase 4"
     },
     "516:568": {
-      "name": "★ Shadow Daggers | Gamma Doppler",
+      "name": "★ Shadow Daggers | Gamma Doppler (Emerald)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Shadow Daggers | Gamma Doppler",
+      "marketVersion": "Emerald"
     },
     "516:569": {
-      "name": "★ Shadow Daggers | Gamma Doppler",
+      "name": "★ Shadow Daggers | Gamma Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Shadow Daggers | Gamma Doppler",
+      "marketVersion": "Phase 1"
     },
     "516:570": {
-      "name": "★ Shadow Daggers | Gamma Doppler",
+      "name": "★ Shadow Daggers | Gamma Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Shadow Daggers | Gamma Doppler",
+      "marketVersion": "Phase 2"
     },
     "516:571": {
-      "name": "★ Shadow Daggers | Gamma Doppler",
+      "name": "★ Shadow Daggers | Gamma Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Shadow Daggers | Gamma Doppler",
+      "marketVersion": "Phase 3"
     },
     "516:572": {
-      "name": "★ Shadow Daggers | Gamma Doppler",
+      "name": "★ Shadow Daggers | Gamma Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Shadow Daggers | Gamma Doppler",
+      "marketVersion": "Phase 4"
     },
     "516:579": {
       "name": "★ Shadow Daggers | Bright Water",
@@ -12940,25 +13203,31 @@
       "supportsStattrak": true
     },
     "516:617": {
-      "name": "★ Shadow Daggers | Doppler",
+      "name": "★ Shadow Daggers | Doppler (Black Pearl)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Shadow Daggers | Doppler",
+      "marketVersion": "Black Pearl"
     },
     "516:618": {
-      "name": "★ Shadow Daggers | Doppler",
+      "name": "★ Shadow Daggers | Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Shadow Daggers | Doppler",
+      "marketVersion": "Phase 2"
     },
     "516:619": {
-      "name": "★ Shadow Daggers | Doppler",
+      "name": "★ Shadow Daggers | Doppler (Sapphire)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Shadow Daggers | Doppler",
+      "marketVersion": "Sapphire"
     },
     "516:1108": {
       "name": "★ Shadow Daggers | Lore",
@@ -12986,7 +13255,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_knife_cord_png.png"
     },
     "517:5": {
       "name": "★ Paracord Knife | Forest DDPAT",
@@ -13094,53 +13365,67 @@
       "supportsStattrak": true
     },
     "517:415": {
-      "name": "★ Paracord Knife | Doppler",
+      "name": "★ Paracord Knife | Doppler (Ruby)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Paracord Knife | Doppler",
+      "marketVersion": "Ruby"
     },
     "517:416": {
-      "name": "★ Paracord Knife | Doppler",
+      "name": "★ Paracord Knife | Doppler (Sapphire)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Paracord Knife | Doppler",
+      "marketVersion": "Sapphire"
     },
     "517:417": {
-      "name": "★ Paracord Knife | Doppler",
+      "name": "★ Paracord Knife | Doppler (Black Pearl)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Paracord Knife | Doppler",
+      "marketVersion": "Black Pearl"
     },
     "517:418": {
-      "name": "★ Paracord Knife | Doppler",
+      "name": "★ Paracord Knife | Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Paracord Knife | Doppler",
+      "marketVersion": "Phase 1"
     },
     "517:419": {
-      "name": "★ Paracord Knife | Doppler",
+      "name": "★ Paracord Knife | Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Paracord Knife | Doppler",
+      "marketVersion": "Phase 2"
     },
     "517:420": {
-      "name": "★ Paracord Knife | Doppler",
+      "name": "★ Paracord Knife | Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Paracord Knife | Doppler",
+      "marketVersion": "Phase 3"
     },
     "517:421": {
-      "name": "★ Paracord Knife | Doppler",
+      "name": "★ Paracord Knife | Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Paracord Knife | Doppler",
+      "marketVersion": "Phase 4"
     },
     "517:621": {
       "name": "★ Paracord Knife | Ultraviolet",
@@ -13161,7 +13446,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_knife_canis_png.png"
     },
     "518:5": {
       "name": "★ Survival Knife | Forest DDPAT",
@@ -13276,53 +13563,67 @@
       "supportsStattrak": true
     },
     "518:415": {
-      "name": "★ Survival Knife | Doppler",
+      "name": "★ Survival Knife | Doppler (Ruby)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Survival Knife | Doppler",
+      "marketVersion": "Ruby"
     },
     "518:416": {
-      "name": "★ Survival Knife | Doppler",
+      "name": "★ Survival Knife | Doppler (Sapphire)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Survival Knife | Doppler",
+      "marketVersion": "Sapphire"
     },
     "518:417": {
-      "name": "★ Survival Knife | Doppler",
+      "name": "★ Survival Knife | Doppler (Black Pearl)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Survival Knife | Doppler",
+      "marketVersion": "Black Pearl"
     },
     "518:418": {
-      "name": "★ Survival Knife | Doppler",
+      "name": "★ Survival Knife | Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Survival Knife | Doppler",
+      "marketVersion": "Phase 1"
     },
     "518:419": {
-      "name": "★ Survival Knife | Doppler",
+      "name": "★ Survival Knife | Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Survival Knife | Doppler",
+      "marketVersion": "Phase 2"
     },
     "518:420": {
-      "name": "★ Survival Knife | Doppler",
+      "name": "★ Survival Knife | Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Survival Knife | Doppler",
+      "marketVersion": "Phase 3"
     },
     "518:421": {
-      "name": "★ Survival Knife | Doppler",
+      "name": "★ Survival Knife | Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Survival Knife | Doppler",
+      "marketVersion": "Phase 4"
     },
     "518:735": {
       "name": "★ Survival Knife | Night Stripe",
@@ -13336,7 +13637,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_knife_ursus_png.png"
     },
     "519:5": {
       "name": "★ Ursus Knife | Forest DDPAT",
@@ -13444,53 +13747,67 @@
       "supportsStattrak": true
     },
     "519:415": {
-      "name": "★ Ursus Knife | Doppler",
+      "name": "★ Ursus Knife | Doppler (Ruby)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Ursus Knife | Doppler",
+      "marketVersion": "Ruby"
     },
     "519:416": {
-      "name": "★ Ursus Knife | Doppler",
+      "name": "★ Ursus Knife | Doppler (Sapphire)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Ursus Knife | Doppler",
+      "marketVersion": "Sapphire"
     },
     "519:417": {
-      "name": "★ Ursus Knife | Doppler",
+      "name": "★ Ursus Knife | Doppler (Black Pearl)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Ursus Knife | Doppler",
+      "marketVersion": "Black Pearl"
     },
     "519:418": {
-      "name": "★ Ursus Knife | Doppler",
+      "name": "★ Ursus Knife | Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Ursus Knife | Doppler",
+      "marketVersion": "Phase 1"
     },
     "519:419": {
-      "name": "★ Ursus Knife | Doppler",
+      "name": "★ Ursus Knife | Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Ursus Knife | Doppler",
+      "marketVersion": "Phase 2"
     },
     "519:420": {
-      "name": "★ Ursus Knife | Doppler",
+      "name": "★ Ursus Knife | Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Ursus Knife | Doppler",
+      "marketVersion": "Phase 3"
     },
     "519:421": {
-      "name": "★ Ursus Knife | Doppler",
+      "name": "★ Ursus Knife | Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Ursus Knife | Doppler",
+      "marketVersion": "Phase 4"
     },
     "519:735": {
       "name": "★ Ursus Knife | Night Stripe",
@@ -13511,7 +13828,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_knife_gypsy_jackknife_png.png"
     },
     "520:5": {
       "name": "★ Navaja Knife | Forest DDPAT",
@@ -13619,53 +13938,67 @@
       "supportsStattrak": true
     },
     "520:415": {
-      "name": "★ Navaja Knife | Doppler",
+      "name": "★ Navaja Knife | Doppler (Ruby)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Navaja Knife | Doppler",
+      "marketVersion": "Ruby"
     },
     "520:416": {
-      "name": "★ Navaja Knife | Doppler",
+      "name": "★ Navaja Knife | Doppler (Sapphire)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Navaja Knife | Doppler",
+      "marketVersion": "Sapphire"
     },
     "520:417": {
-      "name": "★ Navaja Knife | Doppler",
+      "name": "★ Navaja Knife | Doppler (Black Pearl)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Navaja Knife | Doppler",
+      "marketVersion": "Black Pearl"
     },
     "520:418": {
-      "name": "★ Navaja Knife | Doppler",
+      "name": "★ Navaja Knife | Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Navaja Knife | Doppler",
+      "marketVersion": "Phase 1"
     },
     "520:419": {
-      "name": "★ Navaja Knife | Doppler",
+      "name": "★ Navaja Knife | Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Navaja Knife | Doppler",
+      "marketVersion": "Phase 2"
     },
     "520:420": {
-      "name": "★ Navaja Knife | Doppler",
+      "name": "★ Navaja Knife | Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Navaja Knife | Doppler",
+      "marketVersion": "Phase 3"
     },
     "520:421": {
-      "name": "★ Navaja Knife | Doppler",
+      "name": "★ Navaja Knife | Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Navaja Knife | Doppler",
+      "marketVersion": "Phase 4"
     },
     "520:735": {
       "name": "★ Navaja Knife | Night Stripe",
@@ -13686,7 +14019,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_knife_outdoor_png.png"
     },
     "521:5": {
       "name": "★ Nomad Knife | Forest DDPAT",
@@ -13801,53 +14136,67 @@
       "supportsStattrak": true
     },
     "521:415": {
-      "name": "★ Nomad Knife | Doppler",
+      "name": "★ Nomad Knife | Doppler (Ruby)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Nomad Knife | Doppler",
+      "marketVersion": "Ruby"
     },
     "521:416": {
-      "name": "★ Nomad Knife | Doppler",
+      "name": "★ Nomad Knife | Doppler (Sapphire)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Nomad Knife | Doppler",
+      "marketVersion": "Sapphire"
     },
     "521:417": {
-      "name": "★ Nomad Knife | Doppler",
+      "name": "★ Nomad Knife | Doppler (Black Pearl)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Nomad Knife | Doppler",
+      "marketVersion": "Black Pearl"
     },
     "521:418": {
-      "name": "★ Nomad Knife | Doppler",
+      "name": "★ Nomad Knife | Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Nomad Knife | Doppler",
+      "marketVersion": "Phase 1"
     },
     "521:419": {
-      "name": "★ Nomad Knife | Doppler",
+      "name": "★ Nomad Knife | Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Nomad Knife | Doppler",
+      "marketVersion": "Phase 2"
     },
     "521:420": {
-      "name": "★ Nomad Knife | Doppler",
+      "name": "★ Nomad Knife | Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Nomad Knife | Doppler",
+      "marketVersion": "Phase 3"
     },
     "521:421": {
-      "name": "★ Nomad Knife | Doppler",
+      "name": "★ Nomad Knife | Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Nomad Knife | Doppler",
+      "marketVersion": "Phase 4"
     },
     "521:735": {
       "name": "★ Nomad Knife | Night Stripe",
@@ -13861,7 +14210,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_knife_stiletto_png.png"
     },
     "522:5": {
       "name": "★ Stiletto Knife | Forest DDPAT",
@@ -13969,53 +14320,67 @@
       "supportsStattrak": true
     },
     "522:415": {
-      "name": "★ Stiletto Knife | Doppler",
+      "name": "★ Stiletto Knife | Doppler (Ruby)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Stiletto Knife | Doppler",
+      "marketVersion": "Ruby"
     },
     "522:416": {
-      "name": "★ Stiletto Knife | Doppler",
+      "name": "★ Stiletto Knife | Doppler (Sapphire)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Stiletto Knife | Doppler",
+      "marketVersion": "Sapphire"
     },
     "522:417": {
-      "name": "★ Stiletto Knife | Doppler",
+      "name": "★ Stiletto Knife | Doppler (Black Pearl)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Stiletto Knife | Doppler",
+      "marketVersion": "Black Pearl"
     },
     "522:418": {
-      "name": "★ Stiletto Knife | Doppler",
+      "name": "★ Stiletto Knife | Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Stiletto Knife | Doppler",
+      "marketVersion": "Phase 1"
     },
     "522:419": {
-      "name": "★ Stiletto Knife | Doppler",
+      "name": "★ Stiletto Knife | Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Stiletto Knife | Doppler",
+      "marketVersion": "Phase 2"
     },
     "522:420": {
-      "name": "★ Stiletto Knife | Doppler",
+      "name": "★ Stiletto Knife | Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Stiletto Knife | Doppler",
+      "marketVersion": "Phase 3"
     },
     "522:421": {
-      "name": "★ Stiletto Knife | Doppler",
+      "name": "★ Stiletto Knife | Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Stiletto Knife | Doppler",
+      "marketVersion": "Phase 4"
     },
     "522:735": {
       "name": "★ Stiletto Knife | Night Stripe",
@@ -14036,7 +14401,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_knife_widowmaker_png.png"
     },
     "523:5": {
       "name": "★ Talon Knife | Forest DDPAT",
@@ -14137,25 +14504,31 @@
       "supportsStattrak": true
     },
     "523:415": {
-      "name": "★ Talon Knife | Doppler",
+      "name": "★ Talon Knife | Doppler (Ruby)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Talon Knife | Doppler",
+      "marketVersion": "Ruby"
     },
     "523:416": {
-      "name": "★ Talon Knife | Doppler",
+      "name": "★ Talon Knife | Doppler (Sapphire)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Talon Knife | Doppler",
+      "marketVersion": "Sapphire"
     },
     "523:417": {
-      "name": "★ Talon Knife | Doppler",
+      "name": "★ Talon Knife | Doppler (Black Pearl)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Talon Knife | Doppler",
+      "marketVersion": "Black Pearl"
     },
     "523:735": {
       "name": "★ Talon Knife | Night Stripe",
@@ -14165,32 +14538,40 @@
       "supportsStattrak": true
     },
     "523:852": {
-      "name": "★ Talon Knife | Doppler",
+      "name": "★ Talon Knife | Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Talon Knife | Doppler",
+      "marketVersion": "Phase 1"
     },
     "523:853": {
-      "name": "★ Talon Knife | Doppler",
+      "name": "★ Talon Knife | Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Talon Knife | Doppler",
+      "marketVersion": "Phase 2"
     },
     "523:854": {
-      "name": "★ Talon Knife | Doppler",
+      "name": "★ Talon Knife | Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Talon Knife | Doppler",
+      "marketVersion": "Phase 3"
     },
     "523:855": {
-      "name": "★ Talon Knife | Doppler",
+      "name": "★ Talon Knife | Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Talon Knife | Doppler",
+      "marketVersion": "Phase 4"
     },
     "523:856": {
       "name": "★ Talon Knife | Marble Fade",
@@ -14211,7 +14592,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_knife_skeleton_png.png"
     },
     "525:5": {
       "name": "★ Skeleton Knife | Forest DDPAT",
@@ -14326,53 +14709,67 @@
       "supportsStattrak": true
     },
     "525:415": {
-      "name": "★ Skeleton Knife | Doppler",
+      "name": "★ Skeleton Knife | Doppler (Ruby)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Skeleton Knife | Doppler",
+      "marketVersion": "Ruby"
     },
     "525:416": {
-      "name": "★ Skeleton Knife | Doppler",
+      "name": "★ Skeleton Knife | Doppler (Sapphire)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Skeleton Knife | Doppler",
+      "marketVersion": "Sapphire"
     },
     "525:417": {
-      "name": "★ Skeleton Knife | Doppler",
+      "name": "★ Skeleton Knife | Doppler (Black Pearl)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Skeleton Knife | Doppler",
+      "marketVersion": "Black Pearl"
     },
     "525:418": {
-      "name": "★ Skeleton Knife | Doppler",
+      "name": "★ Skeleton Knife | Doppler (Phase 1)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Skeleton Knife | Doppler",
+      "marketVersion": "Phase 1"
     },
     "525:419": {
-      "name": "★ Skeleton Knife | Doppler",
+      "name": "★ Skeleton Knife | Doppler (Phase 2)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Skeleton Knife | Doppler",
+      "marketVersion": "Phase 2"
     },
     "525:420": {
-      "name": "★ Skeleton Knife | Doppler",
+      "name": "★ Skeleton Knife | Doppler (Phase 3)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Skeleton Knife | Doppler",
+      "marketVersion": "Phase 3"
     },
     "525:421": {
-      "name": "★ Skeleton Knife | Doppler",
+      "name": "★ Skeleton Knife | Doppler (Phase 4)",
       "itemType": "knife",
       "minFloat": 0,
       "maxFloat": 0.08,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "marketBaseName": "★ Skeleton Knife | Doppler",
+      "marketVersion": "Phase 4"
     },
     "525:735": {
       "name": "★ Skeleton Knife | Night Stripe",
@@ -14386,7 +14783,9 @@
       "itemType": "knife",
       "minFloat": null,
       "maxFloat": null,
-      "supportsStattrak": true
+      "supportsStattrak": true,
+      "vanillaKnife": true,
+      "imageUrl": "https://cdn.skinhub.gg/econicons/panorama/images/econ/weapons/base_weapons/weapon_knife_kukri_png.png"
     },
     "526:5": {
       "name": "★ Kukri Knife | Forest DDPAT",

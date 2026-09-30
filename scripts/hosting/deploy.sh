@@ -20,10 +20,10 @@ if (($# > 0)); then
     activation=discord-bot/hosting/activate.sh
   fi
 fi
-: "${SSH_HOST:?Set FREAKHOSTING_SSH_HOST}"
-: "${SSH_USER:?Set FREAKHOSTING_SSH_USER}"
+: "${SSH_HOST:?Set SSH_HOST to the website SSH endpoint}"
+: "${SSH_USER:?Set SSH_USER to the website account name}"
 : "${SSH_PRIVATE_KEY:?Set FREAKHOSTING_SSH_KEY}"
-: "${SSH_KNOWN_HOSTS:?Set FREAKHOSTING_KNOWN_HOSTS}"
+: "${SSH_KNOWN_HOSTS:?Set SSH_KNOWN_HOSTS to the verified public host key}"
 : "${RUNNER_TEMP:?Set RUNNER_TEMP}"
 if [[ "$mode" == deploy ]]; then
   : "${RELEASE_ID:?Set RELEASE_ID}"
@@ -41,7 +41,7 @@ if ! [[ "$SSH_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ &&
 fi
 SSH_PORT="$((10#$SSH_PORT))"
 if ((SSH_PORT < 1 || SSH_PORT > 65535)); then
-  echo '::error::FREAKHOSTING_SSH_PORT must be between 1 and 65535.' >&2
+  echo '::error::SSH_PORT must be between 1 and 65535.' >&2
   exit 1
 fi
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.."
@@ -69,7 +69,7 @@ if ! awk -v target="$host_key_name" '
   }
   END { exit !found }
 ' "$hosts"; then
-  echo "::error::FREAKHOSTING_KNOWN_HOSTS has no verified key for $host_key_name. Confirm the new host fingerprint with FreakHosting, then update that GitHub Actions secret with the matching public host-key entry." >&2
+  echo "::error::SSH_KNOWN_HOSTS has no verified key for $host_key_name. Confirm the new host fingerprint with FreakHosting, then update the pinned public host-key entry in the deployment workflows." >&2
   exit 1
 fi
 options=(-i "$key" -o BatchMode=yes -o IdentitiesOnly=yes
@@ -123,7 +123,7 @@ retry_transfer() {
       return "$status"
     fi
     if ((attempt == 3)); then
-      echo "::error::$label failed after 3 attempts. Activation has not started. Verify FREAKHOSTING_SSH_HOST and FREAKHOSTING_SSH_PORT and confirm FreakHosting allows external SSH from GitHub Actions runners (firewall/IP restrictions and SSH connection limits)." >&2
+      echo "::error::$label failed after 3 attempts. Activation has not started. Verify SSH_HOST and SSH_PORT in the workflow and confirm FreakHosting allows external SSH from GitHub Actions runners (firewall/IP restrictions and SSH connection limits)." >&2
       return "$status"
     fi
     echo "Connection interrupted; retrying in $((attempt * 5)) seconds." >&2

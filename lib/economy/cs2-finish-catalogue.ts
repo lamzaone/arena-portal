@@ -6,6 +6,10 @@ export type Cs2Finish = {
   minFloat: number | null;
   maxFloat: number | null;
   supportsStattrak: boolean;
+  marketBaseName?: string;
+  marketVersion?: string;
+  vanillaKnife?: boolean;
+  imageUrl?: string;
 };
 type FinishIdentity = { itemType: string; definitionIndex: number | null; paintkit: number | null };
 const finishes: Readonly<Record<string, Cs2Finish>> = manifest.finishes;

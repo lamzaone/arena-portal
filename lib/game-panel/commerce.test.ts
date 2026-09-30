@@ -72,6 +72,45 @@ test("inventory detail exposes native inspect without slowing inventory grid ser
   assert.match(String(detail.inspectCommand), /^csgo_econ_action_preview [0-9A-F]{16,}$/);
 });
 
+test("panel sell preview reads the authoritative payout before confirming a sale", async () => {
+  const { createPanelReader } = await import("./reads.ts");
+  const actorSteamId = "76561198000000001";
+  const reader = createPanelReader({
+    quoteInventorySaleSelection: async ({ steamId, itemIds }: { steamId: string; itemIds: string[] }) => {
+      assert.equal(steamId, actorSteamId);
+      assert.deepEqual(itemIds, ["owned"]);
+      return { payoutTokens: 600, skippedItemIds: [], quotedAt: "2026-09-30T00:00:00Z" };
+    },
+  } as never);
+  assert.deepEqual(await reader.run("inventory.sell-quote", { itemIds: ["owned"] }, { actorSteamId } as never),
+    { payoutTokens: "600", skippedItemIds: [], quotedAt: "2026-09-30T00:00:00Z" });
+});
+
+test("sell preview prices the exact float and pattern with the sale payout policy", async () => {
+  const { createInventorySaleService } = await import("../economy/sell-service.ts");
+  const item = {
+    id: "owned", catalogueId: 7, itemType: "skin", displayName: "AK-47 | Finish",
+    state: "available", saleLocked: false, tradable: true, stattrak: false, stickers: [],
+    floatValue: 0.012345, seed: 661, source: {},
+    catalogue: { metadata: { minFloat: 0, maxFloat: 0.08 }, marketHashName: "AK-47 | Finish", price: null },
+  };
+  const service = createInventorySaleService({
+    getPlayerEconomyInventoryItems: async () => [item],
+    getCachedMarketplaceVariantFallbacks: async () => [null],
+    getMarketplacePriceQuotes: async (inputs: unknown[]) => {
+      assert.equal(inputs.length, 1);
+      assert.deepEqual({ floatValue: (inputs[0] as typeof item).floatValue, seed: (inputs[0] as typeof item).seed },
+        { floatValue: 0.012345, seed: 661 });
+      assert.equal((inputs[0] as { exactPatternQuote: boolean }).exactPatternQuote, true);
+      return [{ eurCents: 1000, source: "test", sourceReference: "test", floatValue: 0.012345, seed: 661 }];
+    },
+    cacheMarketplaceVariantQuotes: async () => {},
+  } as never);
+  const result = await service.quote({ steamId: "76561198000000001", itemIds: ["owned"] });
+  assert.equal(result.payoutTokens, 600);
+  assert.deepEqual(result.skippedItemIds, []);
+});
+
 test("market capabilities respect authoritative StatTrak metadata", async () => {
   const { serializeProduct } = await import("./serialization.ts");
   const item = { id: 1, itemType: "skin", displayName: "Finish", imageUrl: null, rarityRank: 3,

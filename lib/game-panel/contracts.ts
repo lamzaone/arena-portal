@@ -31,7 +31,7 @@ type Paging = {page?:number;pageSize?:12|24|48};
 export type PanelArguments = {
   'wallet.read': Record<string, never>;
   'inventory.read': Filters & {hideEquipped?:boolean}; 'inventory.detail':ItemId;
-  'inventory.protect':{itemIds:string[];saleLocked:boolean}; 'inventory.sell':{itemIds:string[]};
+  'inventory.protect':{itemIds:string[];saleLocked:boolean}; 'inventory.sell':{itemIds:string[]}; 'inventory.sell-quote':{itemIds:string[]};
   'cases.read':Filters; 'cases.drops':Paging & {catalogueId:number}; 'cases.open':{crateItemId:string};
   'cases.open-bulk':{crateItemIds:string[]}; 'cases.reconcile':{crateItemIds:string[]};
   'market.read':Filters & {minFloat?:number;maxFloat?:number}; 'market.detail':{catalogueId:number};
@@ -47,10 +47,10 @@ export type PanelArguments = {
   'trades.respond':{tradeId:string;decision:'accept'|'decline'}; 'trades.cancel':{tradeId:string}; 'operations.status':{targetOperationId:string};
 };
 export type PanelOperation = keyof PanelArguments;
-export const PANEL_OPERATIONS: readonly PanelOperation[] = ['wallet.read','inventory.read','inventory.detail','inventory.protect','inventory.sell','cases.read','cases.drops','cases.open','cases.open-bulk','cases.reconcile','market.read','market.detail','market.quote','market.purchase','loadout.read','loadout.equip','loadout.clear','customize.rename','customize.sticker','customize.charm','benefits.vip-quote','benefits.vip-activate','benefits.theme-equip','benefits.redeem','trades.partners','trades.inventory','trades.read','trades.detail','trades.create','trades.respond','trades.cancel','operations.status'];
+export const PANEL_OPERATIONS: readonly PanelOperation[] = ['wallet.read','inventory.read','inventory.detail','inventory.protect','inventory.sell','inventory.sell-quote','cases.read','cases.drops','cases.open','cases.open-bulk','cases.reconcile','market.read','market.detail','market.quote','market.purchase','loadout.read','loadout.equip','loadout.clear','customize.rename','customize.sticker','customize.charm','benefits.vip-quote','benefits.vip-activate','benefits.theme-equip','benefits.redeem','trades.partners','trades.inventory','trades.read','trades.detail','trades.create','trades.respond','trades.cancel','operations.status'];
 export const MUTATION_OPERATIONS = new Set<PanelOperation>(['inventory.protect','inventory.sell','cases.open','cases.open-bulk','market.purchase','loadout.equip','loadout.clear','customize.rename','customize.sticker','customize.charm','benefits.vip-activate','benefits.theme-equip','benefits.redeem','trades.create','trades.respond','trades.cancel']);
 export type PanelData = {
-  'wallet.read':Wallet;'inventory.read':Page<Item>&{wallet?:Wallet};'inventory.detail':ItemDetail;'inventory.protect':{itemIds:string[];saleLocked:boolean};'inventory.sell':{itemIds:string[];skippedItemIds:string[];payoutTokens:Tokens;wallet:Wallet};
+  'wallet.read':Wallet;'inventory.read':Page<Item>&{wallet?:Wallet};'inventory.detail':ItemDetail;'inventory.protect':{itemIds:string[];saleLocked:boolean};'inventory.sell':{itemIds:string[];skippedItemIds:string[];payoutTokens:Tokens;wallet:Wallet};'inventory.sell-quote':{payoutTokens:Tokens;skippedItemIds:string[];quotedAt:string};
   'cases.read':Page<Item>&{wallet?:Wallet};'cases.drops':Page<{lootEntryId:number;product:Product;weight:number;minFloat:number|null;maxFloat:number|null;stattrakChanceBps:number}> & {totalWeight:number};'cases.open':Openings;'cases.open-bulk':Openings;'cases.reconcile':Openings & {missingCrateItemIds:string[]};
   'market.read':Page<Product>&{wallet?:Wallet};'market.detail':Product;'market.quote':Quote;'market.purchase':{itemIds:string[];quantity:number;unitPriceTokens:Tokens;totalPriceTokens:Tokens;wallet:Wallet};
   'loadout.read':Loadout;'loadout.equip':{itemId:string;loadout:Loadout};'loadout.clear':{loadout:Loadout};

@@ -203,8 +203,9 @@ export function normalizeMarketplaceFloatRange(
   input: Pick<
     MarketplacePriceIdentityInput,
     "itemType" | "minFloat" | "maxFloat"
-  >,
+  > & { metadata?: Record<string, unknown> | null },
 ): MarketplaceFloatRange | null {
+  if (input.metadata?.vanillaKnife === true) return null;
   if (!isFloatPricedMarketplaceItem(input.itemType)) return null;
 
   const configuredMin = boundedFloat(input.minFloat);
@@ -223,7 +224,7 @@ export function normalizeMarketplaceFloatValue(
   input: Pick<
     MarketplacePriceIdentityInput,
     "itemType" | "minFloat" | "maxFloat" | "floatValue"
-  >,
+  > & { metadata?: Record<string, unknown> | null },
 ) {
   const floatRange = normalizeMarketplaceFloatRange(input);
   if (!floatRange) return null;

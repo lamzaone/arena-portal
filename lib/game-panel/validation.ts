@@ -33,7 +33,7 @@ export function parsePanelRequest(operation:string,value:unknown):PanelRequest<P
     case 'market.read':{const a=object(args,{}, {...filters,minFloat:fraction,maxFloat:fraction,includeWallet:boolean});if(typeof a.minFloat==='number'&&typeof a.maxFloat==='number'&&a.minFloat>a.maxFloat)invalid();break;}
     case 'inventory.detail':case 'benefits.vip-quote':case 'benefits.vip-activate':case 'benefits.theme-equip':object(args,{itemId:id});break;
     case 'inventory.protect':object(args,{itemIds:ids,saleLocked:boolean});break;
-    case 'inventory.sell':object(args,{itemIds:ids});break;
+    case 'inventory.sell':case 'inventory.sell-quote':object(args,{itemIds:ids});break;
     case 'cases.drops':object(args,{catalogueId:integer(1)},paging);break;
     case 'cases.open':object(args,{crateItemId:id});break;
     case 'cases.open-bulk':case 'cases.reconcile':object(args,{crateItemIds:array(id,1,10)});break;

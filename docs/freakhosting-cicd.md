@@ -79,20 +79,18 @@ Add these repository **secrets**:
 
 | Secret | Value |
 | --- | --- |
-| `FREAKHOSTING_SSH_PORT` | SSH port, or leave unset for 22 |
-| `FREAKHOSTING_SSH_USER` | Website SSH user, e.g. `tapped_r1` |
 | `FREAKHOSTING_SSH_KEY` | Dedicated private key, including BEGIN/END lines; usable without an interactive passphrase |
-| `FREAKHOSTING_KNOWN_HOSTS` | Verified OpenSSH host-key line(s) for this website; nondefault ports use `[hostname]:port` |
 
-The three deployment workflows currently connect to `191.96.94.5`. A hosting
-migration to a different server requires a new `FREAKHOSTING_KNOWN_HOSTS` entry
-for that address. Confirm the new SSH host-key fingerprint with FreakHosting
-through its panel or support before replacing the GitHub secret. The connection
-error's fingerprint and an `ssh-keyscan` result alone do not establish trust.
-Use the complete verified public key in `191.96.94.5 ssh-ed25519 ...` format
-(or `[191.96.94.5]:PORT ssh-ed25519 ...` for a nondefault SSH port), then run
-the **FreakHosting SSH check** workflow before the next release. The website
-user's private `FREAKHOSTING_SSH_KEY` does not change with the host key.
+The three deployment workflows connect as `tapped_r1` to `191.96.94.5:22` and
+pin its public ED25519 host key directly. The key's SHA256 fingerprint is
+`E7ZMCKEPRrWXMDzxVo94O45PVeUAHiYCaH4Kr493nyg`, confirmed from the
+FreakHosting web-panel terminal after the Romania-to-Germany migration. The
+previous `FREAKHOSTING_KNOWN_HOSTS`, `FREAKHOSTING_SSH_PORT`, and
+`FREAKHOSTING_SSH_USER` secrets are no longer used. A future hosting migration
+requires a new public host key and fingerprint, verified through the hosting
+panel or provider support, in all
+three workflows. An SSH warning or `ssh-keyscan` result alone does not
+establish trust. Run **FreakHosting SSH check** before the next release.
 
 Then add the repository **variable** `FREAKHOSTING_DEPLOY_ENABLED` with value
 `true`. Without it the workflow only tests/builds and saves an artifact; it does
@@ -119,7 +117,7 @@ does not mean the website was deployed.
 `kex_exchange_identification: read: Connection reset by peer` means the SSH
 connection was reset during its initial handshake, before key authentication.
 The log alone cannot identify which server or network rule caused the reset.
-Check the workflow's `SSH_HOST` and `FREAKHOSTING_SSH_PORT` against the provider's
+Check the workflow's `SSH_HOST` and `SSH_PORT` against the provider's
 external SSH endpoint; the application proxy port and internal panel hostname
 are not necessarily the SSH endpoint. Confirm with FreakHosting that external
 SSH is enabled for the website account and that GitHub Actions runners are

@@ -16,6 +16,7 @@ import {
 } from "@/lib/economy/market-variant-cache";
 import { EconomyRepositoryError } from "@/lib/data/portal-repository";
 import { canSellInventoryItem } from "@/lib/economy/inventory-sale-lock";
+import { resolveEconomySellback } from "@/lib/economy/sellback";
 function metadataFloat(
   metadata: Record<string, unknown>,
   keys: readonly string[],
@@ -56,12 +57,7 @@ export function createInventorySaleService(
     getCachedMarketplaceVariantFallback,
     getCachedMarketplaceVariantFallbacks,
   } = { ...defaults, ...overrides };
-  return {
-    async sell(input: {
-      steamId: string;
-      itemIds: string[];
-      idempotencyKey: string;
-    }) {
+  async function resolveSelection(input: { steamId: string; itemIds: string[] }) {
       const { itemIds } = input;
       const items = await getPlayerEconomyInventoryItems(
         input.steamId,
@@ -144,6 +140,39 @@ export function createInventorySaleService(
           "No online market listing matched the selected item variants. Nothing was sold.",
         );
       }
+      return { items, quoteItems, quotes, quotesByItemId, skippedItems, skippedItemIds, saleItemIds };
+  }
+
+  return {
+    async quote(input: { steamId: string; itemIds: string[] }) {
+      const resolved = await resolveSelection(input);
+      let payoutTokens = 0;
+      const skippedItemIds = new Set(resolved.skippedItemIds);
+      const foundItemIds = new Set(resolved.items.map(item => item.id));
+      for (const itemId of input.itemIds) if (!foundItemIds.has(itemId)) skippedItemIds.add(itemId);
+      for (const item of resolved.items) {
+        if (!resolved.saleItemIds.includes(item.id) || !canSellInventoryItem(item)) {
+          skippedItemIds.add(item.id);
+          continue;
+        }
+        const marketPriceTokens = resolved.quotesByItemId.get(item.id)?.eurCents ?? item.catalogue?.price?.tokenPrice;
+        const sellback = resolveEconomySellback({ marketPriceTokens, source: item.source });
+        if (sellback.status !== "resolved") {
+          skippedItemIds.add(item.id);
+          continue;
+        }
+        payoutTokens += sellback.payoutTokens;
+      }
+      if (!Number.isSafeInteger(payoutTokens)) throw new EconomyRepositoryError("invalid_input", "The payout is too large.");
+      return { payoutTokens, skippedItemIds: input.itemIds.filter(id => skippedItemIds.has(id)), quotedAt: new Date().toISOString() };
+    },
+    async sell(input: {
+      steamId: string;
+      itemIds: string[];
+      idempotencyKey: string;
+    }) {
+      const { itemIds } = input;
+      const { quotesByItemId, skippedItems, saleItemIds } = await resolveSelection(input);
       const result = await sellEconomyItems({
         steamId: input.steamId,
         requestedItemIds: itemIds,
@@ -283,3 +312,7 @@ export const sellInventoryItem = (
     ReturnType<typeof createInventorySaleService>["sellOne"]
   >[0],
 ) => createInventorySaleService().sellOne(input);
+
+export const quoteInventorySaleSelection = (
+  input: Parameters<ReturnType<typeof createInventorySaleService>["quote"]>[0],
+) => createInventorySaleService().quote(input);

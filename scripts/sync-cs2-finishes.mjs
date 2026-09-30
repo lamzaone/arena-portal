@@ -6,6 +6,13 @@ import { fetchSkins } from "@skinhub/cdn/skins";
 // Refresh and review this shared portal/server manifest after CS2 updates.
 const skins = await fetchSkins();
 const finishes = {};
+const dopplerVersions = new Map([
+  [415, "Ruby"], [416, "Sapphire"], [417, "Black Pearl"],
+  [418, "Phase 1"], [419, "Phase 2"], [420, "Phase 3"], [421, "Phase 4"],
+  [568, "Emerald"], [569, "Phase 1"], [570, "Phase 2"], [571, "Phase 3"], [572, "Phase 4"],
+  [617, "Black Pearl"], [618, "Phase 2"], [619, "Sapphire"],
+  [852, "Phase 1"], [853, "Phase 2"], [854, "Phase 3"], [855, "Phase 4"],
+]);
 for (const skin of skins) {
   const definition = skin.weapon.weapon_id;
   const paint = skin.paint_index === null ? 0 : Number(skin.paint_index);
@@ -19,7 +26,15 @@ for (const skin of skins) {
   const key = `${definition}:${paint}`;
   const itemType = skin.category.id === "sfui_invpanel_filter_gloves" ? "glove"
     : skin.category.id === "sfui_invpanel_filter_melee" ? "knife" : "skin";
-  const value = { name: skin.name, itemType, minFloat: skin.min_float, maxFloat: skin.max_float, supportsStattrak: skin.stattrak };
+  const marketVersion = itemType === "knife" && /\| (?:Gamma )?Doppler$/u.test(skin.name)
+    ? dopplerVersions.get(paint) : undefined;
+  const vanillaKnife = itemType === "knife" && paint === 0;
+  const value = {
+    name: marketVersion ? `${skin.name} (${marketVersion})` : skin.name,
+    itemType, minFloat: skin.min_float, maxFloat: skin.max_float, supportsStattrak: skin.stattrak,
+    ...(marketVersion ? { marketBaseName: skin.name, marketVersion } : {}),
+    ...(vanillaKnife ? { vanillaKnife: true, imageUrl: skin.image } : {}),
+  };
   if (key in finishes && JSON.stringify(finishes[key]) !== JSON.stringify(value))
     throw new Error(`Conflicting finish: ${key}`);
   finishes[key] = value;

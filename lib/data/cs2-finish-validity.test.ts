@@ -47,7 +47,47 @@ registerHooks({ resolve(specifier, context, next) {
     : specifier.startsWith(".") && context.parentURL?.startsWith("file:") ? moduleUrl(fileURLToPath(new URL(specifier, context.parentURL))) : null;
   return url ? { url, shortCircuit: true } : next(specifier, context);
 } });
-const { getEconomyCatalogue, getMarketplaceCatalogue, getEconomyCatalogueItem, getEconomyCrateDropPreview, purchaseEconomyItem, sellEconomyItem, awardEconomyDrop } = await import("./portal-repository.ts");
+const { getEconomyCatalogue, getMarketplaceCatalogue, getEconomyCatalogueItem, getEconomyCrateDropPreview, getPlayerEconomyInventoryItem, purchaseEconomyItem, sellEconomyItem, awardEconomyDrop } = await import("./portal-repository.ts");
+const { getCs2Finish } = await import("../economy/cs2-finish-catalogue.ts");
+const { deriveMarketplacePriceIdentity } = await import("../economy/market-pricing.ts");
+
+test("gem knives use distinct names and exact market versions while vanilla has no exterior", () => {
+  const ruby = getCs2Finish(500, 415)!;
+  const sapphire = getCs2Finish(500, 416)!;
+  const vanilla = getCs2Finish(500, 0)!;
+  assert.equal(ruby.name, "★ Bayonet | Doppler (Ruby)");
+  assert.equal(sapphire.marketVersion, "Sapphire");
+  const rubyIdentity = deriveMarketplacePriceIdentity({ itemType: "knife", displayName: ruby.name, marketHashName: null,
+    metadata: { marketBaseName: ruby.marketBaseName, marketVersion: ruby.marketVersion }, minFloat: ruby.minFloat, maxFloat: ruby.maxFloat, floatValue: 0.01 });
+  assert.equal(rubyIdentity.candidates[0].marketHashName, "★ Bayonet | Doppler (Factory New)");
+  assert.equal(rubyIdentity.candidates[0].marketVersion, "Ruby");
+  assert.equal(vanilla.name, "★ Bayonet");
+  const vanillaIdentity = deriveMarketplacePriceIdentity({ itemType: "knife", displayName: vanilla.name, marketHashName: vanilla.name,
+    metadata: { vanillaKnife: true }, minFloat: null, maxFloat: null });
+  assert.equal(vanillaIdentity.candidates[0].marketHashName, "★ Bayonet");
+  assert.equal(vanillaIdentity.wear, null);
+});
+
+test("owned Ruby knives retain generic market base and Ruby version for sale quotes", async () => {
+  const itemId = "12345678-1234-4123-8123-123456789abc";
+  db.prepare("INSERT INTO portal_economy_catalogue (id,item_type,definition_index,paintkit,display_name,market_hash_name) VALUES (500,'knife',500,415,'★ Bayonet | Doppler','★ Bayonet | Doppler')").run();
+  db.prepare("INSERT INTO portal_inventory_items (id,owner_steam_id,catalogue_id,item_type,definition_index,paintkit,seed,float_value,stattrak,stattrak_count,rarity_rank,tradable,state,attributes,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    .run(itemId, "76561198000000001", 500, "knife", 500, 415, 661, 0.01, 0, 0, 6, 1, "available", "{}", "{}");
+  try {
+    const item = await getPlayerEconomyInventoryItem("76561198000000001", itemId);
+    assert.equal(item?.displayName, "★ Bayonet | Doppler (Ruby)");
+    assert.equal(item?.catalogue?.metadata.marketBaseName, "★ Bayonet | Doppler");
+    assert.equal(item?.catalogue?.metadata.marketVersion, "Ruby");
+    const identity = deriveMarketplacePriceIdentity({ itemType: "knife", displayName: item!.displayName,
+      marketHashName: item!.catalogue!.marketHashName, metadata: item!.catalogue!.metadata,
+      minFloat: 0, maxFloat: 0.08, floatValue: item!.floatValue });
+    assert.equal(identity.candidates[0].marketHashName, "★ Bayonet | Doppler (Factory New)");
+    assert.equal(identity.candidates[0].marketVersion, "Ruby");
+  } finally {
+    db.prepare("DELETE FROM portal_inventory_items WHERE id = ?").run(itemId);
+    db.prepare("DELETE FROM portal_economy_catalogue WHERE id = 500").run();
+  }
+});
 db.exec(`
 CREATE TABLE portal_steam_accounts (steam_id TEXT PRIMARY KEY, updated_at TEXT);
 CREATE TABLE portal_economy_catalogue (id INTEGER PRIMARY KEY, catalogue_key TEXT, market_hash_name TEXT, item_type TEXT, definition_index INTEGER, paintkit INTEGER, rarity_rank INTEGER DEFAULT 3, display_name TEXT, metadata TEXT DEFAULT '{}', enabled INTEGER DEFAULT 1, created_at TEXT, updated_at TEXT);
@@ -71,6 +111,15 @@ ALTER TABLE portal_inventory_items ADD COLUMN consumed_at TEXT;
 ALTER TABLE portal_inventory_items ADD COLUMN updated_at TEXT;
 CREATE TABLE portal_inventory_item_stickers (weapon_item_id TEXT, sticker_item_id TEXT);
 CREATE TABLE portal_loadout_slots (owner_steam_id TEXT, item_id TEXT, updated_at TEXT);
+ALTER TABLE portal_inventory_item_stickers ADD COLUMN sticker_slot INTEGER;
+ALTER TABLE portal_inventory_item_stickers ADD COLUMN sticker_catalogue_id INTEGER;
+ALTER TABLE portal_inventory_item_stickers ADD COLUMN sticker_definition_index INTEGER;
+ALTER TABLE portal_inventory_item_stickers ADD COLUMN sticker_paintkit INTEGER;
+ALTER TABLE portal_inventory_item_stickers ADD COLUMN sticker_rarity_rank INTEGER;
+ALTER TABLE portal_inventory_item_stickers ADD COLUMN attributes TEXT;
+ALTER TABLE portal_inventory_item_stickers ADD COLUMN applied_at TEXT;
+ALTER TABLE portal_loadout_slots ADD COLUMN slot_key TEXT;
+CREATE TABLE portal_player_settings (steam_id TEXT, active_theme_item_id TEXT);
 INSERT INTO portal_economy_catalogue (id, item_type, definition_index, paintkit, display_name) VALUES (1,'skin',9,250,'AWP | Full Stop'), (2,'skin',7,44,'Stale name'), (3,'crate',null,null,'Case');
 INSERT INTO portal_loot_tables (id,code,table_type,container_catalogue_id,display_name) VALUES (1,'case','container',3,'Case'), (2,'invalid-drop','drop',null,'Drop');
 INSERT INTO portal_loot_entries (id,loot_table_id,catalogue_id,weight) VALUES (1,1,1,100), (2,1,2,5), (3,2,1,100);

@@ -44,7 +44,7 @@ const stubs: Record<string, string> = {
     export async function cacheMarketplaceVariantQuote(){s.cacheCalls++;}
     export async function cacheMarketplaceVariantQuotes(){s.cacheCalls++;}`,
   "@/lib/economy/inventory-sale-lock": "export const canSellInventoryItem=i=>i.state==='available';",
-  "@/lib/economy/sellback": "export const economySellbackSaleMessage=()=> 'Sold';",
+  "@/lib/economy/sellback": "export const economySellbackSaleMessage=()=> 'Sold'; export const resolveEconomySellback=({marketPriceTokens})=>({status:'resolved',payoutTokens:Math.floor(marketPriceTokens*.6)});",
 };
 registerHooks({ resolve(specifier, context, next) {
   if (stubs[specifier]) return { url: `data:text/javascript,${encodeURIComponent(stubs[specifier])}`, shortCircuit: true };

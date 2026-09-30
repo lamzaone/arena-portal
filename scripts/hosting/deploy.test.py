@@ -119,8 +119,8 @@ class TransportTests(unittest.TestCase):
         self.assertEqual([call["stage"] for call in self.calls()],
                          ["prepare", "sleep", "prepare", "sleep", "prepare"])
         self.assertEqual([call["args"] for call in self.calls("sleep")], [["5"], ["10"]])
-        self.assertIn("FREAKHOSTING_SSH_HOST", result.stderr)
-        self.assertIn("FREAKHOSTING_SSH_PORT", result.stderr)
+        self.assertIn("SSH_HOST", result.stderr)
+        self.assertIn("SSH_PORT", result.stderr)
         self.assertIn("GitHub Actions", result.stderr)
 
     def test_authentication_and_host_key_errors_stop_without_retries(self):
@@ -186,7 +186,7 @@ class TransportTests(unittest.TestCase):
         result = self.deploy(arguments=("--check-ssh",), SSH_HOST="191.96.94.5",
                              SSH_KNOWN_HOSTS=old_entry)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("FREAKHOSTING_KNOWN_HOSTS", result.stderr)
+        self.assertIn("SSH_KNOWN_HOSTS", result.stderr)
         self.assertIn("191.96.94.5", result.stderr)
         self.assertEqual(self.calls(), [])
 
