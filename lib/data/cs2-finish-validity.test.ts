@@ -65,7 +65,21 @@ test("gem knives use distinct names and exact market versions while vanilla has 
   const vanillaIdentity = deriveMarketplacePriceIdentity({ itemType: "knife", displayName: vanilla.name, marketHashName: vanilla.name,
     metadata: { vanillaKnife: true }, minFloat: null, maxFloat: null });
   assert.equal(vanillaIdentity.candidates[0].marketHashName, "★ Bayonet");
-  assert.equal(vanillaIdentity.wear, null);
+  assert.equal(vanillaIdentity.wear, "Vanilla");
+  assert.equal(vanillaIdentity.floatValue, 0);
+});
+
+test("vanilla knives use a fixed zero float in the purchase form", async () => {
+  db.prepare("INSERT INTO portal_economy_catalogue (id,item_type,definition_index,paintkit,display_name,market_hash_name) VALUES (501,'knife',500,0,'★ Bayonet','★ Bayonet')").run();
+  try {
+    const item = await getEconomyCatalogueItem(501);
+    assert.equal(item?.displayName, "★ Bayonet");
+    assert.equal(item?.minFloat, 0);
+    assert.equal(item?.maxFloat, 0);
+    assert.equal(item?.metadata.vanillaKnife, true);
+  } finally {
+    db.prepare("DELETE FROM portal_economy_catalogue WHERE id = 501").run();
+  }
 });
 
 test("owned Ruby knives retain generic market base and Ruby version for sale quotes", async () => {
