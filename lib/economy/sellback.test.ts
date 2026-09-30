@@ -2,9 +2,24 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  ECONOMY_SELLBACK_BASIS_POINTS,
+  ECONOMY_SELLBACK_MINIMUM_TOKENS,
+  ECONOMY_SELLBACK_PERCENT,
+  ECONOMY_SELLBACK_PERCENT_LABEL,
   economySellbackSaleMessage,
   resolveEconomySellback,
 } from "./sellback.ts";
+
+const expectedPayout = (basisTokens: number) =>
+  Math.max(
+    ECONOMY_SELLBACK_MINIMUM_TOKENS,
+    Math.floor((basisTokens * ECONOMY_SELLBACK_PERCENT) / 100),
+  );
+
+test("derives the stored rate and display label from the editable percentage", () => {
+  assert.equal(ECONOMY_SELLBACK_BASIS_POINTS, ECONOMY_SELLBACK_PERCENT * 100);
+  assert.equal(ECONOMY_SELLBACK_PERCENT_LABEL, `${ECONOMY_SELLBACK_PERCENT}%`);
+});
 
 test("uses the recorded discounted purchase price as the sellback basis", () => {
   const result = resolveEconomySellback({
@@ -23,7 +38,7 @@ test("uses the recorded discounted purchase price as the sellback basis", () => 
     marketPriceTokens: 2_000,
     sellbackBasisTokens: 400,
     recordedPurchasePriceTokens: 400,
-    payoutTokens: 240,
+    payoutTokens: expectedPayout(400),
     usesRecordedPurchasePrice: true,
     payoutCappedAtRecordedPurchasePrice: false,
   });
@@ -43,7 +58,7 @@ test("uses the lower current market value for a discounted marketplace purchase"
   assert.equal(result.status, "resolved");
   if (result.status !== "resolved") return;
   assert.equal(result.sellbackBasisTokens, 300);
-  assert.equal(result.payoutTokens, 180);
+  assert.equal(result.payoutTokens, expectedPayout(300));
   assert.equal(result.usesRecordedPurchasePrice, false);
 });
 
@@ -80,7 +95,7 @@ test("keeps current-market sellback for non-discounted purchases and non-market 
     if (result.status !== "resolved") continue;
     assert.equal(result.sellbackBasisTokens, 2_000);
     assert.equal(result.recordedPurchasePriceTokens, null);
-    assert.equal(result.payoutTokens, 1_200);
+    assert.equal(result.payoutTokens, expectedPayout(2_000));
   }
 });
 
@@ -160,25 +175,27 @@ test("allows a fully discounted marketplace purchase to sell for zero Tokens", (
 });
 
 test("describes standard, minimum, and paid-price-capped sellback payouts accurately", () => {
+  const standardBasisTokens = 10_000;
+  const standardPayoutTokens = expectedPayout(standardBasisTokens);
   assert.equal(
     economySellbackSaleMessage({
-      marketPriceTokens: 2_000,
-      sellbackBasisTokens: 400,
-      recordedPurchasePriceTokens: 400,
-      payoutTokens: 240,
+      marketPriceTokens: 20_000,
+      sellbackBasisTokens: standardBasisTokens,
+      recordedPurchasePriceTokens: standardBasisTokens,
+      payoutTokens: standardPayoutTokens,
       payoutCappedAtRecordedPurchasePrice: false,
     }),
-    "Item sold for 240 Tokens (60% of its 400-Token sellback basis; current portal market price: 2,000 Tokens).",
+    `Item sold for ${standardPayoutTokens.toLocaleString("en-US")} Tokens (${ECONOMY_SELLBACK_PERCENT}% of its 10,000-Token sellback basis; current portal market price: 20,000 Tokens).`,
   );
   assert.equal(
     economySellbackSaleMessage({
-      marketPriceTokens: 8,
-      sellbackBasisTokens: 8,
+      marketPriceTokens: 1,
+      sellbackBasisTokens: 1,
       recordedPurchasePriceTokens: null,
-      payoutTokens: 5,
+      payoutTokens: ECONOMY_SELLBACK_MINIMUM_TOKENS,
       payoutCappedAtRecordedPurchasePrice: false,
     }),
-    "Item sold for 5 Tokens (minimum buyback for its 8-Token sellback basis).",
+    `Item sold for ${ECONOMY_SELLBACK_MINIMUM_TOKENS} Tokens (minimum buyback for its 1-Token sellback basis).`,
   );
   assert.equal(
     economySellbackSaleMessage({

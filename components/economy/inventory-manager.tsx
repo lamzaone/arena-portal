@@ -69,6 +69,7 @@ import {
   isOpenableInventoryCrate,
 } from "@/lib/economy/inventory-selection";
 import {
+  ECONOMY_SELLBACK_MINIMUM_TOKENS,
   ECONOMY_SELLBACK_PERCENT_LABEL,
   economySellbackUsesMinimum,
 } from "@/lib/economy/sellback";
@@ -1617,9 +1618,9 @@ export function InventoryManager({
                               ? selectedSalePayout === 0 && selected.recordedPurchasePriceTokens === 0
                                 ? "This item was fully discounted; its estimated buyback payout is 0 Tokens."
                               : selected.sellbackPayoutCappedAtRecordedPurchasePrice
-                                ? `The 5-Token minimum is capped at your recorded ${formatTokens(selected.recordedPurchasePriceTokens ?? 0)}-Token purchase price.`
+                                ? `The ${ECONOMY_SELLBACK_MINIMUM_TOKENS}-Token minimum is capped at your recorded ${formatTokens(selected.recordedPurchasePriceTokens ?? 0)}-Token purchase price.`
                                 : economySellbackUsesMinimum(selected.sellbackBasisTokens)
-                                  ? `Minimum 5-Token buyback for this ${formatTokens(selected.sellbackBasisTokens)}-Token sellback basis.`
+                                  ? `Minimum ${ECONOMY_SELLBACK_MINIMUM_TOKENS}-Token buyback for this ${formatTokens(selected.sellbackBasisTokens)}-Token sellback basis.`
                                   : selected.recordedPurchasePriceTokens !== null
                                     ? `${ECONOMY_SELLBACK_PERCENT_LABEL} of the lower of the current ${formatTokens(selected.marketPriceTokens ?? 0)}-Token market price and your recorded ${formatTokens(selected.recordedPurchasePriceTokens)}-Token purchase price.`
                                     : `${ECONOMY_SELLBACK_PERCENT_LABEL} of the current ${formatTokens(selected.marketPriceTokens ?? 0)}-Token market price.`

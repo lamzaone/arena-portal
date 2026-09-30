@@ -2,6 +2,10 @@
 
 The player portal for the ARENA CS2 server: Steam sign-in, player dashboard, moderation records, appeals, tickets, and the Token Economy inventory, loadout, marketplace, trades, and staff item-management flows. Players buy crates and capsules from Market, then inspect and open owned containers from Inventory.
 
+## Sellback rate
+
+Set `ECONOMY_SELLBACK_PERCENT` in `lib/economy/sellback.ts` to the desired percentage (currently `60`). The payout calculation, inventory and sale text, audit rate, and sellback test expectations derive from it. The 5-Token minimum is controlled separately by `ECONOMY_SELLBACK_MINIMUM_TOKENS` in the same file. Run `npm run test:sellback` after changing either value, then rebuild the portal.
+
 ## 3D weapon customization
 
 Inventory's workbench uses the supported [SkinHub viewer](https://github.com/SkinHubgg/skinhub-viewer), with SkinCraft as the interaction reference. It supports orbit/zoom, first-person views, five sticker slots with rotation/wear/placement, charm placement, and CS2 inspect links. Changes are staged until Save placement. New attachments must be owned; repositioning preserves item float, pattern, StatTrak and charm seed. Saves, inventory consumption, audits and game refresh jobs share one transaction and retry receipt.

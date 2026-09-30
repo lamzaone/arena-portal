@@ -1,6 +1,8 @@
 /** Shared client/server policy for portal inventory sellback. */
-export const ECONOMY_SELLBACK_BASIS_POINTS = 6_000;
-export const ECONOMY_SELLBACK_PERCENT_LABEL = "60%";
+/** Change this percentage to update payouts, sale text, and the recorded audit rate. */
+export const ECONOMY_SELLBACK_PERCENT = 45;
+export const ECONOMY_SELLBACK_BASIS_POINTS = ECONOMY_SELLBACK_PERCENT * 100;
+export const ECONOMY_SELLBACK_PERCENT_LABEL = `${ECONOMY_SELLBACK_PERCENT}%`;
 export const ECONOMY_SELLBACK_MINIMUM_TOKENS = 5;
 
 export type EconomySellbackResolution =
