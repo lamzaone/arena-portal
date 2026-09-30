@@ -1,6 +1,6 @@
 /** Shared client/server policy for portal inventory sellback. */
-export const ECONOMY_SELLBACK_BASIS_POINTS = 3_000;
-export const ECONOMY_SELLBACK_PERCENT_LABEL = "30%";
+export const ECONOMY_SELLBACK_BASIS_POINTS = 6_000;
+export const ECONOMY_SELLBACK_PERCENT_LABEL = "60%";
 export const ECONOMY_SELLBACK_MINIMUM_TOKENS = 5;
 
 export type EconomySellbackResolution =
