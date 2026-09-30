@@ -10784,6 +10784,9 @@ const marketplaceWearLabels = new Set([
   "Field-Tested",
   "Well-Worn",
   "Battle-Scarred",
+  // Base knives have no wear exterior. Their catalogue identity is checked
+  // against the quote before the purchase is committed.
+  "Vanilla",
 ]);
 
 function economyMarketplaceQuoteAmount(value: number, field: string) {

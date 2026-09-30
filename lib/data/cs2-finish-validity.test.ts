@@ -287,3 +287,40 @@ test("a manual price cannot authorize a nonexistent weapon or paint material", a
     await assert.rejects(awardEconomyDrop({ steamId: "76561198000000001", lootTableId: id, source: "hourly", idempotencyKey: `malformed-drop-${id}` }), { code: "loot_table_empty" });
   }
 });
+
+test("a quoted vanilla knife can be purchased at its fixed base price", async () => {
+  db.prepare("INSERT INTO portal_economy_catalogue (id,item_type,definition_index,paintkit,display_name,market_hash_name) VALUES (501,'knife',500,0,'★ Bayonet','★ Bayonet')").run();
+  db.prepare("INSERT INTO portal_economy_catalogue_prices (catalogue_id,is_current,market_price_eur_cents,token_price,price_source,source_reference) VALUES (501,1,100,100,'staff-last-known','staff-panel')").run();
+  const steamId = "76561198000000001";
+  const before = Number(db.prepare("SELECT balance FROM portal_token_accounts WHERE steam_id = ?").get(steamId)!.balance);
+  const result = await purchaseEconomyItem({
+    steamId, catalogueId: 501, floatValue: 0, seed: 0,
+    expectedUnitPriceTokens: 100, idempotencyKey: "vanilla-bayonet-checkout",
+    resolvedMarketQuote: {
+      baseEuroCents: 100, euroCents: 100, source: "staff-last-known", sourceReference: "staff-panel",
+      marketHashName: "★ Bayonet", marketVersion: null, floatValue: 0, wear: "Vanilla",
+      stattrak: false, seed: 0, seedMatched: false, floatDiscountBps: 0,
+      pricingRule: "float-linear-v1", fromFallback: true, fallbackStale: false, fallbackObservedAt: null,
+    },
+  });
+  assert.equal(result.priceTokens, 100);
+  assert.equal(Number(db.prepare("SELECT balance FROM portal_token_accounts WHERE steam_id = ?").get(steamId)!.balance), before - 100);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM portal_inventory_items WHERE catalogue_id = 501").get()!.n, 1);
+});
+
+test("a non-vanilla skin cannot use the Vanilla quote identity", async () => {
+  const steamId = "76561198000000001";
+  const before = Number(db.prepare("SELECT balance FROM portal_token_accounts WHERE steam_id = ?").get(steamId)!.balance);
+  await assert.rejects(purchaseEconomyItem({
+    steamId, catalogueId: 2, floatValue: 0.2, seed: 661,
+    expectedUnitPriceTokens: 100, idempotencyKey: "invalid-vanilla-skin-quote",
+    resolvedMarketQuote: {
+      baseEuroCents: 100, euroCents: 100, source: "staff-last-known", sourceReference: "staff-panel",
+      marketHashName: "AK-47 | Case Hardened (Field-Tested)", marketVersion: null,
+      floatValue: 0.2, wear: "Vanilla", stattrak: false, seed: 661,
+      seedMatched: false, floatDiscountBps: 0, pricingRule: "float-linear-v1",
+      fromFallback: true, fallbackStale: false, fallbackObservedAt: null,
+    },
+  }), { code: "invalid_input" });
+  assert.equal(Number(db.prepare("SELECT balance FROM portal_token_accounts WHERE steam_id = ?").get(steamId)!.balance), before);
+});
