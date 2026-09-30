@@ -23,7 +23,7 @@ test("uses the recorded discounted purchase price as the sellback basis", () => 
     marketPriceTokens: 2_000,
     sellbackBasisTokens: 400,
     recordedPurchasePriceTokens: 400,
-    payoutTokens: 120,
+    payoutTokens: 240,
     usesRecordedPurchasePrice: true,
     payoutCappedAtRecordedPurchasePrice: false,
   });
@@ -43,7 +43,7 @@ test("uses the lower current market value for a discounted marketplace purchase"
   assert.equal(result.status, "resolved");
   if (result.status !== "resolved") return;
   assert.equal(result.sellbackBasisTokens, 300);
-  assert.equal(result.payoutTokens, 90);
+  assert.equal(result.payoutTokens, 180);
   assert.equal(result.usesRecordedPurchasePrice, false);
 });
 
@@ -80,7 +80,7 @@ test("keeps current-market sellback for non-discounted purchases and non-market 
     if (result.status !== "resolved") continue;
     assert.equal(result.sellbackBasisTokens, 2_000);
     assert.equal(result.recordedPurchasePriceTokens, null);
-    assert.equal(result.payoutTokens, 600);
+    assert.equal(result.payoutTokens, 1_200);
   }
 });
 
@@ -165,20 +165,20 @@ test("describes standard, minimum, and paid-price-capped sellback payouts accura
       marketPriceTokens: 2_000,
       sellbackBasisTokens: 400,
       recordedPurchasePriceTokens: 400,
-      payoutTokens: 120,
+      payoutTokens: 240,
       payoutCappedAtRecordedPurchasePrice: false,
     }),
-    "Item sold for 120 Tokens (30% of its 400-Token sellback basis; current portal market price: 2,000 Tokens).",
+    "Item sold for 240 Tokens (60% of its 400-Token sellback basis; current portal market price: 2,000 Tokens).",
   );
   assert.equal(
     economySellbackSaleMessage({
-      marketPriceTokens: 10,
-      sellbackBasisTokens: 10,
+      marketPriceTokens: 8,
+      sellbackBasisTokens: 8,
       recordedPurchasePriceTokens: null,
       payoutTokens: 5,
       payoutCappedAtRecordedPurchasePrice: false,
     }),
-    "Item sold for 5 Tokens (minimum buyback for its 10-Token sellback basis).",
+    "Item sold for 5 Tokens (minimum buyback for its 8-Token sellback basis).",
   );
   assert.equal(
     economySellbackSaleMessage({
