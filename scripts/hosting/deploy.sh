@@ -54,34 +54,23 @@ umask 077
 transport_dir="$(mktemp -d "$RUNNER_TEMP/freakhosting-ssh.XXXXXX")"
 key="$transport_dir/key"
 hosts="$transport_dir/known-hosts"
-rebound_hosts="$transport_dir/rebound-hosts"
 error_log="$transport_dir/stderr"
-trap 'rm -f -- "$key" "$hosts" "$rebound_hosts" "$error_log"; rmdir -- "$transport_dir"' EXIT
+trap 'rm -f -- "$key" "$hosts" "$error_log"; rmdir -- "$transport_dir"' EXIT
 printf '%s\n' "$SSH_PRIVATE_KEY" > "$key"
 printf '%s\n' "$SSH_KNOWN_HOSTS" > "$hosts"
 host_key_name="$SSH_HOST"
 if ((SSH_PORT != 22)); then host_key_name="[$SSH_HOST]:$SSH_PORT"; fi
-# The provider may move the same website to a new IP. Rebind only the pinned
-# FreakHosting keys; SSH still verifies that the new address presents one of them.
+# A new hosting address needs an explicitly verified key of its own. Reusing
+# another host's key hides an unreviewed server migration behind an SSH warning.
 if ! awk -v target="$host_key_name" '
-  $1 !~ /^@/ { split($1, names, ","); for (i in names) if (names[i] == target) found = 1 }
+  $1 !~ /^@/ && NF >= 3 {
+    split($1, names, ",")
+    for (i in names) if (names[i] == target) found = 1
+  }
   END { exit !found }
 ' "$hosts"; then
-  if ! awk -v target="$host_key_name" '
-    {
-      if ($1 ~ /^@/ || NF < 3) next
-      if ($2 !~ /^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh.com|sk-ecdsa-sha2-nistp256@openssh.com)$/) next
-      if (key_count && pinned_names != $1) conflicting_names = 1
-      pinned_names = $1
-      print target, $2, $3
-      key_count++
-    }
-    END { if (!key_count || conflicting_names) exit 1 }
-  ' "$hosts" > "$rebound_hosts"; then
-    echo '::error::FREAKHOSTING_KNOWN_HOSTS has no single pinned host to rebind. Update the verified host-key secret for the new address.' >&2
-    exit 1
-  fi
-  cat -- "$rebound_hosts" >> "$hosts"
+  echo "::error::FREAKHOSTING_KNOWN_HOSTS has no verified key for $host_key_name. Confirm the new host fingerprint with FreakHosting, then update that GitHub Actions secret with the matching public host-key entry." >&2
+  exit 1
 fi
 options=(-i "$key" -o BatchMode=yes -o IdentitiesOnly=yes
   -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$hosts"

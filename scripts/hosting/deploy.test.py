@@ -181,16 +181,24 @@ class TransportTests(unittest.TestCase):
                          "website_user@ssh.example.test:arena-portal/sha-123-2.tar.gz")
         self.assertEqual(self.calls("activate")[0]["args"][-1], "bash -s -- 'sha-123-2'")
 
-    def test_new_ip_reuses_only_the_pinned_host_key_at_the_configured_port(self):
+    def test_new_ip_requires_its_own_verified_host_key_at_the_configured_port(self):
         old_entry = "[old.example.test]:2222 ssh-ed25519 pinned-key"
         result = self.deploy(arguments=("--check-ssh",), SSH_HOST="191.96.94.5",
                              SSH_KNOWN_HOSTS=old_entry)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("FREAKHOSTING_KNOWN_HOSTS", result.stderr)
+        self.assertIn("191.96.94.5", result.stderr)
+        self.assertEqual(self.calls(), [])
+
+        (self.root / "calls.jsonl").unlink(missing_ok=True)
+        new_entry = "[191.96.94.5]:2222 ssh-ed25519 verified-key"
+        result = self.deploy(arguments=("--check-ssh",), SSH_HOST="191.96.94.5",
+                             SSH_KNOWN_HOSTS=new_entry)
         self.assertEqual(result.returncode, 0, result.stderr)
         call = self.calls("check")[0]
         self.assertIn("website_user@191.96.94.5", call["args"])
         self.assertIn("StrictHostKeyChecking=yes", call["args"])
-        self.assertIn(old_entry, call["hosts_contents"])
-        self.assertIn("[191.96.94.5]:2222 ssh-ed25519 pinned-key", call["hosts_contents"])
+        self.assertEqual(call["hosts_contents"], new_entry + "\n")
 
     def test_invalid_release_or_port_fails_before_network_access(self):
         for overrides in ({"RELEASE_ID": "../../escape"}, {"RELEASE_ID": "bad';touch injected"},

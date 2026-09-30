@@ -84,11 +84,15 @@ Add these repository **secrets**:
 | `FREAKHOSTING_SSH_KEY` | Dedicated private key, including BEGIN/END lines; usable without an interactive passphrase |
 | `FREAKHOSTING_KNOWN_HOSTS` | Verified OpenSSH host-key line(s) for this website; nondefault ports use `[hostname]:port` |
 
-The three deployment workflows currently connect to `191.96.94.5`. Their SSH
-transport accepts the existing pinned FreakHosting key at this new address, so a
-change of IP alone does not require replacing the host-key secret. If the host
-key itself changed, verify its new fingerprint with FreakHosting before updating
-`FREAKHOSTING_KNOWN_HOSTS`; strict host-key checking will reject an unknown key.
+The three deployment workflows currently connect to `191.96.94.5`. A hosting
+migration to a different server requires a new `FREAKHOSTING_KNOWN_HOSTS` entry
+for that address. Confirm the new SSH host-key fingerprint with FreakHosting
+through its panel or support before replacing the GitHub secret. The connection
+error's fingerprint and an `ssh-keyscan` result alone do not establish trust.
+Use the complete verified public key in `191.96.94.5 ssh-ed25519 ...` format
+(or `[191.96.94.5]:PORT ssh-ed25519 ...` for a nondefault SSH port), then run
+the **FreakHosting SSH check** workflow before the next release. The website
+user's private `FREAKHOSTING_SSH_KEY` does not change with the host key.
 
 Then add the repository **variable** `FREAKHOSTING_DEPLOY_ENABLED` with value
 `true`. Without it the workflow only tests/builds and saves an artifact; it does
