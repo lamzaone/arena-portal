@@ -60,6 +60,20 @@ test("ordinary market fallback echoes seed but never claims seed-specific eviden
   assert.equal(quote?.pricingRule,"float-linear-v1"); assert.equal(quote?.fromFallback,true);
 });
 
+test("vanilla knives quote their base market identity with one fixed float",async()=>{
+  state.exact=null;
+  const [quote]=await getMarketplacePriceQuotes([{
+    itemType:"knife",displayName:"★ Bayonet",marketHashName:"★ Bayonet",
+    metadata:{vanillaKnife:true,marketBaseName:"★ Bayonet"},
+    minFloat:0,maxFloat:0,floatValue:0,seed:0,stattrak:false,
+    fallbackPrice:{eurCents:1_000,source:"skinport"},
+  }]);
+  assert.equal(quote?.marketHashName,"★ Bayonet");
+  assert.equal(quote?.wear,"Vanilla");
+  assert.equal(quote?.floatValue,0);
+  assert.equal(quote?.floatDiscountBps,0);
+});
+
 test("browse quotes use stored prices without waiting for public providers",async()=>{
   state.failProviders=true;
   try {

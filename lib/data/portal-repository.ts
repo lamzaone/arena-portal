@@ -6103,6 +6103,9 @@ function economyCatalogueFloatRange(
   metadata: Record<string, unknown>,
 ) {
   if (!economyIsSkinLike(itemType)) return null;
+  // Base knives have one market variant and no wear; keep the required
+  // purchase float fixed at zero instead of offering arbitrary wear values.
+  if (metadata.vanillaKnife === true) return { min: 0, max: 0 };
   const minimum =
     economyMetadataDecimal(metadata, "minFloat") ??
     economyMetadataDecimal(metadata, "floatMin") ??

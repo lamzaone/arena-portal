@@ -205,7 +205,7 @@ export function normalizeMarketplaceFloatRange(
     "itemType" | "minFloat" | "maxFloat"
   > & { metadata?: Record<string, unknown> | null },
 ): MarketplaceFloatRange | null {
-  if (input.metadata?.vanillaKnife === true) return null;
+  if (input.metadata?.vanillaKnife === true) return { minFloat: 0, maxFloat: 0 };
   if (!isFloatPricedMarketplaceItem(input.itemType)) return null;
 
   const configuredMin = boundedFloat(input.minFloat);
@@ -258,7 +258,8 @@ export function deriveMarketplacePriceIdentity(
   const floatRange = normalizeMarketplaceFloatRange(input);
   const floatValue = normalizeMarketplaceFloatValue(input);
   const seed = boundedSeed(input.seed);
-  const wear = marketplaceWearLabel(floatValue);
+  const vanillaKnife = input.metadata?.vanillaKnife === true;
+  const wear = vanillaKnife ? "Vanilla" : marketplaceWearLabel(floatValue);
   const stattrak =
     input.stattrak === true && isStattrakMarketplaceItem(input.itemType);
   const baseCandidates: MarketplacePriceCandidate[] = [];
@@ -269,7 +270,7 @@ export function deriveMarketplacePriceIdentity(
     normalizedText(input.displayName) ||
     normalizedText(input.marketHashName);
 
-  if (floatRange && floatValue !== null && wear) {
+  if (!vanillaKnife && floatRange && floatValue !== null && wear) {
     // A legacy catalogue row usually has no market hash because the selected
     // exterior is part of the public market identity. Prefer that exact
     // exterior to any generic/hash stored by older imports.

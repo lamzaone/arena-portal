@@ -385,6 +385,8 @@ function MarketplacePurchaseAction({
   const vipMembership = isVipMembershipItem(item);
   const profileTheme = isProfileThemeItem(item);
   const supportsFloat = isFloatSelectable(item);
+  const vanillaKnife = item.itemType === "knife" && item.paintkit === 0;
+  const customizableFloat = supportsFloat && !vanillaKnife;
   const supportsStattrak = isStattrakSelectable(item);
   const selectedFloat = parseFloatInput(floatInput);
   const selectedSeed = parseMarketSeed(seedInput);
@@ -415,7 +417,7 @@ function MarketplacePurchaseAction({
     quoteStatus !== "error" &&
     (quoteStatus === "loading" || quotePending);
   const quoteFailed = supportsFloat && quoteStatus === "error";
-  const quoteWear = quote?.wear ?? wearLabel(currentFloat);
+  const quoteWear = quote?.wear ?? (vanillaKnife ? "Vanilla" : wearLabel(currentFloat));
   const disabled =
     pending ||
     !item.catalogueId ||
@@ -430,13 +432,13 @@ function MarketplacePurchaseAction({
   return (
     <div className="market-item-purchase">
       {supportsFloat && quoteWear ? (
-        <div className="market-item-wear" aria-label={`Exterior: ${quoteWear}`}>
-          <span>Exterior</span>
+        <div className="market-item-wear" aria-label={`${vanillaKnife ? "Finish" : "Exterior"}: ${quoteWear}`}>
+          <span>{vanillaKnife ? "Finish" : "Exterior"}</span>
           <strong>{quoteWear}</strong>
         </div>
       ) : null}
-      {supportsFloat || supportsStattrak ? <details className={styles.purchaseOptions}>
-        <summary><SlidersHorizontal aria-hidden="true" /><span>{supportsFloat ? "Customize finish" : "StatTrak option"}</span><ChevronDown aria-hidden="true" /></summary>
+      {customizableFloat || supportsStattrak ? <details className={styles.purchaseOptions}>
+        <summary><SlidersHorizontal aria-hidden="true" /><span>{customizableFloat ? "Customize finish" : "StatTrak option"}</span><ChevronDown aria-hidden="true" /></summary>
         <div>
       {supportsStattrak ? (
         <label className="market-purchase-stattrak" htmlFor={stattrakControlId}>
@@ -452,7 +454,7 @@ function MarketplacePurchaseAction({
           </span>
         </label>
       ) : null}
-      {supportsFloat ? (
+      {customizableFloat ? (
         <div className="market-purchase-float">
           <div className="market-float-slider-label">
             <label htmlFor={floatControlId}>Float</label>
@@ -475,7 +477,7 @@ function MarketplacePurchaseAction({
           </small>
         </div>
       ) : null}
-      {supportsFloat ? (
+      {customizableFloat ? (
         <div className="market-purchase-float market-purchase-seed">
           <label className="market-float-slider-label" htmlFor={seedControlId}>
             Pattern seed
