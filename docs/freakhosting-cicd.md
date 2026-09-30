@@ -79,11 +79,16 @@ Add these repository **secrets**:
 
 | Secret | Value |
 | --- | --- |
-| `FREAKHOSTING_SSH_HOST` | External SSH hostname or IPv4 address |
 | `FREAKHOSTING_SSH_PORT` | SSH port, or leave unset for 22 |
 | `FREAKHOSTING_SSH_USER` | Website SSH user, e.g. `tapped_r1` |
 | `FREAKHOSTING_SSH_KEY` | Dedicated private key, including BEGIN/END lines; usable without an interactive passphrase |
-| `FREAKHOSTING_KNOWN_HOSTS` | Verified OpenSSH host-key line(s); nondefault ports use `[hostname]:port` |
+| `FREAKHOSTING_KNOWN_HOSTS` | Verified OpenSSH host-key line(s) for this website; nondefault ports use `[hostname]:port` |
+
+The three deployment workflows currently connect to `191.96.94.5`. Their SSH
+transport accepts the existing pinned FreakHosting key at this new address, so a
+change of IP alone does not require replacing the host-key secret. If the host
+key itself changed, verify its new fingerprint with FreakHosting before updating
+`FREAKHOSTING_KNOWN_HOSTS`; strict host-key checking will reject an unknown key.
 
 Then add the repository **variable** `FREAKHOSTING_DEPLOY_ENABLED` with value
 `true`. Without it the workflow only tests/builds and saves an artifact; it does
@@ -110,7 +115,7 @@ does not mean the website was deployed.
 `kex_exchange_identification: read: Connection reset by peer` means the SSH
 connection was reset during its initial handshake, before key authentication.
 The log alone cannot identify which server or network rule caused the reset.
-Check `FREAKHOSTING_SSH_HOST` and `FREAKHOSTING_SSH_PORT` against the provider's
+Check the workflow's `SSH_HOST` and `FREAKHOSTING_SSH_PORT` against the provider's
 external SSH endpoint; the application proxy port and internal panel hostname
 are not necessarily the SSH endpoint. Confirm with FreakHosting that external
 SSH is enabled for the website account and that GitHub Actions runners are

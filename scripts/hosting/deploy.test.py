@@ -30,6 +30,7 @@ if stage in ("prepare", "upload", "activate", "check"):
     event["hosts_mode"] = stat.S_IMODE(hosts.stat().st_mode)
     event["key_matches"] = key.read_text() == os.environ["SSH_PRIVATE_KEY"] + "\n"
     event["hosts_matches"] = hosts.read_text() == os.environ["SSH_KNOWN_HOSTS"] + "\n"
+    event["hosts_contents"] = hosts.read_text()
     event["key_path"] = str(key)
     event["hosts_path"] = str(hosts)
 if stage == "activate":
@@ -179,6 +180,17 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(self.calls("upload")[0]["args"][-1],
                          "website_user@ssh.example.test:arena-portal/sha-123-2.tar.gz")
         self.assertEqual(self.calls("activate")[0]["args"][-1], "bash -s -- 'sha-123-2'")
+
+    def test_new_ip_reuses_only_the_pinned_host_key_at_the_configured_port(self):
+        old_entry = "[old.example.test]:2222 ssh-ed25519 pinned-key"
+        result = self.deploy(arguments=("--check-ssh",), SSH_HOST="191.96.94.5",
+                             SSH_KNOWN_HOSTS=old_entry)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        call = self.calls("check")[0]
+        self.assertIn("website_user@191.96.94.5", call["args"])
+        self.assertIn("StrictHostKeyChecking=yes", call["args"])
+        self.assertIn(old_entry, call["hosts_contents"])
+        self.assertIn("[191.96.94.5]:2222 ssh-ed25519 pinned-key", call["hosts_contents"])
 
     def test_invalid_release_or_port_fails_before_network_access(self):
         for overrides in ({"RELEASE_ID": "../../escape"}, {"RELEASE_ID": "bad';touch injected"},

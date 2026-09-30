@@ -54,7 +54,7 @@ jobs:
       - name: Upload and activate bot on FreakHosting
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.FREAKHOSTING_BOT_DEPLOY_ENABLED == 'true'
         env:
-          SSH_HOST: ${{ secrets.FREAKHOSTING_SSH_HOST }}
+          SSH_HOST: '191.96.94.5'
           SSH_PORT: ${{ secrets.FREAKHOSTING_SSH_PORT }}
           SSH_USER: ${{ secrets.FREAKHOSTING_SSH_USER }}
           SSH_PRIVATE_KEY: ${{ secrets.FREAKHOSTING_SSH_KEY }}
