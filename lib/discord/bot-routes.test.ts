@@ -26,7 +26,7 @@ registerHooks({
       "server-only": "export {};",
       "@/lib/data/identity-catalogue": `export async function ensureIdentityCatalogue(){const state=globalThis.__discordBotRouteTest;state.catalogueCalls++;if(state.catalogueFailure)throw state.catalogueFailure;}`,
       "@/lib/data/database-pools": `export function getPortalDatabasePool(){const state=globalThis.__discordBotRouteTest;state.poolReads++;return state.pool}`,
-      "@/lib/data/identity-groups": `export async function getArenaAuthorityMembershipsForPlayers(){return globalThis.__discordBotRouteTest.authority}`,
+      "@/lib/data/identity-groups": `export async function getArenaAuthorityMembershipsForPlayers(){return globalThis.__discordBotRouteTest.authority} export async function reconcileDiscordVerifiedGroupMemberships(){return 0} export async function ensureDiscordVerifiedGroupMembership(){return false}`,
       "@/lib/data/portal-repository": `export async function getAuthoritativeExternalIdentityMemberships(){const state=globalThis.__discordBotRouteTest;if(state.externalFailure)throw state.externalFailure;return state.external}`,
     };
     if (specifier in modules) return { url: `data:text/javascript,${encodeURIComponent(modules[specifier])}`, shortCircuit: true };

@@ -7,6 +7,8 @@ import { PortalShell } from "@/components/ui/portal-shell";
 import { createProfileActionToken, getSession } from "@/lib/auth/session";
 import { getPlayerDashboard, getPlayerProfileInventoryPage, getPlayerProfileThemeKey, getPlayerSettings, getPublicPlayerProfile } from "@/lib/data/portal-repository";
 import { getEffectiveIdentity, reconcileIdentityGroupRewards } from "@/lib/data/identity-groups";
+import { getPublicDiscordProfileUrl } from "@/lib/discord/public-profile";
+import { discordVerifiedGroupKey } from "@/lib/discord/link-service";
 import { resolvePlayerIdentities } from "@/lib/player-identities";
 import { getSteamProfiles } from "@/lib/steam/profiles";
 import { isIndividualSteamId64 } from "@/lib/steam/steam-id";
@@ -55,7 +57,7 @@ export default async function PublicPlayerProfilePage({ params, searchParams }: 
         ...profile.sanctions.map((sanction) => sanction.adminSteamId ?? ""),
       ]
     : [];
-  const [identity, relatedPlayerIdentities] = await Promise.all([
+  const [identity, relatedPlayerIdentities, discordProfileUrl] = await Promise.all([
     getEffectiveIdentity({
       steamId,
       vipGroupNames: profile.vipGroups.map((group) => group.externalKey ?? group.name),
@@ -64,6 +66,7 @@ export default async function PublicPlayerProfilePage({ params, searchParams }: 
     resolvePlayerIdentities(
       moderationActorIds.map((actorSteamId) => ({ steamId: actorSteamId })),
     ),
+    getPublicDiscordProfileUrl(steamId),
   ]);
 
   // External Admins.Core and VIPCore memberships remain authoritative in the
@@ -92,5 +95,5 @@ export default async function PublicPlayerProfilePage({ params, searchParams }: 
     }
   }
 
-  return <PlayerProfilePage profile={profile} identity={identity} steamId={steamId} steamProfile={steamProfiles.get(steamId)} isOwnProfile={Boolean(isOwnProfile)} isAuthenticated={Boolean(session)} profileInventory={profileInventory} profileThemeKey={profileThemeKey} relatedPlayerIdentities={relatedPlayerIdentities} settingsOpen={settingsOpen} profileSettings={settings && session ? { csrf: createProfileActionToken(session), initialSettings: { inventoryVisibility: settings.inventoryVisibility, activeThemeId: settings.activeThemeId, activeThemeItemId: settings.activeThemeItemId, ownedThemes: settings.ownedThemes } } : undefined} />;
+  return <PlayerProfilePage profile={profile} identity={identity} steamId={steamId} steamProfile={steamProfiles.get(steamId)} discordProfileUrl={identity.groups.some((group) => group.key === discordVerifiedGroupKey()) ? discordProfileUrl : null} isOwnProfile={Boolean(isOwnProfile)} isAuthenticated={Boolean(session)} profileInventory={profileInventory} profileThemeKey={profileThemeKey} relatedPlayerIdentities={relatedPlayerIdentities} settingsOpen={settingsOpen} profileSettings={settings && session ? { csrf: createProfileActionToken(session), initialSettings: { inventoryVisibility: settings.inventoryVisibility, activeThemeId: settings.activeThemeId, activeThemeItemId: settings.activeThemeItemId, ownedThemes: settings.ownedThemes } } : undefined} />;
 }

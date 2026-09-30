@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { NavigationIndicator } from "@/components/ui/navigation-indicator";
+import { DiscordMark } from "@/components/icons/discord-mark";
 
 import { isPrimaryNavigationLinkActive } from "./primary-navigation-routes";
 
@@ -14,6 +15,7 @@ const primaryLinks = [
   { href: "/ranking", label: "Ranking" },
   { href: "/staff", label: "Staff" },
 ] as const;
+const discordInviteUrl = "https://discord.gg/eEkXZpSzrD";
 
 function PrimaryNavigationLinks({ pathname }: { pathname: string | null }) {
   return primaryLinks.map(({ href, label }, index) => {
@@ -73,6 +75,9 @@ export function PrimaryNavigation() {
       <nav className="main-nav" aria-label="Primary navigation">
         <NavigationIndicator />
         <PrimaryNavigationLinks pathname={pathname} />
+        <a className="nav-discord-link" href={discordInviteUrl} target="_blank" rel="noopener noreferrer" aria-label="Join the ARENA Discord server (opens in a new tab)">
+          <DiscordMark /><span>Discord</span>
+        </a>
       </nav>
       <div ref={menuRef} className="mobile-nav" data-open={expanded}>
         <button
@@ -92,6 +97,9 @@ export function PrimaryNavigation() {
           }
         }}>
           <PrimaryNavigationLinks pathname={pathname} />
+          <a className="nav-discord-link" href={discordInviteUrl} target="_blank" rel="noopener noreferrer" aria-label="Join the ARENA Discord server (opens in a new tab)">
+            <DiscordMark /><span>Discord</span>
+          </a>
         </nav>
       </div>
     </>

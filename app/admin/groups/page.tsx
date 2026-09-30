@@ -665,7 +665,7 @@ function GroupCard({
                 </label>
                 <label>
                   Display order
-                  <input name="sortOrder" type="number" min="0" max="65535" defaultValue="0" required />
+                  <input name="sortOrder" type="number" min="-1000000" max="1000000" defaultValue="0" required />
                 </label>
                 <div className={styles.inlineActions}>
                   <button className="staff-unban-button" name="action" value="group-tag-attach" type="submit">Attach</button>

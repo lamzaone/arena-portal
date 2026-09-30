@@ -1,11 +1,12 @@
 import "server-only";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { getPortalDatabasePool } from "@/lib/data/database-pools";
-import { getArenaAuthorityMembershipsForPlayers } from "@/lib/data/identity-groups";
+import { getArenaAuthorityMembershipsForPlayers, reconcileDiscordVerifiedGroupMemberships } from "@/lib/data/identity-groups";
 import { ensureIdentityCatalogue } from "@/lib/data/identity-catalogue";
 import { getAuthoritativeExternalIdentityMemberships } from "@/lib/data/portal-repository";
 import { createNotificationRepository } from "./notification-repository";
 import { resolveDiscordMembers, type DiscordGroup } from "./role-snapshot";
+import { discordVerifiedGroupKey } from "./link-service";
 
 export function discordPortalPool() {
   const pool = getPortalDatabasePool();
@@ -44,6 +45,7 @@ export async function getDiscordBotSnapshot() {
     rankWeight: Number(row.rank_weight),
   }));
   const links = linkRows.map((row) => ({ steamId: row.steam_id, discordUserId: row.discord_user_id }));
+  await reconcileDiscordVerifiedGroupMemberships(links.map((link) => link.steamId), discordVerifiedGroupKey());
   const authority = await getArenaAuthorityMembershipsForPlayers(links.map((link) => link.steamId));
   const members = await resolveDiscordMembers(groups, links, authority, getAuthoritativeExternalIdentityMemberships);
   return { groups, members,
