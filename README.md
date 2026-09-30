@@ -30,6 +30,15 @@ Before starting the portal, run `npm run thumbnails:warm -- --models --profile=s
 
 The Discord bridge is implemented in [`discord-bot/`](discord-bot/README.md): private account-link codes, managed group roles, and queued staff alerts from the portal and game. See [setup and migrations](docs/discord-bot-plan.md) before enabling it; run the bot as a separate Node process.
 
+Completed Discord links receive the enabled custom group `discord_verified` in
+Arena's global scope. Set `DISCORD_VERIFIED_GROUP_KEY` if that group's key differs.
+The bot snapshot and the linked account page retry interrupted assignments;
+`node --env-file=.env.local --experimental-transform-types scripts/reconcile-discord-verified.mjs`
+backfills existing links. Migration `036_signed_group_chat_tag_order.sql` permits
+negative group tag order values. Set the Verified tag to `-1` in Staff > Groups
+to put it before VIP tags. Public verified player profiles show their linked
+Discord profile, and the main navigation links to the ARENA Discord invite.
+
 1. Copy `.env.example` to `.env.local` and set `SITE_URL` to `http://localhost:3000` for local testing.
 2. Set a long random `SESSION_SECRET` for CSRF protection on sensitive staff actions.
 3. Run `npm install`, then `npm run dev`.

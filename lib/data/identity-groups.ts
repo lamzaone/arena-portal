@@ -2171,7 +2171,7 @@ async function getEffectiveIdentityUnsafe(input: {
               "LEFT JOIN portal_identity_player_tag_preferences AS preferences ON preferences.steam_id = ? AND preferences.tag_id = tags.id " +
               "WHERE links.group_id IN (" +
               groupPlaceholders +
-              ") ORDER BY CASE WHEN identity_group.source_type = 'vipcore' THEN 0 ELSE 1 END, links.sort_order, identity_group.profile_priority DESC, tags.id",
+              ") ORDER BY links.sort_order, identity_group.profile_priority DESC, tags.id",
             [steamId, ...groupIds],
           )
         : Promise.resolve([[], []] as unknown as [IdentityTagRow[], unknown]),
@@ -2822,6 +2822,103 @@ export async function assignIdentityGroup(input: {
   };
 }
 
+export async function ensureDiscordVerifiedGroupMembership(steamIdInput: string, groupKey: string) {
+  const steamId = identitySteamId(steamIdInput, "Player SteamID64");
+  if (!/^[a-z0-9][a-z0-9._:-]{0,63}$/.test(groupKey)) {
+    identityError("invalid_input", "The Discord verified group key is invalid.");
+  }
+  const portal = getIdentityPool();
+  if (!portal) identityError("storage_unavailable", "The portal presentation database is not configured.");
+  const [groups] = await portal.query<IdentityGroupRow[]>(
+    "SELECT id, group_key, source_type, enabled FROM portal_identity_groups WHERE group_key = ? LIMIT 1",
+    [groupKey],
+  );
+  const projection = groups[0];
+  if (!projection || projection.source_type !== "custom" || !asBoolean(projection.enabled)) {
+    identityError("group_not_found", "The Discord verified group must be an enabled custom group.");
+  }
+  const changed = await withArenaIdentityTransaction(async (connection) => {
+    const target = await lockArenaGlobalGroupTarget(connection, projection, {
+      requireCustom: true,
+      requireEnabled: true,
+    });
+    const existing = await lockArenaCustomMembership(connection, {
+      target,
+      steamId,
+      reference: null,
+    });
+    if (existing?.status === "active" && existing.expires_at === null) return false;
+    if (existing?.source_inventory_item_id || (existing && existing.status !== "active" && existing.status !== "revoked")) {
+      identityError("membership_not_found", "The Discord verified membership has an incompatible existing assignment.");
+    }
+    const now = new Date();
+    const membershipUuid = existing ? String(existing.membership_uuid) : randomUUID().toLowerCase();
+    const rowVersion = existing ? Number(existing.row_version) + 1 : 1;
+    if (existing) {
+      const [updated] = await connection.execute<ResultSetHeader>(
+        "UPDATE arena_group_memberships SET starts_at = ?, expires_at = NULL, status = 'active', " +
+          "provenance_type = 'system', provenance_reference = 'discord-verified', " +
+          "origin_command_uuid = NULL, granted_by_actor = 'discord-link', " +
+          "grant_reason = 'Discord account linked', revoked_at = NULL, revoked_by_actor = NULL, " +
+          "revoke_reason = NULL, row_version = row_version + 1 " +
+          "WHERE membership_uuid = ? AND row_version = ?",
+        [now, membershipUuid, Number(existing.row_version)],
+      );
+      if (updated.affectedRows !== 1) identityError("membership_not_found", "The Discord verified membership changed during assignment.");
+    } else {
+      await connection.execute(
+        "INSERT INTO arena_group_memberships " +
+          "(membership_uuid, group_id, scope_id, steam_id, starts_at, expires_at, status, " +
+          "provenance_type, provenance_reference, granted_by_actor, grant_reason, row_version) " +
+          "VALUES (?, ?, ?, ?, ?, NULL, 'active', 'system', 'discord-verified', 'discord-link', 'Discord account linked', 1)",
+        [membershipUuid, Number(target.arena_group_id), Number(target.scope_id), steamId, now],
+      );
+    }
+    await writeArenaCustomMembershipOutbox(connection, {
+      action: "assigned",
+      membershipUuid,
+      groupId: Number(target.arena_group_id),
+      portalGroupId: Number(projection.id),
+      scopeId: Number(target.scope_id),
+      steamId,
+      startsAt: now,
+      expiresAt: null,
+      status: "active",
+      rowVersion,
+      actorSteamId: "discord-link",
+      reason: "Discord account linked",
+    });
+    return true;
+  });
+  if (changed) await reconcileCustomMembershipRewardsFailSoft(steamId, `discord-verified:${steamId}`);
+  return changed;
+}
+
+export async function reconcileDiscordVerifiedGroupMemberships(steamIdsInput: string[], groupKey: string) {
+  if (!steamIdsInput.length) return 0;
+  const steamIds = [...new Set(steamIdsInput.map((steamId) => identitySteamId(steamId, "Player SteamID64")))];
+  const pool = getGameDatabasePool();
+  if (!pool) identityError("storage_unavailable", "The Arena group-authority database is not configured.");
+  const [rows] = await pool.query<Array<RowDataPacket & { steam_id: string }>>(
+    "SELECT membership.steam_id FROM arena_group_memberships AS membership " +
+      "INNER JOIN arena_groups AS arena_group ON arena_group.id = membership.group_id " +
+      "INNER JOIN arena_group_scopes AS group_scope ON group_scope.group_id = membership.group_id AND group_scope.scope_id = membership.scope_id " +
+      "INNER JOIN arena_scopes AS scope ON scope.id = membership.scope_id " +
+      "WHERE arena_group.group_key = ? AND arena_group.group_type = 'custom' " +
+      "AND arena_group.enabled = TRUE AND group_scope.enabled = TRUE AND scope.enabled = TRUE " +
+      "AND scope.scope_type = 'global' AND scope.scope_key = 'global' " +
+      "AND membership.status = 'active' AND membership.expires_at IS NULL",
+    [groupKey],
+  );
+  const members = new Set(rows.map((row) => String(row.steam_id)));
+  let changed = 0;
+  for (const steamId of steamIds) {
+    if (members.has(steamId)) continue;
+    if (await ensureDiscordVerifiedGroupMembership(steamId, groupKey)) changed++;
+  }
+  return changed;
+}
+
 export async function removeIdentityGroupMembership(input: {
   actor: IdentityFounderActor;
   requestKey: string;
@@ -3107,7 +3204,7 @@ export async function attachIdentityGroupTag(input: {
   const requestKey = identityRequestKey(input.requestKey);
   const groupId = identityId(input.groupId, "Group ID");
   const tagId = identityId(input.tagId, "Tag ID");
-  const sortOrder = identityInteger(input.sortOrder ?? 0, "Tag order", 0, 65_535);
+  const sortOrder = identityInteger(input.sortOrder ?? 0, "Tag order", -1_000_000, 1_000_000);
   return withIdentityTransaction(async (connection) => {
     await lockGroup(connection, groupId);
     await requireEnabledDefinition(connection, "portal_identity_chat_tags", tagId, "chat tag");

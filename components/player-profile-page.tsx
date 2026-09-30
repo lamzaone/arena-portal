@@ -21,6 +21,7 @@ import { ProfileThemeSurfaceBadge } from "@/components/profile-theme-surface-bad
 import { ProfileTabs } from "@/components/profile-tabs";
 import { ResilientRemoteImage } from "@/components/resilient-remote-image";
 import { SiteHeader } from "@/components/site-header";
+import { DiscordMark } from "@/components/icons/discord-mark";
 import { getLevelRank, getNextLevelRank, getRankProgress } from "@/lib/content/levelranks";
 import type { HitboxStats, PlayerDashboard, PlayerProfileInventoryPage, PublicPlayerProfile } from "@/lib/data/portal-repository";
 import type { EffectiveIdentity, EffectiveIdentityGroup } from "@/lib/data/identity-groups";
@@ -35,6 +36,7 @@ type PlayerProfilePageProps = {
   identity: EffectiveIdentity;
   steamId: string;
   steamProfile?: SteamProfile;
+  discordProfileUrl?: string | null;
   isOwnProfile: boolean;
   isAuthenticated: boolean;
   profileInventory: PlayerProfileInventoryPage;
@@ -186,7 +188,7 @@ function identityMembershipLabel(
   return "Custom portal group";
 }
 
-export function PlayerProfilePage({ profile, identity, steamId, steamProfile, isOwnProfile, isAuthenticated, profileInventory, profileThemeKey, relatedPlayerIdentities = {}, settingsOpen = false, profileSettings }: PlayerProfilePageProps) {
+export function PlayerProfilePage({ profile, identity, steamId, steamProfile, discordProfileUrl, isOwnProfile, isAuthenticated, profileInventory, profileThemeKey, relatedPlayerIdentities = {}, settingsOpen = false, profileSettings }: PlayerProfilePageProps) {
   const displayName = steamProfile?.name ?? profile.displayName ?? "ARENA player";
   const dashboard = isDashboard(profile) ? profile : null;
   const activeBan = dashboard?.bans.find((ban) => isActiveSanction(ban.expiresAt));
@@ -247,6 +249,9 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, is
                   <a className="public-player-steam-identity" href={steamProfileUrl} target="_blank" rel="noreferrer" title={`Open ${displayName}'s Steam profile`}>{steamId}</a>
                   <CopyToClipboardButton value={steamId} label={`Copy ${displayName}'s SteamID64`} />
                 </div>
+                {discordProfileUrl ? <a className="profile-discord-link" href={discordProfileUrl} target="_blank" rel="noopener noreferrer" aria-label={`Open ${displayName}'s Discord profile in a new tab`}>
+                  <DiscordMark /><span>Discord profile</span><ArrowRight aria-hidden="true" />
+                </a> : null}
                 {secondaryIdentityGroups.length > 0 ? <div className="profile-identity-badge-rack">
                   <IdentityGroupBadgeList groups={secondaryIdentityGroups} compact />
                 </div> : null}

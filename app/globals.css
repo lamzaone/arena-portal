@@ -4388,3 +4388,71 @@ main.staff-page :is(input, select, textarea, button) {
   align-items: normal;
   justify-content: normal;
 }
+
+/* Discord links are visible actions, with the same quiet framing as portal controls. */
+.tapped-page .main-nav .nav-discord-link,
+.mobile-nav nav .nav-discord-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--theme-border-strong, var(--border-bright));
+  border-radius: var(--theme-control-radius, 7px);
+  color: var(--theme-text, var(--text));
+  background: color-mix(in srgb, var(--theme-accent, var(--accent)) 15%, var(--theme-control-bg, var(--surface)));
+  font-weight: 800;
+  transition: border-color .18s ease, background-color .18s ease, transform .18s ease;
+}
+.tapped-page .main-nav .nav-discord-link::after { display: none; }
+.nav-discord-link svg { width: 18px; height: 18px; flex: 0 0 auto; }
+.tapped-page .main-nav .nav-discord-link:hover,
+.tapped-page .main-nav .nav-discord-link:focus-visible,
+.mobile-nav nav .nav-discord-link:hover,
+.mobile-nav nav .nav-discord-link:focus-visible {
+  border-color: var(--theme-accent-strong, var(--accent-bright));
+  color: var(--theme-text, var(--text));
+  background: var(--theme-control-hover, var(--accent-surface));
+  transform: translateY(-1px);
+  outline: 2px solid var(--theme-focus-ring, var(--accent-soft));
+  outline-offset: 2px;
+}
+.mobile-nav nav .nav-discord-link { margin-top: 5px; }
+
+.profile-discord-link {
+  display: inline-flex;
+  width: max-content;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 13px;
+  padding: 7px 11px;
+  border: 1px solid var(--theme-border-strong, var(--border-bright));
+  border-radius: var(--theme-control-radius, 7px);
+  color: var(--theme-text, var(--text));
+  background: color-mix(in srgb, var(--theme-accent, var(--accent)) 15%, var(--theme-control-bg, var(--surface)));
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+  transition: border-color .18s ease, background-color .18s ease, transform .18s ease;
+}
+.profile-discord-link svg:first-child { width: 18px; height: 18px; }
+.profile-discord-link svg:last-child { width: 13px; height: 13px; }
+.profile-discord-link:hover,
+.profile-discord-link:focus-visible {
+  border-color: var(--theme-accent-strong, var(--accent-bright));
+  color: var(--theme-text, var(--text));
+  background: var(--theme-control-hover, var(--accent-surface));
+  transform: translateY(-1px);
+  outline: 2px solid var(--theme-focus-ring, var(--accent-soft));
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-discord-link,
+  .profile-discord-link { transition: none !important; }
+  .nav-discord-link:hover,
+  .nav-discord-link:focus-visible,
+  .profile-discord-link:hover,
+  .profile-discord-link:focus-visible { transform: none !important; }
+}
