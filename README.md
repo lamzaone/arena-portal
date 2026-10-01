@@ -4,7 +4,7 @@ The player portal for the ARENA CS2 server: Steam sign-in, player dashboard, mod
 
 ## Sellback rate
 
-Set `ECONOMY_SELLBACK_PERCENT` in `lib/economy/sellback.ts` to the desired percentage (currently `60`). The payout calculation, inventory and sale text, audit rate, and sellback test expectations derive from it. The 5-Token minimum is controlled separately by `ECONOMY_SELLBACK_MINIMUM_TOKENS` in the same file. Run `npm run test:sellback` after changing either value, then rebuild the portal.
+Set `ECONOMY_SELLBACK_PERCENT` in `lib/economy/sellback.ts` to the desired percentage. The payout calculation, inventory and sale text, audit rate, and related test expectations derive from it. The 5-Token minimum is controlled separately by `ECONOMY_SELLBACK_MINIMUM_TOKENS` in the same file. Run `npm run test:sellback` and `npm run test:game-panel` after changing either value, then rebuild the portal.
 
 ## 3D weapon customization
 

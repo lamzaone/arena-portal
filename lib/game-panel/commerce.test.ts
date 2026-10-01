@@ -4,6 +4,10 @@ import { registerHooks } from "node:module";
 import { existsSync } from "node:fs";
 import { resolve, extname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
+import {
+  ECONOMY_SELLBACK_MINIMUM_TOKENS,
+  ECONOMY_SELLBACK_PERCENT,
+} from "../economy/sellback.ts";
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -107,7 +111,10 @@ test("sell preview prices the exact float and pattern with the sale payout polic
     cacheMarketplaceVariantQuotes: async () => {},
   } as never);
   const result = await service.quote({ steamId: "76561198000000001", itemIds: ["owned"] });
-  assert.equal(result.payoutTokens, 600);
+  assert.equal(
+    result.payoutTokens,
+    Math.max(ECONOMY_SELLBACK_MINIMUM_TOKENS, Math.floor((1_000 * ECONOMY_SELLBACK_PERCENT) / 100)),
+  );
   assert.deepEqual(result.skippedItemIds, []);
 });
 
