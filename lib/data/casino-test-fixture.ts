@@ -14,7 +14,7 @@ export function validateCasinoTestUrl(value: string) {
 }
 export async function casinoFixture(value: string) {
   const pool = mysql.createPool({ uri: validateCasinoTestUrl(value), connectionLimit: 8, timezone: 'Z', supportBigNumbers: true, bigNumberStrings: true });
-  const control = { random: (maximum: number) => maximum - 1, failLedger: false, beforeCommit: null as null | (() => Promise<void>) };
+  const control = { random: (maximum: number) => maximum - 1, failLedger: false, failPayout: false, beforeCommit: null as null | (() => Promise<void>), profiles: async (_ids: string[]) => new Map<string, import('../steam/profiles.ts').SteamProfile>() };
   const injectedPool = {
     query: pool.query.bind(pool), execute: pool.execute.bind(pool),
     async getConnection() {
@@ -24,6 +24,7 @@ export async function casinoFixture(value: string) {
         if (name === 'commit') return async () => { if (control.beforeCommit) await control.beforeCommit(); return target.commit(); };
         if (name === 'execute') return async (query: string, args: unknown[]) => {
           if (control.failLedger && query.includes('INSERT INTO portal_token_ledger')) throw new Error('injected ledger failure');
+          if (control.failPayout && query.includes('INSERT INTO portal_token_ledger') && args.includes('casino_payout')) throw new Error('injected payout failure');
           return target.execute(query, args as Parameters<typeof target.execute>[1]);
         };
         const member = Reflect.get(target, name);
@@ -31,7 +32,7 @@ export async function casinoFixture(value: string) {
       } });
     },
   };
-  Object.assign(globalThis, { __casinoTestPool: injectedPool, __casinoTestRandom: (maximum: number) => control.random(maximum) });
+  Object.assign(globalThis, { __casinoTestPool: injectedPool, __casinoTestRandom: (maximum: number) => control.random(maximum), __casinoTestProfiles: (ids: string[]) => control.profiles(ids) });
   function moduleUrl(path: string) {
     const file = (extname(path) ? [path] : [`${path}.ts`, `${path}.tsx`, resolve(path, 'index.ts')]).find(existsSync);
     return file ? pathToFileURL(file).href : null;
@@ -39,6 +40,7 @@ export async function casinoFixture(value: string) {
   const hooks = registerHooks({ resolve(specifier, context, next) {
     const stubs: Record<string, string> = {
       'server-only': 'export {};',
+      '../steam/profiles.ts': 'export function getSteamProfiles(ids){return globalThis.__casinoTestProfiles(ids)}',
       '@/lib/data/database-pools': 'export function getGameDatabasePool(){return globalThis.__casinoTestPool} export function getPortalDatabasePool(){return globalThis.__casinoTestPool}',
       '@/lib/data/identity-catalogue': 'export async function ensureIdentityCatalogue(){} export async function getIdentityCatalogueStatus(){} export async function syncIdentityCatalogue(){}',
       '@/lib/data/staff-vip-memberships': 'export class StaffVipMembershipError extends Error {}',

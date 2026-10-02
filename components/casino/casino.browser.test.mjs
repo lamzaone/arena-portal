@@ -5,11 +5,167 @@ import test from 'node:test';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 
-const artifacts = 'D:/ARENA/.artifacts/casino-ui';
+// Use the same real engines without requiring native .ts imports in this .mjs runner.
+const engineBundle=await build({stdin:{contents:"export {playRouletteMulti} from './lib/casino/roulette';export {playPlinkoBatch} from './lib/casino/plinko';",resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'node'});
+const {playRouletteMulti,playPlinkoBatch}=await import(`data:text/javascript;base64,${Buffer.from(engineBundle.outputFiles[0].text).toString('base64')}`);
+
+const artifacts = 'D:/ARENA/.artifacts/casino-premium';
 const initial = () => ({ balance: 1000, settings: { enabled: true, minBet: 2, maxBet: 10000, blackjackTimeoutMs: 300000 }, activeBlackjack: null, crash: null, history: [] });
 const round = (game, details, stake = 10) => ({ id: `${game}-1`, game, status: 'settled', stakeTokens: stake, payoutTokens: 0, createdAt: new Date().toISOString(), settledAt: new Date().toISOString(), details });
 const blackjack = (status = 'active') => ({ status, hands: [{ cards: [{ rank: '8', suit: 'hearts' }, { rank: '8', suit: 'spades' }], stakeTokens: 10, status: status === 'active' ? 'playing' : 'stood', natural: false, split: false, doubled: false, total: 16, soft: false }], currentHand: 0, dealer: { cards: [{ rank: '6', suit: 'clubs' }, status === 'active' ? null : { rank: 'K', suit: 'hearts' }], total: status === 'active' ? 6 : 16, soft: false }, totalStakeTokens: 10, payoutTokens: status === 'active' ? null : 20, availableActions: status === 'active' ? ['hit', 'stand', 'double', 'split'] : [] });
 const fitsViewport = async page => assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'each game fits the viewport');
+
+test('premium tables place chips, align a normal-motion wheel, keep concurrent balls moving, and expose real participants', async () => {
+  const bundle=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {CasinoLobby} from './components/casino/casino-lobby';import './app/casino/casino.css';createRoot(document.getElementById('root')).render(<CasinoLobby initial={${JSON.stringify(initial())}} steamId="premium-player" csrf="premium-csrf" themeKey="default"/>);`,loader:'tsx',resolveDir:process.cwd()},bundle:true,write:false,outfile:'premium.js',jsx:'automatic',define:{'process.env.NODE_ENV':'"development"'}});
+  const js=bundle.outputFiles.find(f=>f.path.endsWith('.js')).text;
+  const css=(await readFile('app/globals.css','utf8')).replace(/^@import[^\r\n]+[\r\n]*/gm,'')+bundle.outputFiles.find(f=>f.path.endsWith('.css')).text;
+  const server=createServer((req,res)=>{res.setHeader('content-type',req.url==='/premium.js'?'text/javascript':req.url==='/premium.css'?'text/css':'text/html');res.end(req.url==='/premium.js'?js:req.url==='/premium.css'?css:'<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/premium.css"></head><body><main id="root" style="max-width:1440px;margin:auto;padding:16px"></main><script src="/premium.js"></script></body></html>');});
+  await new Promise(done=>server.listen(0,'127.0.0.1',done)); await mkdir(artifacts,{recursive:true});
+  const browser=await chromium.launch();
+  try {
+    for(const width of [1440,375]) {
+      const context=await browser.newContext({viewport:{width,height:1000},recordVideo:{dir:artifacts,size:{width,height:1000}}});
+      const page=await context.newPage();page.setDefaultTimeout(8000);
+      const errors=[];page.on('pageerror',e=>errors.push(e.message));
+      let state={...initial(),settings:{...initial().settings,maxBet:100000}},posts=[];
+      await page.route('**/api/casino/**',async route=>{
+        if(route.request().method()==='GET'){await route.fulfill({json:{ok:true,...state}});return;}
+        const body=route.request().postDataJSON();posts.push(body);let result;
+        if(body.game==='roulette') {
+          const details=playRouletteMulti(body.stake,body.selection.bets,()=>32);
+          result={...round('roulette',details,body.stake),id:`wheel-${posts.length}`,payoutTokens:details.payoutTokens};
+        } else {
+          let draw=0;const details=playPlinkoBatch(body.stake,body.selection.rows,body.selection.risk,body.selection.ballCount,()=>draw++%2);
+          result={...round('plinko',details,details.stakeTokens),id:`batch-${posts.length}`,payoutTokens:details.payoutTokens};
+        }
+        state.balance-=result.stakeTokens;state.balance+=result.payoutTokens;state.history.unshift(result);
+        await route.fulfill({json:{ok:true,balance:state.balance,round:result}});
+      });
+      await page.goto(`http://127.0.0.1:${server.address().port}`);
+      await page.getByRole('button',{name:'10 Token chip',exact:true}).click();
+      await page.getByRole('button',{name:'Red',exact:true}).click();await page.getByRole('button',{name:'Red',exact:true}).click();
+      await page.getByRole('button',{name:'Number 7',exact:true}).click();
+      assert.match(await page.getByTestId('roulette-total').textContent(),/30/);
+      await page.getByRole('button',{name:'Undo chip',exact:true}).click();assert.match(await page.getByTestId('roulette-total').textContent(),/20/);
+      await page.getByRole('button',{name:'Clear table',exact:true}).click();assert.match(await page.getByTestId('roulette-total').textContent(),/0/);
+      await page.getByRole('button',{name:'Red',exact:true}).click();await page.getByRole('button',{name:'Red',exact:true}).click();await page.getByRole('button',{name:'Number 32',exact:true}).click();
+      await page.evaluate(()=>{
+        window.wheelMotion=[];let started=null;
+        const sample=()=>{const svg=document.querySelector('.roulette-wheel');if(svg?.dataset.revealing==='true'){const now=performance.now();started??=now;const angle=Number(svg.querySelector('.roulette-rotor').getAttribute('transform').match(/rotate\(([-\d.]+)/)[1]);window.wheelMotion.push({time:now-started,angle});}window.wheelMotionRaf=requestAnimationFrame(sample);};
+        window.wheelMotionRaf=requestAnimationFrame(sample);
+      });
+      await page.getByRole('button',{name:'Spin wheel',exact:true}).click();
+      await page.getByText('Revealing spin…',{exact:true}).waitFor();await page.locator('.roulette-wheel').scrollIntoViewIfNeeded();assert.equal(await page.getByRole('button',{name:'Spin wheel',exact:true}).isDisabled(),true);
+      assert.equal(posts.length,1);assert.equal(posts[0].stake,30);assert.deepEqual(posts[0].selection.bets,[{selection:{kind:'color',value:'red'},stakeTokens:20},{selection:{kind:'number',value:32},stakeTokens:10}]);
+      const first=await page.locator('.roulette-rotor').getAttribute('transform');await page.waitForTimeout(300);assert.notEqual(await page.locator('.roulette-rotor').getAttribute('transform'),first);
+      const rotation=await page.locator('.roulette-wheel').evaluate(async svg=>{
+        const sample=()=>{const rotor=svg.querySelector('.roulette-rotor');const ball=svg.querySelector('.roulette-ball');return {wheel:Number(rotor.getAttribute('transform').match(/rotate\(([-\d.]+)/)[1]),ball:Math.atan2(Number(ball.getAttribute('cx'))-200,200-Number(ball.getAttribute('cy')))*180/Math.PI};};
+        const a=sample();await new Promise(resolve=>setTimeout(resolve,32));const b=sample();return {wheel:b.wheel-a.wheel,ball:((b.ball-a.ball+540)%360)-180};
+      });
+      assert.ok(rotation.wheel>0&&rotation.ball<0,`wheel and ball must counterrotate, signed deltas: ${JSON.stringify(rotation)}`);
+      await page.screenshot({path:`${artifacts}/wheel-moving-${width}.png`,fullPage:true});
+      await page.locator('.roulette-wheel[data-revealing="false"]').waitFor();
+      const speeds=await page.evaluate(()=>{
+        cancelAnimationFrame(window.wheelMotionRaf);
+        const speed=(start,end)=>{const frames=window.wheelMotion.filter(frame=>frame.time>=start&&frame.time<=end);if(frames.length<2)throw Error('Missing real wheel frames');return (frames.at(-1).angle-frames[0].angle)/(frames.at(-1).time-frames[0].time);};
+        return {launch:speed(0,180),middle:speed(600,1100),braking:speed(2900,3400)};
+      });
+      assert.ok(speeds.launch>0&&speeds.middle>speeds.launch*1.4,`wheel accelerates after launch: ${JSON.stringify(speeds)}`);
+      assert.ok(speeds.braking>0&&speeds.braking<speeds.middle*.5,`wheel brakes before landing: ${JSON.stringify(speeds)}`);
+      const alignment=await page.locator('.roulette-wheel').evaluate(svg=>{const p=svg.querySelector('[data-pocket="32"]'),b=svg.querySelector('.roulette-ball');const a=svg.createSVGPoint();a.x=+p.getAttribute('data-x');a.y=+p.getAttribute('data-y');const q=a.matrixTransform(p.getCTM());const c=svg.createSVGPoint();c.x=+b.getAttribute('cx');c.y=+b.getAttribute('cy');const d=c.matrixTransform(b.getCTM());const center=svg.createSVGPoint();center.x=200;center.y=200;const o=center.matrixTransform(svg.getCTM());return Math.abs(Math.atan2(q.y-o.y,q.x-o.x)-Math.atan2(d.y-o.y,d.x-o.x));});
+      assert.ok(alignment<.001,'winning pocket center aligns exactly with landed ball');
+      assert.equal(await page.getByRole('button',{name:'Red',exact:true}).getAttribute('data-winning'),'true');assert.equal(await page.getByRole('button',{name:'Number 32',exact:true}).getAttribute('data-winning'),'true');
+      await fitsViewport(page);await page.screenshot({path:`${artifacts}/roulette-premium-${width}.png`,fullPage:true});
+      await page.getByRole('button',{name:'Clear table',exact:true}).click();await page.getByRole('button',{name:'100000 Token chip',exact:true}).click();await page.getByRole('button',{name:'Red',exact:true}).click();assert.match(await page.getByTestId('roulette-total').textContent(),/100,000/);await page.getByRole('button',{name:'Spin wheel',exact:true}).click();await page.getByRole('alert').filter({hasText:'balance'}).waitFor();assert.equal(posts.length,1);
+      await page.getByRole('button',{name:'Clear table',exact:true}).click();await page.getByRole('button',{name:'Repeat table',exact:true}).click();assert.match(await page.getByTestId('roulette-total').textContent(),/30/);
+      await page.getByRole('tab',{name:'Plinko',exact:true}).click();await page.getByLabel('Ball count').fill('5');
+      assert.match(await page.getByTestId('plinko-cost').textContent(),/10 Tokens/);
+      await page.getByRole('button',{name:'Drop balls',exact:true}).click();
+      await page.waitForFunction(()=>document.querySelectorAll('.plinko-moving-ball').length===5);
+      const position=await page.locator('.plinko-moving-ball').first().getAttribute('cy');await page.waitForTimeout(160);assert.notEqual(await page.locator('.plinko-moving-ball').first().getAttribute('cy'),position);
+      assert.equal(await page.getByLabel('Rows',{exact:true}).isDisabled(),true);
+      await page.getByRole('button',{name:'Drop balls',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.plinko-moving-ball').length===10);await page.locator('.plinko-board').scrollIntoViewIfNeeded();
+      await page.screenshot({path:`${artifacts}/plinko-multiball-${width}.png`,fullPage:true});
+      await fitsViewport(page);await page.waitForFunction(()=>document.querySelectorAll('.plinko-moving-ball').length===0);
+      assert.equal(await page.getByLabel('Rows',{exact:true}).isEnabled(),true);
+      await page.getByLabel('Stake (Tokens)').fill('300');await page.getByRole('button',{name:'Drop balls',exact:true}).click();await page.getByRole('alert').filter({hasText:'batch'}).waitFor();assert.equal(posts.length,3);
+      state.crash={roundId:'public-round',phase:'betting',serverTime:Date.now(),opensAt:Date.now(),startAt:Date.now()+8000,crashesAt:null,multiplier:100,recent:[],bet:null,participants:[{betId:'a',steamId:'1',displayName:'Mara',avatarUrl:null,stakeTokens:40,status:'pending',cashoutMultiplier:null,payoutTokens:null},{betId:'b',steamId:'2',displayName:'Denis',avatarUrl:null,stakeTokens:50,status:'pending',cashoutMultiplier:null,payoutTokens:null}]};
+      await page.getByRole('tab',{name:'Crash',exact:true}).click();await page.getByText('Mara',{exact:true}).waitFor();assert.equal(await page.locator('.crash-participant').count(),2);
+      state.crash={...state.crash,phase:'flying',serverTime:Date.now(),startAt:Date.now()-8000,multiplier:161,participants:state.crash.participants.map((p,i)=>({...p,status:i?'active':'cashed_out',cashoutMultiplier:i?null:150,payoutTokens:i?null:60}))};
+      await page.getByRole('button',{name:'Refresh balance and rounds'}).click();await page.getByText('60 Tokens returned',{exact:true}).waitFor();
+      await page.screenshot({path:`${artifacts}/crash-participants-${width}.png`,fullPage:true});await fitsViewport(page);
+      state.crash={...state.crash,phase:'crashed',multiplier:170,crashesAt:Date.now(),participants:state.crash.participants.map(p=>p.status==='active'?{...p,status:'lost',payoutTokens:0}:p)};
+      await page.getByRole('button',{name:'Refresh balance and rounds'}).click();await page.getByText('0 Tokens returned',{exact:true}).waitFor();
+      state.crash={...state.crash,roundId:'next',phase:'betting',participants:[]};await page.getByRole('button',{name:'Refresh balance and rounds'}).click();await page.getByText('The table is open. Be the first to join.',{exact:true}).waitFor();
+      for(const game of ['Blackjack','Slots']){await page.getByRole('tab',{name:game,exact:true}).click();await fitsViewport(page);await page.screenshot({path:`${artifacts}/${game.toLowerCase()}-premium-${width}.png`,fullPage:true});}
+      assert.deepEqual(errors,[]);const video=page.video();await context.close();await video.saveAs(`${artifacts}/premium-motion-${width}.webm`);
+    }
+  } finally {await browser.close();await new Promise(done=>server.close(done));}
+});
+
+test('shared recovery finishes incompatible Plinko playback before adopting different rows and risk', async()=>{
+  const bundle=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {CasinoLobby} from './components/casino/casino-lobby';import './app/casino/casino.css';createRoot(document.getElementById('root')).render(<CasinoLobby initial={${JSON.stringify(initial())}} steamId="recovery-geometry" csrf="current-csrf" themeKey="default"/>);`,loader:'tsx',resolveDir:process.cwd()},bundle:true,write:false,outfile:'recovery.js',jsx:'automatic',define:{'process.env.NODE_ENV':'"development"'}});
+  const js=bundle.outputFiles.find(file=>file.path.endsWith('.js')).text;
+  const css=(await readFile('app/globals.css','utf8')).replace(/^@import[^\r\n]+[\r\n]*/gm,'')+bundle.outputFiles.find(file=>file.path.endsWith('.css')).text;
+  const server=createServer((req,res)=>{res.setHeader('content-type',req.url==='/fixture.js'?'text/javascript':req.url==='/fixture.css'?'text/css':'text/html');res.end(req.url==='/fixture.js'?js:req.url==='/fixture.css'?css:'<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/fixture.css"></head><body><main id="root" style="max-width:1200px;margin:auto;padding:16px"></main><script src="/fixture.js"></script></body></html>');});
+  await new Promise(done=>server.listen(0,'127.0.0.1',done));const browser=await chromium.launch();
+  try{
+    const context=await browser.newContext({viewport:{width:1280,height:1000},recordVideo:{dir:artifacts,size:{width:1280,height:1000}}});
+    const pages=await Promise.all([context.newPage(),context.newPage()]);const [page,other]=pages;pages.forEach(p=>p.setDefaultTimeout(8000));
+    let state=initial(),accepted=0;const receipts=new Map(),requests=[];
+    await context.route('**/api/casino/**',async route=>{
+      if(route.request().method()==='GET'){await route.fulfill({json:{ok:true,...state}});return;}
+      const body=route.request().postDataJSON();requests.push(body);
+      if(receipts.has(body.idempotencyKey)){await route.fulfill({json:receipts.get(body.idempotencyKey)});return;}
+      accepted++;let draw=0;const details=playPlinkoBatch(body.stake,body.selection.rows,body.selection.risk,body.selection.ballCount,()=>draw++%2);
+      const result={...round('plinko',details,details.stakeTokens),id:body.selection.rows===12?'own-twelve':'recovered-eight',payoutTokens:details.payoutTokens};
+      state.balance-=result.stakeTokens;state.balance+=result.payoutTokens;state.history.unshift(result);
+      const receipt={ok:true,balance:state.balance,round:result};receipts.set(body.idempotencyKey,receipt);
+      if(body.selection.rows===8){await route.abort('failed');return;}await route.fulfill({json:receipt});
+    });
+    await Promise.all(pages.map(p=>p.goto(`http://127.0.0.1:${server.address().port}`)));
+    await page.getByRole('tab',{name:'Plinko',exact:true}).click();
+    await page.getByRole('button',{name:'Drop ball',exact:true}).click();await page.waitForFunction(()=>document.querySelector('[data-ball-id="own-twelve:0"]'));
+    await page.getByText('Request confirmed. Your balance and rounds have been refreshed.',{exact:true}).waitFor();
+    // Seed the complete accepted-but-unconfirmed receipt from the other tab.
+    // Existing recovery tests exercise response loss; this case isolates adoption during motion.
+    const original={path:'/api/casino/play',payload:{game:'plinko',stake:2,selection:{rows:8,risk:'high',ballCount:2}},key:'recovered-geometry-original'};
+    let draw=0;const details=playPlinkoBatch(2,8,'high',2,()=>draw++%2);
+    const recovered={...round('plinko',details,details.stakeTokens),id:'recovered-eight',payoutTokens:details.payoutTokens};
+    accepted++;state.balance-=recovered.stakeTokens;state.balance+=recovered.payoutTokens;state.history.unshift(recovered);
+    receipts.set(original.key,{ok:true,balance:state.balance,round:recovered});
+    await other.evaluate(original=>localStorage.setItem(`tapped.casino.pending.v2.recovery-geometry.${original.key}`,JSON.stringify(original)),original);
+    await page.getByRole('button',{name:'Retry pending request',exact:true}).waitFor();
+    assert.equal(await page.locator('.plinko-board').getAttribute('aria-label'),'12 row Plinko board; 1 balls falling');
+    assert.equal(await page.getByLabel('Rows',{exact:true}).inputValue(),'12');
+    await page.evaluate(()=>{window.geometryFrames=[];const collect=()=>{const board=document.querySelector('.plinko-board');window.geometryFrames.push({board:board?.getAttribute('aria-label'),ids:[...document.querySelectorAll('.plinko-moving-ball')].map(ball=>ball.dataset.ballId)});window.geometryRaf=requestAnimationFrame(collect);};window.geometryRaf=requestAnimationFrame(collect);});
+    const beforeReplay=state.balance;await page.getByRole('button',{name:'Retry pending request',exact:true}).click();
+    await page.waitForFunction(()=>document.querySelector('.plinko-board')?.getAttribute('aria-label')?.startsWith('8 row'));
+    assert.equal(await page.locator('[data-ball-id="own-twelve:0"]').count(),0,'old playback finished before board changed');
+    assert.equal(await page.getByLabel('Rows',{exact:true}).inputValue(),'8');assert.equal(await page.getByLabel('Risk',{exact:true}).inputValue(),'high');
+    assert.equal(await page.getByLabel('Rows',{exact:true}).isDisabled(),true);assert.equal(await page.getByLabel('Risk',{exact:true}).isDisabled(),true);
+    const frames=await page.evaluate(()=>{cancelAnimationFrame(window.geometryRaf);return window.geometryFrames;});
+    assert.ok(frames.every(frame=>!frame.board?.startsWith('8 row')||frame.ids.every(id=>id.startsWith('recovered-eight:'))),'every drawn 8-row frame must contain only its matching trajectories');
+    assert.equal(accepted,2,'financial recovery never creates another wager');assert.equal(state.balance,beforeReplay);assert.equal(requests.length,2);assert.equal(requests[1].idempotencyKey,original.key);assert.deepEqual(requests[1].selection,original.payload.selection);
+    await page.locator('.plinko-board').scrollIntoViewIfNeeded();await page.screenshot({path:`${artifacts}/plinko-recovered-geometry.png`,fullPage:true});
+    // Risk alone also changes the payout pockets, even when peg rows match.
+    const riskOriginal={path:'/api/casino/play',payload:{game:'plinko',stake:2,selection:{rows:8,risk:'low',ballCount:1}},key:'recovered-risk-original'};
+    draw=0;const lowDetails=playPlinkoBatch(2,8,'low',1,()=>draw++%2);
+    const lowRound={...round('plinko',lowDetails,lowDetails.stakeTokens),id:'recovered-eight-low',payoutTokens:lowDetails.payoutTokens};
+    accepted++;state.balance-=lowRound.stakeTokens;state.balance+=lowRound.payoutTokens;state.history.unshift(lowRound);receipts.set(riskOriginal.key,{ok:true,balance:state.balance,round:lowRound});
+    await other.evaluate(original=>localStorage.setItem(`tapped.casino.pending.v2.recovery-geometry.${original.key}`,JSON.stringify(original)),riskOriginal);
+    await page.getByRole('button',{name:'Retry pending request',exact:true}).waitFor();
+    assert.equal(await page.locator('[data-ball-id^="recovered-eight:"]').count(),2);
+    const beforeRiskReplay=state.balance;await page.getByRole('button',{name:'Retry pending request',exact:true}).click();
+    await page.waitForFunction(()=>document.querySelector('select[aria-label=Risk]')?.value==='low');
+    assert.equal(await page.locator('[data-ball-id^="recovered-eight:"]').count(),0,'risk-only recovery finishes prior payout-pocket playback');
+    await page.waitForFunction(()=>document.querySelector('[data-ball-id="recovered-eight-low:0"]'));
+    assert.equal(await page.getByLabel('Rows',{exact:true}).isDisabled(),true);assert.equal(await page.getByLabel('Risk',{exact:true}).isDisabled(),true);
+    assert.equal(accepted,3);assert.equal(state.balance,beforeRiskReplay);assert.equal(requests.length,3);assert.equal(requests[2].idempotencyKey,riskOriginal.key);
+    await page.waitForFunction(()=>document.querySelectorAll('.plinko-moving-ball').length===0);assert.equal(await page.getByLabel('Rows',{exact:true}).isEnabled(),true);assert.equal(await page.getByLabel('Risk',{exact:true}).isEnabled(),true);
+    const video=page.video();await context.close();await video.saveAs(`${artifacts}/plinko-recovered-geometry.webm`);
+  }finally{await browser.close();await new Promise(done=>server.close(done));}
+});
 
 test('two existing tabs preserve every simultaneous request identity and recover only their own records', async () => {
   const bundle = await build({ stdin: { contents: `import React from 'react'; import {createRoot} from 'react-dom/client'; import {CasinoLobby} from './components/casino/casino-lobby'; createRoot(document.getElementById('root')).render(<CasinoLobby initial={${JSON.stringify(initial())}} steamId="player-tabs" csrf={new URLSearchParams(location.search).get('csrf')||'old-csrf'} themeKey="default"/>);`, loader:'tsx',resolveDir:process.cwd() },bundle:true,write:false,jsx:'automatic',define:{'process.env.NODE_ENV':'"development"'} });
@@ -41,7 +197,8 @@ test('two existing tabs preserve every simultaneous request identity and recover
         if(firstRoutes.length===2){await firstRoutes[0].route.abort('failed');if(loseBoth)await firstRoutes[1].route.abort('failed');else await firstRoutes[1].route.fulfill({json:firstRoutes[1].result});}
       });
       await Promise.all(pages.map(page=>page.goto(url)));
-      await Promise.all(pages.map(page=>page.getByLabel('Stake (Tokens)').fill('10')));
+      await Promise.all(pages.map(page=>page.getByRole('button',{name:'10 Token chip',exact:true}).click()));
+      await Promise.all(pages.map(page=>page.getByRole('button',{name:'Red',exact:true}).click()));
       await Promise.all(pages.map(page=>page.getByRole('button',{name:'Spin wheel'}).click()));
       await pages[0].waitForFunction(()=>document.querySelector('[role="alert"]')||document.body.textContent.includes('Request confirmed.'));
       await pages[1].waitForFunction(()=>document.querySelector('[role="alert"]')||document.body.textContent.includes('Request confirmed.'));
@@ -68,7 +225,7 @@ test('two existing tabs preserve every simultaneous request identity and recover
       const page=await context.newPage();let posts=0;
       await page.route('**/api/casino/**',async route=>{if(route.request().method()==='POST')posts++;await route.fulfill({json:{ok:true,...initial()}});});
       await page.goto(url);
-      if(method==='setItem')await page.getByRole('button',{name:'Spin wheel'}).click();
+      if(method==='setItem'){await page.getByRole('button',{name:'Red',exact:true}).click();await page.getByRole('button',{name:'Spin wheel'}).click();}
       await page.getByRole('alert').filter({hasText:'storage is unavailable'}).waitFor();
       assert.equal(await page.getByRole('button',{name:'Spin wheel'}).isDisabled(),true);
       assert.equal(posts,0,'inaccessible storage cannot send an unrecoverable wager');
@@ -80,7 +237,7 @@ test('two existing tabs preserve every simultaneous request identity and recover
 test('real casino clients recover accepted wagers across reload, render all games, and fit mobile', async () => {
   const bundle = await build({ stdin: { contents: `import React from 'react'; import {createRoot} from 'react-dom/client'; import {CasinoLobby} from './components/casino/casino-lobby'; import './app/casino/casino.css'; const query=new URLSearchParams(location.search); createRoot(document.getElementById('root')).render(<CasinoLobby initial={${JSON.stringify(initial())}} steamId={query.get('account')||'player-1'} csrf={query.get('csrf')||'csrf-one'} themeKey="default"/>);`, loader: 'tsx', resolveDir: process.cwd() }, bundle: true, write: false, outfile: 'fixture.js', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"development"' } });
   const javascript = bundle.outputFiles.find(file => file.path.endsWith('.js')).text;
-  const css = await readFile('app/globals.css', 'utf8') + bundle.outputFiles.find(file => file.path.endsWith('.css')).text;
+  const css = (await readFile('app/globals.css', 'utf8')).replace(/^@import[^\r\n]+[\r\n]*/gm,'') + bundle.outputFiles.find(file => file.path.endsWith('.css')).text;
   const server = createServer((request, response) => {
     response.setHeader('content-type', request.url === '/fixture.js' ? 'text/javascript' : request.url === '/fixture.css' ? 'text/css' : 'text/html');
     response.end(request.url === '/fixture.js' ? javascript : request.url === '/fixture.css' ? css : '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/fixture.css"></head><body><main id="root" style="max-width:1200px;margin:auto;padding:16px"></main><script src="/fixture.js"></script></body></html>');
@@ -130,11 +287,15 @@ test('real casino clients recover accepted wagers across reload, render all game
       });
       await page.goto(url);
       await page.getByRole('tab', { name: 'Roulette', exact: true }).waitFor();
-      await page.getByLabel('Stake (Tokens)').fill('1001');
+      await page.getByRole('button',{name:'1000 Token chip',exact:true}).click();
+      await page.getByRole('button',{name:'Red',exact:true}).click();
+      await page.getByRole('button',{name:'Red',exact:true}).click();
       await page.getByRole('button', { name: 'Spin wheel' }).click();
       await page.getByRole('alert').filter({ hasText: 'balance' }).waitFor();
       assert.equal(requests.length, 0);
-      await page.getByLabel('Stake (Tokens)').fill('10');
+      await page.getByRole('button',{name:'Clear table',exact:true}).click();
+      await page.getByRole('button',{name:'10 Token chip',exact:true}).click();
+      await page.getByRole('button',{name:'Red',exact:true}).click();
       await page.getByRole('button', { name: 'Spin wheel' }).click();
       await page.getByRole('button', { name: 'Retry pending request' }).waitFor();
       assert.equal(await page.getByRole('button', { name: 'Spin wheel' }).isDisabled(), true);
@@ -184,6 +345,8 @@ test('real casino clients recover accepted wagers across reload, render all game
       await page.getByRole('button', { name: 'Drop ball' }).click();
       await page.getByTestId('plinko-result').waitFor();
       assert.match(await page.getByTestId('plinko-result').textContent(), /0\.97/);
+      await page.waitForFunction(()=>!document.querySelector('select[aria-label=Rows]')?.disabled);
+      assert.equal(await page.getByLabel('Rows',{exact:true}).isEnabled(),true,'reduced-motion batches must unlock geometry after immediate landing');
       await fitsViewport(page);
       await page.screenshot({ path: `${artifacts}/plinko-${width}.png`, fullPage: true });
       state.crash = { roundId: 'crash-1', phase: 'betting', serverTime: Date.now(), opensAt: Date.now(), startAt: Date.now() + 8000, crashesAt: null, multiplier: 100, recent: [{ roundId: 'old', multiplier: 175, crashedAt: Date.now() - 10000 }], bet: null };
@@ -255,6 +418,8 @@ test('real casino clients recover accepted wagers across reload, render all game
       await page.getByText('Tables open', { exact: true }).waitFor();
       await page.getByRole('tab', { name: 'Roulette', exact: true }).click();
       outage = true;
+      await page.getByRole('button',{name:'10 Token chip',exact:true}).click();
+      await page.getByRole('button',{name:'Red',exact:true}).click();
       await page.getByRole('button', { name: 'Spin wheel' }).click();
       await page.getByRole('button', { name: 'Retry pending request' }).waitFor();
       assert.match(await page.getByRole('alert').textContent(), /temporarily unavailable/);
@@ -274,7 +439,7 @@ test('real casino clients recover accepted wagers across reload, render all game
 test('Blackjack fresh state supersedes active receipts after immediate, polled, and replayed settlement', async () => {
   const bundle = await build({ stdin: { contents: `import React from 'react';import {createRoot} from 'react-dom/client';import {CasinoLobby} from './components/casino/casino-lobby';import './app/casino/casino.css';createRoot(document.getElementById('root')).render(<CasinoLobby initial={${JSON.stringify(initial())}} steamId="blackjack-player" csrf="current-csrf" themeKey="default"/>);`, loader: 'tsx', resolveDir: process.cwd() }, bundle: true, write: false, outfile: 'blackjack.js', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"development"' } });
   const javascript = bundle.outputFiles.find(file => file.path.endsWith('.js')).text;
-  const css = await readFile('app/globals.css', 'utf8') + bundle.outputFiles.find(file => file.path.endsWith('.css')).text;
+  const css = (await readFile('app/globals.css', 'utf8')).replace(/^@import[^\r\n]+[\r\n]*/gm,'') + bundle.outputFiles.find(file => file.path.endsWith('.css')).text;
   const server = createServer((request, response) => { response.setHeader('content-type', request.url === '/blackjack.js' ? 'text/javascript' : request.url === '/blackjack.css' ? 'text/css' : 'text/html'); response.end(request.url === '/blackjack.js' ? javascript : request.url === '/blackjack.css' ? css : '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/blackjack.css"></head><body><main id="root" style="max-width:1200px;margin:auto;padding:16px"></main><script src="/blackjack.js"></script></body></html>'); });
   await new Promise(done => server.listen(0, '127.0.0.1', done));
   let browser;
@@ -351,7 +516,7 @@ test('real casino server page fails closed with wallet, inherits one account nav
   };
   const bundle = await build({ stdin: { contents: `import React from 'react';import {createRoot} from 'react-dom/client';import CasinoPage,{metadata} from './app/casino/page';window.fixtureMetadata=metadata;CasinoPage().then(page=>createRoot(document.getElementById('root')).render(page));`, loader: 'tsx', resolveDir: process.cwd() }, bundle: true, write: false, outfile: 'page.js', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"development"' }, plugins: [{ name: 'page-server-boundaries', setup(builder) { builder.onResolve({ filter: /.*/ }, args => Object.hasOwn(modules, args.path) ? { path: args.path, namespace: 'page-fixture' } : undefined); builder.onLoad({ filter: /.*/, namespace: 'page-fixture' }, args => ({ contents: modules[args.path], loader: 'tsx', resolveDir: process.cwd() })); } }] });
   const javascript = bundle.outputFiles.find(file => file.path.endsWith('.js')).text;
-  const css = await readFile('app/globals.css', 'utf8') + bundle.outputFiles.find(file => file.path.endsWith('.css')).text;
+  const css = (await readFile('app/globals.css', 'utf8')).replace(/^@import[^\r\n]+[\r\n]*/gm,'') + bundle.outputFiles.find(file => file.path.endsWith('.css')).text;
   const server = createServer((request, response) => { response.setHeader('content-type', request.url === '/page.js' ? 'text/javascript' : request.url === '/page.css' ? 'text/css' : 'text/html'); response.end(request.url === '/page.js' ? javascript : request.url === '/page.css' ? css : '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/page.css"></head><body><div id="root"></div><script src="/page.js"></script></body></html>'); });
   await new Promise(done => server.listen(0, '127.0.0.1', done));
   let browser;

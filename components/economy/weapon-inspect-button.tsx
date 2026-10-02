@@ -48,7 +48,6 @@ export function WeaponInspectButton({ item, samplePattern = false }: Props) {
         <button type="button" aria-pressed={view === "hands"} onClick={() => setView("hands")}><Hand size={15} /> In hands</button>
       </div>
       <div className={styles.stage}>
-        <div className={styles.frame}>
         <SkinViewer key={reload} item={preview} view={view} title={`${item.displayName}, float ${preview.float}, pattern ${preview.seed}`}
           style={{ width: "100%", height: "100%" }}
           settings={{ camera: { defaultZoom: 1 }, quality: { renderScale: 1, bloom: 0, shadows: false }, environment: { background: "transparent", map: "Warehouse" } }}
@@ -56,7 +55,6 @@ export function WeaponInspectButton({ item, samplePattern = false }: Props) {
           onError={() => setFailed(true)}
           loading={<div className={styles.loading}><LoaderCircle size={18} /> Loading 3D inspection…</div>}
           fallback={<div className={styles.loading}>3D inspection is unavailable.</div>} />
-        </div>
       </div>
       <footer className={styles.details}>
         <span>Float <b>{preview.float}</b></span>

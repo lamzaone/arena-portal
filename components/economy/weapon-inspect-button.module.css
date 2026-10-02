@@ -7,9 +7,9 @@
 .dialog button[aria-pressed=true] { border-color: var(--accent-bright); color: var(--text); }
 .dialog :is(button,a):focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 2px; }
 .views { display: flex; gap: 6px; padding: 8px 14px; }
-.stage { position: relative; height: clamp(340px, 64dvh, 680px); overflow: hidden; background: #0a090b; }
-.frame { position: absolute; inset: -64px 0 0; }
-.loading { height: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; color: var(--muted); background: #0a090b; font-size: 12px; }
+/* Size the whole viewer to the stage so its SkinHub credit remains visible. */
+.stage { position: relative; height: clamp(340px, 64dvh, 680px); overflow: hidden; background: radial-gradient(ellipse at 50% 40%, #5a5a5e 0%, #36363b 48%, #1b1b1f 100%); }
+.loading { height: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; color: #e4e4e7; font-size: 12px; }
 .details { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 14px; border-top: 1px solid var(--border); font-size: 13px; color: var(--muted); }
 .details b { color: var(--text); font-weight: 500; }
 .details a { margin-left: auto; color: var(--accent-soft); }

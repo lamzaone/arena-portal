@@ -1,12 +1,57 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { playRoulette } from './roulette.ts';
-import { playPlinko, plinkoPaytable } from './plinko.ts';
+import { playRoulette, playRouletteMulti, normalizeRouletteBets, rouletteMaximumReturn } from './roulette.ts';
+import { playPlinko, playPlinkoBatch, plinkoBatchExposure, plinkoPaytable } from './plinko.ts';
+import { getCasinoSettings } from './settings.ts';
 import { startBlackjack, actBlackjack, publicBlackjack, blackjackPayout } from './blackjack.ts';
 import { crashPoint, crashMultiplier, crashDuration } from './crash.ts';
 import type { BlackjackState, Card, CardRank, RouletteSelection } from './types.ts';
 
 const card = (rank: CardRank): Card => ({ rank, suit: 'spades' });
+test('one pocket settles the whole board and normalizes repeated placements', () => {
+  let draws = 0;
+  const bets = [{selection:{kind:'number' as const,value:0},stakeTokens:4},{selection:{kind:'color' as const,value:'red' as const},stakeTokens:20},{selection:{kind:'number' as const,value:0},stakeTokens:6}];
+  const result = playRouletteMulti(30,bets,() => { draws++; return 0; });
+  assert.equal(draws,1); assert.equal(result.stakeTokens,30); assert.equal(result.payoutTokens,360);
+  assert.equal(result.bets.length,2); assert.equal(result.bets.find(bet=>bet.selection.kind==='number')!.stakeTokens,10);
+  assert.deepEqual(normalizeRouletteBets(30,bets),normalizeRouletteBets(30,[...bets].reverse()));
+  assert.equal(rouletteMaximumReturn([{selection:{kind:'color',value:'red'},stakeTokens:10},{selection:{kind:'color',value:'black'},stakeTokens:10}]),20);
+});
+test('multi Roulette rejects invalid totals, unbounded arrays and exposure before drawing', () => {
+  let draws=0; const draw=()=>{draws++;return 0;};
+  const bet={selection:{kind:'number' as const,value:0},stakeTokens:2};
+  for (const [stake,bets] of [[3,[bet]],[2,[]],[2000,Array(1000).fill(bet)],[2,[{...bet,stakeTokens:1}]],[Number.MAX_SAFE_INTEGER,[{...bet,stakeTokens:Number.MAX_SAFE_INTEGER}]]] as const) {
+    assert.throws(()=>playRouletteMulti(stake,bets,draw));
+  }
+  assert.throws(()=>playRouletteMulti(Number.MAX_SAFE_INTEGER,[{...bet,stakeTokens:Number.MAX_SAFE_INTEGER},bet],draw));
+  assert.throws(()=>playRouletteMulti(2200000000000000,[{selection:{kind:'number',value:1},stakeTokens:200000000000000},{selection:{kind:'color',value:'red'},stakeTokens:2000000000000000}],draw));
+  assert.equal(draws,0);
+});
+test('Plinko batches draw independent paths and sum individually floored payouts', () => {
+  let draws=0;
+  const result=playPlinkoBatch(3,8,'low',2,()=>draws++<8?0:1);
+  assert.equal(draws,16); assert.equal(result.stakeTokens,6); assert.equal(result.stakePerBall,3); assert.equal(result.ballCount,2);
+  assert.deepEqual(result.balls.map(ball=>ball.bin),[0,8]);
+  assert.notEqual(result.balls[0].path,result.balls[1].path);
+  assert.equal(result.payoutTokens,result.balls.reduce((sum,ball)=>sum+ball.payoutTokens,0));
+  assert.equal(result.payoutTokens,2*Math.floor(3*result.paytable[0]/10000));
+  assert.equal(plinkoBatchExposure(3,8,'low',2).maximumReturn,result.payoutTokens);
+  let alternating=0;
+  const rounded=playPlinkoBatch(2,8,'low',2,()=>alternating++%2);
+  assert.equal(rounded.payoutTokens,0); // Two floor(0.6086) returns, not floor(1.2172).
+  assert.equal(Math.floor(rounded.stakeTokens*rounded.paytable[4]/10000),1);
+});
+test('Plinko rejects invalid count and unsafe aggregate stake or return before any draw', () => {
+  let draws=0;const draw=()=>{draws++;return 0;};
+  for(const count of [0,21,1.5,NaN]) assert.throws(()=>playPlinkoBatch(2,8,'low',count,draw));
+  assert.throws(()=>playPlinkoBatch(Number.MAX_SAFE_INTEGER,8,'low',2,draw));
+  assert.throws(()=>playPlinkoBatch(100000000000000,16,'high',20,draw));
+  assert.equal(draws,0);
+});
+test('default casino max is exactly 100000 Tokens', () => {
+  const previous=process.env.CASINO_MAX_BET;delete process.env.CASINO_MAX_BET;
+  try {assert.equal(getCasinoSettings().maxBet,100000);} finally {if(previous!==undefined) process.env.CASINO_MAX_BET=previous;}
+});
 function table(player: CardRank[], dealer: CardRank[], draws: CardRank[] = [], stake = 20): BlackjackState {
   return {
     status: 'active', currentHand: 0, totalStakeTokens: stake, payoutTokens: null,

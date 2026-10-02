@@ -9,9 +9,9 @@
 .editor button[aria-pressed=true] { color: var(--text); border-color: var(--accent-bright); background: var(--accent-surface); }
 .workspace { display: grid; grid-template-columns: minmax(0, 1fr) clamp(260px, 26vw, 320px); align-items: start; }
 .workspace:not(:has(.attachments)) { grid-template-columns: 1fr; }
-.stage { position: relative; min-width: 0; height: clamp(380px, 58dvh, 600px); background: radial-gradient(ellipse at 50% 35%, rgba(140, 80, 90, .12), transparent 65%), #0a090b; }
-.stageHint { position: absolute; bottom: 12px; left: 12px; right: 12px; pointer-events: none; text-align: center; font-size: 12px; line-height: 1.5; color: #b5a8ab; }
-.loading { height: 100%; display: flex; gap: 10px; align-items: center; justify-content: center; padding: 24px; text-align: center; background: #0a090b; color: var(--muted); }
+.stage { position: relative; min-width: 0; height: clamp(380px, 58dvh, 600px); background: radial-gradient(ellipse at 50% 40%, #5a5a5e 0%, #36363b 48%, #1b1b1f 100%); }
+.stageHint { position: absolute; bottom: 12px; left: 12px; right: 12px; pointer-events: none; text-align: center; font-size: 12px; line-height: 1.5; color: #d4d4d8; text-shadow: 0 1px 3px #000; }
+.loading { height: 100%; display: flex; gap: 10px; align-items: center; justify-content: center; padding: 24px; text-align: center; color: #e4e4e7; }
 .attachments { min-width: 0; width: 100%; max-height: clamp(380px, 58dvh, 600px); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: var(--accent-muted) var(--surface); margin: 0; padding: 14px; border: 0; border-left: 1px solid var(--border); }
 .attachmentFields { min-width: 0; margin: 0; padding: 0; border: 0; }
 .attachments legend { display: flex; gap: 8px; align-items: center; padding: 4px 0 8px; font-size: 15px; font-weight: 700; }

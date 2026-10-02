@@ -14,6 +14,14 @@ export interface RouletteResult {
   number: number;
   color: 'red' | 'black' | 'green';
 }
+export interface RouletteBet { selection: RouletteSelection; stakeTokens: number }
+export interface RouletteMultiResult {
+  stakeTokens: number;
+  payoutTokens: number;
+  number: number;
+  color: RouletteResult['color'];
+  bets: (RouletteBet & { payoutTokens: number })[];
+}
 export type PlinkoRows = 8 | 12 | 16;
 export type PlinkoRisk = 'low' | 'medium' | 'high';
 export interface PlinkoSettings { rows: PlinkoRows; risk: PlinkoRisk }
@@ -25,6 +33,14 @@ export interface PlinkoResult extends PlinkoSettings {
   /** Basis points of the total return (10000 = 1x). */
   multiplier: number;
   paytable: number[];
+}
+export interface PlinkoBatchResult extends PlinkoSettings {
+  stakePerBall: number;
+  ballCount: number;
+  stakeTokens: number;
+  payoutTokens: number;
+  paytable: number[];
+  balls: PlinkoResult[];
 }
 export type CardRank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K';
 export type CardSuit = 'clubs' | 'diamonds' | 'hearts' | 'spades';
@@ -84,6 +100,17 @@ export interface CrashPublicSnapshot {
   multiplier: number;
   recent: { roundId: string; multiplier: number; crashedAt: number }[];
   bet: CrashBetPublic | null;
+  participants: CrashParticipantPublic[];
+}
+export interface CrashParticipantPublic {
+  betId: string;
+  steamId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  stakeTokens: number;
+  status: CrashBetPublic['status'];
+  cashoutMultiplier: number | null;
+  payoutTokens: number | null;
 }
 export interface CasinoRoundPublic {
   id: string;
@@ -93,7 +120,7 @@ export interface CasinoRoundPublic {
   payoutTokens: number | null;
   createdAt: string;
   settledAt: string | null;
-  details: RouletteResult | PlinkoResult | BlackjackPublicState | CrashBetPublic | Record<string, unknown>;
+  details: RouletteResult | RouletteMultiResult | PlinkoResult | PlinkoBatchResult | BlackjackPublicState | CrashBetPublic | Record<string, unknown>;
 }
 export interface CasinoBootstrap {
   balance: number;

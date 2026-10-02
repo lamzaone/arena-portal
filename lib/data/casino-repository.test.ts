@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
 import type { RowDataPacket } from 'mysql2/promise';
-import type { BlackjackState, CardRank } from '../casino/types.ts';
+import type { BlackjackState, CardRank, PlinkoBatchResult, RouletteMultiResult } from '../casino/types.ts';
 import { casinoFixture, validateCasinoTestUrl } from './casino-test-fixture.ts';
 
 test('fixture rejects remote and non-test databases before connecting', () => {
@@ -27,7 +27,7 @@ before(async () => {
 beforeEach(async () => {
   if (!enabled) return;
   process.env.CASINO_ENABLED = 'true'; delete process.env.CASINO_MIN_BET; delete process.env.CASINO_MAX_BET;
-  fixture.control.failLedger = false; fixture.control.random = maximum => maximum - 1;
+  fixture.control.failLedger = false; fixture.control.failPayout = false; fixture.control.random = maximum => maximum - 1;
   for (const table of ['portal_casino_reservations', 'portal_casino_actions', 'portal_casino_crash_bets', 'portal_casino_rounds', 'portal_casino_crash_rounds', 'portal_token_ledger', 'portal_economy_operations', 'portal_token_accounts']) await fixture.pool.execute(table === 'portal_token_ledger' ? `TRUNCATE TABLE ${table}` : `DELETE FROM ${table}`);
   await fixture.pool.execute('UPDATE portal_casino_clock SET current_round_id = NULL WHERE id = 1');
   for (const id of [player, other]) await fixture.pool.execute('INSERT INTO portal_token_accounts (steam_id,balance,lifetime_earned) VALUES (?,?,?)', [id, initialBalance, initialBalance]);
@@ -66,7 +66,7 @@ integration('failed ledger writes roll back wallet, round and operation together
   for (const table of ['portal_casino_rounds', 'portal_token_ledger', 'portal_economy_operations', 'portal_casino_actions']) assert.equal(await count(table), 0);
 });
 integration('invalid stakes and selections cannot mutate wallets', async () => {
-  for (const stake of [1, 2.1, 10001, Number.MAX_SAFE_INTEGER + 1]) await assert.rejects(api.playCasinoInstant(instant({ stake })), { code: 'invalid_input' });
+  for (const stake of [1, 2.1, 100001, Number.MAX_SAFE_INTEGER + 1]) await assert.rejects(api.playCasinoInstant(instant({ stake })), { code: 'invalid_input' });
   await assert.rejects(api.playCasinoInstant(instant({ selection: {kind: 'number', value: 37} })), { code: 'invalid_input' });
   await assert.rejects(api.startCasinoBlackjack({steamId: player, stake: 3, idempotencyKey: key()}), {code: 'invalid_input'});
   assert.equal(await count('portal_token_ledger'), 0);
@@ -193,7 +193,7 @@ integration('accepted settings are saved and existing blackjack timeout uses its
   const {started} = await blackjack();
   const row = (await rows('SELECT settings_snapshot,engine_version FROM portal_casino_rounds WHERE id = ?',[started.round.id]))[0];
   const saved = typeof row.settings_snapshot === 'string' ? JSON.parse(row.settings_snapshot) : row.settings_snapshot;
-  assert.equal(saved.minBet,2); assert.equal(saved.maxBet,10000); assert.equal(saved.blackjackTimeoutMs,900000); assert.ok(row.engine_version);
+  assert.equal(saved.minBet,2); assert.equal(saved.maxBet,100000); assert.equal(saved.blackjackTimeoutMs,900000); assert.ok(row.engine_version);
   process.env.CASINO_MIN_BET = '100'; process.env.CASINO_MAX_BET = '200';
   const result = await api.actCasinoBlackjack({steamId:player,roundId:started.round.id,action:'stand',idempotencyKey:key()});
   assert.equal(result.round.payoutTokens,40);
@@ -427,4 +427,148 @@ integration('split replaces its reserved maximum once and settlement rollback re
   fixture.control.failLedger=false;
   assert.equal(Number((await rows('SELECT maximum_return FROM portal_casino_reservations'))[0].maximum_return),80);
   await api.actCasinoBlackjack(stand);assert.equal(await count('portal_casino_reservations'),0);
+});
+
+integration('multi Roulette persists one draw and atomic total with canonical duplicate replay after pruning',async()=>{
+  await api.getCasinoBootstrap(player);
+  let draws=0;fixture.control.random=()=>{draws++;return 0;};
+  const zero={kind:'number',value:0};const red={kind:'color',value:'red'};
+  const request=instant({stake:30,selection:{bets:[{selection:zero,stakeTokens:4},{selection:red,stakeTokens:20},{selection:zero,stakeTokens:6}]}});
+  const result=await api.playCasinoInstant(request);
+  assert.equal(draws,1);assert.equal(result.round.stakeTokens,30);assert.equal(result.round.payoutTokens,360);assert.equal(result.balance,1330);
+  assert.equal((result.round.details as RouletteMultiResult).bets.length,2);
+  assert.deepEqual((await rows('SELECT delta FROM portal_token_ledger ORDER BY id')).map(row=>Number(row.delta)),[-30,360]);
+  await fixture.pool.execute('DELETE FROM portal_economy_operations');
+  process.env.CASINO_ENABLED='false';process.env.CASINO_MAX_BET='2';
+  assert.deepEqual(await api.playCasinoInstant({...request,selection:{bets:[{selection:red,stakeTokens:20},{selection:zero,stakeTokens:10}]}}),result);
+  await assert.rejects(api.playCasinoInstant({...request,selection:{bets:[{selection:red,stakeTokens:30}]}}),{code:'idempotency_conflict'});
+  assert.equal(draws,1);assert.equal(await count('portal_casino_rounds'),1);
+});
+integration('Plinko batch debits full cost once and replays all saved paths after pruning',async()=>{
+  await api.getCasinoBootstrap(player);
+  let draws=0;fixture.control.random=()=>draws++%2;
+  const request=instant({game:'plinko',stake:3,selection:{rows:8,risk:'low',ballCount:5}});
+  const result=await api.playCasinoInstant(request);const details=result.round.details as PlinkoBatchResult;
+  assert.equal(draws,40);assert.equal(result.round.stakeTokens,15);assert.equal(details.balls.length,5);
+  assert.equal(result.round.payoutTokens,details.balls.reduce((sum,ball)=>sum+ball.payoutTokens,0));
+  assert.equal(result.balance,1000-15+details.payoutTokens);
+  assert.equal((await rows('SELECT SUM(delta) AS total FROM portal_token_ledger'))[0].total,String(result.balance-1000));
+  await fixture.pool.execute('DELETE FROM portal_economy_operations');
+  process.env.CASINO_ENABLED='false';process.env.CASINO_MAX_BET='2';
+  assert.deepEqual(await api.playCasinoInstant(request),result);
+  await assert.rejects(api.playCasinoInstant({...request,selection:{rows:8,risk:'low',ballCount:4}}),{code:'idempotency_conflict'});
+  assert.equal(draws,40);assert.equal(await count('portal_casino_rounds'),1);
+});
+integration('whole-board and batch affordability, limits and unsafe exposure reject before RNG',async()=>{
+  await api.getCasinoBootstrap(player);let draws=0;fixture.control.random=()=>{draws++;return 0;};
+  const board=(stakeTokens:number)=>({bets:[{selection:{kind:'number',value:0},stakeTokens}]});
+  await assert.rejects(api.playCasinoInstant(instant({stake:100001,selection:board(100001)})),{code:'invalid_input'});
+  await assert.rejects(api.playCasinoInstant(instant({stake:1002,selection:board(1002)})),{code:'insufficient_tokens'});
+  await assert.rejects(api.playCasinoInstant(instant({stake:20,selection:board(22)})),{code:'invalid_input'});
+  await assert.rejects(api.playCasinoInstant(instant({game:'plinko',stake:100001,selection:{rows:8,risk:'low',ballCount:1}})),{code:'invalid_input'});
+  for(const ballCount of [0,21,1.5,null]) await assert.rejects(api.playCasinoInstant(instant({game:'plinko',selection:{rows:8,risk:'low',ballCount}})),{code:'invalid_input'});
+  await assert.rejects(api.playCasinoInstant(instant({game:'plinko',stake:100,selection:{rows:8,risk:'low',ballCount:11}})),{code:'insufficient_tokens'});
+  process.env.CASINO_MAX_BET=String(Number.MAX_SAFE_INTEGER);
+  for(const request of [instant({stake:1000000000000000,selection:board(1000000000000000)}),instant({game:'plinko',stake:Number.MAX_SAFE_INTEGER,selection:{rows:8,risk:'low',ballCount:2}}),instant({game:'plinko',stake:100000000000000,selection:{rows:16,risk:'high',ballCount:20}})]) {
+    await assert.rejects(api.playCasinoInstant(request),{code:'invalid_input'});
+  }
+  assert.equal(draws,0);assert.equal(await count('portal_token_ledger'),0);assert.equal(await count('portal_casino_actions'),0);
+});
+integration('batch headroom includes every ball and Roulette exposure accounts for incompatible wins',async()=>{
+  await api.getCasinoBootstrap(player);let draws=0;fixture.control.random=()=>{draws++;return 0;};
+  await fixture.pool.execute('UPDATE portal_token_accounts SET lifetime_earned = ? WHERE steam_id = ?',[Number.MAX_SAFE_INTEGER-40,player]);
+  await assert.rejects(api.playCasinoInstant(instant({game:'plinko',stake:20,selection:{rows:8,risk:'low',ballCount:2}})),{code:'token_limit'});
+  assert.equal(draws,0);
+  const result=await api.playCasinoInstant(instant({stake:40,selection:{bets:[{selection:{kind:'color',value:'red'},stakeTokens:20},{selection:{kind:'color',value:'black'},stakeTokens:20}]}}));
+  assert.equal(result.round.payoutTokens,0);assert.equal(draws,1);
+});
+integration('multi wagers roll back their full debit and receipt when payout ledger insertion fails',async()=>{
+  for(const request of [instant({stake:20,selection:{bets:[{selection:{kind:'number',value:36},stakeTokens:20}]}}),instant({game:'plinko',stake:10,selection:{rows:8,risk:'low',ballCount:5}})]) {
+    fixture.control.failPayout=true;
+    await assert.rejects(api.playCasinoInstant(request),/injected payout failure/);
+    fixture.control.failPayout=false;
+    assert.equal(Number((await rows('SELECT balance FROM portal_token_accounts WHERE steam_id = ?',[player]))[0].balance),1000);
+    for(const table of ['portal_casino_rounds','portal_token_ledger','portal_casino_actions','portal_economy_operations']) assert.equal(await count(table),0);
+  }
+});
+integration('maximum per-ball and whole-spin stakes are accepted and batch round cost is aggregate',async()=>{
+  await fixture.pool.execute('UPDATE portal_token_accounts SET balance = 3000000 WHERE steam_id = ?',[player]);
+  const board=await api.playCasinoInstant(instant({stake:100000,selection:{bets:[{selection:{kind:'number',value:0},stakeTokens:100000}]}}));
+  assert.equal(board.round.stakeTokens,100000);
+  const batch=await api.playCasinoInstant(instant({game:'plinko',stake:100000,selection:{rows:8,risk:'low',ballCount:20}}));
+  assert.equal(batch.round.stakeTokens,2000000);assert.equal((batch.round.details as PlinkoBatchResult).balls.length,20);
+});
+integration('Crash exposes every public entrant through pending active cashed-out and lost phases',async()=>{
+  const third='76561198000000003';
+  await fixture.pool.execute('INSERT INTO portal_token_accounts (steam_id,balance,lifetime_earned) VALUES (?,1000,1000)',[third]);
+  const roundId=(await api.getCasinoBootstrap(player)).crash!.roundId;
+  for(const [id,autoCashout] of [[player,null],[other,150],[third,null]] as const) await api.betCasinoCrash({steamId:id,roundId,stake:20,autoCashout,idempotencyKey:key()});
+  let snapshot=await api.getCasinoBootstrap(player);
+  assert.equal(snapshot.crash!.participants.length,3);assert.ok(snapshot.crash!.participants.every(p=>p.status==='pending'));
+  for(const participant of snapshot.crash!.participants) {
+    assert.deepEqual(Object.keys(participant).sort(),['avatarUrl','betId','cashoutMultiplier','displayName','payoutTokens','stakeTokens','status','steamId'].sort());
+    assert.equal(participant.displayName,participant.steamId);assert.equal(participant.avatarUrl,null);
+  }
+  assert.equal(snapshot.crash!.crashesAt,null);assert.ok(!JSON.stringify(snapshot).includes('private_point'));
+  await flight(300,1000);snapshot=await api.getCasinoBootstrap(player);
+  assert.equal(snapshot.crash!.phase,'flying');assert.ok(snapshot.crash!.participants.every(p=>p.status==='active'));
+  await api.cashoutCasinoCrash({steamId:player,roundId,idempotencyKey:key()});
+  await flight(300,9000);snapshot=await api.getCasinoBootstrap(player);
+  assert.equal(snapshot.crash!.participants.find(p=>p.steamId===other)!.cashoutMultiplier,150);
+  assert.equal(snapshot.crash!.participants.find(p=>p.steamId===other)!.payoutTokens,30);
+  assert.equal(snapshot.crash!.participants.find(p=>p.steamId===third)!.status,'active');
+  process.env.CASINO_ENABLED='false';await flight(300,19000);snapshot=await api.getCasinoBootstrap(player);
+  assert.equal(snapshot.crash!.phase,'crashed');assert.equal(snapshot.crash!.participants.find(p=>p.steamId===third)!.status,'lost');
+  assert.equal(snapshot.crash!.participants.find(p=>p.steamId===third)!.payoutTokens,0);
+  assert.equal(snapshot.crash!.participants.filter(p=>p.status==='cashed_out').length,2);
+});
+
+integration('Steam identity misses never delay polls or cashout and warm only after commit',async()=>{
+  const id='76561198000000088';
+  await fixture.pool.execute('INSERT INTO portal_token_accounts (steam_id,balance,lifetime_earned) VALUES (?,1000,1000)',[id]);
+  const roundId=(await api.getCasinoBootstrap(id)).crash!.roundId;
+  await api.betCasinoCrash({steamId:id,roundId,stake:20,idempotencyKey:key()});
+  let resolveProfiles!:(value:Map<string,import('../steam/profiles.ts').SteamProfile>)=>void;
+  let calls=0, committed=false;
+  const pending=new Promise<Map<string,import('../steam/profiles.ts').SteamProfile>>(resolve=>{resolveProfiles=resolve;});
+  fixture.control.profiles=async ids=>{calls++;assert.equal(committed,true,'profile work is outside the transaction');assert.deepEqual(ids,[id]);return pending;};
+  fixture.control.beforeCommit=async()=>{assert.equal(calls,0);committed=true;};
+  try {
+    const snapshot=await api.getCasinoBootstrap(id);
+    assert.equal(snapshot.crash!.participants[0].displayName,id);
+    fixture.control.beforeCommit=null;
+    assert.equal(calls,1);
+    const another=await api.getCasinoBootstrap(id);assert.equal(another.crash!.participants[0].displayName,id);assert.equal(calls,1);
+    await fixture.pool.execute('UPDATE portal_casino_crash_rounds SET private_point = 10000, start_at_ms = CAST(UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3))*1000 AS UNSIGNED)-1000 WHERE id = ?',[roundId]);
+    const cashed=await api.cashoutCasinoCrash({steamId:id,roundId,idempotencyKey:key()});assert.equal(cashed.round.status,'settled');
+    resolveProfiles(new Map([[id,{steamId:id,name:'Table Player',avatarFull:'https://avatars.steamstatic.com/example.jpg',presence:'online'}]]));
+    await new Promise(resolve=>setImmediate(resolve));
+    const enriched=(await api.getCasinoBootstrap(id)).crash!.participants[0];
+    assert.equal(enriched.displayName,'Table Player');assert.equal(enriched.avatarUrl,'https://avatars.steamstatic.com/example.jpg');assert.equal(calls,1);
+  } finally {resolveProfiles(new Map());fixture.control.beforeCommit=null;fixture.control.profiles=async()=>new Map();}
+});
+
+integration('identity warmup batches at most 100 with bounded cache, queue and negative retry caching',async()=>{
+  const {warmCrashIdentities,cachedCrashIdentity}=await import('../casino/participant-identities.ts');
+  const ids=Array.from({length:1100},(_,i)=>`76561199${String(i).padStart(9,'0')}`);
+  let calls=0,concurrent=0,maximumConcurrent=0;const sizes:number[]=[];
+  fixture.control.profiles=async batch=>{
+    calls++;sizes.push(batch.length);maximumConcurrent=Math.max(maximumConcurrent,++concurrent);
+    await new Promise(resolve=>setImmediate(resolve));concurrent--;
+    return new Map(batch.map(steamId=>[steamId,{steamId,name:`Player ${steamId}`,avatarFull:'https://avatars.steamstatic.com/test.jpg',presence:'online' as const}]));
+  };
+  try {
+    warmCrashIdentities(ids);
+    for(let attempt=0;attempt<40;attempt++) await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(calls,10);assert.ok(sizes.every(size=>size===100));assert.equal(maximumConcurrent,1);
+    assert.equal(ids.filter(id=>cachedCrashIdentity(id).displayName!==id).length,1000);
+    warmCrashIdentities(ids.slice(1000));
+    for(let attempt=0;attempt<10;attempt++) await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(calls,11);assert.equal(ids.filter(id=>cachedCrashIdentity(id).displayName!==id).length,1000);
+    const unavailable='76561198000009999';
+    fixture.control.profiles=async()=>{calls++;throw new Error('profile boundary unavailable');};
+    warmCrashIdentities([unavailable]);await new Promise(resolve=>setImmediate(resolve));
+    assert.deepEqual(cachedCrashIdentity(unavailable),{displayName:unavailable,avatarUrl:null});
+    warmCrashIdentities([unavailable]);await new Promise(resolve=>setImmediate(resolve));assert.equal(calls,12);
+  } finally {fixture.control.profiles=async()=>new Map();}
 });

@@ -30,7 +30,7 @@ export function validStake(text: string, client: GameClient, even = false): numb
 
 export function StakeField({ value, onChange, client, even = false }: { value: string; onChange: (value: string) => void; client: GameClient; even?: boolean }) {
   return <label className="casino-field">Stake (Tokens)
-    <input type="number" inputMode="numeric" min={client.state.settings.minBet + (even ? client.state.settings.minBet % 2 : 0)} max={client.state.settings.maxBet - (even ? client.state.settings.maxBet % 2 : 0)} step={even ? 2 : 1} value={value} onChange={event => onChange(event.target.value)} disabled={client.busy || client.blocked} />
+    <input type="number" inputMode="numeric" min={client.state.settings.minBet + (even ? client.state.settings.minBet % 2 : 0)} max={client.state.settings.maxBet - (even ? client.state.settings.maxBet % 2 : 0)} step={even ? 2 : 1} value={value} onChange={event => onChange(event.target.value)} disabled={client.busy || client.blocked || !client.state.settings.enabled} />
     <span>{tokens(client.state.settings.minBet)}–{tokens(client.state.settings.maxBet)} Tokens{even ? " · even stakes" : ""}</span>
   </label>;
 }

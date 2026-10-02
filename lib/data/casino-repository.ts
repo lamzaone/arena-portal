@@ -4,11 +4,12 @@ import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { getPortalDatabasePool } from '@/lib/data/database-pools';
 import { applyTokenDelta, lockTokenAccounts, runEconomyMutation, type EconomyMutationContext, type TokenWallet } from './portal-repository.ts';
 import { CasinoError, getCasinoSettings } from '../casino/settings.ts';
-import { playRoulette, rouletteMaximumMultiplier } from '../casino/roulette.ts';
-import { playPlinko, plinkoPaytable } from '../casino/plinko.ts';
+import { normalizeRouletteBets, playRoulette, playRouletteMulti, rouletteMaximumMultiplier, rouletteMaximumReturn } from '../casino/roulette.ts';
+import { playPlinko, playPlinkoBatch, plinkoBatchExposure, plinkoPaytable } from '../casino/plinko.ts';
+import { cachedCrashIdentity, warmCrashIdentities } from '../casino/participant-identities.ts';
 import { actBlackjack, publicBlackjack, startBlackjack } from '../casino/blackjack.ts';
 import { crashDuration, crashMultiplier, crashPoint } from '../casino/crash.ts';
-import { casinoReturn, type BlackjackAction, type BlackjackState, type CasinoBootstrap, type CasinoGame, type CasinoRoundPublic, type CasinoSettings, type CrashBetPublic, type CrashPublicSnapshot, type PlinkoSettings, type RouletteSelection } from '../casino/types.ts';
+import { casinoReturn, type BlackjackAction, type BlackjackState, type CasinoBootstrap, type CasinoGame, type CasinoRoundPublic, type CasinoSettings, type CrashBetPublic, type CrashPublicSnapshot, type PlinkoSettings, type RouletteBet, type RouletteSelection } from '../casino/types.ts';
 
 const ENGINE_VERSION = 'native-v1';
 type RoundRow = RowDataPacket & { id: string; steam_id: string; game: CasinoGame; request_key: string; status: 'active' | 'settled'; stake_tokens: number | string; payout_tokens: number | string | null; private_state: unknown; public_state: unknown; settings_snapshot: unknown; created_at_ms: number | string; settled_at_ms: number | string | null; expires_at_ms: number | string | null };
@@ -201,26 +202,42 @@ async function mutation(input: ActorRequest, operationName: string, request: Rec
 export async function playCasinoInstant(input: ActorRequest & {game:CasinoGame;stake:number;selection:unknown}): Promise<CasinoMutationResult> {
   if (input.game === 'slots') fail('slots_unavailable','Slots require an authorized provider wallet integration and are currently unavailable.');
   if (!['roulette','plinko'].includes(input.game)) fail('invalid_input','Choose Roulette or Plinko.');
-  const selection = input.selection;
+  let selection = input.selection;
   if (!selection || typeof selection !== 'object' || Array.isArray(selection)) fail('invalid_input','Choose valid game settings.');
+  const multiRoulette = input.game === 'roulette' && 'bets' in selection;
+  const batchPlinko = input.game === 'plinko' && 'ballCount' in selection;
+  let bets: RouletteBet[] = [];
+  if (multiRoulette) {
+    try { bets = normalizeRouletteBets(input.stake,(selection as {bets:unknown}).bets); }
+    catch (error) { fail('invalid_input',error instanceof Error ? error.message : 'Invalid roulette bets.'); }
+    selection = {bets}; // Equivalent placement orders/duplicates share one request identity.
+  }
+  const plinko = selection as PlinkoSettings & {ballCount:number};
   return mutation(input,`casino_${input.game}`,{game:input.game,stake:input.stake,selection},async (locked,context) => {
     stake(input.stake,locked.settings);
     let outcome;
     let maximum;
+    let totalStake = input.stake;
     try {
-      maximum = input.game === 'roulette'
+      if (multiRoulette) maximum = rouletteMaximumReturn(bets);
+      else if (batchPlinko) {
+        const exposure = plinkoBatchExposure(input.stake,plinko.rows,plinko.risk,plinko.ballCount);
+        totalStake = exposure.stakeTokens; maximum = exposure.maximumReturn;
+      } else maximum = input.game === 'roulette'
         ? checkedMaximumReturn(input.stake,rouletteMaximumMultiplier(selection as RouletteSelection))
-        : checkedMaximumReturn(input.stake,Math.max(...plinkoPaytable((selection as PlinkoSettings).rows,(selection as PlinkoSettings).risk)),10000);
+        : checkedMaximumReturn(input.stake,Math.max(...plinkoPaytable(plinko.rows,plinko.risk)),10000);
     } catch (error) { fail('invalid_input',error instanceof Error ? error.message : 'Invalid game settings.'); }
-    await admitReturn(locked,input.steamId,input.stake,maximum);
+    await admitReturn(locked,input.steamId,totalStake,maximum);
     try {
-      outcome = input.game === 'roulette' ? playRoulette(input.stake, selection as RouletteSelection, randomInt)
-        : playPlinko(input.stake,(selection as PlinkoSettings).rows,(selection as PlinkoSettings).risk,randomInt);
+      outcome = multiRoulette ? playRouletteMulti(input.stake,bets,randomInt)
+        : batchPlinko ? playPlinkoBatch(input.stake,plinko.rows,plinko.risk,plinko.ballCount,randomInt)
+        : input.game === 'roulette' ? playRoulette(input.stake, selection as RouletteSelection, randomInt)
+        : playPlinko(input.stake,plinko.rows,plinko.risk,randomInt);
     } catch (error) { fail('invalid_input', error instanceof Error ? error.message : 'Invalid game settings.'); }
     const id = randomUUID();
-    await delta(locked,input.steamId,-input.stake,id,'stake',context.idempotencyKey);
+    await delta(locked,input.steamId,-totalStake,id,'stake',context.idempotencyKey);
     await delta(locked,input.steamId,outcome.payoutTokens,id,'payout');
-    return roundPublic(await insertRound(locked,{id,steamId:input.steamId,game:input.game,requestKey:context.idempotencyKey,stakeTokens:input.stake,details:outcome,status:'settled',payoutTokens:outcome.payoutTokens}));
+    return roundPublic(await insertRound(locked,{id,steamId:input.steamId,game:input.game,requestKey:context.idempotencyKey,stakeTokens:totalStake,details:outcome,status:'settled',payoutTokens:outcome.payoutTokens}));
   });
 }
 export async function startCasinoBlackjack(input: ActorRequest & {stake:number}): Promise<CasinoMutationResult> {
@@ -297,11 +314,12 @@ async function crashSnapshot(locked: LockedCasino, steamId: string): Promise<Cra
   const starts = whole(crash.start_at_ms,'flight start'); const crashed = crash.completed_at_ms !== null;
   const [recent] = await locked.connection.query<CrashRow[]>('SELECT * FROM portal_casino_crash_rounds WHERE completed_at_ms IS NOT NULL ORDER BY completed_at_ms DESC LIMIT 12');
   const own = locked.bets.find(bet=>bet.steam_id === steamId) ?? null;
-  return {roundId:crash.id,phase:locked.now < starts ? 'betting' : crashed ? 'crashed' : 'flying',serverTime:locked.now,opensAt:whole(crash.opens_at_ms,'betting start'),startAt:starts,crashesAt:crashed ? whole(crash.completed_at_ms,'crash time') : null,multiplier:crashed ? whole(crash.private_point,'crash result') : locked.now < starts ? 100 : crashMultiplier(locked.now-starts),recent:recent.map(row=>({roundId:row.id,multiplier:whole(row.private_point,'crash result'),crashedAt:whole(row.completed_at_ms,'crash time')})),bet:own ? betPublic(own) : null};
+  const participants = locked.bets.map(bet=>({betId:bet.id,steamId:bet.steam_id,displayName:bet.steam_id,avatarUrl:null,stakeTokens:whole(bet.stake_tokens,'stake'),status:bet.status,cashoutMultiplier:bet.cashout_multiplier,payoutTokens:bet.payout_tokens === null ? null : whole(bet.payout_tokens,'payout')}));
+  return {roundId:crash.id,phase:locked.now < starts ? 'betting' : crashed ? 'crashed' : 'flying',serverTime:locked.now,opensAt:whole(crash.opens_at_ms,'betting start'),startAt:starts,crashesAt:crashed ? whole(crash.completed_at_ms,'crash time') : null,multiplier:crashed ? whole(crash.private_point,'crash result') : locked.now < starts ? 100 : crashMultiplier(locked.now-starts),recent:recent.map(row=>({roundId:row.id,multiplier:whole(row.private_point,'crash result'),crashedAt:whole(row.completed_at_ms,'crash time')})),bet:own ? betPublic(own) : null,participants};
 }
 export async function getCasinoBootstrap(steamId: string): Promise<CasinoBootstrap> {
   actor(steamId);
-  return available(async () => {
+  const result = await available(async () => {
     const pool = getPortalDatabasePool(); if (!pool) fail('storage_unavailable','Portal Token storage is not configured.');
     const connection = await pool.getConnection();
     try {
@@ -312,4 +330,11 @@ export async function getCasinoBootstrap(steamId: string): Promise<CasinoBootstr
       await connection.commit(); return result;
     } catch (error) { await connection.rollback(); throw error; } finally { connection.release(); }
   });
+  // Both the connection and every financial lock have been released. A cache
+  // miss returns the public Steam ID immediately; enrichment never delays a poll.
+  if (result.crash) {
+    result.crash.participants = result.crash.participants.map(participant=>({...participant,...cachedCrashIdentity(participant.steamId)}));
+    warmCrashIdentities(result.crash.participants.map(participant=>participant.steamId));
+  }
+  return result;
 }

@@ -1,31 +1,136 @@
 "use client";
 
-import { useState } from "react";
-import type { PlinkoResult, PlinkoRisk, PlinkoRows } from "@/lib/casino/types";
+import { useEffect, useState } from "react";
+import type { PlinkoBatchResult, PlinkoResult, PlinkoRisk, PlinkoRows } from "@/lib/casino/types";
 import { plinkoPaytable } from "@/lib/casino/plinko";
-import { GameLayout, Result, StakeField, multiple, validStake, type GameClient } from "./client";
+import { GameLayout, Result, StakeField, multiple, tokens, validStake, type GameClient } from "./client";
+import { PlinkoBoard } from "./plinko-board";
 
 export function PlinkoGame({ client }: { client: GameClient }) {
+  const round = client.lastRound?.game === "plinko"
+    ? client.lastRound
+    : client.state.history.find(item => item.game === "plinko") ?? null;
+  const previous = round?.details as PlinkoBatchResult | PlinkoResult | undefined;
   const [stake, setStake] = useState(String(client.state.settings.minBet));
-  const [rows, setRows] = useState<PlinkoRows>(12);
-  const [risk, setRisk] = useState<PlinkoRisk>("medium");
-  const round = client.lastRound?.game === "plinko" ? client.lastRound : client.state.history.find(item => item.game === "plinko") || null;
-  const result = round?.details as PlinkoResult | undefined;
-  const boardRows = result?.rows ?? rows;
-  let offset = 0;
-  const path = result?.path.map((direction, index) => { offset += direction === 0 ? -1 : 1; return `${210 + offset * 10},${32 + (index + 1) * 17}`; });
+  const [rows, setRows] = useState<PlinkoRows>(previous?.rows ?? 12);
+  const [risk, setRisk] = useState<PlinkoRisk>(previous?.risk ?? "medium");
+  const [count, setCount] = useState("1");
+  const [active, setActive] = useState(0);
+
+  useEffect(() => {
+    if (previous) {
+      setRows(previous.rows);
+      setRisk(previous.risk);
+    }
+  }, [round?.id]);
+
   const table = plinkoPaytable(rows, risk);
-  return <GameLayout title="Plinko" subtitle="Follow the fall. Find your pocket." stage={<>
-    <div className="plinko-board-label"><span>{boardRows} ROWS</span><span>{(result?.risk || risk).toUpperCase()} RISK</span></div>
-    <svg viewBox={`0 0 420 ${70 + boardRows * 17}`} className="plinko-board" role="img" aria-label={result ? `Plinko path to bin ${result.bin}, ${multiple(result.multiplier, 10000)}x return` : "Triangular Plinko peg board"}>
-      {Array.from({ length: boardRows }, (_, row) => Array.from({ length: row + 3 }, (_, peg) => <circle key={`${row}-${peg}`} cx={210 + (peg - (row + 2) / 2) * 20} cy={49 + row * 17} r="2.8" className="plinko-peg" />))}
-      {path && <polyline className="plinko-path" key={round?.id} points={`210,32 ${path.join(" ")}`} fill="none" strokeWidth="3" pathLength="1" />}
-      <circle cx={result ? 210 + (result.bin * 2 - boardRows) * 10 : 210} cy={result ? 40 + boardRows * 17 : 32} r="6" className="plinko-ball" />
-      {Array.from({ length: boardRows + 1 }, (_, bin) => <rect key={bin} x={210 + (bin * 2 - boardRows) * 10 - 8} y={47 + boardRows * 17} width="16" height="12" rx="2" className={result?.bin === bin ? "plinko-bin is-winner" : "plinko-bin"} />)}
-    </svg><p className="casino-stage-caption" data-testid={result ? "plinko-result" : undefined}>{result ? `BIN ${result.bin} / ${multiple(result.multiplier, 10000)}x RETURN` : "DROP INTO POSSIBILITY"}</p>
-  </>} rules={<><p>Every peg sends the ball left or right with equal probability. Choose 8, 12 or 16 rows and low, medium or high risk. Higher risk puts larger returns at the edges and smaller returns in the center.</p><p>Table expected total return is at most 97%. Returns are rounded down to whole Tokens, so smaller stakes can return less.</p><p>Next drop paytable · {rows} rows / {risk} risk · left to right:</p><ol className="plinko-paytable" aria-label="Plinko total return paytable">{table.map((value, bin) => <li key={bin}><span>Bin {bin}</span><strong>{multiple(value, 10000)}x</strong></li>)}</ol></>}>
-    <form noValidate onSubmit={event => { event.preventDefault(); const value = validStake(stake, client); if (value !== null) void client.mutate("/api/casino/play", { game: "plinko", stake: value, selection: { rows, risk } }); }}>
-      <StakeField value={stake} onChange={setStake} client={client} /><label className="casino-field">Rows<select value={rows} onChange={event => setRows(Number(event.target.value) as PlinkoRows)} disabled={client.busy || client.blocked}>{[8,12,16].map(value => <option key={value}>{value}</option>)}</select></label><label className="casino-field">Risk<select value={risk} onChange={event => setRisk(event.target.value as PlinkoRisk)} disabled={client.busy || client.blocked}>{["low","medium","high"].map(value => <option key={value}>{value}</option>)}</select></label><button className="casino-primary" disabled={client.busy || client.blocked || !client.state.settings.enabled}>Drop ball</button>
-    </form><Result round={round} />
-  </GameLayout>;
+  const cost = Number(stake) * Number(count);
+  const disabled = client.busy || client.blocked || !client.state.settings.enabled;
+
+  return (
+    <GameLayout
+      title="Plinko"
+      subtitle="A cascade of chances. Make room for the next drop."
+      stage={(
+        <>
+          <div className="plinko-board-label">
+            <span>{rows} ROWS / {risk.toUpperCase()} RISK</span>
+            <span>{active ? `${active} IN PLAY` : "BALLS READY"}</span>
+          </div>
+          <PlinkoBoard
+            round={round}
+            rows={rows}
+            risk={risk}
+            paytable={previous?.rows === rows && previous.risk === risk ? previous.paytable : table}
+            onActiveChange={setActive}
+          />
+        </>
+      )}
+      rules={(
+        <>
+          <p>Every peg sends the ball left or right with equal probability. Choose 8, 12 or 16 rows and low, medium or high risk. Higher risk puts larger returns at the edges and smaller returns in the center.</p>
+          <p>Drop 1–20 balls per batch. Each ball has its own result. Stakes are limited to {tokens(client.state.settings.maxBet)} Tokens per ball; the full batch costs stake × ball count.</p>
+          <p>Table expected total return is at most 97%. Returns are rounded down to whole Tokens.</p>
+          <ol className="plinko-paytable" aria-label="Plinko total return paytable">
+            {table.map((value, bin) => (
+              <li key={bin}>
+                <span>Bin {bin}</span>
+                <strong>{multiple(value, 10000)}x</strong>
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
+    >
+      <form noValidate onSubmit={event => {
+        event.preventDefault();
+        const value = validStake(stake, client);
+        if (value === null) return;
+        const ballCount = Number(count);
+        if (!Number.isSafeInteger(ballCount) || ballCount < 1 || ballCount > 20) {
+          client.error("Choose between 1 and 20 balls per batch.");
+          return;
+        }
+        if (!Number.isSafeInteger(value * ballCount) || value * ballCount > client.state.balance) {
+          client.error("Your Token balance is too low for this full batch cost.");
+          return;
+        }
+        void client.mutate("/api/casino/play", { game: "plinko", stake: value, selection: { rows, risk, ballCount } });
+      }}>
+        <StakeField value={stake} onChange={setStake} client={client} />
+        <label className="casino-field">
+          Ball count
+          <input
+            type="number"
+            inputMode="numeric"
+            min="1"
+            max="20"
+            step="1"
+            value={count}
+            onChange={event => setCount(event.target.value)}
+            disabled={disabled}
+          />
+        </label>
+        <div className="plinko-settings">
+          <label className="casino-field">
+            Rows
+            <select
+              aria-label="Rows"
+              value={rows}
+              onChange={event => setRows(Number(event.target.value) as PlinkoRows)}
+              disabled={disabled || active > 0}
+            >
+              {[8, 12, 16].map(value => <option key={value}>{value}</option>)}
+            </select>
+          </label>
+          <label className="casino-field">
+            Risk
+            <select
+              aria-label="Risk"
+              value={risk}
+              onChange={event => setRisk(event.target.value as PlinkoRisk)}
+              disabled={disabled || active > 0}
+            >
+              {["low", "medium", "high"].map(value => <option key={value}>{value}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="casino-cost" data-testid="plinko-cost">
+          <span>FULL BATCH COST</span>
+          <strong>{Number.isSafeInteger(cost) && cost >= 0 ? tokens(cost) : "—"} <small>Tokens</small></strong>
+          <span>{stake || "—"} per ball × {count || "—"} balls</span>
+        </div>
+        <button className="casino-primary" disabled={disabled || active > 60}>
+          {Number(count) === 1 ? "Drop ball" : "Drop balls"}
+        </button>
+        <p className="casino-control-note">
+          {active
+            ? "Keep dropping while balls fall. Rows and risk unlock when the board clears."
+            : "Each ball settles on its own. Drop a batch or play one at a time."}
+        </p>
+      </form>
+      <Result round={round} />
+    </GameLayout>
+  );
 }

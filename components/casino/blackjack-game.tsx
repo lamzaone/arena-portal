@@ -7,7 +7,7 @@ import { GameLayout, Result, StakeField, tokens, validStake, type GameClient } f
 const suits = { hearts: "♥", diamonds: "♦", clubs: "♣", spades: "♠" };
 function PlayingCard({ card, label = "Dealer hole card" }: { card: Card | null; label?: string }) {
   if (!card) return <div className="casino-card is-back" role="img" aria-label={label}><span>◆</span></div>;
-  return <div className={`casino-card ${card.suit === "hearts" || card.suit === "diamonds" ? "is-red" : ""}`} role="img" aria-label={`${card.rank} of ${card.suit}`}><span>{card.rank}<small>{suits[card.suit]}</small></span><b aria-hidden="true">{suits[card.suit]}</b><span aria-hidden="true">{card.rank}<small>{suits[card.suit]}</small></span></div>;
+  return <div key={`${card.rank}:${card.suit}`} className={`casino-card ${card.suit === "hearts" || card.suit === "diamonds" ? "is-red" : ""}`} role="img" aria-label={`${card.rank} of ${card.suit}`}><span>{card.rank}<small>{suits[card.suit]}</small></span><b aria-hidden="true">{suits[card.suit]}</b><span aria-hidden="true">{card.rank}<small>{suits[card.suit]}</small></span></div>;
 }
 
 export function BlackjackGame({ client }: { client: GameClient }) {

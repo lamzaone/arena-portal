@@ -20,7 +20,7 @@
     "test:game-panel:mysql": "node --experimental-transform-types --test lib/game-panel/mysql/*.test.ts",
     "test:appeals": "node --experimental-transform-types --test lib/data/appeals.test.ts app/api/appeals/route.test.ts",
     "test:trades": "node --experimental-strip-types --test lib/economy/trade-counterparty.test.ts",
-    "test:casino": "node --experimental-transform-types --test lib/casino/games.test.ts lib/data/casino-repository.test.ts app/api/casino/routes.test.ts",
+    "test:casino": "node --experimental-transform-types --test lib/casino/games.test.ts lib/casino/plinko-physics.test.ts lib/data/casino-repository.test.ts app/api/casino/routes.test.ts",
     "test:casino:browser": "node --test components/casino/casino.browser.test.mjs",
     "test:discord": "node --experimental-transform-types --test lib/discord/*.test.ts",
     "discord:build": "npm --prefix discord-bot run build",

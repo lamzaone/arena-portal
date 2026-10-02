@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { GameLayout, StakeField, tokens, validStake, type GameClient } from "./client";
+import { CrashParticipants } from "./crash-participants";
 
 export function CrashGame({ client }: { client: GameClient }) {
   const [stake, setStake] = useState(String(client.state.settings.minBet));
@@ -13,8 +14,11 @@ export function CrashGame({ client }: { client: GameClient }) {
   const received = useRef(0);
   useEffect(() => { received.current = performance.now(); setElapsed(0); }, [snapshot]);
   useEffect(() => {
-    const timer = setInterval(() => { if (document.visibilityState === "visible") setElapsed(Math.max(0, performance.now() - received.current)); }, 100);
-    return () => clearInterval(timer);
+    const reduced=window.matchMedia('(prefers-reduced-motion: reduce)');
+    let frame=0,last=0;
+    const tick=(now:number)=>{if(document.visibilityState==="visible"&&now-last>=(reduced.matches?250:32)){last=now;setElapsed(Math.max(0,now-received.current));}frame=requestAnimationFrame(tick);};
+    frame=requestAnimationFrame(tick);
+    return ()=>cancelAnimationFrame(frame);
   }, []);
   const serverNow = (snapshot?.serverTime || 0) + elapsed;
   const flyingMs = snapshot ? Math.max(0, serverNow - snapshot.startAt) : 0;
@@ -39,7 +43,7 @@ export function CrashGame({ client }: { client: GameClient }) {
       {[45,115,185,255].map(y => <line key={y} x1="40" y1={y} x2="455" y2={y} className="crash-grid" />)}{[40,145,250,355,455].map(x => <line key={x} x1={x} y1="25" x2={x} y2="255" className="crash-grid" />)}
       <text x="8" y="260" className="crash-axis">1x</text><text x="8" y="48" className="crash-axis">{graphMaximum / 100}x</text><text x="410" y="282" className="crash-axis">TIME →</text>
       {snapshot?.phase !== "betting" && snapshot && <><polygon points={`40,255 ${graphPoints} ${tip.x},255`} className="crash-area" /><polyline points={graphPoints} fill="none" className="crash-line" strokeWidth="4" /><circle cx={tip.x} cy={tip.y} r="7" className="crash-tip" /></>}
-    </svg><div className="crash-recent" aria-label="Recent Crash outcomes">{snapshot?.recent.slice(0, 6).map(item => <span key={item.roundId}>{(item.multiplier / 100).toFixed(2)}x</span>)}</div>
+    </svg><div className="crash-recent" aria-label="Recent Crash outcomes">{snapshot?.recent.slice(0, 6).map(item => <span key={item.roundId}>{(item.multiplier / 100).toFixed(2)}x</span>)}</div><CrashParticipants participants={snapshot?.participants??[]}/>
   </>} rules={<><p>Shared 8-second betting window, then the multiplier grows until the round crashes. A manual cashout uses the server’s current multiplier. Your optional automatic target is stored with the bet and works while disconnected.</p><p>Automatic targets range from 1.01x to 99.99x. A crash exactly at your target loses. The multiplier caps at 100x and can crash instantly at 1x. The theoretical total return at automatic targets is approximately 99% before whole-Token rounding.</p><p>The chart and timer are visual estimates synchronized to server time; they do not decide the payout. A 5-second cooldown follows a crash.</p></>}>
     {!snapshot ? <p className="casino-control-note">Connecting to the shared round. Refresh to check its status.</p> : bet ? <div className="crash-bet"><span>Your saved bet</span><strong>{tokens(bet.stakeTokens)} Tokens</strong><p>Auto cashout: {bet.autoCashout === null ? "Off" : `${(bet.autoCashout / 100).toFixed(2)}x`}</p><p>{bet.status === "pending" ? "Waiting for takeoff" : bet.status === "active" ? "In flight" : bet.status === "lost" ? "Round lost · 0 Tokens returned" : `Cashed out at ${((bet.cashoutMultiplier || 100) / 100).toFixed(2)}x · ${tokens(bet.payoutTokens || 0)} Tokens returned`}</p>{canCashout && <button type="button" className="casino-primary" disabled={client.busy || client.blocked} onClick={() => void client.mutate("/api/casino/crash/cashout", { roundId: snapshot.roundId })}>Cash out</button>}</div> : <form noValidate onSubmit={event => {
       event.preventDefault(); const value = validStake(stake, client); if (value === null) return;
