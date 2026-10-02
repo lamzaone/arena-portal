@@ -6523,7 +6523,7 @@ function economySeed(value: number | null | undefined, field: string) {
   return value;
 }
 
-type EconomyMutationContext = {
+export type EconomyMutationContext = {
   connection: PoolConnection;
   operationName: string;
   idempotencyKey: string;
@@ -6538,7 +6538,7 @@ export async function getEconomyOperationReceipt(input:{actorSteamId:string;idem
   return {status:row.status==="completed"?"completed":"pending",result:economyNullableRecord(row.result_json)};
 }
 
-async function runEconomyMutation<T extends Record<string, unknown>>(input: {
+export async function runEconomyMutation<T extends Record<string, unknown>>(input: {
   operationName: string;
   actorSteamId: string;
   idempotencyKey: string;
@@ -6719,7 +6719,7 @@ async function ensureEconomySteamAccount(
   );
 }
 
-async function lockTokenAccounts(
+export async function lockTokenAccounts(
   connection: PoolConnection,
   steamIds: string[],
 ) {
@@ -6743,7 +6743,7 @@ async function lockTokenAccounts(
   return new Map(rows.map((row) => [String(row.steam_id), toTokenWallet(row)]));
 }
 
-async function applyTokenDelta(input: {
+export async function applyTokenDelta(input: {
   connection: PoolConnection;
   wallets: Map<string, TokenWallet>;
   steamId: string;
@@ -6778,6 +6778,25 @@ async function applyTokenDelta(input: {
   const nextSpent = wallet.lifetimeSpent + (input.delta < 0 ? -input.delta : 0);
   if (!Number.isSafeInteger(nextEarned) || !Number.isSafeInteger(nextSpent))
     economyError("token_limit", "The token balance limit was reached.");
+
+  if (input.delta > 0) {
+    // The caller already holds this wallet lock. A locking read is current even
+    // when this transaction established an older REPEATABLE READ snapshot.
+    // Never acquire the casino clock/rounds here (casino locks them first).
+    let reserved = 0n;
+    try {
+      const [liabilities] = await input.connection.query<Array<RowDataPacket & { maximum_return: string | number }>>(
+        "SELECT maximum_return FROM portal_casino_reservations WHERE steam_id = ? FOR UPDATE", [input.steamId],
+      );
+      for (const liability of liabilities) reserved += BigInt(liability.maximum_return);
+    } catch (error) {
+      // Other portal economies retain their pre-casino behavior until migrated.
+      if ((error as { code?: string }).code !== "ER_NO_SUCH_TABLE") throw error;
+    }
+    const ceiling = BigInt(Number.MAX_SAFE_INTEGER);
+    if (BigInt(nextBalance) + reserved > ceiling || BigInt(nextEarned) + reserved > ceiling)
+      economyError("token_limit", "The token balance limit was reached.");
+  }
 
   await input.connection.execute(
     "UPDATE portal_token_accounts SET balance = ?, lifetime_earned = ?, lifetime_spent = ? WHERE steam_id = ?",

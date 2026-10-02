@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Archive, Crosshair, Coins, Link2, Settings2, Shield, ShoppingBag, Ticket, TicketCheck, UserRound } from "lucide-react";
+import { Archive, Crosshair, Coins, Dice5, Link2, Settings2, Shield, ShoppingBag, Ticket, TicketCheck, UserRound } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { NavigationIndicator } from "@/components/ui/navigation-indicator";
 import { isPrimaryNavigationLinkActive } from "./primary-navigation-routes";
@@ -11,6 +11,7 @@ const accountLinks = [
   { href: "/inventory", label: "Inventory", icon: Archive },
   { href: "/loadout", label: "Loadout", icon: Crosshair },
   { href: "/market", label: "Market", icon: ShoppingBag },
+  { href: "/casino", label: "Casino", icon: Dice5 },
   { href: "/redeem", label: "Redeem", icon: TicketCheck },
   { href: "/trades", label: "Trades", icon: Coins },
   { href: "/appeals", label: "Ban appeals", icon: Shield },

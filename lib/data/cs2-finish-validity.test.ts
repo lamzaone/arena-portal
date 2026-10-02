@@ -17,7 +17,12 @@ const sql = (query: string) => query.replaceAll(" FOR UPDATE", "").replaceAll(" 
 const executor = {
   async query(query: string, args: unknown[] = []) {
     if (query.includes("portal_economy_discount_rules")) { discountQueries += 1; return [activeDiscountRows, []]; }
-    return [db.prepare(sql(query)).all(...args as Array<string | number | null>), []];
+    try { return [db.prepare(sql(query)).all(...args as Array<string | number | null>), []]; }
+    catch (error) {
+      // Match the production MySQL missing-table contract for optional schemas.
+      if (error instanceof Error && error.message.startsWith('no such table:')) Object.assign(error,{code:'ER_NO_SUCH_TABLE'});
+      throw error;
+    }
   },
   async execute(query: string, args: unknown[] = []) {
     const result = db.prepare(sql(query)).run(...args.map((value) => typeof value === "boolean" ? Number(value) : value) as Array<string | number | null>);

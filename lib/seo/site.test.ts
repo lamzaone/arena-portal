@@ -41,6 +41,7 @@ test("keeps public pages crawlable while excluding private portal surfaces", asy
     "/inventory",
     "/loadout",
     "/trades",
+    "/casino",
     "/settings",
     "/tickets",
     "/appeals",

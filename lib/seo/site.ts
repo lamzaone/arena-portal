@@ -19,11 +19,16 @@ const PRIVATE_ROUTES = [
   "/inventory",
   "/loadout",
   "/trades",
+  "/casino",
   "/settings",
   "/tickets",
   "/appeals",
 ] as const;
 const PAGE_SEO = {
+  "/casino": {
+    title: "Token Casino | TAPPED.RO",
+    description: "Play Roulette, Blackjack, Crash and Plinko with your shared TAPPED.RO Token wallet. Sign in with Steam to view your personal rounds and results.",
+  },
   "/staff": {
     title: "Meet the CS2 Arena Staff | TAPPED.RO",
     description:
