@@ -517,7 +517,7 @@ function LoadoutEmptyState({ message }: { message: string }) {
     <div className="loadout-empty">
       <p>{message}</p>
       <p>
-        Find cosmetics in <Link href="/market">Marketplace</Link> or <Link href="/inventory">open an owned crate</Link>.
+        Find cosmetics in <Link href="/market">Marketplace</Link> or <Link href="/inventory">open an owned case</Link>.
       </p>
     </div>
   );

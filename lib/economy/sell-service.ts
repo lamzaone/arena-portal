@@ -73,6 +73,12 @@ export function createInventorySaleService(
       const fallbacks = await getCachedMarketplaceVariantFallbacks(
         quoteItems.map((item) => ({
           catalogueId: item.catalogueId as number,
+          itemType: item.itemType,
+          displayName: item.displayName,
+          marketHashName: item.catalogue?.marketHashName,
+          metadata: item.catalogue?.metadata,
+          minFloat: metadataFloat(item.catalogue?.metadata ?? {}, ["minFloat", "floatMin", "wearMin"]),
+          maxFloat: metadataFloat(item.catalogue?.metadata ?? {}, ["maxFloat", "floatMax", "wearMax"]),
           floatValue: item.floatValue,
           stattrak: item.stattrak,
           standardFallback:
@@ -90,6 +96,8 @@ export function createInventorySaleService(
       const quotes = await getMarketplacePriceQuotes(
         quoteItems.map((item, index) => ({
           itemType: item.itemType,
+          definitionIndex: item.definitionIndex,
+          paintkit: item.paintkit,
           displayName: item.displayName,
           marketHashName: item.catalogue?.marketHashName,
           metadata: item.catalogue?.metadata,
@@ -126,7 +134,7 @@ export function createInventorySaleService(
       // providers have already been checked above, so leave it unsold and
       // return it to the client for a later retry or staff price correction.
       const skippedItems = quoteItems.flatMap((item, index) =>
-        quotes[index] || fallbacks[index]
+        quotes[index]
           ? []
           : [{ itemId: item.id, displayName: item.displayName }],
       );
@@ -224,6 +232,12 @@ export function createInventorySaleService(
         item && catalogue && item.catalogueId !== null && !customServerFinish
           ? await getCachedMarketplaceVariantFallback({
               catalogueId: item.catalogueId,
+              itemType: item.itemType,
+              displayName: item.displayName,
+              marketHashName: catalogue.marketHashName,
+              metadata: catalogue.metadata,
+              minFloat: metadataFloat(catalogue.metadata, ["minFloat", "floatMin", "wearMin"]),
+              maxFloat: metadataFloat(catalogue.metadata, ["maxFloat", "floatMax", "wearMax"]),
               floatValue: item.floatValue,
               stattrak: item.stattrak,
               standardFallback:
@@ -247,6 +261,8 @@ export function createInventorySaleService(
           ? await getMarketplacePriceQuotes([
               {
                 itemType: item.itemType,
+                definitionIndex: item.definitionIndex,
+                paintkit: item.paintkit,
                 displayName: item.displayName,
                 marketHashName: catalogue.marketHashName,
                 metadata: catalogue.metadata,

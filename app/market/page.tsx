@@ -31,7 +31,7 @@ const marketDiscountCategoryLabels: Record<string, string> = {
   weapon: "All weapons",
   knife: "All knives",
   glove: "All gloves",
-  crate: "All crates and cases",
+  crate: "All cases",
   capsule: "All capsules",
   sticker: "All stickers",
   agent: "All agents",

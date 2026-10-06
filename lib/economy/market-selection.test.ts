@@ -28,4 +28,5 @@ test("quote labels distinguish seed evidence from estimates and server prices", 
   assert.equal(marketQuoteEvidenceLabel({ seedMatched: true, pricingRule: "exact" }), "Seed-matched market price");
   assert.equal(marketQuoteEvidenceLabel({ seedMatched: false, pricingRule: "float-linear-v1" }), "Market estimate · seed price unverified");
   assert.equal(marketQuoteEvidenceLabel({ seedMatched: false, pricingRule: "custom-server-fixed-v1" }), "Staff-set server price");
+  assert.equal(marketQuoteEvidenceLabel({ seedMatched: true, pricingRule: "float-linear-v1" }), "Seed-matched market estimate · float adjusted");
 });

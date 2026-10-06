@@ -29,6 +29,7 @@ export function marketQuoteEvidenceLabel(quote: {
   pricingRule: string | null;
 }) {
   if (quote.pricingRule === "custom-server-fixed-v1") return "Staff-set server price";
+  if (quote.seedMatched && quote.pricingRule === "float-linear-v1") return "Seed-matched market estimate · float adjusted";
   return quote.seedMatched
     ? "Seed-matched market price"
     : "Market estimate · seed price unverified";

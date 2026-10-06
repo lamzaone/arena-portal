@@ -14,7 +14,7 @@ export function TokenBalance({ wallet, compact = false }: { wallet: EconomyWalle
       {wallet.earned !== null || wallet.spent !== null ? <div className="tag-list">
         {wallet.earned !== null ? <span className="tag"><TrendingUp aria-hidden="true" /> {formatTokens(wallet.earned)} earned</span> : null}
         {wallet.spent !== null ? <span className="tag"><TrendingDown aria-hidden="true" /> {formatTokens(wallet.spent)} spent</span> : null}
-      </div> : <p className="empty-copy">Earn tokens in eligible live matches, then use them for crates and direct marketplace purchases.</p>}
+      </div> : <p className="empty-copy">Earn tokens in eligible live matches, then use them for cases and direct marketplace purchases.</p>}
     </Panel>
   );
 }

@@ -20,7 +20,7 @@ export default async function InventoryPage() {
   const csrf = createEconomyActionToken(session);
 
   return <PortalShell authenticated className="tapped-page">
-    <PageHeading eyebrow={<><Archive aria-hidden="true" /> Player economy</>} title="Inventory" description="Manage and protect your owned items, then inspect and open your crates without leaving Inventory." />
+    <PageHeading eyebrow={<><Archive aria-hidden="true" /> Player economy</>} title="Inventory" description="Manage and protect your owned items, then inspect and open your cases without leaving Inventory." />
     <InventoryWorkspace inventory={inventory} loadout={loadout} wallet={wallet} csrf={csrf} />
   </PortalShell>;
 }

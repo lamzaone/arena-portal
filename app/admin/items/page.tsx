@@ -187,10 +187,10 @@ function noticeText(value: string | undefined) {
     "artwork-saved": "Catalogue artwork saved and will be used by all item previews.",
     "market-enabled": "This product is now listed in the Marketplace.",
     "market-disabled": "This product is now hidden from the Marketplace.",
-    "custom-crate-created": "Custom crate created as a draft. Add rewards, then list it in Marketplace when ready.",
-    "custom-crate-saved": "Custom crate product details and direct Token price saved.",
-    "custom-crate-reward-added": "Reward added to the crate pool.",
-    "custom-crate-reward-removed": "Reward removed from future crate openings.",
+    "custom-crate-created": "Custom case created as a draft. Add rewards, then list it in Marketplace when ready.",
+    "custom-crate-saved": "Custom case product details and direct Token price saved.",
+    "custom-crate-reward-added": "Reward added to the case pool.",
+    "custom-crate-reward-removed": "Reward removed from future case openings.",
     "discount-created": "Discount rule created and audited.",
     "discount-saved": "Discount rule changes saved and audited.",
     "discount-enabled": "Discount rule enabled.",
@@ -221,20 +221,20 @@ function errorText(value: string | undefined) {
     "token-details": "Provide a valid token action, amount, and reason.",
     "item-details": "Review the item fields, JSON, and reason before saving.",
     "container-catalogue":
-      "Crates and capsules must be granted from a catalogue entry so their loot table is available.",
+      "Cases and capsules must be granted from a catalogue entry so their loot table is available.",
     "custom-product-catalogue":
       "VIP memberships and profile themes must use a trusted catalogue product.",
     "custom-crate-details":
-      "Provide a crate name, rarity, direct Token price, and valid artwork URL or image upload.",
+      "Provide a case name, rarity, direct Token price, and valid artwork URL or image upload.",
     "custom-crate-reward":
       "Choose a valid catalogue reward and a positive drop weight.",
     "custom-crate-duplicate":
-      "That item is already active in this crate's reward pool. Remove it first if you need to change the reward.",
+      "That item is already active in this case's reward pool. Remove it first if you need to change the reward.",
     "discount-details":
       "Review the discount target, adjustment, dates, and category exclusions.",
     "discount-missing": "That discount rule no longer exists.",
     "crate-reward-required":
-      "A listed crate, or one with unopened copies in player inventories, must keep at least one active reward.",
+      "A listed case, or one with unopened copies in player inventories, must keep at least one active reward.",
     "sticker-details": "Provide a valid weapon, sticker, slot, and reason.",
     "loadout-details": "Choose a valid loadout slot, item, and reason.",
     "transfer-details": "Provide a valid destination SteamID64 and reason.",
@@ -427,7 +427,7 @@ export default async function AdminItemsPage({
         <AdminPageHeader
           id="item-management-title"
           title="Item management"
-          description="Maintain Marketplace products and custom crate pools in separate, focused workspaces."
+          description="Maintain Marketplace products and custom case pools in separate, focused workspaces."
           access={access}
         />
 
@@ -439,7 +439,7 @@ export default async function AdminItemsPage({
           dense
           items={[
             { key: "marketplace", href: marketplaceTabHref, label: "Marketplace", icon: ShoppingBag },
-            { key: "crates", href: cratesTabHref, label: "Crates", icon: Archive },
+            { key: "crates", href: cratesTabHref, label: "Cases", icon: Archive },
             { key: "discount", href: discountTabHref, label: "Discounts", icon: BadgePercent },
           ]}
         />
@@ -467,7 +467,7 @@ export default async function AdminItemsPage({
                 label="Product name, market name, type, or catalogue ID"
                 defaultValue={marketplaceQuery}
                 maxLength={120}
-                placeholder="Skins, VIP products, crates…"
+                placeholder="Skins, VIP products, cases…"
                 autoComplete="off"
               />
             </SearchNavigationForm>
@@ -482,7 +482,7 @@ export default async function AdminItemsPage({
             <div className={styles.lookupHeading}>
               <PackageSearch aria-hidden="true" />
               <div>
-                <p className="eyebrow">Crate lookup</p>
+                <p className="eyebrow">Case lookup</p>
                 <h2 id="crate-lookup-title">Find a managed container</h2>
               </div>
             </div>
@@ -497,17 +497,17 @@ export default async function AdminItemsPage({
                 id="staff-crate-lookup"
                 rootClassName={styles.lookupControl}
                 name="crateQ"
-                label="Crate name or catalogue ID"
+                label="Case name or catalogue ID"
                 defaultValue={crateQuery}
                 maxLength={120}
-                placeholder="Managed crate name or ID…"
+                placeholder="Managed case name or ID…"
                 autoComplete="off"
               />
             </SearchNavigationForm>
             <p className={styles.lookupSummary} aria-live="polite">
               {crateQuery
-                ? `${visibleCustomCrates.length} of ${customCrates.length} managed crate${customCrates.length === 1 ? "" : "s"} match "${crateQuery}".`
-                : `${customCrates.length} managed crate${customCrates.length === 1 ? "" : "s"} available.`}
+                ? `${visibleCustomCrates.length} of ${customCrates.length} managed case${customCrates.length === 1 ? "" : "s"} match "${crateQuery}".`
+                : `${customCrates.length} managed case${customCrates.length === 1 ? "" : "s"} available.`}
             </p>
           </section>
         ) : null}
@@ -516,9 +516,9 @@ export default async function AdminItemsPage({
           <section className="economy-crate-section">
             <div className="section-heading compact">
               <p className="eyebrow">
-                <Archive aria-hidden="true" /> Custom crate studio
+                <Archive aria-hidden="true" /> Custom case studio
               </p>
-              <h2>Build a crate from any catalogue item.</h2>
+              <h2>Build a case from any catalogue item.</h2>
               <p>
                 Create the container, set its direct Token price and artwork,
                 then add skins, knives, gloves, stickers, agents, charms, or
@@ -533,15 +533,15 @@ export default async function AdminItemsPage({
                 encType="multipart/form-data"
               >
                 <p className="eyebrow">New container</p>
-                <h3>Create a draft crate</h3>
+                <h3>Create a draft case</h3>
                 <p className="empty-copy">
-                  Draft crates stay out of Marketplace until you deliberately
+                  Draft cases stay out of Marketplace until you deliberately
                   list them after adding rewards.
                 </p>
                 <ActionFields csrf={csrf} action="custom-crate-create" />
                 <div className="form-grid">
                   <label>
-                    Crate name
+                    Case name
                     <input
                       name="crateDisplayName"
                       required
@@ -550,7 +550,7 @@ export default async function AdminItemsPage({
                     />
                   </label>
                   <label>
-                    Crate rarity
+                    Case rarity
                     <select name="crateRarityRank" defaultValue="0">
                       {ECONOMY_RARITIES.map((rarity) => (
                         <option key={rarity.rank} value={rarity.rank}>
@@ -587,18 +587,18 @@ export default async function AdminItemsPage({
                   />
                 </label>
                 <button className="button button-primary" type="submit">
-                  <PackagePlus aria-hidden="true" /> Create crate draft
+                  <PackagePlus aria-hidden="true" /> Create case draft
                 </button>
               </form>
               <aside className="panel economy-crate-picker">
                 <p className="eyebrow">Managed containers</p>
-                <h3>Crate library</h3>
+                <h3>Case library</h3>
                 <p className="empty-copy">
-                  The TAPPD Weapon Case and every staff-created crate are
+                  The TAPPD Weapon Case and every staff-created case are
                   editable here. Official Valve cases stay protected.
                 </p>
                 {visibleCustomCrates.length ? (
-                  <PaginatedItemGrid className="economy-crate-picker-list" label="Managed crates" resetKey={crateQuery}>
+                  <PaginatedItemGrid className="economy-crate-picker-list" label="Managed cases" resetKey={crateQuery}>
                     {visibleCustomCrates.map((crate) => (
                       <Link
                         className={`economy-crate-picker-item ${customCrate?.crate.id === crate.id ? "is-selected" : ""}`}
@@ -638,8 +638,8 @@ export default async function AdminItemsPage({
                 ) : (
                   <p className="empty-copy">
                     {crateQuery
-                      ? "No managed crates match this lookup."
-                      : "No managed crates yet. Create the first one above."}
+                      ? "No managed cases match this lookup."
+                      : "No managed cases yet. Create the first one above."}
                   </p>
                 )}
               </aside>
@@ -649,7 +649,7 @@ export default async function AdminItemsPage({
                 <header className="economy-crate-workbench-header">
                   <div>
                     <p className="eyebrow">
-                      <SlidersHorizontal aria-hidden="true" /> Editing crate
+                      <SlidersHorizontal aria-hidden="true" /> Editing case
                     </p>
                     <h3>{customCrate.crate.displayName}</h3>
                     <p>
@@ -678,7 +678,7 @@ export default async function AdminItemsPage({
                     <input type="hidden" name="crateId" value={customCrate.crate.id} />
                     <div className="form-grid">
                       <label>
-                        Crate name
+                        Case name
                         <input
                           name="crateDisplayName"
                           required
@@ -687,7 +687,7 @@ export default async function AdminItemsPage({
                         />
                       </label>
                       <label>
-                        Crate rarity
+                        Case rarity
                         <select
                           name="crateRarityRank"
                           defaultValue={String(customCrate.crate.rarityRank)}
@@ -727,7 +727,7 @@ export default async function AdminItemsPage({
                       />
                     </label>
                     <button className="staff-unban-button" type="submit">
-                      Save crate product
+                      Save case product
                     </button>
                   </form>
                   <form
@@ -738,7 +738,7 @@ export default async function AdminItemsPage({
                     <p className="eyebrow">Release control</p>
                     <h4>Marketplace availability</h4>
                     <p className="empty-copy">
-                      A crate needs at least one active reward before it can be
+                      A case needs at least one active reward before it can be
                       released for purchase.
                     </p>
                     <ActionFields csrf={csrf} action="market-status-set" />
@@ -763,7 +763,7 @@ export default async function AdminItemsPage({
                           !customCrateMarketListed
                         }
                       />
-                      List this crate in Marketplace
+                      List this case in Marketplace
                     </label>
                     <button
                       className="staff-unban-button"
@@ -883,7 +883,7 @@ export default async function AdminItemsPage({
                     </button>
                   </form>
                   {crateRewardCatalogue.items.length ? (
-                    <PaginatedItemGrid className="economy-crate-candidate-list" label="Crate reward candidates" resetKey={`${customCrate.crate.id}:${crateRewardQuery}:${crateRewardType}`}>
+                    <PaginatedItemGrid className="economy-crate-candidate-list" label="Case reward candidates" resetKey={`${customCrate.crate.id}:${crateRewardQuery}:${crateRewardType}`}>
                       {crateRewardCatalogue.items
                         .filter((item) => item.id !== customCrate.crate.id)
                         .map((item) => {
@@ -955,7 +955,7 @@ export default async function AdminItemsPage({
                     </p>
                   )}
                   {customCrate.entries.length ? (
-                    <PaginatedItemGrid className="economy-crate-reward-list" label="Configured crate rewards" resetKey={String(customCrate.crate.id)}>
+                    <PaginatedItemGrid className="economy-crate-reward-list" label="Configured case rewards" resetKey={String(customCrate.crate.id)}>
                       {customCrate.entries.map((entry) => {
                         const rewardIsActive =
                           entry.enabled && entry.catalogue.enabled;
@@ -1017,7 +1017,7 @@ export default async function AdminItemsPage({
                     </PaginatedItemGrid>
                   ) : (
                     <p className="empty-copy economy-crate-empty-rewards">
-                      This crate has no rewards yet. It cannot be listed or opened
+                      This case has no rewards yet. It cannot be listed or opened
                       until you add at least one catalogue item.
                     </p>
                   )}
@@ -1029,10 +1029,10 @@ export default async function AdminItemsPage({
         {activeTab === "crates" && !access.canManageEconomy ? (
           <section className={`${styles.emptyResults} panel`}>
             <LockKeyhole aria-hidden="true" />
-            <h2>Crate management permission required</h2>
+            <h2>Case management permission required</h2>
             <p>
               Your staff role can view the economy, but cannot create or edit
-              crate products and reward pools.
+              case products and reward pools.
             </p>
           </section>
         ) : null}

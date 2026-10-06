@@ -101,7 +101,7 @@ const featuredTypes = new Set<EconomyItemType>([
 
 const catalogueFilters: Array<{ value: CatalogueFilter; label: string }> = [
   { value: "featured", label: "Quick grants" },
-  { value: "containers", label: "Crates" },
+  { value: "containers", label: "Cases" },
   { value: "vip", label: "VIP" },
   { value: "themes", label: "Themes" },
   { value: "all", label: "All loaded" },
@@ -454,7 +454,7 @@ export function StaffGrantItemControls({
         return [];
       }
       if (!isContainer(line.itemType) && line.quantity !== 1) {
-        errors[line.key] = "Only crates and capsules can use a quantity above one.";
+        errors[line.key] = "Only cases and capsules can use a quantity above one.";
         return [];
       }
       if (
@@ -554,7 +554,7 @@ export function StaffGrantItemControls({
     });
     if (expandedTotal > 500) {
       setSubmitMessage(
-        "This grant expands to more than 500 items. Reduce one or more crate quantities.",
+        "This grant expands to more than 500 items. Reduce one or more case quantities.",
       );
       return { payload: null, errors };
     }
@@ -645,7 +645,7 @@ export function StaffGrantItemControls({
           <Gift aria-hidden="true" />
           <span>
             <strong>Catalogue items</strong>
-            <small>Crates, VIP, themes and imported cosmetics</small>
+            <small>Cases, VIP, themes and imported cosmetics</small>
           </span>
         </label>
         <label className={mode === "custom" ? "is-selected" : ""}>

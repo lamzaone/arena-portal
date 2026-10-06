@@ -17,7 +17,7 @@ const sql = (query: string) => query.replaceAll(" FOR UPDATE", "").replaceAll(" 
 const executor = {
   async query(query: string, args: unknown[] = []) {
     if (query.includes("portal_economy_discount_rules")) { discountQueries += 1; return [activeDiscountRows, []]; }
-    try { return [db.prepare(sql(query)).all(...args as Array<string | number | null>), []]; }
+    try { return [db.prepare(sql(query)).all(...args.map((value) => typeof value === "boolean" ? Number(value) : value) as Array<string | number | null>), []]; }
     catch (error) {
       // Match the production MySQL missing-table contract for optional schemas.
       if (error instanceof Error && error.message.startsWith('no such table:')) Object.assign(error,{code:'ER_NO_SUCH_TABLE'});
@@ -52,9 +52,19 @@ registerHooks({ resolve(specifier, context, next) {
     : specifier.startsWith(".") && context.parentURL?.startsWith("file:") ? moduleUrl(fileURLToPath(new URL(specifier, context.parentURL))) : null;
   return url ? { url, shortCircuit: true } : next(specifier, context);
 } });
-const { getEconomyCatalogue, getMarketplaceCatalogue, getEconomyCatalogueItem, getEconomyCrateDropPreview, getPlayerEconomyInventoryItem, purchaseEconomyItem, sellEconomyItem, awardEconomyDrop } = await import("./portal-repository.ts");
+const { getEconomyCatalogue, getMarketplaceCatalogue, getEconomyCatalogueItem, getEconomyCrates, getStaffCustomCrates, getEconomyCrateDropPreview, getPlayerEconomyInventoryItem, purchaseEconomyItem, sellEconomyItem, sellEconomyItems, awardEconomyDrop } = await import("./portal-repository.ts");
 const { getCs2Finish } = await import("../economy/cs2-finish-catalogue.ts");
 const { deriveMarketplacePriceIdentity } = await import("../economy/market-pricing.ts");
+
+test("Glock Gamma Doppler phases retain their separate public market identities", async () => {
+  db.exec("INSERT INTO portal_economy_catalogue (id,item_type,definition_index,paintkit,display_name) VALUES (991,'skin',4,1119,'Glock-18 | Gamma Doppler')");
+  try {
+    const item = await getEconomyCatalogueItem(991);
+    assert.equal(item?.metadata.marketVersion, "Emerald");
+    assert.equal(item?.metadata.marketBaseName, "Glock-18 | Gamma Doppler");
+    assert.equal(item?.displayName, "Glock-18 | Gamma Doppler (Emerald)");
+  } finally { db.exec("DELETE FROM portal_economy_catalogue WHERE id = 991"); }
+});
 
 test("gem knives use distinct names and exact market versions while vanilla has no exterior", () => {
   const ruby = getCs2Finish(500, 415)!;
@@ -143,6 +153,16 @@ INSERT INTO portal_economy_catalogue (id, item_type, definition_index, paintkit,
 INSERT INTO portal_loot_tables (id,code,table_type,container_catalogue_id,display_name) VALUES (1,'case','container',3,'Case'), (2,'invalid-drop','drop',null,'Drop');
 INSERT INTO portal_loot_entries (id,loot_table_id,catalogue_id,weight) VALUES (1,1,1,100), (2,1,2,5), (3,2,1,100);
 `);
+
+test("Cases labels retain existing crate records in public and staff catalogue queries", async () => {
+  db.prepare("UPDATE portal_economy_catalogue SET metadata = ? WHERE id = 3").run(JSON.stringify({ staffCreated: "true" }));
+  try {
+    const page = await getEconomyCrates();
+    assert.equal(page.total, 1);
+    assert.deepEqual(page.crates.map((item) => [item.id, item.itemType]), [[3, "crate"]]);
+    assert.deepEqual((await getStaffCustomCrates()).map((item) => [item.id, item.itemType]), [[3, "crate"]]);
+  } finally { db.prepare("UPDATE portal_economy_catalogue SET metadata = '{}' WHERE id = 3").run(); }
+});
 
 test("public pagination excludes unreleased pairs but retains real unpriced finishes", async () => {
   const page = await getEconomyCatalogue({ itemTypes: ["skin"], pageSize: 1 });
@@ -328,4 +348,54 @@ test("a non-vanilla skin cannot use the Vanilla quote identity", async () => {
     },
   }), { code: "invalid_input" });
   assert.equal(Number(db.prepare("SELECT balance FROM portal_token_accounts WHERE steam_id = ?").get(steamId)!.balance), before);
+});
+
+test("verified pattern and stockless phase sources remain usable at checkout", async () => {
+  db.prepare("INSERT INTO portal_economy_catalogue (id,item_type,definition_index,paintkit,display_name) VALUES (992,'knife',500,568,'★ Bayonet | Gamma Doppler')").run();
+  const steamId = "76561198000000001";
+  const before = Number(db.prepare("SELECT balance FROM portal_token_accounts WHERE steam_id = ?").get(steamId)!.balance);
+  const selections = [
+    { catalogueId: 2, floatValue: 0.2, baseEuroCents: 100, euroCents: 97, floatDiscountBps: 300, source: "csfloat-pattern-listing", sourceReference: "https://csfloat.com/api/v1/listings/123", marketHashName: "AK-47 | Case Hardened (Field-Tested)", marketVersion: null, wear: "Field-Tested", seedMatched: true },
+    { catalogueId: 992, floatValue: 0, baseEuroCents: 100, euroCents: 100, floatDiscountBps: 0, source: "skinport-out-of-stock-suggested", sourceReference: "https://api.skinport.com/v1/sales/out-of-stock", marketHashName: "★ Bayonet | Gamma Doppler (Factory New)", marketVersion: "Emerald", wear: "Factory New", seedMatched: false },
+  ];
+  for (const { catalogueId, ...quote } of selections) {
+    const result = await purchaseEconomyItem({ steamId, catalogueId, floatValue: quote.floatValue, seed: 661, expectedUnitPriceTokens: quote.euroCents, idempotencyKey: `variant-source-${catalogueId}`,
+      resolvedMarketQuote: { ...quote, stattrak: false, seed: 661, pricingRule: "float-linear-v1", fromFallback: false, fallbackStale: false, fallbackObservedAt: null } });
+    assert.equal(result.priceTokens, quote.euroCents);
+  }
+  assert.equal(Number(db.prepare("SELECT balance FROM portal_token_accounts WHERE steam_id = ?").get(steamId)!.balance), before - 197);
+});
+
+test("single and bulk sales reject an automatic catalogue price without a matching exterior quote", async () => {
+  const steamId = "76561198000000001";
+  const itemId = "12345678-1234-4123-8123-123456789ddd";
+  db.prepare("INSERT INTO portal_economy_catalogue_prices (catalogue_id,is_current,market_price_eur_cents,token_price,price_source) VALUES (2,1,977,977,'skinport-30d-median')").run();
+  db.prepare("INSERT INTO portal_inventory_items (id,owner_steam_id,catalogue_id,item_type,definition_index,paintkit,seed,float_value,stattrak,stattrak_count,rarity_rank,tradable,state,attributes,source) VALUES (?, ?, 2, 'skin', 7, 44, 661, 0.02, 0, 0, 3, 1, 'available', '{}', '{}')").run(itemId, steamId);
+  const before = db.prepare("SELECT balance FROM portal_token_accounts WHERE steam_id = ?").get(steamId)!.balance;
+  try {
+    await assert.rejects(sellEconomyItem({ steamId, itemId, idempotencyKey: "no-matching-exterior-sale" }), { code: "price_unavailable" });
+    await assert.rejects(sellEconomyItems({ steamId, items: [{ itemId }], idempotencyKey: "no-matching-exterior-bulk-sale" }), { code: "price_unavailable" });
+    assert.equal(db.prepare("SELECT balance FROM portal_token_accounts WHERE steam_id = ?").get(steamId)!.balance, before);
+    assert.equal(db.prepare("SELECT state FROM portal_inventory_items WHERE id = ?").get(itemId)!.state, "available");
+  } finally {
+    db.prepare("DELETE FROM portal_inventory_items WHERE id = ?").run(itemId);
+    db.prepare("DELETE FROM portal_economy_catalogue_prices WHERE catalogue_id = 2 AND price_source = 'skinport-30d-median'").run();
+  }
+});
+
+test("market browsing excludes a pre-correction generic Glock phase cache and accepts a matching Emerald cache", async () => {
+  db.exec("CREATE TABLE portal_economy_market_variant_prices (catalogue_id INTEGER, stattrak INTEGER, wear TEXT, market_hash_name TEXT, market_version TEXT, market_price_eur_cents INTEGER, price_source TEXT, source_reference TEXT, image_url TEXT, observed_at TEXT, expires_at TEXT)");
+  db.exec("INSERT INTO portal_economy_catalogue (id,item_type,definition_index,paintkit,display_name) VALUES (993,'skin',4,1119,'Glock-18 | Gamma Doppler')");
+  db.exec("INSERT INTO portal_economy_catalogue_prices (catalogue_id,is_current,market_price_eur_cents,token_price,price_source) VALUES (993,1,850,850,'skinport-30d-median')");
+  db.prepare("INSERT INTO portal_economy_market_variant_prices (catalogue_id,stattrak,wear,market_hash_name,market_version,market_price_eur_cents,price_source,observed_at,expires_at) VALUES (993,0,'Minimal Wear|base-v2','Glock-18 | Gamma Doppler (Minimal Wear)',NULL,1000,'skinport-30d-median',?,?)").run(new Date().toISOString(),new Date(Date.now()+3600000).toISOString());
+  try {
+    const staleIdentity = (await getMarketplaceCatalogue({ query: "Glock-18 | Gamma Doppler", itemTypes: ["skin"] })).items.find(item => item.id === 993)!;
+    assert.equal(staleIdentity.displayPriceTokens, null);
+    db.exec("UPDATE portal_economy_market_variant_prices SET market_version = 'Emerald' WHERE catalogue_id = 993");
+    const matched = (await getMarketplaceCatalogue({ query: "Glock-18 | Gamma Doppler", itemTypes: ["skin"] })).items.find(item => item.id === 993)!;
+    assert.equal(matched.displayPriceTokens, 955);
+    assert.equal(matched.displayPriceSource, "skinport-30d-median");
+  } finally {
+    db.exec("DELETE FROM portal_economy_catalogue WHERE id = 993; DELETE FROM portal_economy_catalogue_prices WHERE catalogue_id = 993; DROP TABLE portal_economy_market_variant_prices");
+  }
 });

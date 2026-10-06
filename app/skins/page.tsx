@@ -15,7 +15,7 @@ export default async function SkinsPage() {
   if (process.env.LEGACY_WEAPONSKINS_ENABLED !== "true") {
     return <PortalShell authenticated className="tapped-page">
       <PageHeading eyebrow={<><Paintbrush aria-hidden="true" /> Player economy</>} title="Your cosmetics" description="Your collection and equipped items have a new home." />
-      <section className={styles.retired}><span className={styles.icon}><ShieldCheck aria-hidden="true" /></span><h2>Manage your items in Inventory</h2><p>Browse your cosmetics, customize items, and open crates in Inventory. Use Loadout to choose what each team equips.</p><div className={styles.actions}><Link className="button button-primary" href="/inventory">Open inventory</Link><Link className="button button-secondary" href="/loadout">Manage loadout</Link></div></section>
+      <section className={styles.retired}><span className={styles.icon}><ShieldCheck aria-hidden="true" /></span><h2>Manage your items in Inventory</h2><p>Browse your cosmetics, customize items, and open cases in Inventory. Use Loadout to choose what each team equips.</p><div className={styles.actions}><Link className="button button-primary" href="/inventory">Open inventory</Link><Link className="button button-secondary" href="/loadout">Manage loadout</Link></div></section>
     </PortalShell>;
   }
   const session = await getSession();

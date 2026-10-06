@@ -21,7 +21,8 @@ export type ExternalMarketPriceSource =
   | "csfloat-price-index"
   | "skincash-listing"
   | "multi-market-index"
-  | "csfloat-exact-listing";
+  | "csfloat-exact-listing"
+  | "csfloat-pattern-listing";
 
 export type ExternalMarketPrice = {
   eurCents: number;
@@ -41,6 +42,9 @@ export type CsfloatExactListingLookup = {
   minFloat: number | null;
   maxFloat: number | null;
   seed: number | null;
+  definitionIndex?: number | null;
+  paintkit?: number | null;
+  allowPatternEstimate?: boolean;
 };
 
 type ProviderQuote = {
@@ -74,11 +78,11 @@ const exactListingCache = new Map<string, ExactListingCacheValue>();
 const exactListingRequests = new Map<string, Promise<ExternalMarketPrice | null>>();
 
 function text(value: unknown) {
-  return typeof value === "string" ? value.normalize("NFKC").replace(/\s+/g, " ").trim() : "";
+  return typeof value === "string" ? value.normalize("NFC").replace(/\s+/g, " ").trim() : "";
 }
 
 function key(value: string | null | undefined) {
-  return text(value).toLocaleLowerCase("en-US");
+  return text(value).normalize("NFKC").toLocaleLowerCase("en-US");
 }
 
 function positiveInteger(value: unknown) {
@@ -336,6 +340,11 @@ function exactListingCacheKey(input: CsfloatExactListingLookup) {
     input.stattrak ? "stattrak" : "normal",
     input.floatValue?.toFixed(6) ?? "none",
     input.seed ?? "none",
+    input.definitionIndex ?? "none",
+    input.paintkit ?? "none",
+    input.minFloat ?? "none",
+    input.maxFloat ?? "none",
+    input.allowPatternEstimate ? "pattern" : "exact",
   ].join("\u0000");
 }
 
@@ -355,6 +364,9 @@ export async function getCsfloatExactListingPrice(
   const requestedSeed = numberInRange(input.seed, 0, 1_000);
   if (requestedFloat === null || requestedSeed === null || !Number.isInteger(requestedSeed))
     return null;
+  for (const value of [input.definitionIndex, input.paintkit]) {
+    if (value != null && (!Number.isSafeInteger(value) || value < 0)) return null;
+  }
   const targetFloat = Number(requestedFloat.toFixed(6));
   const cacheKey = exactListingCacheKey({ ...input, marketHashName });
   const cached = exactListingCache.get(cacheKey);
@@ -399,11 +411,19 @@ async function fetchExactListingPrice(
   });
   const minFloat = numberInRange(input.minFloat, 0, 1) ?? 0;
   const maxFloat = numberInRange(input.maxFloat, 0, 1) ?? 1;
+  if (input.definitionIndex != null) search.set("def_index", String(input.definitionIndex));
+  if (input.paintkit != null) search.set("paint_index", String(input.paintkit));
   // Portal wear is persisted to six decimals. Query that same rounding bin,
   // then verify the returned identity instead of trusting remote filters.
   const tolerance = 0.0000005;
-  search.set("min_float", Math.max(minFloat, targetFloat - tolerance).toFixed(7));
-  search.set("max_float", Math.min(maxFloat, targetFloat + tolerance).toFixed(7));
+  const wearBounds = targetFloat <= 0.07 ? [0, 0.07]
+    : targetFloat <= 0.15 ? [0.070001, 0.15]
+    : targetFloat <= 0.38 ? [0.150001, 0.38]
+    : targetFloat <= 0.45 ? [0.380001, 0.45] : [0.450001, 1];
+  const lower = input.allowPatternEstimate ? wearBounds[0] : targetFloat - tolerance;
+  const upper = input.allowPatternEstimate ? wearBounds[1] : targetFloat + tolerance;
+  search.set("min_float", Math.max(minFloat, lower).toFixed(7));
+  search.set("max_float", Math.min(maxFloat, upper).toFixed(7));
 
   const payload = await fetchJson(
     `https://csfloat.com/api/v1/listings?${search.toString()}`,
@@ -422,6 +442,8 @@ async function fetchExactListingPrice(
       const itemRow = item as Record<string, unknown>;
       if (key(itemRow.market_hash_name as string) !== key(marketHashName)) continue;
       if (itemRow.is_stattrak !== input.stattrak || itemRow.is_souvenir !== false) continue;
+      if (input.definitionIndex != null && itemRow.def_index !== input.definitionIndex) continue;
+      if (input.paintkit != null && itemRow.paint_index !== input.paintkit) continue;
       const usdCents = positiveInteger(row.price);
       const eurCents = usdCents === null
         ? null
@@ -429,7 +451,9 @@ async function fetchExactListingPrice(
       const listingFloat = numberInRange(itemRow.float_value, 0, 1);
       const listingSeed = numberInRange(itemRow.paint_seed, 0, 1_000);
       if (eurCents === null) continue;
-      if (listingFloat === null || Number(listingFloat.toFixed(6)) !== targetFloat) continue;
+      if (listingFloat === null || listingFloat < minFloat || listingFloat > maxFloat) continue;
+      const exactFloat = Number(listingFloat.toFixed(6)) === targetFloat;
+      if (!exactFloat && (!input.allowPatternEstimate || listingFloat < wearBounds[0] || listingFloat > wearBounds[1])) continue;
       if (
         listingSeed === null || !Number.isInteger(listingSeed) || listingSeed !== requestedSeed
       ) {
@@ -439,12 +463,12 @@ async function fetchExactListingPrice(
       const listingId = text(row.id);
       quote = {
         eurCents,
-        source: "csfloat-exact-listing",
+        source: exactFloat ? "csfloat-exact-listing" : "csfloat-pattern-listing",
         sourceReference: /^\d+$/.test(listingId)
           ? `https://csfloat.com/api/v1/listings/${listingId}`
           : `https://csfloat.com/api/v1/listings?${search.toString()}`,
         marketHashName,
-        exactFloat: true,
+        exactFloat,
         exactSeed: true,
       };
     }

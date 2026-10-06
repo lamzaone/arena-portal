@@ -14,6 +14,7 @@ import {
 import {
   getBrowseMarketplacePriceQuotes,
   isStattrakMarketplaceItem,
+  isFloatPricedMarketplaceItem,
 } from "@/lib/economy/market-pricing";
 import type { PanelTimingReporter } from "@/lib/game-panel/timing";
 
@@ -50,6 +51,12 @@ export async function withCurrentMarketPrices(items: EconomyInventoryItem[]) {
       const catalogue = item.catalogue!;
       return {
         catalogueId: item.catalogueId!,
+        itemType: item.itemType,
+        displayName: item.displayName,
+        marketHashName: catalogue.marketHashName,
+        metadata: catalogue.metadata,
+        minFloat: metadataFloat(catalogue.metadata, ["minFloat", "floatMin", "wearMin"]),
+        maxFloat: metadataFloat(catalogue.metadata, ["maxFloat", "floatMax", "wearMax"]),
         floatValue: item.floatValue,
         stattrak: item.stattrak,
         standardFallback:
@@ -68,6 +75,8 @@ export async function withCurrentMarketPrices(items: EconomyInventoryItem[]) {
       const catalogue = item.catalogue!;
       return {
         itemType: item.itemType,
+        definitionIndex: item.definitionIndex,
+        paintkit: item.paintkit,
         displayName: item.displayName,
         marketHashName: catalogue.marketHashName,
         metadata: catalogue.metadata,
@@ -94,9 +103,9 @@ export async function withCurrentMarketPrices(items: EconomyInventoryItem[]) {
   return items.map((item) => {
     const quote = quoteByItemId.get(item.id);
     if (!quote) {
-      // The catalogue stores the normal item's historic snapshot. Never show
-      // it as the value of a separately priced StatTrak™ instance.
-      return item.stattrak
+      // A default catalogue snapshot does not establish this instance's
+      // exterior or StatTrak value.
+      return item.stattrak || isFloatPricedMarketplaceItem(item.itemType)
         ? {
             ...item,
             marketPriceTokens: null,

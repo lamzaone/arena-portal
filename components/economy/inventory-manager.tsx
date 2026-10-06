@@ -1031,7 +1031,7 @@ export function InventoryManager({
             </button>
           ) : null}
           {inventoryTotal || bulkSelectedIds.size ? (
-            <button id="inventory-selection-toggle" type="button" className="button button-secondary inventory-selection-toggle" aria-pressed={selectionMode} aria-expanded={selectionMode} aria-controls={selectionMode ? "inventory-selection-actions" : undefined} disabled={inventoryInteractionBlocked} onClick={toggleSelectionMode} title={selectionMode ? "Exit selection mode" : "Select up to 50 items to lock, unlock, sell, or open crates"}>
+            <button id="inventory-selection-toggle" type="button" className="button button-secondary inventory-selection-toggle" aria-pressed={selectionMode} aria-expanded={selectionMode} aria-controls={selectionMode ? "inventory-selection-actions" : undefined} disabled={inventoryInteractionBlocked} onClick={toggleSelectionMode} title={selectionMode ? "Exit selection mode" : "Select up to 50 items to lock, unlock, sell, or open cases"}>
               <ListChecks aria-hidden="true" /> {selectionMode ? "Exit selection" : "Select items"}
             </button>
           ) : null}
@@ -1052,8 +1052,8 @@ export function InventoryManager({
               <strong>{selectionMode ? "Selection mode" : "Bulk actions"}</strong>
               <span>
                 {selectionMode
-                  ? `${bulkSelectedItems.length.toLocaleString()} of ${MAX_BULK_SELL_ITEMS} items selected · ${bulkSellableItems.length.toLocaleString()} sellable${bulkCrateSelection.status === "ready" ? ` · ${bulkOpenableCrates.length.toLocaleString()} openable` : bulkSelectedItems.length ? " · opening requires crates only" : ""}`
-                  : `Select up to ${MAX_BULK_SELL_ITEMS} items to lock, unlock, sell, or open crates.`}
+                  ? `${bulkSelectedItems.length.toLocaleString()} of ${MAX_BULK_SELL_ITEMS} items selected · ${bulkSellableItems.length.toLocaleString()} sellable${bulkCrateSelection.status === "ready" ? ` · ${bulkOpenableCrates.length.toLocaleString()} openable` : bulkSelectedItems.length ? " · opening requires cases only" : ""}`
+                  : `Select up to ${MAX_BULK_SELL_ITEMS} items to lock, unlock, sell, or open cases.`}
               </span>
             </div>
           </div>
@@ -1136,7 +1136,7 @@ export function InventoryManager({
           ) : null}
           {selectionMode && bulkOpenConfirming ? (
             <p className="economy-bulk-confirmation" role="alert">
-              Opening {bulkOpenableCrates.length} selected {bulkOpenableCrates.length === 1 ? "crate" : "crates"} consumes every container. Rewards are generated server-side in groups of 10. Select Confirm open {bulkOpenableCrates.length} to continue.
+              Opening {bulkOpenableCrates.length} selected {bulkOpenableCrates.length === 1 ? "case" : "cases"} consumes every container. Rewards are generated server-side in groups of 10. Select Confirm open {bulkOpenableCrates.length} to continue.
             </p>
           ) : null}
         </section>
@@ -1682,7 +1682,7 @@ export function InventoryManager({
       ) : (
         <EconomyEmptyState
           title="Your inventory is empty"
-          description="Earn eligible match rewards, wait for random drops, open crates, or buy an item from the marketplace to start a collection."
+          description="Earn eligible match rewards, wait for random drops, open cases, or buy an item from the marketplace to start a collection."
         />
       )}
     </section>

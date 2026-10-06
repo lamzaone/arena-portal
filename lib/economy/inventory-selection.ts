@@ -50,10 +50,10 @@ export function partitionCrateOpeningIds(itemIds: readonly string[]) {
     itemIds.length < 1 ||
     itemIds.length > MAX_INVENTORY_CRATE_OPEN_SELECTION
   ) {
-    throw new RangeError("Choose between 1 and 50 crates to open.");
+    throw new RangeError("Choose between 1 and 50 cases to open.");
   }
   if (new Set(itemIds).size !== itemIds.length)
-    throw new RangeError("Each crate can only be opened once.");
+    throw new RangeError("Each case can only be opened once.");
 
   const groups: string[][] = [];
   for (

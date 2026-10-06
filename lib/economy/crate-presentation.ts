@@ -178,10 +178,10 @@ export function crateDropStateFromResponse<TCatalogue = Record<string, unknown>>
   ) => TCatalogue = (catalogue) => catalogue as TCatalogue,
 ): CrateDropState<TCatalogue> {
   if (!isRecord(value) || !Array.isArray(value.drops)) {
-    return { status: "error", message: "Crate odds are unavailable." };
+    return { status: "error", message: "Case odds are unavailable." };
   }
   if (value.drops.length === 0) {
-    return { status: "empty", message: "This crate has no enabled drops." };
+    return { status: "empty", message: "This case has no enabled drops." };
   }
 
   const totalWeight = finiteNumber(value.totalWeight);
@@ -190,13 +190,13 @@ export function crateDropStateFromResponse<TCatalogue = Record<string, unknown>>
     !Number.isSafeInteger(totalWeight) ||
     totalWeight <= 0
   ) {
-    return { status: "error", message: "Crate odds are unavailable." };
+    return { status: "error", message: "Case odds are unavailable." };
   }
 
   const drops: CrateDrop<TCatalogue>[] = [];
   for (const entry of value.drops) {
     if (!isRecord(entry) || !isRecord(entry.catalogue)) {
-      return { status: "error", message: "Crate odds are unavailable." };
+      return { status: "error", message: "Case odds are unavailable." };
     }
     const lootEntryId = finiteNumber(entry.lootEntryId);
     const weight = finiteNumber(entry.weight);
@@ -218,7 +218,7 @@ export function crateDropStateFromResponse<TCatalogue = Record<string, unknown>>
       stattrakChanceBps < 0 ||
       stattrakChanceBps > 10_000
     ) {
-      return { status: "error", message: "Crate odds are unavailable." };
+      return { status: "error", message: "Case odds are unavailable." };
     }
     try {
       drops.push({
@@ -230,13 +230,13 @@ export function crateDropStateFromResponse<TCatalogue = Record<string, unknown>>
         stattrakChanceBps,
       });
     } catch {
-      return { status: "error", message: "Crate odds are unavailable." };
+      return { status: "error", message: "Case odds are unavailable." };
     }
   }
 
   const summedWeight = drops.reduce((sum, drop) => sum + drop.weight, 0);
   if (!Number.isSafeInteger(summedWeight) || summedWeight !== totalWeight) {
-    return { status: "error", message: "Crate odds are unavailable." };
+    return { status: "error", message: "Case odds are unavailable." };
   }
   return { status: "ready", totalWeight, drops };
 }

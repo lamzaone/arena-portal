@@ -56,11 +56,12 @@ import {
   deriveMarketplacePriceIdentity,
   getBrowseMarketplacePriceQuotes,
   getMarketplacePriceQuotes,
+  isCatalogueMarketplaceFallbackAllowed,
   MAXIMUM_MARKETPLACE_FALLBACK_AGE_MS,
   marketplaceFloatDiscountBps,
   marketplaceWearLabel,
   normalizeMarketplaceFloatValue,
-  selectMarketplacePriceFallback,
+  selectMarketplacePriceFallbackForIdentity,
 } from "@/lib/economy/market-pricing";
 import {
   ECONOMY_SELLBACK_BASIS_POINTS,
@@ -7450,7 +7451,7 @@ export async function getMarketplaceCatalogue(
     // quoted as their one "Standard" market variant. Keeping them in this
     // batch means the portal can use the persisted last-known price whenever
     // an upstream public price source is briefly unavailable.
-    const wear = marketplaceWearLabel(floatValue) ?? "Standard";
+    const wear = item.metadata.vanillaKnife === true ? "Vanilla" : marketplaceWearLabel(floatValue) ?? "Standard";
     return { catalogueId: item.id, stattrak: false, wear };
   });
   let cachedVariants: Array<EconomyMarketVariantPrice | null> = catalogue.items.map(
@@ -7480,17 +7481,20 @@ export async function getMarketplaceCatalogue(
       metadata: item.metadata,
       minFloat: item.minFloat,
       maxFloat: item.maxFloat,
-      fallbackPrice: selectMarketplacePriceFallback(
+      fallbackPrice: selectMarketplacePriceFallbackForIdentity(
+        deriveMarketplacePriceIdentity(item),
         cachedVariants[index]
           ? {
               eurCents: cachedVariants[index].euroCents,
               source: cachedVariants[index].source,
               sourceReference: cachedVariants[index].sourceReference,
+              marketHashName: cachedVariants[index].marketHashName,
+              marketVersion: cachedVariants[index].marketVersion,
               observedAt: cachedVariants[index].observedAt,
               stale: cachedVariants[index].stale,
             }
           : null,
-        item.price && !economyPriceIsLegacySteam(item.price)
+        item.price && !economyPriceIsLegacySteam(item.price) && isCatalogueMarketplaceFallbackAllowed(item.itemType, item.price.source)
           ? {
               eurCents: item.price.euroCents,
               source: item.price.source,
@@ -7523,9 +7527,9 @@ export async function getMarketplaceCatalogue(
           displayPriceFloatDiscountBps: price.floatDiscountBps,
         };
       }
-      // Historical Steam snapshots are preserved for audit, but are not
-      // surfaced as a current public-market quote after this provider switch.
-      if (economyPriceIsLegacySteam(item.price)) {
+      // An unverified automatic catalogue snapshot cannot establish a finish's
+      // current phase/exterior identity. Preserve it only in the audit data.
+      if (economyPriceIsLegacySteam(item.price) || !isCatalogueMarketplaceFallbackAllowed(item.itemType, item.price?.source)) {
         return {
           ...item,
           basePriceTokens: null,
@@ -8453,7 +8457,7 @@ export async function getEconomyCrates(
     values.push(...rarityRanks);
   }
   if (filter.query?.trim()) {
-    const search = economyCatalogueSearchFilter(filter.query, "Crate search");
+    const search = economyCatalogueSearchFilter(filter.query, "Case search");
     where.push(search.sql);
     values.push(...search.values);
   }
@@ -9114,7 +9118,7 @@ async function lockEconomyContainerLootTables(
   if (rows.length !== ids.length)
     economyError(
       "loot_table_unavailable",
-      "One or more crate loot tables are unavailable.",
+      "One or more case loot tables are unavailable.",
     );
   return new Map(
     rows.map((table) => {
@@ -9214,7 +9218,7 @@ async function lockEconomyLootEntriesByTable(
   if (ids.some((lootTableId) => !byTable.get(lootTableId)?.length))
     economyError(
       "loot_table_empty",
-      "One or more crate loot tables have no enabled rewards.",
+      "One or more case loot tables have no enabled rewards.",
     );
   return byTable;
 }
@@ -10215,7 +10219,7 @@ function isStaffManagedCustomCrate(crate: EconomyCatalogueItem) {
 function staffCustomCrateBasePrice(directPriceTokens: number) {
   return economyAmount(
     directPriceTokens,
-    "Custom crate Token price",
+    "Custom case Token price",
   );
 }
 
@@ -10238,7 +10242,7 @@ async function lockStaffManagedCustomCrate(
   if (!isStaffManagedCustomCrate(crate)) {
     economyError(
       "incompatible_item",
-      "Only the TAPPD case and staff-created crates can be managed here.",
+      "Only the TAPPD case and staff-created cases can be managed here.",
     );
   }
   const lootTable = await lockEconomyLootTable(connection, {
@@ -10250,7 +10254,7 @@ async function lockStaffManagedCustomCrate(
   ) {
     economyError(
       "loot_table_unavailable",
-      "This crate does not have a usable container loot table.",
+      "This case does not have a usable container loot table.",
     );
   }
   return { crate, lootTable };
@@ -10269,7 +10273,7 @@ async function replaceStaffCustomCratePrice(input: {
     [input.catalogueId],
   );
   await input.connection.execute(
-    "INSERT INTO portal_economy_catalogue_prices (catalogue_id, market_price_eur_cents, price_source, source_reference, is_current) VALUES (?, ?, 'staff-custom-crate-direct-v2', 'Staff custom crate base Token price; no implicit markdown', TRUE)",
+    "INSERT INTO portal_economy_catalogue_prices (catalogue_id, market_price_eur_cents, price_source, source_reference, is_current) VALUES (?, ?, 'staff-custom-crate-direct-v2', 'Staff custom case base Token price; no implicit markdown', TRUE)",
     [input.catalogueId, marketPriceEurCents],
   );
 }
@@ -10310,7 +10314,7 @@ export async function getStaffCustomCrates(): Promise<StaffCustomCrate[]> {
 export async function getStaffCustomCrateManagement(
   catalogueId: number,
 ): Promise<StaffCustomCrateManagement | null> {
-  const selectedId = economyNumber(catalogueId, "Custom crate catalogue ID", 1);
+  const selectedId = economyNumber(catalogueId, "Custom case catalogue ID", 1);
   const crates = await getStaffCustomCrates();
   const crate = crates.find((candidate) => candidate.id === selectedId);
   if (!crate) return null;
@@ -10341,16 +10345,16 @@ export async function getStaffCustomCrateManagement(
 export async function createStaffCustomCrate(
   input: CreateStaffCustomCrateInput,
 ): Promise<CreateStaffCustomCrateResult> {
-  const displayName = economyText(input.displayName, "Custom crate name", 160);
-  const rarityRank = economyNumber(input.rarityRank, "Custom crate rarity");
+  const displayName = economyText(input.displayName, "Custom case name", 160);
+  const rarityRank = economyNumber(input.rarityRank, "Custom case rarity");
   if (rarityRank > ECONOMY_MAX_RARITY_RANK)
     economyError(
       "invalid_input",
-      `Custom crate rarity must be between 0 and ${ECONOMY_MAX_RARITY_RANK}.`,
+      `Custom case rarity must be between 0 and ${ECONOMY_MAX_RARITY_RANK}.`,
     );
   const directPriceTokens = economyAmount(
     input.directPriceTokens,
-    "Custom crate Token price",
+    "Custom case Token price",
   );
   const artworkUrl = economyArtworkUrl(input.artworkUrl);
   const stableId = randomUUID().replaceAll("-", "");
@@ -10378,7 +10382,7 @@ export async function createStaffCustomCrate(
       );
       const catalogueId = Number(catalogueInsert.insertId);
       if (!Number.isSafeInteger(catalogueId) || catalogueId < 1)
-        economyError("catalogue_unavailable", "The custom crate could not be created.");
+        economyError("catalogue_unavailable", "The custom case could not be created.");
       const [lootTableInsert] = await context.connection.execute<ResultSetHeader>(
         "INSERT INTO portal_loot_tables (code, table_type, container_catalogue_id, display_name, enabled, metadata) VALUES (?, 'container', ?, ?, TRUE, ?)",
         [
@@ -10390,7 +10394,7 @@ export async function createStaffCustomCrate(
       );
       const lootTableId = Number(lootTableInsert.insertId);
       if (!Number.isSafeInteger(lootTableId) || lootTableId < 1)
-        economyError("loot_table_unavailable", "The custom crate loot table could not be created.");
+        economyError("loot_table_unavailable", "The custom case loot table could not be created.");
       await replaceStaffCustomCratePrice({
         connection: context.connection,
         catalogueId,
@@ -10413,17 +10417,17 @@ export async function createStaffCustomCrate(
 export async function updateStaffCustomCrate(
   input: UpdateStaffCustomCrateInput,
 ): Promise<UpdateStaffCustomCrateResult> {
-  const catalogueId = economyNumber(input.catalogueId, "Custom crate catalogue ID", 1);
-  const displayName = economyText(input.displayName, "Custom crate name", 160);
-  const rarityRank = economyNumber(input.rarityRank, "Custom crate rarity");
+  const catalogueId = economyNumber(input.catalogueId, "Custom case catalogue ID", 1);
+  const displayName = economyText(input.displayName, "Custom case name", 160);
+  const rarityRank = economyNumber(input.rarityRank, "Custom case rarity");
   if (rarityRank > ECONOMY_MAX_RARITY_RANK)
     economyError(
       "invalid_input",
-      `Custom crate rarity must be between 0 and ${ECONOMY_MAX_RARITY_RANK}.`,
+      `Custom case rarity must be between 0 and ${ECONOMY_MAX_RARITY_RANK}.`,
     );
   const directPriceTokens = economyAmount(
     input.directPriceTokens,
-    "Custom crate Token price",
+    "Custom case Token price",
   );
   const artworkUrl = economyArtworkUrl(input.artworkUrl);
   return runEconomyMutation({
@@ -10479,7 +10483,7 @@ export async function updateStaffCustomCrate(
 export async function addStaffCustomCrateLootEntry(
   input: AddStaffCustomCrateLootEntryInput,
 ): Promise<AddStaffCustomCrateLootEntryResult> {
-  const catalogueId = economyNumber(input.catalogueId, "Custom crate catalogue ID", 1);
+  const catalogueId = economyNumber(input.catalogueId, "Custom case catalogue ID", 1);
   const rewardCatalogueId = economyNumber(
     input.rewardCatalogueId,
     "Reward catalogue ID",
@@ -10499,7 +10503,7 @@ export async function addStaffCustomCrateLootEntry(
         catalogueId,
       );
       if (rewardCatalogueId === catalogueId)
-        economyError("incompatible_item", "A crate cannot contain itself.");
+        economyError("incompatible_item", "A case cannot contain itself.");
       const reward = await lockEconomyCatalogue(
         context.connection,
         rewardCatalogueId,
@@ -10514,7 +10518,7 @@ export async function addStaffCustomCrateLootEntry(
       if (activeEntry) {
         economyError(
           "duplicate_reward",
-          "That catalogue item is already in this crate's active reward pool.",
+          "That catalogue item is already in this case's active reward pool.",
         );
       }
       const disabledEntry = existingRows.find((entry) => !economyBoolean(entry.enabled));
@@ -10570,7 +10574,7 @@ export async function addStaffCustomCrateLootEntry(
       );
       const lootEntryId = Number(insert.insertId);
       if (!Number.isSafeInteger(lootEntryId) || lootEntryId < 1)
-        economyError("loot_table_unavailable", "The crate reward could not be added.");
+        economyError("loot_table_unavailable", "The case reward could not be added.");
       await writeEconomyAdminAudit({
         connection: context.connection,
         actorSteamId: context.actorSteamId,
@@ -10588,7 +10592,7 @@ export async function addStaffCustomCrateLootEntry(
 export async function removeStaffCustomCrateLootEntry(
   input: RemoveStaffCustomCrateLootEntryInput,
 ): Promise<RemoveStaffCustomCrateLootEntryResult> {
-  const catalogueId = economyNumber(input.catalogueId, "Custom crate catalogue ID", 1);
+  const catalogueId = economyNumber(input.catalogueId, "Custom case catalogue ID", 1);
   const lootEntryId = economyNumber(input.lootEntryId, "Loot entry ID", 1);
   return runEconomyMutation({
     operationName: "staff.custom_crate.loot_entry.remove",
@@ -10608,7 +10612,7 @@ export async function removeStaffCustomCrateLootEntry(
       );
       const entry = entryRows[0];
       if (!entry)
-        economyError("item_not_found", "That crate reward no longer exists.");
+        economyError("item_not_found", "That case reward no longer exists.");
       if (economyBoolean(entry.enabled)) {
         const [countRows] = await context.connection.query<
           Array<RowDataPacket & { active_count: number | string }>
@@ -10632,7 +10636,7 @@ export async function removeStaffCustomCrateLootEntry(
         ) {
           economyError(
             "loot_table_empty",
-            "A listed or circulating crate must retain at least one active reward.",
+            "A listed or circulating case must retain at least one active reward.",
           );
         }
       }
@@ -10790,10 +10794,13 @@ const marketplacePurchasePriceSources = new Set([
   "skinport-listing-median",
   "skinport-listing-mean",
   "skinport-listing-suggested",
+  "skinport-out-of-stock-average",
+  "skinport-out-of-stock-suggested",
   "csfloat-price-index",
   "skincash-listing",
   "multi-market-index",
   "csfloat-exact-listing",
+  "csfloat-pattern-listing",
   "staff-last-known",
 ]);
 
@@ -10898,6 +10905,7 @@ function economyResolvedMarketplacePurchaseQuote(
     source.startsWith("skinport-") ||
     source === "csfloat-price-index" ||
     source === "csfloat-exact-listing" ||
+    source === "csfloat-pattern-listing" ||
     source === "skincash-listing" ||
     source === "multi-market-index"
   ) {
@@ -11192,7 +11200,7 @@ export async function purchaseEconomyItem(
       ) {
         economyError(
           "incompatible_item",
-          "Only crates and capsules can be purchased in a batch.",
+          "Only cases and capsules can be purchased in a batch.",
         );
       }
       if (requestedFloat !== undefined) {
@@ -11665,7 +11673,7 @@ export async function sellEconomyItem(
       const customServerFinish = item.catalogue.metadata.customServerFinish === true;
       if (customServerFinish && (!isCs2CatalogueFinishAvailable({ ...item, price: item.catalogue.price }) || marketQuote))
         economyError("price_unavailable", "Custom server finishes require the current configured staff price.");
-      const fallbackPrice = item.stattrak && !customServerFinish ? null : item.catalogue.price;
+      const fallbackPrice = !customServerFinish && (item.stattrak || !isCatalogueMarketplaceFallbackAllowed(item.itemType, item.catalogue.price?.source)) ? null : item.catalogue.price;
       if (
         !marketQuote &&
         (!fallbackPrice || economyPriceIsLegacySteam(fallbackPrice))
@@ -11897,7 +11905,7 @@ export async function sellEconomyItems(
         const customServerFinish = item.catalogue.metadata.customServerFinish === true;
         if (customServerFinish && (!isCs2CatalogueFinishAvailable({ ...item, price: item.catalogue.price }) || sale.marketQuote))
           economyError("price_unavailable", "Custom server finishes require the current configured staff price.");
-        const fallbackPrice = item.stattrak && !customServerFinish ? null : item.catalogue.price;
+        const fallbackPrice = !customServerFinish && (item.stattrak || !isCatalogueMarketplaceFallbackAllowed(item.itemType, item.catalogue.price?.source)) ? null : item.catalogue.price;
         if (
           !sale.marketQuote &&
           (!fallbackPrice || economyPriceIsLegacySteam(fallbackPrice))
@@ -12057,7 +12065,7 @@ export async function openEconomyCrate(
   input: OpenEconomyCrateInput,
 ): Promise<OpenEconomyCrateResult> {
   const steamId = economySteamId(input.steamId);
-  const crateItemId = economyItemId(input.crateItemId, "Crate item ID");
+  const crateItemId = economyItemId(input.crateItemId, "Case item ID");
   const playerName = await getEconomyPlayerDisplayName(steamId);
   return runEconomyMutation({
     operationName: "crate.open",
@@ -12072,13 +12080,13 @@ export async function openEconomyCrate(
       if (crate.ownerSteamId !== steamId || crate.state !== "available")
         economyError(
           "ownership_required",
-          "That crate is not available in your inventory.",
+          "That case is not available in your inventory.",
         );
       if (
         (crate.itemType !== "crate" && crate.itemType !== "capsule") ||
         crate.catalogueId === null
       ) {
-        economyError("not_a_crate", "That item cannot be opened as a crate.");
+        economyError("not_a_crate", "That item cannot be opened as a case.");
       }
       const lootTable = await lockEconomyLootTable(context.connection, {
         containerCatalogueId: crate.catalogueId,
@@ -12308,7 +12316,7 @@ async function restoreOpenEconomyCratesResult(
     economyNumber(value, "opening ID", 1),
   );
   const crateItemIds = rawCrateItemIds.map((value) =>
-    economyItemId(String(value), "crate item ID"),
+    economyItemId(String(value), "case item ID"),
   );
   if (
     new Set(openingIds).size !== openingIds.length ||
@@ -12332,7 +12340,7 @@ async function restoreOpenEconomyCratesResult(
   if (rows.length !== openingIds.length)
     economyError(
       "invalid_database_value",
-      "One or more saved crate openings no longer exist.",
+      "One or more saved case openings no longer exist.",
     );
   const rowsById = new Map(
     rows.map((row) => [economyNumber(row.id, "opening ID", 1), row]),
@@ -12342,7 +12350,7 @@ async function restoreOpenEconomyCratesResult(
     if (!row)
       economyError(
         "invalid_database_value",
-        "A saved crate opening could not be restored.",
+        "A saved case opening could not be restored.",
       );
     return row;
   });
@@ -12373,7 +12381,7 @@ async function restoreOpenEconomyCratesResult(
     if (!crate || crate.catalogueId === null)
       economyError(
         "invalid_database_value",
-        "A saved crate reference is unavailable.",
+        "A saved case reference is unavailable.",
       );
     return crate;
   });
@@ -12402,7 +12410,7 @@ async function restoreOpenEconomyCratesResult(
     if (!entries?.length)
       economyError(
         "loot_table_empty",
-        "That crate loot table has no enabled rewards.",
+        "That case loot table has no enabled rewards.",
       );
     reelEntriesByTable.set(
       lootTable.id,
@@ -12429,11 +12437,11 @@ async function restoreOpenEconomyCratesResult(
     if (!lootTable)
       economyError(
         "loot_table_unavailable",
-        "That crate loot table is unavailable.",
+        "That case loot table is unavailable.",
       );
     const reelEntries = reelEntriesByTable.get(lootTable.id);
     if (!reelEntries?.length)
-      economyError("loot_table_empty", "That crate reel is unavailable.");
+      economyError("loot_table_empty", "That case reel is unavailable.");
     return economyCrateReelPool({
       containerCatalogueId,
       reelEntries,
@@ -12446,11 +12454,11 @@ async function restoreOpenEconomyCratesResult(
     if (!reward || reward.catalogueId === null)
       economyError(
         "invalid_database_value",
-        "A saved crate reward is unavailable.",
+        "A saved case reward is unavailable.",
       );
     return {
       openingId: economyNumber(row.id, "opening ID", 1),
-      crateItemId: economyItemId(row.crate_item_id, "crate item ID"),
+      crateItemId: economyItemId(row.crate_item_id, "case item ID"),
       rewardItemId,
       rewardCatalogueId: reward.catalogueId,
       rewardLootEntryId: economyNumber(
@@ -12496,13 +12504,13 @@ export async function openEconomyCrates(
     input.crateItemIds.length < 1 ||
     input.crateItemIds.length > 10
   ) {
-    economyError("invalid_input", "Choose between 1 and 10 crates to open.");
+    economyError("invalid_input", "Choose between 1 and 10 cases to open.");
   }
   const crateItemIds = input.crateItemIds.map((crateItemId) =>
-    economyItemId(crateItemId, "Crate item ID"),
+    economyItemId(crateItemId, "Case item ID"),
   );
   if (new Set(crateItemIds).size !== crateItemIds.length)
-    economyError("invalid_input", "Each crate can only be opened once.");
+    economyError("invalid_input", "Each case can only be opened once.");
   const requestCrateItemIds = [...crateItemIds].sort();
   const playerName = await getEconomyPlayerDisplayName(steamId);
 
@@ -12527,11 +12535,11 @@ export async function openEconomyCrates(
       const crates = crateItemIds.map((crateItemId) => {
         const crate = lockedItems.get(crateItemId);
         if (!crate)
-          economyError("item_not_found", "That crate no longer exists.");
+          economyError("item_not_found", "That case no longer exists.");
         if (crate.ownerSteamId !== steamId || crate.state !== "available")
           economyError(
             "ownership_required",
-            "One or more crates are no longer available in your inventory.",
+            "One or more cases are no longer available in your inventory.",
           );
         if (
           (crate.itemType !== "crate" && crate.itemType !== "capsule") ||
@@ -12539,7 +12547,7 @@ export async function openEconomyCrates(
         ) {
           economyError(
             "not_a_crate",
-            "One or more selected items cannot be opened as crates.",
+            "One or more selected items cannot be opened as cases.",
           );
         }
         return crate;
@@ -12569,13 +12577,13 @@ export async function openEconomyCrates(
         if (!lootTable)
           economyError(
             "loot_table_unavailable",
-            "That crate loot table is unavailable.",
+            "That case loot table is unavailable.",
           );
         const lootEntries = lootEntriesByTable.get(lootTable.id);
         if (!lootEntries?.length)
           economyError(
             "loot_table_empty",
-            "That crate loot table has no enabled rewards.",
+            "That case loot table has no enabled rewards.",
           );
         const roll = rollEconomyLoot(lootEntries);
         const childIdempotencyKey = economyChildIdempotencyKey(
@@ -12598,7 +12606,7 @@ export async function openEconomyCrates(
         if (!entries?.length)
           economyError(
             "loot_table_empty",
-            "That crate loot table has no enabled rewards.",
+            "That case loot table has no enabled rewards.",
           );
         reelEntriesByTable.set(
           lootTable.id,
@@ -12626,13 +12634,13 @@ export async function openEconomyCrates(
         if (!lootTable)
           economyError(
             "loot_table_unavailable",
-            "That crate loot table is unavailable.",
+            "That case loot table is unavailable.",
           );
         const reelEntries = reelEntriesByTable.get(lootTable.id);
         if (!reelEntries?.length)
           economyError(
             "loot_table_empty",
-            "That crate reel has no enabled rewards.",
+            "That case reel has no enabled rewards.",
           );
         return economyCrateReelPool({
           containerCatalogueId,
@@ -12718,7 +12726,7 @@ export async function openEconomyCrates(
       if (consumed.affectedRows !== requestCrateItemIds.length)
         economyError(
           "ownership_required",
-          "One or more crates are no longer available in your inventory.",
+          "One or more cases are no longer available in your inventory.",
         );
       await writeInventoryEvents(
         context.connection,
@@ -14861,7 +14869,7 @@ export async function staffGrantEconomyItems(
           ) {
             economyError(
               "incompatible_item",
-              "Only crates and capsules support a quantity above one.",
+              "Only cases and capsules support a quantity above one.",
             );
           }
           if (

@@ -85,7 +85,7 @@ export function economyItemTypePluralLabel(
     skin: "Skins",
     knife: "Knives",
     glove: "Gloves",
-    crate: "Crates",
+    crate: "Cases",
     capsule: "Capsules",
     nametag: "Name Tags",
     sticker: "Stickers",

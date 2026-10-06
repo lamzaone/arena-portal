@@ -150,7 +150,7 @@ function dropHeadline(rarityRank: number) {
   if (rarityRank >= 6) return "Covert unbox";
   if (rarityRank >= 5) return "Classified unbox";
   if (rarityRank >= 4) return "Restricted unbox";
-  return "Crate reward";
+  return "Case reward";
 }
 
 function rewardWithDropArtwork(
@@ -305,14 +305,14 @@ function CrateOpeningAnimation({
                 !isVerifying && index === REVEAL_WINNER_INDEX ? "winner" : ""
               } ${rarityRankClass(item.rarityRank)}`}
             >
-              <MarketplaceItemPreview item={item} enableMarketPreview={false} />
+              <MarketplaceItemPreview item={item} enableMarketPreview />
               <span>{item.displayName}</span>
             </article>
           ))}
         </div>
       </div>
       {isVerifying ? (
-        <p aria-label="Opening crate">
+        <p aria-label="Opening case">
           <LoaderCircle aria-hidden="true" className="crate-opening-spinner" />
         </p>
       ) : null}
@@ -386,12 +386,12 @@ function resolveBulkRows(
 
   return crates.map((crate, index) => {
     if (crate.catalogueId === null)
-      throw new Error("This crate is missing its catalogue drop pool.");
+      throw new Error("This case is missing its catalogue drop pool.");
     const drops = dropsByCatalogueId.get(crate.catalogueId);
     const rawOpening = openingsByCrateId.get(crate.id);
     if (!drops?.length || !rawOpening)
       throw new Error(
-        "The crates opened, but their reveal summary was incomplete. Reload Inventory to verify the rewards.",
+        "The cases opened, but their reveal summary was incomplete. Reload Inventory to verify the rewards.",
       );
     const resultItem = rawOpening.item ? toEconomyItem(rawOpening.item) : null;
     if (
@@ -399,7 +399,7 @@ function resolveBulkRows(
       (!resultItem.id && resultItem.displayName === "Unnamed item")
     ) {
       throw new Error(
-        "A crate opened, but its reward could not be displayed. Reload Inventory to verify it.",
+        "A case opened, but its reward could not be displayed. Reload Inventory to verify it.",
       );
     }
     const rawLootEntryId = finiteNumber(rawOpening.rewardLootEntryId);
@@ -429,7 +429,7 @@ function resolveBulkRows(
           ? `${reward.displayName} was unboxed and announced in global chat.`
           : typeof rawOpening.message === "string"
             ? rawOpening.message
-            : "Crate opened. The item is now in your Inventory.",
+            : "Case opened. The item is now in your Inventory.",
       error: null,
     } satisfies BulkOpeningRow;
   });
@@ -582,7 +582,7 @@ export function useInventoryCrateOpening({
           (!resultItem.id && resultItem.displayName === "Unnamed item")
         ) {
           throw new Error(
-            "The crate opened, but its reward could not be displayed. Reload Inventory to verify it.",
+            "The case opened, but its reward could not be displayed. Reload Inventory to verify it.",
           );
         }
         const rawLootEntryId = finiteNumber(result.rewardLootEntryId);
@@ -610,7 +610,7 @@ export function useInventoryCrateOpening({
           rewardMessage:
             result.globalAnnouncementQueued === true
               ? `${reward.displayName} was unboxed and announced in global chat.`
-              : result.message ?? "Crate opened. The item is now in your Inventory.",
+              : result.message ?? "Case opened. The item is now in your Inventory.",
         }));
         await new Promise<void>((resolve) => {
           let finished = false;
@@ -640,7 +640,7 @@ export function useInventoryCrateOpening({
           error:
             error instanceof Error
               ? error.message
-              : "The crate could not be opened.",
+              : "The case could not be opened.",
         }));
         router.refresh();
       } finally {
@@ -707,7 +707,7 @@ export function useInventoryCrateOpening({
           const groupCrates = group.crateItemIds.map((crateId) => {
             const crate = cratesById.get(crateId);
             if (!crate)
-              throw new Error("A selected crate is missing from this opening session.");
+              throw new Error("A selected case is missing from this opening session.");
             return crate;
           });
           const resolved = resolveBulkRows(groupCrates, response, Date.now());
@@ -762,7 +762,7 @@ export function useInventoryCrateOpening({
         const message =
           result.error instanceof Error
             ? result.error.message
-            : "The remaining crates could not be opened.";
+            : "The remaining cases could not be opened.";
         const failedGroup = session.groups[activeGroupIndex];
         const failedIds = new Set(failedGroup?.crateItemIds ?? []);
         updateBulk((current) => ({
@@ -958,7 +958,7 @@ export function InventorySingleCrateOpening({
           {dropReady
             ? state.error
               ? "Retry open"
-              : "Open crate"
+              : "Open case"
             : "Preparing opening…"}
         </button>
         <button
@@ -1045,7 +1045,7 @@ export function InventoryBulkCrateOpeningResults({
           <progress
             value={session.completedCount}
             max={total}
-            aria-label={`${session.completedCount} of ${total} crates opened`}
+            aria-label={`${session.completedCount} of ${total} cases opened`}
           />
         </div>
         <div className="inventory-crate-session-actions">

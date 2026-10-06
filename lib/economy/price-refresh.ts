@@ -10,6 +10,10 @@ import {
 import {
   getMarketplacePriceQuotes,
   isStattrakMarketplaceItem,
+  normalizeMarketplaceFloatRange,
+  normalizeMarketplaceFloatValue,
+  marketplaceWearLabel,
+  isCatalogueMarketplaceFallbackAllowed,
 } from "@/lib/economy/market-pricing";
 
 const refreshBatchSize = 500;
@@ -27,6 +31,8 @@ export type EconomyPublicPriceRefreshResult = {
 type PriceRefreshLookup = {
   candidateIndex: number;
   stattrak: boolean;
+  floatValue: number | null;
+  primary: boolean;
 };
 
 /**
@@ -41,9 +47,26 @@ export async function refreshAllEconomyPublicPrices(): Promise<EconomyPublicPric
     const candidates = await getEconomyPublicPriceRefreshCandidates();
     const lookups: PriceRefreshLookup[] = [];
     for (let index = 0; index < candidates.length; index += 1) {
-      lookups.push({ candidateIndex: index, stattrak: false });
-      if (isStattrakMarketplaceItem(candidates[index].itemType)) {
-        lookups.push({ candidateIndex: index, stattrak: true });
+      const candidate = candidates[index];
+      const primaryFloat = normalizeMarketplaceFloatValue(candidate);
+      const range = normalizeMarketplaceFloatRange(candidate);
+      const samples = new Map<string | null, number | null>([[marketplaceWearLabel(primaryFloat), primaryFloat]]);
+      if (range && candidate.metadata.vanillaKnife !== true) {
+        for (const [lower, upper] of [[0, 0.07], [0.070001, 0.15], [0.150001, 0.38], [0.380001, 0.45], [0.450001, 1]]) {
+          const min = Math.max(range.minFloat, lower);
+          const max = Math.min(range.maxFloat, upper);
+          if (min > max) continue;
+          const sample = Math.round((min + max) / 2 * 1_000_000) / 1_000_000;
+          const wear = marketplaceWearLabel(sample);
+          if (!samples.has(wear)) samples.set(wear, sample);
+        }
+      }
+      for (const floatValue of samples.values()) {
+        const primary = floatValue === primaryFloat;
+        lookups.push({ candidateIndex: index, stattrak: false, floatValue, primary });
+        if (isStattrakMarketplaceItem(candidate.itemType)) {
+          lookups.push({ candidateIndex: index, stattrak: true, floatValue, primary });
+        }
       }
     }
 
@@ -56,7 +79,7 @@ export async function refreshAllEconomyPublicPrices(): Promise<EconomyPublicPric
     for (let offset = 0; offset < lookups.length; offset += refreshBatchSize) {
       const batch = lookups.slice(offset, offset + refreshBatchSize);
       const quotes = await getMarketplacePriceQuotes(
-        batch.map(({ candidateIndex, stattrak }) => {
+        batch.map(({ candidateIndex, stattrak, floatValue, primary }) => {
           const candidate = candidates[candidateIndex];
           return {
             itemType: candidate.itemType,
@@ -65,12 +88,13 @@ export async function refreshAllEconomyPublicPrices(): Promise<EconomyPublicPric
             metadata: candidate.metadata,
             minFloat: candidate.minFloat,
             maxFloat: candidate.maxFloat,
+            floatValue,
             stattrak,
-            // The standard catalogue snapshot is a legitimate last-known
-            // fallback only for the matching normal variant. StatTrak is
-            // always stored independently in the variant cache below.
+            // Staff overrides can retain a normal variant's last-known price.
+            // Automatic float display prices lack an unadjusted base identity.
+            // StatTrak is always stored independently in the variant cache.
             fallbackPrice:
-              !stattrak && candidate.currentPrice
+              primary && !stattrak && candidate.currentPrice && isCatalogueMarketplaceFallbackAllowed(candidate.itemType, candidate.currentPrice.source)
                 ? {
                     eurCents: candidate.currentPrice.euroCents,
                     source: candidate.currentPrice.source,
@@ -104,7 +128,7 @@ export async function refreshAllEconomyPublicPrices(): Promise<EconomyPublicPric
           imageUrl: candidate.imageUrl,
           expiresAt: new Date(Date.now() + variantCacheTtlMs),
         });
-        if (lookup.stattrak) continue;
+        if (lookup.stattrak || !lookup.primary) continue;
         const current = candidate.currentPrice;
         if (
           current?.euroCents === quote.eurCents &&

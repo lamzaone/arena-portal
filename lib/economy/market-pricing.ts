@@ -27,6 +27,8 @@ export type MarketplacePriceCandidate = {
 export type MarketplacePriceIdentityInput = {
   itemType: string;
   displayName: string;
+  definitionIndex?: number | null;
+  paintkit?: number | null;
   marketHashName: string | null | undefined;
   metadata: Record<string, unknown> | null | undefined;
   minFloat: number | null | undefined;
@@ -53,6 +55,9 @@ export type MarketplacePriceIdentity = {
 export type MarketplacePriceFallback = {
   eurCents: number;
   source: string;
+  // Variant snapshots retain their identity across catalogue corrections.
+  marketHashName?: string | null;
+  marketVersion?: string | null;
   sourceReference?: string | null | undefined;
   // Persisted provider snapshots carry their age into the final quote so
   // mutations can record when a last-known value was used.
@@ -97,12 +102,12 @@ export type MarketplacePriceQuote = {
 
 function normalizedText(value: unknown) {
   return typeof value === "string"
-    ? value.normalize("NFKC").replace(/\s+/g, " ").trim()
+    ? value.normalize("NFC").replace(/\s+/g, " ").trim()
     : "";
 }
 
 function normalizedKey(value: string | null | undefined) {
-  return normalizedText(value).toLocaleLowerCase("en-US");
+  return normalizedText(value).normalize("NFKC").toLocaleLowerCase("en-US");
 }
 
 function metadataText(
@@ -171,8 +176,8 @@ function stattrakMarketHashName(value: string) {
   if (!normalized) return "";
   // Preserve manually-normalized catalogue names while using Skinport's
   // exact StatTrak™ public-market identity for ordinary items.
-  return /^stattrak(?:™)?\s+/iu.test(normalized)
-    ? normalized
+  return /^stattrak(?:™|TM)?\s+/iu.test(normalized)
+    ? normalized.replace(/^stattrak(?:™|TM)?\s+/iu, "StatTrak™ ")
     : `StatTrak™ ${normalized}`;
 }
 
@@ -188,6 +193,11 @@ function validEuroCents(value: unknown) {
 /** Whether this catalogue item has an exterior float that affects its price. */
 export function isFloatPricedMarketplaceItem(itemType: string | null | undefined) {
   return ["skin", "knife", "glove"].includes(normalizedKey(itemType));
+}
+
+/** Automatic catalogue snapshots hold one adjusted display price, without an exterior/base identity. */
+export function isCatalogueMarketplaceFallbackAllowed(itemType: string, source: string | null | undefined) {
+  return !isFloatPricedMarketplaceItem(itemType) || normalizedKey(source) === "staff-last-known";
 }
 
 /** CS2 has marketable StatTrak™ variants for weapon skins and knives. */
@@ -250,11 +260,13 @@ export function marketplaceWearLabel(floatValue: number | null | undefined) {
 export function deriveMarketplacePriceIdentity(
   input: MarketplacePriceIdentityInput,
 ): MarketplacePriceIdentity {
+  const rawBaseName = metadataText(input.metadata, ["marketBaseName"]) || normalizedText(input.displayName) || normalizedText(input.marketHashName);
+  const versionSuffix = stripWearSuffix(rawBaseName).match(/\b(?:Gamma )?Doppler\s*\((Phase [1-4]|Ruby|Sapphire|Black Pearl|Emerald)\)$/iu)?.[1] ?? null;
   const marketVersion = metadataText(input.metadata, [
     "marketVersion",
     "skinportVersion",
     "priceVersion",
-  ]);
+  ]) ?? versionSuffix;
   const floatRange = normalizeMarketplaceFloatRange(input);
   const floatValue = normalizeMarketplaceFloatValue(input);
   const seed = boundedSeed(input.seed);
@@ -265,10 +277,8 @@ export function deriveMarketplacePriceIdentity(
   const baseCandidates: MarketplacePriceCandidate[] = [];
   const candidates: MarketplacePriceCandidate[] = [];
   const itemType = normalizedKey(input.itemType);
-  const baseName =
-    metadataText(input.metadata, ["marketBaseName"]) ||
-    normalizedText(input.displayName) ||
-    normalizedText(input.marketHashName);
+  const baseName = stripWearSuffix(rawBaseName)
+    .replace(/(\b(?:Gamma )?Doppler)\s*\((?:Phase [1-4]|Ruby|Sapphire|Black Pearl|Emerald)\)$/iu, "$1");
 
   if (!vanillaKnife && floatRange && floatValue !== null && wear) {
     // A legacy catalogue row usually has no market hash because the selected
@@ -276,13 +286,15 @@ export function deriveMarketplacePriceIdentity(
     // exterior to any generic/hash stored by older imports.
     const finishBase = stripWearSuffix(baseName);
     if (finishBase) {
-      const bareFinishBase = stripStarPrefix(finishBase);
+      const bareFinishBase = stripStarPrefix(finishBase).replace(/^StatTrak(?:™|TM)?\s+/iu, "");
       const exteriorName = `${bareFinishBase} (${wear})`;
       if (itemType === "knife" || itemType === "glove")
         addCandidate(baseCandidates, `\u2605 ${exteriorName}`, marketVersion);
       addCandidate(baseCandidates, exteriorName, marketVersion);
     }
-    addCandidate(baseCandidates, input.marketHashName, marketVersion);
+    const storedName = normalizedText(input.marketHashName);
+    // A fixed legacy exterior must never price a different selected wear.
+    if (storedName.endsWith(`(${wear})`)) addCandidate(baseCandidates, storedName, marketVersion);
   } else {
     addCandidate(baseCandidates, input.marketHashName, marketVersion);
     addCandidate(baseCandidates, baseName, marketVersion);
@@ -353,8 +365,10 @@ function validFallback(value: MarketplacePriceFallback | null | undefined) {
   if (eurCents === null || !source || source.length > 96) return null;
   // Coarse catalogue and wear caches do not retain exact seed/float identity.
   // A historical listing premium cannot become another pattern's base price.
-  if (normalizedKey(source) === "csfloat-exact-listing") return null;
+  if (["csfloat-exact-listing", "csfloat-pattern-listing"].includes(normalizedKey(source))) return null;
   const sourceReference = normalizedText(value.sourceReference);
+  const marketHashName = normalizedText(value.marketHashName);
+  if (marketHashName.length > 255) return null;
   const observedAtInput = normalizedText(value.observedAt);
   const observedAtMilliseconds = observedAtInput
     ? Date.parse(observedAtInput)
@@ -378,6 +392,7 @@ function validFallback(value: MarketplacePriceFallback | null | undefined) {
       : null,
     observedAt,
     stale,
+    ...(marketHashName ? { marketHashName, marketVersion: normalizedText(value.marketVersion) || null } : {}),
   };
 }
 
@@ -388,6 +403,22 @@ export function selectMarketplacePriceFallback(
   for (const value of values) {
     const fallback = validFallback(value);
     if (fallback) return fallback;
+  }
+  return null;
+}
+
+/** Reject outdated cache identities before choosing a later approved fallback. */
+export function selectMarketplacePriceFallbackForIdentity(
+  identity: MarketplacePriceIdentity,
+  ...values: Array<MarketplacePriceFallback | null | undefined>
+) {
+  for (const value of values) {
+    const fallback = selectMarketplacePriceFallback(value);
+    if (!fallback) continue;
+    if (fallback.marketHashName && !identity.candidates.some(candidate =>
+      normalizedKey(candidate.marketHashName) === normalizedKey(fallback.marketHashName) &&
+      normalizedKey(candidate.marketVersion) === normalizedKey(fallback.marketVersion))) continue;
+    return fallback;
   }
   return null;
 }
@@ -404,12 +435,12 @@ function quoteFromPrice(
   options: { exact?: ExternalMarketPrice | null | undefined } = {},
 ): MarketplacePriceQuote {
   const exact = options.exact ?? null;
-  const floatDiscountBps = exact
+  const floatDiscountBps = exact?.exactFloat
     ? 0
     : marketplaceFloatDiscountBps(identity.floatRange, identity.floatValue);
   return {
     baseEuroCents: price.baseEuroCents,
-    eurCents: exact
+    eurCents: exact?.exactFloat
       ? price.baseEuroCents
       : adjustedMarketplaceEuroCents(price.baseEuroCents, floatDiscountBps),
     source: price.source,
@@ -420,7 +451,7 @@ function quoteFromPrice(
     wear: identity.wear,
     stattrak: identity.stattrak,
     floatDiscountBps,
-    pricingRule: exact ? "external-exact-v2" : "float-linear-v1",
+    pricingRule: exact?.exactFloat ? "external-exact-v2" : "float-linear-v1",
     seed: identity.seed,
     seedMatched: exact?.exactSeed ?? false,
     fromFallback: price.fromFallback,
@@ -501,19 +532,26 @@ export async function getMarketplacePriceQuotes(
       if (input.fallbackOnly === true) return null;
       const identity = identities[index];
       if (identity.floatValue === null || identity.seed === null) return null;
-      // A named phase/version must remain on a source that exposes that exact
-      // version; do not infer it from an otherwise matching market hash.
-      if (identity.marketVersion) return null;
+      // Paint index distinguishes phases sharing one Steam market name.
+      // Without that identity a generic listing cannot verify the phase.
+      if (identity.marketVersion && input.paintkit == null) return null;
       for (const candidate of identity.candidates) {
-        const quote = await getCsfloatExactListingPrice({
+        const lookup = {
           marketHashName: candidate.marketHashName,
           stattrak: identity.stattrak,
           floatValue: identity.floatValue,
           minFloat: identity.floatRange?.minFloat ?? null,
           maxFloat: identity.floatRange?.maxFloat ?? null,
           seed: identity.seed,
-        });
+          definitionIndex: input.definitionIndex,
+          paintkit: input.paintkit,
+        };
+        const quote = await getCsfloatExactListingPrice(lookup);
         if (quote) return quote;
+        if (/\|\s*(?:Case Hardened|Heat Treated|(?:Gamma )?Doppler|(?:Marble )?Fade|Slaughter)\b/iu.test(candidate.marketHashName)) {
+          const pattern = await getCsfloatExactListingPrice({ ...lookup, allowPatternEstimate: true });
+          if (pattern) return pattern;
+        }
       }
       return null;
     }),
@@ -574,7 +612,7 @@ export async function getMarketplacePriceQuotes(
     // identity. This now includes the server-warmed variant cache, so a
     // temporary provider outage does not make a valid StatTrak™ item
     // impossible to price or sell.
-    const fallback = selectMarketplacePriceFallback(input.fallbackPrice);
+    const fallback = selectMarketplacePriceFallbackForIdentity(identity, input.fallbackPrice);
     if (!fallback) return null;
     return quoteFromPrice(
       {

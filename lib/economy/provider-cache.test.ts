@@ -38,13 +38,13 @@ test("large Skinport feeds retain shared parsed prices without oversized Next ca
   const lookups = [{ marketHashName: normal }, { marketHashName: stattrak }, { marketHashName: normal, marketVersion: "Phase 2" }];
   const batches = await Promise.all(Array.from({ length: 20 }, () => getSkinportHistoricalPrices(lookups)));
   for (const batch of batches) assert.deepEqual(batch.map((quote: { eurCents: number } | null) => quote?.eurCents ?? null), [1234, 5678, null]);
-  assert.equal(requests.length, 2, "concurrent lookups share the two provider downloads");
+  assert.equal(requests.length, 3, "concurrent lookups share the three provider downloads");
   assert.deepEqual(oversizedWrites, [], "raw feed bodies must bypass Next's 2 MB data cache");
   await getSkinportHistoricalPrices(lookups);
-  assert.equal(requests.length, 2);
+  assert.equal(requests.length, 3);
   t.mock.timers.tick(30 * 60 * 1000 + 1);
   await getSkinportHistoricalPrices(lookups);
-  assert.equal(requests.length, 4, "prices are refreshed after their existing TTL");
+  assert.equal(requests.length, 6, "prices are refreshed after their existing TTL");
 });
 
 test("large external indexes cache parsed estimates and retain separate StatTrak identities", async t => {
@@ -67,6 +67,45 @@ test("large external indexes cache parsed estimates and retain separate StatTrak
   t.mock.timers.tick(15 * 60 * 1000 + 1);
   await getExternalMarketPrices([normal]);
   assert.equal(requests.length, 6, "refresh indexes while keeping the valid exchange-rate snapshot");
+});
+
+test("phase listings fill empty history without crossing phases or StatTrak categories", async t => {
+  const normal = "★ Bayonet | Doppler (Factory New)";
+  const stattrak = "★ StatTrak™ Bayonet | Doppler (Factory New)";
+  provider(t, url => url.pathname.includes("history")
+    ? [{ market_hash_name: stattrak, version: "Black Pearl", currency: "EUR", last_30_days: { median: null } },
+      { market_hash_name: stattrak, version: "Phase 2", currency: "EUR", last_30_days: { median: 400 } }]
+    : [{ market_hash_name: normal, version: "Black Pearl", currency: "EUR", suggested_price: 1800 },
+      { market_hash_name: stattrak, version: "Black Pearl", currency: "EUR", suggested_price: 2500 },
+      { market_hash_name: stattrak, version: "Phase 2", currency: "EUR", median_price: 600 }]);
+  const { getSkinportHistoricalPrices } = await freshModule("./skinport-prices.ts");
+  const quotes = await getSkinportHistoricalPrices([
+    { marketHashName: stattrak, marketVersion: "Black Pearl" },
+    { marketHashName: normal, marketVersion: "Black Pearl" },
+    { marketHashName: stattrak, marketVersion: "Phase 2" },
+    { marketHashName: stattrak, marketVersion: "Phase 1" },
+    { marketHashName: stattrak },
+  ]);
+  assert.deepEqual(quotes.map((q: { eurCents: number } | null) => q?.eurCents ?? null), [250000, 180000, 40000, null, null]);
+  assert.equal(quotes[0]?.marketVersion, "Black Pearl");
+  assert.equal(quotes[0]?.source, "skinport-listing-suggested");
+});
+
+test("out-of-stock phase values price scarce StatTrak knives with no history or current listing", async t => {
+  const name = "★ StatTrak™ Bayonet | Gamma Doppler (Factory New)";
+  provider(t, url => url.pathname.endsWith("out-of-stock")
+    ? [{ market_hash_name: name, version: "Emerald", currency: "EUR", suggested_price: 4500, avg_sale_price: 4000, sales_last_90d: 2 },
+      { market_hash_name: name, version: "Phase 2", currency: "EUR", suggested_price: 400, avg_sale_price: null, sales_last_90d: 0 }]
+    : []);
+  const { getSkinportHistoricalPrices } = await freshModule("./skinport-prices.ts");
+  const quotes = await getSkinportHistoricalPrices([
+    { marketHashName: name, marketVersion: "Emerald" },
+    { marketHashName: name, marketVersion: "Phase 2" },
+    { marketHashName: name, marketVersion: "Phase 1" },
+  ]);
+  assert.deepEqual(quotes.map((q: { eurCents: number } | null) => q?.eurCents ?? null), [400000, 40000, null]);
+  assert.equal(quotes[0]?.source, "skinport-out-of-stock-average");
+  assert.equal(quotes[1]?.source, "skinport-out-of-stock-suggested");
 });
 
 test("large Steam pages share one download per exact market name and cache only image results", async t => {

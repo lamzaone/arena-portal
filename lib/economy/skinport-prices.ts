@@ -7,6 +7,8 @@ const skinportHistoryUrl =
   "https://api.skinport.com/v1/sales/history?app_id=730&currency=EUR";
 const skinportItemsUrl =
   "https://api.skinport.com/v1/items?app_id=730&currency=EUR&tradable=0";
+const skinportOutOfStockUrl =
+  "https://api.skinport.com/v1/sales/out-of-stock?app_id=730&currency=EUR";
 const snapshotTtlMs = 30 * 60 * 1_000;
 const failedRefreshBackoffMs = 5 * 60 * 1_000;
 const maximumSnapshotRows = 100_000;
@@ -27,7 +29,9 @@ export type SkinportHistoricalPrice = {
     | "skinport-90d-median"
     | "skinport-listing-median"
     | "skinport-listing-mean"
-    | "skinport-listing-suggested";
+    | "skinport-listing-suggested"
+    | "skinport-out-of-stock-average"
+    | "skinport-out-of-stock-suggested";
   sourceReference: string;
   marketHashName: string;
   marketVersion: string | null;
@@ -36,7 +40,7 @@ export type SkinportHistoricalPrice = {
 type SkinportSnapshot = {
   expiresAt: number;
   byMarketHashName: Map<string, Map<string, SkinportHistoricalPrice>>;
-  listingByMarketHashName: Map<string, SkinportHistoricalPrice>;
+  listingByMarketHashName: Map<string, Map<string, SkinportHistoricalPrice>>;
 };
 
 type HistoricalPeriod = {
@@ -136,10 +140,27 @@ function listingQuoteFromRow(row: Record<string, unknown>) {
       source: field.source,
       sourceReference: skinportReference(row.item_page, skinportItemsUrl),
       marketHashName,
-      marketVersion: null,
+      marketVersion: text(row.version) || null,
     } satisfies SkinportHistoricalPrice;
   }
   return null;
+}
+
+function outOfStockQuoteFromRow(row: Record<string, unknown>) {
+  const marketHashName = text(row.market_hash_name);
+  const currency = text(row.currency).toLocaleUpperCase("en-US");
+  if (!marketHashName || (currency && currency !== "EUR")) return null;
+  const average = typeof row.sales_last_90d === "number" && row.sales_last_90d > 0
+    ? euroCents(row.avg_sale_price) : null;
+  const eurCents = average ?? euroCents(row.suggested_price);
+  if (eurCents === null) return null;
+  return {
+    eurCents,
+    source: average !== null ? "skinport-out-of-stock-average" : "skinport-out-of-stock-suggested",
+    sourceReference: skinportOutOfStockUrl,
+    marketHashName,
+    marketVersion: text(row.version) || null,
+  } satisfies SkinportHistoricalPrice;
 }
 
 async function fetchSkinportRows(url: string) {
@@ -153,6 +174,7 @@ async function fetchSkinportRows(url: string) {
         Accept: "application/json",
         "User-Agent": "TAPPED.RO Token Economy/1.0",
       },
+      signal: AbortSignal.timeout(15_000),
       // Bulk feeds exceed Next's 2 MB fetch-cache limit. The parsed snapshot
       // and shared pending request below provide the cache and deduplication.
       cache: "no-store",
@@ -168,11 +190,12 @@ async function fetchSkinportRows(url: string) {
 }
 
 async function fetchSnapshot(): Promise<SkinportSnapshot | null> {
-  const [historicalRows, listingRows] = await Promise.all([
+  const [historicalRows, listingRows, outOfStockRows] = await Promise.all([
     fetchSkinportRows(skinportHistoryUrl),
     fetchSkinportRows(skinportItemsUrl),
+    fetchSkinportRows(skinportOutOfStockUrl),
   ]);
-  if (!historicalRows && !listingRows) return null;
+  if (!historicalRows && !listingRows && !outOfStockRows) return null;
 
   const byMarketHashName = new Map<
     string,
@@ -192,14 +215,28 @@ async function fetchSnapshot(): Promise<SkinportSnapshot | null> {
     if (!variants.has(marketVersionKey)) variants.set(marketVersionKey, quote);
     byMarketHashName.set(marketHashKey, variants);
   }
-  const listingByMarketHashName = new Map<string, SkinportHistoricalPrice>();
+  const listingByMarketHashName = new Map<string, Map<string, SkinportHistoricalPrice>>();
   for (const entry of listingRows ?? []) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
     const quote = listingQuoteFromRow(entry as Record<string, unknown>);
     if (!quote) continue;
     const marketHashKey = lookupKey(quote.marketHashName);
-    if (marketHashKey && !listingByMarketHashName.has(marketHashKey))
-      listingByMarketHashName.set(marketHashKey, quote);
+    if (!marketHashKey) continue;
+    const versions = listingByMarketHashName.get(marketHashKey) ?? new Map();
+    const versionKey = lookupKey(quote.marketVersion);
+    if (!versions.has(versionKey)) versions.set(versionKey, quote);
+    listingByMarketHashName.set(marketHashKey, versions);
+  }
+  for (const entry of outOfStockRows ?? []) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const quote = outOfStockQuoteFromRow(entry as Record<string, unknown>);
+    if (!quote) continue;
+    const marketHashKey = lookupKey(quote.marketHashName);
+    const versions = listingByMarketHashName.get(marketHashKey) ?? new Map();
+    const versionKey = lookupKey(quote.marketVersion);
+    // Current listings are preferred. Stockless values only fill real gaps.
+    if (!versions.has(versionKey)) versions.set(versionKey, quote);
+    listingByMarketHashName.set(marketHashKey, versions);
   }
   return {
     expiresAt: Date.now() + snapshotTtlMs,
@@ -240,20 +277,11 @@ function resolveQuote(snapshotValue: SkinportSnapshot, lookup: SkinportPriceLook
   const marketHashKey = lookupKey(lookup.marketHashName);
   const variants = snapshotValue.byMarketHashName.get(marketHashKey);
   const requestedVersion = lookupKey(lookup.marketVersion);
-  if (variants) {
-    if (requestedVersion) return variants.get(requestedVersion) ?? null;
-
-    // A non-versioned record is safe to use for an ordinary market hash. Do
-    // not guess among phase/variant records when the catalogue has no explicit
-    // version: staff can set a last-known price until that identity is mapped.
-    return variants.get("") ?? null;
-  }
-  // Only use an active-listing quote after historical sales data is absent.
-  // Listing data has no phase field, so it is never a fallback for a requested
-  // variant.
-  return requestedVersion
-    ? null
-    : snapshotValue.listingByMarketHashName.get(marketHashKey) ?? null;
+  // Both feeds expose version. An empty history row must fall through to a
+  // listing/suggested quote for this same phase, exterior and StatTrak name.
+  return variants?.get(requestedVersion)
+    ?? snapshotValue.listingByMarketHashName.get(marketHashKey)?.get(requestedVersion)
+    ?? null;
 }
 
 /**

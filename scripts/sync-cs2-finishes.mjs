@@ -26,8 +26,9 @@ for (const skin of skins) {
   const key = `${definition}:${paint}`;
   const itemType = skin.category.id === "sfui_invpanel_filter_gloves" ? "glove"
     : skin.category.id === "sfui_invpanel_filter_melee" ? "knife" : "skin";
-  const marketVersion = itemType === "knife" && /\| (?:Gamma )?Doppler$/u.test(skin.name)
-    ? dopplerVersions.get(paint) : undefined;
+  const marketVersion = /\| (?:Gamma )?Doppler$/u.test(skin.name)
+    ? (/^(?:Phase [1-4]|Ruby|Sapphire|Black Pearl|Emerald)$/u.test(skin.phase ?? "")
+      ? skin.phase : dopplerVersions.get(paint)) : undefined;
   const vanillaKnife = itemType === "knife" && paint === 0;
   const value = {
     name: marketVersion ? `${skin.name} (${marketVersion})` : skin.name,

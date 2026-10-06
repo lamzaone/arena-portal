@@ -52,7 +52,7 @@ const PAGE_SEO = {
   "/market": {
     title: "CS2 Arena Market & Inventory | TAPPED.RO",
     description:
-      "Browse the TAPPED.RO player market for crates, capsules, cosmetics, and VIP items earned on our CS2 arena server in Romania.",
+      "Browse the TAPPED.RO player market for cases, capsules, cosmetics, and VIP items earned on our CS2 arena server in Romania.",
   },
 } as const;
 

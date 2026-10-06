@@ -340,7 +340,11 @@ export function toEconomyItem(value: unknown): EconomyItemView {
   const discountTokens = integer(appliedDiscount?.discountTokens);
   const discountName = text(appliedDiscount?.displayName, "");
   const tradableValue = firstDefined(record, ["tradable", "isTradable"]);
-  const marketPriceTokens = number(
+  const marketPriceTokens = Object.hasOwn(record, "displayPriceTokens")
+    ? number(record.displayPriceTokens)
+    : Object.hasOwn(record, "marketPriceTokens")
+      ? number(record.marketPriceTokens)
+      : number(
     firstDefined(record, [
       "displayPriceTokens",
       "directPurchasePriceTokens",
@@ -350,6 +354,7 @@ export function toEconomyItem(value: unknown): EconomyItemView {
     ]),
     number(firstDefined(nestedPrice, ["tokenPrice", "priceTokens"])),
   );
+  const priceUnavailable = marketPriceTokens === null && (Object.hasOwn(record, "displayPriceTokens") || Object.hasOwn(record, "marketPriceTokens"));
   const source = isRecord(record.source) ? record.source : {};
   const sellback = resolveEconomySellback({ marketPriceTokens, source });
 
@@ -391,7 +396,7 @@ export function toEconomyItem(value: unknown): EconomyItemView {
     sellbackPayoutCappedAtRecordedPurchasePrice:
       sellback.status === "resolved" &&
       sellback.payoutCappedAtRecordedPurchasePrice,
-    marketBasePriceTokens: number(
+    marketBasePriceTokens: priceUnavailable ? null : number(
       firstDefined(record, ["displayBasePriceTokens", "basePriceTokens"]),
       number(
         firstDefined(catalogue, [
@@ -401,7 +406,7 @@ export function toEconomyItem(value: unknown): EconomyItemView {
         number(firstDefined(nestedPrice, ["tokenPrice", "priceTokens"])),
       ),
     ),
-    marketPriceEuroCents: number(
+    marketPriceEuroCents: priceUnavailable ? null : number(
       firstDefined(record, [
         "displayPriceEuroCents",
         "marketPriceEuroCents",
@@ -415,7 +420,7 @@ export function toEconomyItem(value: unknown): EconomyItemView {
         ]),
       ),
     ),
-    marketBasePriceEuroCents: number(
+    marketBasePriceEuroCents: priceUnavailable ? null : number(
       firstDefined(record, [
         "displayBasePriceEuroCents",
         "basePriceEuroCents",
@@ -429,7 +434,7 @@ export function toEconomyItem(value: unknown): EconomyItemView {
       ),
     ),
     marketPriceSource:
-      text(
+      priceUnavailable ? null : text(
         firstDefined(record, ["displayPriceSource", "marketPriceSource"]),
         text(firstDefined(nestedPrice, ["source", "priceSource"]), ""),
       ) || null,
@@ -749,6 +754,8 @@ export function formatTokens(value: number | null | undefined) {
 }
 
 export function humanize(value: string) {
+  if (value === "crate") return "Case";
+  if (value === "crates") return "Cases";
   return value
     .replace(/[-_]+/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());

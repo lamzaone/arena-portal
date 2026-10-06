@@ -73,3 +73,34 @@ test("fractional seed lookup is invalid and a missing API key never initiates a 
   process.env.CSFLOAT_API_KEY = "test-key";
   assert.equal(requests.length,before);
 });
+
+test("pattern estimates match seed, exterior, paint and StatTrak without requiring identical floats", async () => {
+  listings = [
+    { ...listing(710, 0.21, 12000), item: { ...listing(710, 0.21).item, def_index: 7, paint_index: 44 } },
+    { ...listing(710, 0.05, 100), item: { ...listing(710, 0.05).item, def_index: 7, paint_index: 44 } },
+    { ...listing(710, 0.21, 100), item: { ...listing(710, 0.21).item, def_index: 7, paint_index: 43 } },
+    { ...listing(710, 0.21, 100), item: { ...listing(710, 0.21).item, def_index: 8, paint_index: 44 } },
+    { ...listing(710, 0.21, 100), item: { ...listing(710, 0.21).item, def_index: 7, paint_index: 44, is_stattrak: true } },
+  ];
+  const quote = await getCsfloatExactListingPrice({ ...lookup(710), definitionIndex: 7, paintkit: 44, allowPatternEstimate: true });
+  assert.equal(quote?.eurCents, 10800);
+  assert.equal(quote?.exactSeed, true);
+  assert.equal(quote?.exactFloat, false);
+  assert.equal(quote?.source, "csfloat-pattern-listing");
+  const search = requests.at(-1)!.searchParams;
+  assert.equal(search.get("paint_index"), "44");
+  assert.equal(search.get("def_index"), "7");
+  assert.ok(Number(search.get("min_float")) > 0.15);
+  assert.equal(Number(search.get("max_float")), 0.38);
+  assert.equal(await getCsfloatExactListingPrice({ ...lookup(710), definitionIndex: 7, paintkit: 44 }), null);
+});
+
+test("exact listing cache includes the Doppler paint identity", async () => {
+  const name = "★ StatTrak™ Bayonet | Doppler (Factory New)";
+  const item = { market_hash_name: name, def_index: 500, paint_index: 419, paint_seed: 711, float_value: 0.02, is_stattrak: true, is_souvenir: false };
+  listings = [{ id: "711", type: "buy_now", state: "listed", price: 40000, item }];
+  const input = { ...lookup(711), marketHashName: name, stattrak: true, floatValue: 0.02, definitionIndex: 500, paintkit: 418 };
+  assert.equal(await getCsfloatExactListingPrice(input), null);
+  const quote = await getCsfloatExactListingPrice({ ...input, paintkit: 419 });
+  assert.equal(quote?.eurCents, 36000);
+});

@@ -109,7 +109,7 @@ function RuleFields({
             required
             maxLength={120}
             defaultValue={rule?.displayName ?? ""}
-            placeholder="Weekend crates"
+            placeholder="Weekend cases"
           />
         </label>
         <label>

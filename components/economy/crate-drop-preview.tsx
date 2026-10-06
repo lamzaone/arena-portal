@@ -86,7 +86,7 @@ export function CrateDropPreview({
         const payload: unknown = await response.json().catch(() => null);
         if (!response.ok) {
           throw new Error(
-            responseMessage(payload) || "Crate odds are temporarily unavailable.",
+            responseMessage(payload) || "Case odds are temporarily unavailable.",
           );
         }
         setLoadedState(economyCrateDropStateFromResponse(payload));
@@ -97,7 +97,7 @@ export function CrateDropPreview({
           message:
             error instanceof Error
               ? error.message
-              : "Crate odds are temporarily unavailable.",
+              : "Case odds are temporarily unavailable.",
         });
       }
     })();
@@ -184,11 +184,11 @@ function CrateDropPreviewReady({
     [drops, queryTerms, rarityFilter],
   );
   return (
-    <section className="crate-drop-odds" aria-label="Possible crate drops">
+    <section className="crate-drop-odds" aria-label="Possible case drops">
       <header>
         <div>
           <p className="eyebrow">
-            <Trophy aria-hidden="true" /> Verified crate odds
+            <Trophy aria-hidden="true" /> Verified case odds
           </p>
           <h3>Possible drops</h3>
         </div>
@@ -199,7 +199,7 @@ function CrateDropPreviewReady({
         to browse the full pool; displayed percentages are the actual per-item
         chance.
       </p>
-      <div className="crate-drop-tier-tabs" aria-label="Filter crate drops by rarity">
+      <div className="crate-drop-tier-tabs" aria-label="Filter case drops by rarity">
         <button
           type="button"
           aria-pressed={rarityFilter === "all"}
@@ -225,7 +225,7 @@ function CrateDropPreviewReady({
       <div className="crate-drop-toolbar">
         <SearchField
           id={searchId}
-          label="Search this crate"
+          label="Search this case"
           value={query}
           onValueChange={setQuery}
           placeholder="Butterfly, Fade, AK-47..."
@@ -238,7 +238,7 @@ function CrateDropPreviewReady({
         </p>
       </div>
       {filteredDrops.length ? (
-        <PaginatedItemGrid className="crate-drop-grid" label="Possible crate drops" resetKey={`${query}:${rarityFilter}`}>
+        <PaginatedItemGrid className="crate-drop-grid" label="Possible case drops" resetKey={`${query}:${rarityFilter}`}>
           {filteredDrops.map((drop) => (
             <article
               key={drop.lootEntryId}

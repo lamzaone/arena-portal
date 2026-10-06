@@ -1307,7 +1307,7 @@ export function MarketplaceBrowser({
           <p>Purchases go straight to your inventory. Open cases without a key.</p>
           <details className={styles.help}>
             <summary>How prices work</summary>
-            <p>Public market data informs Token prices. Custom server finishes use staff-set prices. Crates and capsules use their listed price, including any active discount.</p>
+            <p>Public market data informs Token prices. Custom server finishes use staff-set prices. Cases and capsules use their listed price, including any active discount.</p>
           </details>
         </div>
         <div className={styles.overviewMeta}>

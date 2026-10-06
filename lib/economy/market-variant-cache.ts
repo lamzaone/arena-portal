@@ -6,20 +6,31 @@ import {
   recordEconomyMarketVariantPrices,
 } from "@/lib/data/portal-repository";
 import {
-  marketplaceWearLabel,
+  deriveMarketplacePriceIdentity,
+  isCatalogueMarketplaceFallbackAllowed,
   selectMarketplacePriceFallback,
+  selectMarketplacePriceFallbackForIdentity,
+  type MarketplacePriceIdentityInput,
   type MarketplacePriceFallback,
   type MarketplacePriceQuote,
 } from "@/lib/economy/market-pricing";
 
 const cacheTtlMs = 6 * 60 * 60 * 1_000;
 
-type CachedFallbackInput = {
+type CachedFallbackInput = MarketplacePriceIdentityInput & {
   catalogueId: number;
-  floatValue: number | null | undefined;
   stattrak: boolean;
   standardFallback?: MarketplacePriceFallback | null | undefined;
 };
+
+function standardFallback(input: CachedFallbackInput) {
+  return input.stattrak || !isCatalogueMarketplaceFallbackAllowed(input.itemType, input.standardFallback?.source)
+    ? null : input.standardFallback;
+}
+
+function cachedWear(input: CachedFallbackInput) {
+  return deriveMarketplacePriceIdentity(input).wear ?? "Standard";
+}
 
 function fallbackFromCached(
   input: CachedFallbackInput,
@@ -27,6 +38,8 @@ function fallbackFromCached(
     euroCents: number;
     source: string;
     sourceReference: string | null;
+    marketHashName: string;
+    marketVersion: string | null;
     observedAt: string;
     stale: boolean;
   } | null,
@@ -34,7 +47,7 @@ function fallbackFromCached(
   // Older deployments may already have written an exact listing into this
   // coarse key. Never reuse that row for a different seed or float.
   const cachedFallback =
-    cached && cached.source !== "csfloat-exact-listing"
+    cached && !["csfloat-exact-listing", "csfloat-pattern-listing"].includes(cached.source)
       ? {
           eurCents: cached.euroCents,
           // Staleness describes when the snapshot was recorded, not which
@@ -42,25 +55,28 @@ function fallbackFromCached(
           // economy source allowlist can validate a last-known quote.
           source: cached.source,
           sourceReference: cached.sourceReference,
+          marketHashName: cached.marketHashName,
+          marketVersion: cached.marketVersion,
           observedAt: cached.observedAt,
           stale: cached.stale,
         }
       : null;
-  return selectMarketplacePriceFallback(
+  return selectMarketplacePriceFallbackForIdentity(
+    deriveMarketplacePriceIdentity(input),
     cachedFallback,
-    input.stattrak ? null : input.standardFallback,
+    standardFallback(input),
   );
 }
 
 /**
- * Reads the exact wear + StatTrak variant first. A standard catalogue price is
- * used only for normal items, preventing a non-StatTrak snapshot from ever
- * being applied to a StatTrak™ purchase or sale.
+ * Reads the exact wear + StatTrak variant first. Automatic catalogue prices
+ * lack exterior/base provenance, so float items require a variant snapshot
+ * or an explicit normal-item staff override.
  */
 export async function getCachedMarketplaceVariantFallback(
   input: CachedFallbackInput,
 ): Promise<MarketplacePriceFallback | null> {
-  const wear = marketplaceWearLabel(input.floatValue) ?? "Standard";
+  const wear = cachedWear(input);
   let cached = null;
   try {
     cached = await getEconomyMarketVariantPrice({
@@ -72,7 +88,7 @@ export async function getCachedMarketplaceVariantFallback(
     // A portal deployment can come up just before the game-server plug-in
     // creates the cache table. Price resolution must retain its older public
     // provider path during that small rollout window.
-    return input.stattrak ? null : selectMarketplacePriceFallback(input.standardFallback);
+    return selectMarketplacePriceFallback(standardFallback(input));
   }
   return fallbackFromCached(input, cached);
 }
@@ -85,14 +101,14 @@ export async function getCachedMarketplaceVariantFallbacks(
   const lookups = inputs.map((input) => ({
     catalogueId: input.catalogueId,
     stattrak: input.stattrak,
-    wear: marketplaceWearLabel(input.floatValue) ?? "Standard",
+    wear: cachedWear(input),
   }));
   try {
     const cached = await getEconomyMarketVariantPrices(lookups);
     return inputs.map((input, index) => fallbackFromCached(input, cached[index]));
   } catch {
     return inputs.map((input) =>
-      input.stattrak ? null : selectMarketplacePriceFallback(input.standardFallback),
+      selectMarketplacePriceFallback(standardFallback(input)),
     );
   }
 }

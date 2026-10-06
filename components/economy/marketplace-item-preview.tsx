@@ -25,6 +25,7 @@ import {
 } from "@/components/economy/economy-view-model";
 import { proxiedImageUrl } from "@/lib/images/proxy-url";
 import type { WeaponPreviewSource } from "@/lib/economy/weapon-preview";
+import { loadCatalogueArtwork } from "@/components/economy/catalogue-artwork-client";
 
 type MarketplaceItemPreviewProps = {
   item: Pick<
@@ -175,10 +176,8 @@ function CatalogueItemPreview({
 
     const controller = new AbortController();
     setState("loading");
-    void fetch(previewRequestUrl, { signal: controller.signal })
-      .then(async (response) => {
-        const body: unknown = await response.json();
-        if (!response.ok) throw new Error("Preview unavailable");
+    void loadCatalogueArtwork(previewRequestUrl)
+      .then((body) => {
         const imageUrls = previewImageUrlsFromResponse(body).filter(
           (imageUrl) => !directImageUrls.includes(imageUrl),
         );

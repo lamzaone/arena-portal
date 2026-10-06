@@ -14,7 +14,7 @@ export const marketplaceCategories: readonly MarketplaceCategory[] = [
   { value: "weapons", label: "Weapons / Skins", itemTypes: ["skin"] },
   { value: "knife", label: "Knives", itemTypes: ["knife"] },
   { value: "glove", label: "Gloves", itemTypes: ["glove"] },
-  { value: "crate", label: "Crates", itemTypes: ["crate"] },
+  { value: "crate", label: "Cases", itemTypes: ["crate"] },
   { value: "capsule", label: "Capsules", itemTypes: ["capsule"] },
   { value: "sticker", label: "Stickers", itemTypes: ["sticker"] },
   { value: "agent", label: "Agents", itemTypes: ["agent"] },

@@ -8,6 +8,7 @@ const state = {
   catalogue: {} as Record<string, any>, items: [] as Array<Record<string, any>>,
   lookups: [] as Array<Record<string, any>>, purchases: [] as Array<Record<string, any>>,
   sales: [] as Array<Record<string, any>>, cacheCalls: 0, purchaseFailure: null as string | null,
+  cachedFallback: null as Record<string, unknown> | null,
 };
 Object.assign(globalThis, { __customFinishRoutes: state });
 const stubs: Record<string, string> = {
@@ -39,8 +40,8 @@ const stubs: Record<string, string> = {
     export const marketplaceWearLabel=()=> 'Field-Tested';
     export async function getMarketplacePriceQuotes(inputs){s.lookups.push(...inputs);return inputs.map(i=>i.metadata?.unpriced?null:{baseEuroCents:900,eurCents:900,source:'csfloat-exact-listing',sourceReference:'listing',marketHashName:i.marketHashName,marketVersion:null,floatValue:i.floatValue,wear:'Field-Tested',stattrak:i.stattrak,floatDiscountBps:0,pricingRule:'external-exact-v2',seed:i.seed,seedMatched:true,fromFallback:false,fallbackStale:false,fallbackObservedAt:null});}`,
   "@/lib/economy/market-variant-cache": `const s=globalThis.__customFinishRoutes;
-    export async function getCachedMarketplaceVariantFallback(){s.cacheCalls++;return null;}
-    export async function getCachedMarketplaceVariantFallbacks(inputs){s.cacheCalls++;return inputs.map(()=>null);}
+    export async function getCachedMarketplaceVariantFallback(){s.cacheCalls++;return s.cachedFallback;}
+    export async function getCachedMarketplaceVariantFallbacks(inputs){s.cacheCalls++;return inputs.map(()=>s.cachedFallback);}
     export async function cacheMarketplaceVariantQuote(){s.cacheCalls++;}
     export async function cacheMarketplaceVariantQuotes(){s.cacheCalls++;}`,
   "@/lib/economy/inventory-sale-lock": "export const canSellInventoryItem=i=>i.state==='available';",
@@ -58,7 +59,7 @@ const { GET: quote } = await import("./market/quote/route.ts");
 function reset(custom = true) {
   state.catalogue = { id:1,itemType:'skin',displayName:'Glock-18 | Case Hardened',marketHashName:'Glock-18 | Case Hardened',minFloat:0,maxFloat:1,metadata:{customServerFinish:custom},price:{euroCents:1200,tokenPrice:1200,source:'staff-last-known',sourceReference:'staff-panel'} };
   state.items = [{id:'custom',catalogueId:1,catalogue:state.catalogue,itemType:'skin',state:'available',floatValue:.2,seed:661,stattrak:false}];
-  state.lookups=[]; state.purchases=[]; state.sales=[]; state.cacheCalls=0; state.purchaseFailure=null;
+  state.lookups=[]; state.purchases=[]; state.sales=[]; state.cacheCalls=0; state.purchaseFailure=null; state.cachedFallback=null;
 }
 const mutation = (body: Record<string, unknown>) => new Request('http://localhost/api', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({idempotencyKey:'test-request-0001',...(body.catalogueId ? {expectedUnitPriceTokens:900} : {}),...body})});
 const quoteRequest = (seed = '661') => new Request(`http://localhost/api?catalogueId=1&float=0.2&seed=${seed}`);
@@ -113,6 +114,15 @@ test('mixed bulk sale excludes custom finishes from provider lookup without skip
   assert.deepEqual(state.sales[0].items.map((i:Record<string,unknown>)=>i.itemId),['custom','official']);
   assert.equal(state.sales[0].items[0].marketQuote,undefined); assert.ok(state.sales[0].items[1].marketQuote);
   assert.deepEqual((await response.json()).skippedItemIds,[]);
+});
+test('bulk sale skips a rejected cache quote while selling the verified selection', async()=>{
+  reset(false);
+  state.items = [{ ...state.items[0], id:'unpriced', catalogue:{...state.catalogue,metadata:{unpriced:true}} }, { ...state.items[0], id:'priced' }];
+  state.cachedFallback = {eurCents:1200,source:'skinport-30d-median'};
+  const response = await sell(mutation({itemIds:['unpriced','priced']}));
+  assert.equal(response.status,200);
+  assert.deepEqual(state.sales[0].items.map((item:Record<string,unknown>)=>item.itemId),['priced']);
+  assert.deepEqual((await response.json()).skippedItemIds,['unpriced']);
 });
 test('manual quote echoes selection and applies promotions to fixed staff price without inventing pattern premiums',async()=>{
   reset(); const response=await quote(quoteRequest()); const body=await response.json();

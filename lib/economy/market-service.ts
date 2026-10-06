@@ -151,6 +151,12 @@ export function createMarketplaceService(
 
     const fallbackPrice = await getCachedMarketplaceVariantFallback({
       catalogueId,
+      itemType: item.itemType,
+      displayName: item.displayName,
+      marketHashName: item.marketHashName,
+      metadata: item.metadata,
+      minFloat: item.minFloat,
+      maxFloat: item.maxFloat,
       floatValue,
       stattrak,
       standardFallback:
@@ -165,6 +171,8 @@ export function createMarketplaceService(
     const [quote] = await getMarketplacePriceQuotes([
       {
         itemType: item.itemType,
+        definitionIndex: item.definitionIndex,
+        paintkit: item.paintkit,
         displayName: item.displayName,
         marketHashName: item.marketHashName,
         metadata: item.metadata,
@@ -298,6 +306,12 @@ export function createMarketplaceService(
         if (catalogue.metadata.customServerFinish !== true) {
           const fallbackPrice = await getCachedMarketplaceVariantFallback({
             catalogueId,
+            itemType: catalogue.itemType,
+            displayName: catalogue.displayName,
+            marketHashName: catalogue.marketHashName,
+            metadata: catalogue.metadata,
+            minFloat: catalogue.minFloat,
+            maxFloat: catalogue.maxFloat,
             floatValue,
             stattrak,
             standardFallback:
@@ -314,6 +328,8 @@ export function createMarketplaceService(
           const [quote] = await getMarketplacePriceQuotes([
             {
               itemType: catalogue.itemType,
+              definitionIndex: catalogue.definitionIndex,
+              paintkit: catalogue.paintkit,
               displayName: catalogue.displayName,
               marketHashName: catalogue.marketHashName,
               metadata: catalogue.metadata,
@@ -368,6 +384,8 @@ export function createMarketplaceService(
         const [quote] = await getMarketplacePriceQuotes([
           {
             itemType: catalogue.itemType,
+            definitionIndex: catalogue.definitionIndex,
+            paintkit: catalogue.paintkit,
             displayName: catalogue.displayName,
             marketHashName: catalogue.marketHashName,
             metadata: catalogue.metadata,
@@ -496,6 +514,8 @@ export function createMarketplaceService(
           const [quote] = await getMarketplacePriceQuotes([
             {
               itemType: item.itemType,
+              definitionIndex: item.definitionIndex,
+              paintkit: item.paintkit,
               displayName: item.displayName,
               marketHashName: item.marketHashName,
               metadata: item.metadata,

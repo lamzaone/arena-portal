@@ -1,7 +1,7 @@
 {
   "source": "https://cdn.skinhub.gg/data/skins.json",
-  "generatedAt": "2026-09-30T08:31:47.819Z",
-  "sha256": "97f29707340848c9568cd61a354f88c68187958147931d7b46c53dac18ee2337",
+  "generatedAt": "2026-10-06T14:56:51.371Z",
+  "sha256": "77a75715c1969226bfe81666593a76461a18978dd9d59a97f6df58c21c9c248e",
   "finishes": {
     "1:0": {
       "name": "Desert Eagle | Default",
@@ -1222,39 +1222,49 @@
       "supportsStattrak": true
     },
     "4:1119": {
-      "name": "Glock-18 | Gamma Doppler",
+      "name": "Glock-18 | Gamma Doppler (Emerald)",
       "itemType": "skin",
       "minFloat": 0,
       "maxFloat": 0.5,
-      "supportsStattrak": false
+      "supportsStattrak": false,
+      "marketBaseName": "Glock-18 | Gamma Doppler",
+      "marketVersion": "Emerald"
     },
     "4:1120": {
-      "name": "Glock-18 | Gamma Doppler",
+      "name": "Glock-18 | Gamma Doppler (Phase 1)",
       "itemType": "skin",
       "minFloat": 0,
       "maxFloat": 0.5,
-      "supportsStattrak": false
+      "supportsStattrak": false,
+      "marketBaseName": "Glock-18 | Gamma Doppler",
+      "marketVersion": "Phase 1"
     },
     "4:1121": {
-      "name": "Glock-18 | Gamma Doppler",
+      "name": "Glock-18 | Gamma Doppler (Phase 2)",
       "itemType": "skin",
       "minFloat": 0,
       "maxFloat": 0.5,
-      "supportsStattrak": false
+      "supportsStattrak": false,
+      "marketBaseName": "Glock-18 | Gamma Doppler",
+      "marketVersion": "Phase 2"
     },
     "4:1122": {
-      "name": "Glock-18 | Gamma Doppler",
+      "name": "Glock-18 | Gamma Doppler (Phase 3)",
       "itemType": "skin",
       "minFloat": 0,
       "maxFloat": 0.5,
-      "supportsStattrak": false
+      "supportsStattrak": false,
+      "marketBaseName": "Glock-18 | Gamma Doppler",
+      "marketVersion": "Phase 3"
     },
     "4:1123": {
-      "name": "Glock-18 | Gamma Doppler",
+      "name": "Glock-18 | Gamma Doppler (Phase 4)",
       "itemType": "skin",
       "minFloat": 0,
       "maxFloat": 0.5,
-      "supportsStattrak": false
+      "supportsStattrak": false,
+      "marketBaseName": "Glock-18 | Gamma Doppler",
+      "marketVersion": "Phase 4"
     },
     "4:1158": {
       "name": "Glock-18 | Winterized",
