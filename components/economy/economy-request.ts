@@ -4,7 +4,7 @@ export type EconomyActionResult = {
   ok: boolean;
   message?: string;
   code?: string;
-  balance?: number;
+  balance?: string;
   priceTokens?: number;
   totalPriceTokens?: number;
   quantity?: number;
@@ -21,7 +21,7 @@ export type EconomyActionResult = {
   rewardLootEntryId?: number;
   codeId?: number;
   displayName?: string;
-  tokensAwarded?: number;
+  tokensAwarded?: string;
   itemNames?: string[];
   item?: unknown;
   trade?: unknown;

@@ -1,3 +1,4 @@
+import { TOKEN_MAX, TOKEN_LIFETIME_MAX, tokenInteger, type TokenAmountInput } from "../economy/token-amount.ts";
 import "server-only";
 import { CLOSED_APPEAL_STATUSES } from "@/lib/cases/appeal-status";
 import { enqueueDiscordNotification } from "@/lib/discord/notification-repository";
@@ -3805,9 +3806,9 @@ export class EconomyRepositoryError extends Error {
 
 export type TokenWallet = {
   steamId: string;
-  balance: number;
-  lifetimeEarned: number;
-  lifetimeSpent: number;
+  balance: string;
+  lifetimeEarned: string;
+  lifetimeSpent: string;
   createdAt: string | null;
   updatedAt: string | null;
 };
@@ -3815,8 +3816,8 @@ export type TokenWallet = {
 export type TokenLedgerEntry = {
   id: number;
   steamId: string;
-  delta: number;
-  balanceAfter: number;
+  delta: string;
+  balanceAfter: string;
   reason: string;
   referenceType: string;
   referenceId: string;
@@ -3963,7 +3964,7 @@ export type EconomyRedeemCode = {
   id: number;
   codeHint: string;
   displayName: string;
-  tokenAmount: number;
+  tokenAmount: string;
   maxRedemptions: number | null;
   redemptionCount: number;
   enabled: boolean;
@@ -3984,7 +3985,7 @@ export type CreateEconomyRedeemCodeInput = {
   actorSteamId: string;
   code: string;
   displayName: string;
-  tokenAmount: number;
+  tokenAmount: TokenAmountInput;
   maxRedemptions: number | null;
   rewards: Array<{ catalogueId: number; quantity: number }>;
   idempotencyKey: string;
@@ -4007,7 +4008,7 @@ export type RedeemEconomyCodeInput = {
 export type RedeemEconomyCodeResult = {
   codeId: number;
   displayName: string;
-  tokensAwarded: number;
+  tokensAwarded: string;
   itemIds: string[];
   itemNames: string[];
   wallet: TokenWallet;
@@ -4259,8 +4260,8 @@ export type EconomyTrade = {
   counterpartySteamId: string;
   direction: "incoming" | "outgoing";
   status: EconomyTradeStatus;
-  offered: { steamId: string; tokens: number; items: EconomyTradeItem[] };
-  requested: { steamId: string; tokens: number; items: EconomyTradeItem[] };
+  offered: { steamId: string; tokens: string; items: EconomyTradeItem[] };
+  requested: { steamId: string; tokens: string; items: EconomyTradeItem[] };
   expiresAt: string | null;
   respondedAt: string | null;
   createdAt: string;
@@ -4570,8 +4571,8 @@ export type CreateEconomyTradeInput = {
   counterpartySteamId: string;
   offeredItemIds?: string[];
   requestedItemIds?: string[];
-  offeredTokens?: number;
-  requestedTokens?: number;
+  offeredTokens?: TokenAmountInput;
+  requestedTokens?: TokenAmountInput;
   expiresAt?: string;
   idempotencyKey: string;
 };
@@ -4838,14 +4839,14 @@ export type StaffAdjustTokensInput = {
   actorSteamId: string;
   targetSteamId: string;
   action: "award" | "take" | "set";
-  amount: number;
+  amount: TokenAmountInput;
   reason: string;
   idempotencyKey: string;
 };
 
 export type StaffAdjustTokensResult = {
   targetSteamId: string;
-  delta: number;
+  delta: string;
   wallet: TokenWallet;
 };
 
@@ -5690,31 +5691,34 @@ function economyChildIdempotencyKey(
   );
 }
 
+function economyTokenInput(value: unknown, field: string): string {
+  try { return tokenInteger(value).toString(); }
+  catch { return economyError("invalid_input", field + " must be a whole amount between 0 and 18446744073709551615."); }
+}
+
+function economyToken(value: unknown, field: string, maximum = TOKEN_MAX, minimum = 0n): string {
+  try { return tokenInteger(value, maximum, minimum).toString(); }
+  catch { return economyError("invalid_database_value", "The token economy contains an invalid " + field + "."); }
+}
+
 function toTokenWallet(row: EconomyAccountRow): TokenWallet {
   return {
     steamId: String(row.steam_id),
-    balance: economyNumber(row.balance, "wallet balance"),
-    lifetimeEarned: economyNumber(
-      row.lifetime_earned,
-      "wallet lifetime earned",
-    ),
-    lifetimeSpent: economyNumber(row.lifetime_spent, "wallet lifetime spent"),
+    balance: economyToken(row.balance, "wallet balance"),
+    lifetimeEarned: economyToken(row.lifetime_earned, "wallet lifetime earned", TOKEN_LIFETIME_MAX),
+    lifetimeSpent: economyToken(row.lifetime_spent, "wallet lifetime spent", TOKEN_LIFETIME_MAX),
     createdAt: economyDateToIso(row.created_at),
     updatedAt: economyDateToIso(row.updated_at),
   };
 }
 
 function toTokenLedgerEntry(row: EconomyLedgerRow): TokenLedgerEntry {
-  const delta = economyNumber(
-    row.delta,
-    "ledger delta",
-    Number.MIN_SAFE_INTEGER,
-  );
+  const delta = economyToken(row.delta, "ledger delta", TOKEN_MAX, -TOKEN_MAX);
   return {
     id: economyNumber(row.id, "ledger ID"),
     steamId: String(row.account_steam_id),
     delta,
-    balanceAfter: economyNumber(row.balance_after, "ledger balance"),
+    balanceAfter: economyToken(row.balance_after, "ledger balance"),
     reason: String(row.reason),
     referenceType: String(row.reference_type),
     referenceId: String(row.reference_id),
@@ -6748,7 +6752,7 @@ export async function applyTokenDelta(input: {
   connection: PoolConnection;
   wallets: Map<string, TokenWallet>;
   steamId: string;
-  delta: number;
+  delta: TokenAmountInput;
   reason: string;
   referenceType: string;
   referenceId: string;
@@ -6757,30 +6761,20 @@ export async function applyTokenDelta(input: {
   actorSteamId: string | null;
   metadata?: Record<string, unknown>;
 }) {
-  if (!Number.isSafeInteger(input.delta) || input.delta === 0)
-    economyError(
-      "invalid_input",
-      "A token change must be a non-zero whole number.",
-    );
+  let delta: bigint;
+  try { delta = tokenInteger(input.delta, TOKEN_MAX, -TOKEN_MAX); }
+  catch { return economyError("invalid_input", "A token change must be an exact UInt64 amount."); }
+  if (delta === 0n) economyError("invalid_input", "A token change must be non-zero.");
   const wallet = input.wallets.get(input.steamId);
-  if (!wallet)
-    economyError(
-      "wallet_unavailable",
-      "The token economy wallet is not locked.",
-    );
-  const nextBalance = wallet.balance + input.delta;
-  if (!Number.isSafeInteger(nextBalance) || nextBalance < 0)
-    economyError(
-      "insufficient_tokens",
-      "This account does not have enough Tokens.",
-    );
-  const nextEarned =
-    wallet.lifetimeEarned + (input.delta > 0 ? input.delta : 0);
-  const nextSpent = wallet.lifetimeSpent + (input.delta < 0 ? -input.delta : 0);
-  if (!Number.isSafeInteger(nextEarned) || !Number.isSafeInteger(nextSpent))
+  if (!wallet) economyError("wallet_unavailable", "The token economy wallet is not locked.");
+  const nextBalance = BigInt(wallet.balance) + delta;
+  if (nextBalance < 0n) economyError("insufficient_tokens", "This account does not have enough Tokens.");
+  const nextEarned = BigInt(wallet.lifetimeEarned) + (delta > 0n ? delta : 0n);
+  const nextSpent = BigInt(wallet.lifetimeSpent) + (delta < 0n ? -delta : 0n);
+  if (nextBalance > TOKEN_MAX || nextEarned > TOKEN_LIFETIME_MAX || nextSpent > TOKEN_LIFETIME_MAX)
     economyError("token_limit", "The token balance limit was reached.");
 
-  if (input.delta > 0) {
+  if (delta > 0n) {
     // The caller already holds this wallet lock. A locking read is current even
     // when this transaction established an older REPEATABLE READ snapshot.
     // Never acquire the casino clock/rounds here (casino locks them first).
@@ -6794,21 +6788,20 @@ export async function applyTokenDelta(input: {
       // Other portal economies retain their pre-casino behavior until migrated.
       if ((error as { code?: string }).code !== "ER_NO_SUCH_TABLE") throw error;
     }
-    const ceiling = BigInt(Number.MAX_SAFE_INTEGER);
-    if (BigInt(nextBalance) + reserved > ceiling || BigInt(nextEarned) + reserved > ceiling)
+    if (nextBalance + reserved > TOKEN_MAX || nextEarned + reserved > TOKEN_LIFETIME_MAX)
       economyError("token_limit", "The token balance limit was reached.");
   }
 
   await input.connection.execute(
     "UPDATE portal_token_accounts SET balance = ?, lifetime_earned = ?, lifetime_spent = ? WHERE steam_id = ?",
-    [nextBalance, nextEarned, nextSpent, input.steamId],
+    [nextBalance.toString(), nextEarned.toString(), nextSpent.toString(), input.steamId],
   );
   await input.connection.execute(
     "INSERT INTO portal_token_ledger (account_steam_id, delta, balance_after, reason, reference_type, reference_id, idempotency_key, line_key, actor_steam_id, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     [
       input.steamId,
-      input.delta,
-      nextBalance,
+      delta.toString(),
+      nextBalance.toString(),
       economyText(input.reason, "Ledger reason", 64),
       economyText(input.referenceType, "Ledger reference type", 48),
       economyText(input.referenceId, "Ledger reference ID", 96),
@@ -6821,9 +6814,9 @@ export async function applyTokenDelta(input: {
 
   const updated: TokenWallet = {
     ...wallet,
-    balance: nextBalance,
-    lifetimeEarned: nextEarned,
-    lifetimeSpent: nextSpent,
+    balance: nextBalance.toString(),
+    lifetimeEarned: nextEarned.toString(),
+    lifetimeSpent: nextSpent.toString(),
     updatedAt: new Date().toISOString(),
   };
   input.wallets.set(input.steamId, updated);
@@ -7250,9 +7243,9 @@ export async function getTokenWallet(steamId: string): Promise<TokenWallet> {
   const pool = getPortalPool();
   const empty: TokenWallet = {
     steamId,
-    balance: 0,
-    lifetimeEarned: 0,
-    lifetimeSpent: 0,
+    balance: "0",
+    lifetimeEarned: "0",
+    lifetimeSpent: "0",
     createdAt: null,
     updatedAt: null,
   };
@@ -7605,7 +7598,7 @@ function toEconomyRedeemCode(
     id: economyNumber(row.id, "redeem code ID", 1),
     codeHint: String(row.code_hint),
     displayName: String(row.display_name),
-    tokenAmount: economyNumber(row.token_amount, "redeem token amount"),
+    tokenAmount: economyToken(row.token_amount, "redeem token amount"),
     maxRedemptions: economyOptionalInteger(
       row.max_redemptions,
       "redeem max redemptions",
@@ -7737,7 +7730,7 @@ export async function createEconomyRedeemCode(
   const code = economyRedeemCode(input.code);
   const codeHash = economyRedeemCodeHash(code);
   const displayName = economyText(input.displayName, "Code display name", 120);
-  const tokenAmount = economyAmount(input.tokenAmount, "Token reward");
+  const tokenAmount = economyTokenInput(input.tokenAmount, "Token reward");
   const maxRedemptions =
     input.maxRedemptions === null || input.maxRedemptions === undefined
       ? null
@@ -7745,7 +7738,7 @@ export async function createEconomyRedeemCode(
   if (maxRedemptions !== null && maxRedemptions > 2_147_483_647)
     economyError("invalid_input", "Code usage limit is too large.");
   const rewards = economyRedeemRewards(input.rewards);
-  if (tokenAmount === 0 && !rewards.length)
+  if (tokenAmount === "0" && !rewards.length)
     economyError("invalid_input", "Add Tokens or at least one item reward.");
   await ensureEconomyRedeemSchema();
 
@@ -8009,8 +8002,8 @@ export async function redeemEconomyCode(
       const totalItems = rewards.reduce((total, reward) => total + reward.quantity, 0);
       if (totalItems > 100)
         economyError("invalid_database_value", "This redeem code has too many item rewards.");
-      const tokenAmount = economyNumber(redeemCode.token_amount, "redeem token amount");
-      if (tokenAmount === 0 && !rewards.length)
+      const tokenAmount = economyToken(redeemCode.token_amount, "redeem token amount");
+      if (tokenAmount === "0" && !rewards.length)
         economyError("invalid_database_value", "This redeem code has no rewards.");
 
       const catalogueById = new Map<number, EconomyCatalogueItem>();
@@ -8031,7 +8024,7 @@ export async function redeemEconomyCode(
       let wallet = wallets.get(steamId);
       if (!wallet)
         economyError("wallet_unavailable", "The token economy wallet is not locked.");
-      if (tokenAmount > 0) {
+      if (BigInt(tokenAmount) > 0n) {
         wallet = await applyTokenDelta({
           connection: context.connection,
           wallets,
@@ -13668,12 +13661,12 @@ function toEconomyTrade(rows: {
     status: economyTradeStatus(String(trade.status)),
     offered: {
       steamId: String(trade.creator_steam_id),
-      tokens: economyNumber(trade.offered_tokens, "offered Tokens"),
+      tokens: economyToken(trade.offered_tokens, "offered Tokens"),
       items: offeredItems,
     },
     requested: {
       steamId: String(trade.counterparty_steam_id),
-      tokens: economyNumber(trade.requested_tokens, "requested Tokens"),
+      tokens: economyToken(trade.requested_tokens, "requested Tokens"),
       items: requestedItems,
     },
     expiresAt: economyDateToIso(trade.expires_at),
@@ -13824,11 +13817,11 @@ async function returnEconomyTradeEscrow(input: {
   const tradeId = economyUuid(String(input.trade.id), "Trade ID");
   const offered = input.tradeItems.filter((item) => item.side === "offered");
   const offeredIds = offered.map((item) => economyItemId(String(item.item_id)));
-  const offeredTokens = economyNumber(
+  const offeredTokens = economyToken(
     input.trade.offered_tokens,
     "offered Tokens",
   );
-  if (offeredTokens > 0) {
+  if (BigInt(offeredTokens) > 0n) {
     const wallets = await lockTokenAccounts(input.connection, [
       String(input.trade.creator_steam_id),
     ]);
@@ -13955,16 +13948,16 @@ export async function createEconomyTrade(
     input.requestedItemIds,
     "Requested item ID",
   );
-  const offeredTokens = economyAmount(input.offeredTokens, "Offered Tokens");
-  const requestedTokens = economyAmount(
-    input.requestedTokens,
+  const offeredTokens = economyTokenInput(input.offeredTokens ?? "0", "Offered Tokens");
+  const requestedTokens = economyTokenInput(
+    input.requestedTokens ?? "0",
     "Requested Tokens",
   );
   if (
     !offeredItemIds.length &&
     !requestedItemIds.length &&
-    offeredTokens === 0 &&
-    requestedTokens === 0
+    offeredTokens === "0" &&
+    requestedTokens === "0"
   ) {
     economyError(
       "invalid_input",
@@ -14045,12 +14038,12 @@ export async function createEconomyTrade(
           expiresAt,
         ],
       );
-      if (offeredTokens > 0) {
+      if (BigInt(offeredTokens) > 0n) {
         await applyTokenDelta({
           connection: context.connection,
           wallets,
           steamId,
-          delta: -offeredTokens,
+          delta: -BigInt(offeredTokens),
           reason: "trade.escrow.hold",
           referenceType: "trade",
           referenceId: tradeId,
@@ -14238,20 +14231,20 @@ export async function respondEconomyTrade(
         itemIds,
       );
 
-      const offeredTokens = economyNumber(
+      const offeredTokens = economyToken(
         trade.offered_tokens,
         "offered Tokens",
       );
-      const requestedTokens = economyNumber(
+      const requestedTokens = economyToken(
         trade.requested_tokens,
         "requested Tokens",
       );
-      if (requestedTokens > 0) {
+      if (BigInt(requestedTokens) > 0n) {
         await applyTokenDelta({
           connection: context.connection,
           wallets,
           steamId: counterpartySteamId,
-          delta: -requestedTokens,
+          delta: -BigInt(requestedTokens),
           reason: "trade.settlement.debit",
           referenceType: "trade",
           referenceId: tradeId,
@@ -14265,7 +14258,7 @@ export async function respondEconomyTrade(
           [tradeId, counterpartySteamId, requestedTokens],
         );
       }
-      if (offeredTokens > 0) {
+      if (BigInt(offeredTokens) > 0n) {
         await applyTokenDelta({
           connection: context.connection,
           wallets,
@@ -14280,7 +14273,7 @@ export async function respondEconomyTrade(
           metadata: { creatorSteamId },
         });
       }
-      if (requestedTokens > 0) {
+      if (BigInt(requestedTokens) > 0n) {
         await applyTokenDelta({
           connection: context.connection,
           wallets,
@@ -14299,7 +14292,7 @@ export async function respondEconomyTrade(
           [tradeId, counterpartySteamId],
         );
       }
-      if (offeredTokens > 0) {
+      if (BigInt(offeredTokens) > 0n) {
         await context.connection.execute(
           "UPDATE portal_trade_token_escrow SET status = 'released', released_at = CURRENT_TIMESTAMP WHERE trade_id = ? AND party_steam_id = ? AND side = 'offered' AND status = 'held'",
           [tradeId, creatorSteamId],
@@ -14545,7 +14538,9 @@ export async function staffAdjustTokens(
   const targetSteamId = economySteamId(input.targetSteamId, "Target Steam ID");
   if (!["award", "take", "set"].includes(input.action))
     economyError("invalid_input", "The token action is invalid.");
-  const amount = economyAmount(input.amount, "Token amount");
+  let amount: string;
+  try { amount = tokenInteger(input.amount).toString(); }
+  catch { return economyError("invalid_input", "Token amount must be between 0 and 18446744073709551615."); }
   const reason = economyText(input.reason, "Staff reason", 300);
   return runEconomyMutation({
     operationName: "staff.tokens." + input.action,
@@ -14561,11 +14556,11 @@ export async function staffAdjustTokens(
         economyError("wallet_unavailable", "The target wallet was not locked.");
       const delta =
         input.action === "award"
-          ? amount
+          ? BigInt(amount)
           : input.action === "take"
-            ? -amount
-            : amount - current.balance;
-      if (delta !== 0) {
+            ? -BigInt(amount)
+            : BigInt(amount) - BigInt(current.balance);
+      if (delta !== 0n) {
         await applyTokenDelta({
           connection: context.connection,
           wallets,
@@ -14594,9 +14589,9 @@ export async function staffAdjustTokens(
         targetType: "token-account",
         targetId: targetSteamId,
         idempotencyKey: context.idempotencyKey,
-        metadata: { amount, delta, reason },
+        metadata: { amount, delta: delta.toString(), reason },
       });
-      return { targetSteamId, delta, wallet };
+      return { targetSteamId, delta: delta.toString(), wallet };
     },
   });
 }
@@ -16016,9 +16011,9 @@ export async function findStaffEconomyAccounts(
       displayName,
       wallet: {
         steamId,
-        balance: 0,
-        lifetimeEarned: 0,
-        lifetimeSpent: 0,
+        balance: "0",
+        lifetimeEarned: "0",
+        lifetimeSpent: "0",
         createdAt: null,
         updatedAt: null,
       },

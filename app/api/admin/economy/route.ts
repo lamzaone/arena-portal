@@ -1,3 +1,4 @@
+import { tokenAmountField } from "@/lib/economy/token-amount";
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -1085,11 +1086,7 @@ export async function POST(request: Request) {
       if (!actor.canAdjustEconomyTokens)
         return redirect(request, "error", "token-permission", targetSteamId);
       const tokenAction = formText(formData, "tokenAction", 12);
-      const amount = integer(
-        formText(formData, "amount", 20),
-        0,
-        10_000_000_000,
-      );
+      const amount = tokenAmountField(formText(formData, "amount", 20));
       if (
         (tokenAction !== "award" &&
           tokenAction !== "take" &&

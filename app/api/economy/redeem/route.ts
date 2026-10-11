@@ -23,8 +23,8 @@ export async function POST(request: Request) {
       idempotencyKey: context.body.idempotencyKey,
     });
     const rewardSummary = [
-      result.tokensAwarded
-        ? `+${result.tokensAwarded.toLocaleString()} Tokens`
+      BigInt(result.tokensAwarded) > 0n
+        ? `+${BigInt(result.tokensAwarded).toLocaleString()} Tokens`
         : null,
       result.itemNames.length
         ? `${result.itemNames.length} item${result.itemNames.length === 1 ? "" : "s"}`

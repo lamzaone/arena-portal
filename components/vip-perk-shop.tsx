@@ -16,7 +16,7 @@ type VipPerkShopProps = {
   offers: VipPerkShopOffer[];
   owned: EffectiveVipPerk[];
   csrf: string;
-  initialBalance: number;
+  initialBalance: string;
   authenticated: boolean;
 };
 
@@ -42,7 +42,7 @@ export function VipPerkShop({ offers, owned, csrf, initialBalance, authenticated
     try {
       const result = await postEconomyAction("/api/economy/vip-perks/purchase", csrf, { offerId: offer.id }, requestId);
       attemptKeys.current.delete(offer.id);
-      if (typeof result.balance === "number") setBalance(result.balance);
+      if (typeof result.balance === "string") setBalance(result.balance);
       if (result.expiresAt) setPurchasedExpirations((current) => ({ ...current, [offer.perkKey]: result.expiresAt! }));
       setNotice({ variant: "success", message: result.message ?? `${offer.perkName} was added to your account.` });
       router.refresh();
@@ -59,7 +59,7 @@ export function VipPerkShop({ offers, owned, csrf, initialBalance, authenticated
 
   return (
     <>
-      <div className={styles.balance}><Coins aria-hidden="true" /><span>Available balance</span><strong>{balance.toLocaleString()} Tokens</strong></div>
+      <div className={styles.balance}><Coins aria-hidden="true" /><span>Available balance</span><strong>{BigInt(balance).toLocaleString()} Tokens</strong></div>
       <div className={styles.shopGrid}>
         {groups.map((perkOffers) => {
           const first = perkOffers[0];
@@ -82,14 +82,14 @@ export function VipPerkShop({ offers, owned, csrf, initialBalance, authenticated
                       <AsyncButton
                         className="button button-primary"
                         pending={pendingOfferId === offer.id}
-                        disabled={pendingOfferId !== null || balance < offer.tokenPrice || ownedPermanently}
+                        disabled={pendingOfferId !== null || BigInt(balance) < BigInt(offer.tokenPrice) || ownedPermanently}
                         pendingLabel="Buying"
                         icon={<Coins />}
                         onClick={() => purchase(offer)}
                       >
                         {ownedPermanently
                           ? "Owned permanently"
-                          : balance < offer.tokenPrice
+                          : BigInt(balance) < BigInt(offer.tokenPrice)
                             ? "Not enough Tokens"
                             : "Buy perk"}
                       </AsyncButton>

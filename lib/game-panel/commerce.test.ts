@@ -200,7 +200,7 @@ test("private trade inventory exposes neither items nor total", async () => {
 test("panel reads use the authenticated request's storage without an extra readiness query", async () => {
   const { createPanelReader } = await import("./reads.ts");
   const reader = createPanelReader({
-    getTokenWallet: async () => ({ steamId: "76561198000000001", balance: 7, lifetimeEarned: 8, lifetimeSpent: 1, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" }),
+    getTokenWallet: async () => ({ steamId: "76561198000000001", balance: "7", lifetimeEarned: "8", lifetimeSpent: "1", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" }),
   });
   assert.deepEqual(await reader.run("wallet.read", {}, {
     actorSteamId: "76561198000000001",
@@ -222,7 +222,7 @@ test("inventory page returns the wallet in the same read and skips grid price en
   const { createPanelReader } = await import("./reads.ts");
   const calls: unknown[] = [];
   const reader = createPanelReader({
-    getTokenWallet: async () => ({ balance: 7, lifetimeEarned: 8, lifetimeSpent: 1 }),
+    getTokenWallet: async () => ({ balance: "7", lifetimeEarned: "8", lifetimeSpent: "1" }),
     getPlayerEconomyInventoryPage: async (_actor: string, filter: Record<string, unknown>, _timing: unknown, options: { quotePrices?: boolean }) => {
       calls.push({ filter, options });
       return { items: [], total: 0, page: 1, pageSize: 12 };

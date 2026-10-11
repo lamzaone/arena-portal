@@ -16,7 +16,7 @@ export default async function CasinoPage() {
   try { initial = await getCasinoBootstrap(session.steamId); }
   catch {
     const wallet = await getTokenWallet(session.steamId).catch(() => null);
-    return <PortalShell authenticated><section className="casino casino-unavailable" data-theme={session.profileThemeKey || "default"} data-theme-surface="global"><p className="casino-kicker">Player economy / casino</p><h1>Tables are temporarily unavailable.</h1><p>We couldn’t open the casino right now. Please try again later.</p>{wallet && <p className="casino-wallet-fallback">Available Tokens <strong>{wallet.balance.toLocaleString("en-US")}</strong></p>}<a href="/market">Visit the Token Market →</a></section></PortalShell>;
+    return <PortalShell authenticated><section className="casino casino-unavailable" data-theme={session.profileThemeKey || "default"} data-theme-surface="global"><p className="casino-kicker">Player economy / casino</p><h1>Tables are temporarily unavailable.</h1><p>We couldn’t open the casino right now. Please try again later.</p>{wallet && <p className="casino-wallet-fallback">Available Tokens <strong>{BigInt(wallet.balance).toLocaleString("en-US")}</strong></p>}<a href="/market">Visit the Token Market →</a></section></PortalShell>;
   }
   return <PortalShell authenticated><CasinoLobby initial={initial} steamId={session.steamId} csrf={createEconomyActionToken(session)} themeKey={session.profileThemeKey} /></PortalShell>;
 }

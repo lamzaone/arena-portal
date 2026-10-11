@@ -12,7 +12,7 @@ test("redeem admin edits quantities, confirms actions, and safely retries at des
     csrf: "fixture-csrf", searchQuery: "",
     catalogue: [{ id: 7, displayName: itemName, itemType: "weapon", rarityRank: 5, rarityName: "Classified", imageUrl: null }],
     codes: [{ id: 12, displayName: "Summer rewards", codeHint: "SUM…026", enabled: true,
-      tokenAmount: 100, maxRedemptions: 10, redemptionCount: 5,
+      tokenAmount: "18446744073709551615", maxRedemptions: 10, redemptionCount: 5,
       rewards: [{ catalogueId: 7, displayName: itemName, quantity: 5, rarityRank: 5 }] }],
   };
   const bundle = await build({
@@ -64,6 +64,7 @@ test("redeem admin edits quantities, confirms actions, and safely retries at des
       await quantity.fill("25");
       await page.getByPlaceholder("TAPPD-SUMMER-2026").fill("TEST-CODE");
       await page.getByRole("textbox", { name: "Internal label", exact: true }).fill("Typed quantities");
+      await page.getByRole("textbox", { name: "Tokens to award", exact: true }).fill("18446744073709551615");
       await quantity.fill("51");
       await page.getByRole("button", { name: "Create redeem code", exact: true }).click();
       assert.equal(requests.length, 0);
@@ -77,6 +78,7 @@ test("redeem admin edits quantities, confirms actions, and safely retries at des
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       await page.getByRole("button", { name: "Create redeem code", exact: true }).click();
       await page.waitForFunction(() => window.fixtureRefreshes === 1);
+      assert.equal(requests[0].tokenAmount, "18446744073709551615");
       assert.deepEqual(requests[0].rewards, [{ catalogueId: 7, quantity: 25 }]);
       await page.getByRole("button", { name: "Restart code", exact: true }).click();
       let dialog = page.getByRole("dialog");

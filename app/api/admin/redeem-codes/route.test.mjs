@@ -8,7 +8,7 @@ const stubs = {
   "@/lib/admin/access": "export async function getAdminAccess(){return {canManageEconomy:globalThis.__redeemRouteState.allowed}}",
   "@/lib/auth/session": "export async function getSession(){return globalThis.__redeemRouteState.session} export function verifyAdminActionToken(){return globalThis.__redeemRouteState.csrf}",
   "@/lib/data/portal-repository": `const s=globalThis.__redeemRouteState;
-    export async function createEconomyRedeemCode(){throw new Error('unexpected create')}
+    export async function createEconomyRedeemCode(input){s.calls.push({action:'create',...input});return {code:{id:3},revealedCode:input.code}}
     export async function getEconomyCatalogue(){return {items:[],total:0}}
     export async function setEconomyRedeemCodeEnabled(){throw new Error('unexpected toggle')}
     export async function restartEconomyRedeemCode(input){s.calls.push({action:'restart',...input});return {codeId:2}}
@@ -46,3 +46,14 @@ for (const action of ["restart", "remove"]) {
     assert.equal(state.calls.length, 0);
   });
 }
+
+
+test("create preserves full UInt64 rewards and rejects rounded numeric input", async () => {
+  const fields = {code: "ULL-TEST", displayName: "ULL test", tokenAmount: "18446744073709551615", rewards: [], maxRedemptions: null};
+  assert.equal((await POST(request("create",fields))).status,200);
+  assert.equal(state.calls[0].tokenAmount,fields.tokenAmount);
+  for (const tokenAmount of ["18446744073709551616", Number.MAX_SAFE_INTEGER+1, "1e6", "-1"]) {
+    assert.equal((await POST(request("create",{...fields,tokenAmount}))).status,400);
+  }
+  assert.equal(state.calls.length,1);
+});

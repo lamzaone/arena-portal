@@ -1,3 +1,4 @@
+import { tokenAmountField } from "./token-amount.ts";
 export const MAX_CRATE_PURCHASE_QUANTITY = 50;
 
 export type CrateDrop<TCatalogue = Record<string, unknown>> = {
@@ -78,19 +79,18 @@ export function cratePurchaseTotal(unitPrice: number, quantity: unknown): number
 }
 
 export function canAffordCratePurchase(
-  walletBalance: number,
+  walletBalance: number | string,
   unitPrice: number,
   quantity: unknown,
 ) {
   const normalizedQuantity = clampCrateQuantity(quantity);
   const rawTotal = unitPrice * normalizedQuantity;
   return (
-    Number.isSafeInteger(walletBalance) &&
-    walletBalance >= 0 &&
+    tokenAmountField(walletBalance) !== null &&
     Number.isSafeInteger(unitPrice) &&
     unitPrice >= 0 &&
     Number.isSafeInteger(rawTotal) &&
-    rawTotal <= walletBalance
+    BigInt(rawTotal) <= BigInt(walletBalance)
   );
 }
 

@@ -1,5 +1,6 @@
+import { tokenAmountField } from "../../../../../lib/economy/token-amount.ts";
 import { createEconomyTrade } from "@/lib/data/portal-repository";
-import { economyJsonError, economyJsonSuccess, economyMutationFailure, integerField, isEconomyError, readEconomyMutation, stringArrayField, textField } from "@/lib/economy/request";
+import { economyJsonError, economyJsonSuccess, economyMutationFailure, isEconomyError, readEconomyMutation, stringArrayField, textField } from "@/lib/economy/request";
 
 function steamIdField(value: unknown) {
   const steamId = textField(value, 17);
@@ -12,13 +13,13 @@ export async function POST(request: Request) {
   const counterpartySteamId = steamIdField(context.body.counterpartySteamId);
   const offeredItemIds = context.body.offeredItemIds === undefined ? [] : stringArrayField(context.body.offeredItemIds, 12);
   const requestedItemIds = context.body.requestedItemIds === undefined ? [] : stringArrayField(context.body.requestedItemIds, 12);
-  const offeredTokens = integerField(context.body.offeredTokens, 0);
-  const requestedTokens = integerField(context.body.requestedTokens, 0);
+  const offeredTokens = tokenAmountField(context.body.offeredTokens);
+  const requestedTokens = tokenAmountField(context.body.requestedTokens);
   if (!counterpartySteamId || offeredItemIds === null || requestedItemIds === null || offeredTokens === null || requestedTokens === null) {
     return economyJsonError("The trade offer contains invalid player, item, or Token values.", 400);
   }
   if (counterpartySteamId === context.session.steamId) return economyJsonError("You cannot create a trade offer with yourself.", 400);
-  if (!offeredItemIds.length && !offeredTokens && !requestedItemIds.length && !requestedTokens) return economyJsonError("Offer or request at least one item or some Tokens.", 400);
+  if (!offeredItemIds.length && offeredTokens === "0" && !requestedItemIds.length && requestedTokens === "0") return economyJsonError("Offer or request at least one item or some Tokens.", 400);
 
   try {
     const result = await createEconomyTrade({

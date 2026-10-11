@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parsePanelRequest, parseTokens } from './validation.ts';
 const request = (args: unknown) => ({ actorSteamId: '76561198000000001', operationId: '1790164800000_00112233445566778899aabbccddeeff', arguments: args });
-test('Tokens preserve the maximum safe integer and reject ambiguous values', () => {
-  assert.equal(parseTokens('9007199254740991'), Number.MAX_SAFE_INTEGER);
-  for (const value of ['9007199254740992', '1e3', '-1', '01', 1000]) assert.throws(() => parseTokens(value));
+test('Tokens preserve the full UInt64 range and reject ambiguous values', () => {
+  assert.equal(parseTokens('18446744073709551615'), '18446744073709551615');
+  for (const value of ['18446744073709551616', '1e3', '-1', '01', 1000]) assert.throws(() => parseTokens(value));
 });
 test('strict arguments reject identity overrides, duplicates and oversized batches', () => {
   const id = '10000000-0000-4000-8000-000000000001';

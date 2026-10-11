@@ -22,7 +22,7 @@ export function RouletteGame({client}:{client:GameClient}){
   const spin=()=>{
     const {minBet,maxBet}=client.state.settings;
     if(!Number.isSafeInteger(total)||total<minBet||total>maxBet){client.error(`Place a total between ${tokens(minBet)} and ${tokens(maxBet)} Tokens per spin.`);return;}
-    if(total>client.state.balance){client.error("Your Token balance is too low for this table total.");return;}
+    if(BigInt(total)>BigInt(client.state.balance)){client.error("Your Token balance is too low for this table total.");return;}
     setRepeat(bets.map(bet=>({...bet})));void client.mutate("/api/casino/play",{game:"roulette",stake:total,selection:{bets}});
   };
   return <GameLayout title="Roulette" subtitle="A classic table. Every chip has its place." stage={<div className="roulette-surface"><RouletteWheel roundId={round?.id??null} number={result?.number??null} color={result?.color} onRevealing={setRevealing}/><RouletteTable bets={bets} winning={winning} disabled={disabled} place={place}/></div>} rules={<><p>Single zero. Straight number: 36x. Dozen or column: 3x. Red/black, odd/even, low/high: 2x. Zero loses every outside selection.</p><p>Choose a chip, then tap a number or an outside position. Tap again to add chips. All placements share one spin, with a maximum total of {tokens(client.state.settings.maxBet)} Tokens.</p><p>Each pocket has a 1 in 37 chance. The theoretical total return is 36/37 (97.30%).</p></>}>

@@ -1,5 +1,6 @@
 "use client";
 
+import { tokenAmountField } from "../../lib/economy/token-amount.ts";
 import {
   Check,
   Clipboard,
@@ -178,7 +179,7 @@ export function RedeemCodeAdmin({
       return;
     }
     setQuantityError(null);
-    const tokenAmount = Number(tokens);
+    const tokenAmount = tokenAmountField(tokens);
     const maxRedemptions =
       useMode === "unlimited"
         ? null
@@ -186,11 +187,10 @@ export function RedeemCodeAdmin({
           ? 1
           : Number(customUses);
     if (
-      !Number.isSafeInteger(tokenAmount) ||
-      tokenAmount < 0 ||
+      tokenAmount === null ||
       !Number.isSafeInteger(maxRedemptions ?? 1) ||
       (maxRedemptions !== null && maxRedemptions < 1) ||
-      (tokenAmount === 0 && rewards.length === 0)
+      (tokenAmount === "0" && rewards.length === 0)
     ) {
       setError("Add a valid Token amount or at least one item reward.");
       return;
@@ -370,9 +370,9 @@ export function RedeemCodeAdmin({
             <label>
               <Coins aria-hidden="true" /> Tokens to award
               <input
-                type="number"
-                min="0"
-                step="1"
+                type="text"
+                maxLength={20}
+                pattern="[0-9]+"
                 inputMode="numeric"
                 value={tokens}
                 onChange={(event) => setTokens(event.target.value)}
@@ -513,7 +513,7 @@ export function RedeemCodeAdmin({
         {visibleCodes.length ? <PaginatedItemGrid className="redeem-code-grid" label="Redeem codes" resetKey={`${campaignQuery}:${campaignStatus}`}>{visibleCodes.map((item) => (
           <article className={`panel redeem-code-card ${item.enabled ? "is-live" : "is-paused"}`} key={item.id}>
             <header><div><span className="redeem-code-hint">{item.codeHint}</span><h3>{item.displayName}</h3></div><span className={`redeem-code-status ${item.enabled ? "" : "is-paused"}`}>{item.enabled ? "Live" : "Paused"}</span></header>
-            <div className="redeem-code-meta"><span><Coins aria-hidden="true" /> {item.tokenAmount.toLocaleString()} Tokens</span><span><TicketCheck aria-hidden="true" /> {usesLabel(item)}</span></div>
+            <div className="redeem-code-meta"><span><Coins aria-hidden="true" /> {BigInt(item.tokenAmount).toLocaleString()} Tokens</span><span><TicketCheck aria-hidden="true" /> {usesLabel(item)}</span></div>
             {item.rewards.length ? <ul className="redeem-card-rewards">{item.rewards.map((reward) => <li key={reward.catalogueId}><span className={`rarity-rank-${reward.rarityRank}`}>{reward.quantity}×</span><span>{reward.displayName}</span></li>)}</ul> : <p className="empty-copy">Token-only reward</p>}
             <div className="redeem-code-actions">
             <AsyncButton

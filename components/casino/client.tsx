@@ -13,7 +13,7 @@ export type GameClient = {
   error: (message: string) => void;
 };
 
-export const tokens = (amount: number) => amount.toLocaleString("en-US");
+export const tokens = (amount: number | string) => BigInt(amount).toLocaleString("en-US");
 export const multiple = (value: number, denominator: number) => (value / denominator).toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
 
 export function validStake(text: string, client: GameClient, even = false): number | null {
@@ -24,7 +24,7 @@ export function validStake(text: string, client: GameClient, even = false): numb
     return null;
   }
   if (even && stake % 2 !== 0) { client.error("Blackjack stakes must be even whole Tokens."); return null; }
-  if (stake > client.state.balance) { client.error("Your Token balance is too low for this stake."); return null; }
+  if (BigInt(stake) > BigInt(client.state.balance)) { client.error("Your Token balance is too low for this stake."); return null; }
   return stake;
 }
 

@@ -1,3 +1,4 @@
+import { tokenInteger, tokenAmountField, TOKEN_LIFETIME_MAX } from "../../lib/economy/token-amount.ts";
 import {
   economyRarityName as taxonomyRarityName,
   economyRarityRankClass,
@@ -54,9 +55,9 @@ export type EconomyItemView = {
 };
 
 export type EconomyWalletView = {
-  balance: number;
-  earned: number | null;
-  spent: number | null;
+  balance: string;
+  earned: string | null;
+  spent: string | null;
 };
 
 export type EconomyLoadoutView = {
@@ -94,8 +95,8 @@ export type EconomyTradeView = {
   status: string;
   counterpartySteamId: string;
   direction: "incoming" | "outgoing" | "unknown";
-  offeredTokens: number;
-  requestedTokens: number;
+  offeredTokens: string;
+  requestedTokens: string;
   offeredItems: EconomyTradeItemView[];
   requestedItems: EconomyTradeItemView[];
   createdAt: string | null;
@@ -552,26 +553,14 @@ export function toEconomyItem(value: unknown): EconomyItemView {
 
 export function economyWallet(value: unknown): EconomyWalletView {
   const record = isRecord(value) ? value : {};
+  const amount = (keys: string[]) => {
+    try { return tokenInteger(firstDefined(record, keys), TOKEN_LIFETIME_MAX).toString(); }
+    catch { return null; }
+  };
   return {
-    balance:
-      integer(firstDefined(record, ["balance", "tokens", "tokenBalance"]), 0) ??
-      0,
-    earned: integer(
-      firstDefined(record, [
-        "earned",
-        "totalEarned",
-        "tokensEarned",
-        "lifetimeEarned",
-      ]),
-    ),
-    spent: integer(
-      firstDefined(record, [
-        "spent",
-        "totalSpent",
-        "tokensSpent",
-        "lifetimeSpent",
-      ]),
-    ),
+    balance: amount(["balance", "tokens", "tokenBalance"]) ?? "0",
+    earned: amount(["earned", "totalEarned", "tokensEarned", "lifetimeEarned"]),
+    spent: amount(["spent", "totalSpent", "tokensSpent", "lifetimeSpent"]),
   };
 }
 
@@ -636,18 +625,8 @@ export function economyTrades(value: unknown): EconomyTradeView[] {
         status: text(firstDefined(record, ["status", "state"]), "pending"),
         counterpartySteamId: tradeCounterpartySteamId(record) ?? "Unknown player",
         direction,
-        offeredTokens:
-          integer(
-            firstDefined(record, ["offeredTokens", "offerTokens"]),
-            isRecord(record.offered) ? integer(record.offered.tokens, 0) : 0,
-          ) ?? 0,
-        requestedTokens:
-          integer(
-            firstDefined(record, ["requestedTokens", "requestTokens"]),
-            isRecord(record.requested)
-              ? integer(record.requested.tokens, 0)
-              : 0,
-          ) ?? 0,
+        offeredTokens: tokenAmountField(firstDefined(record, ["offeredTokens", "offerTokens"]) ?? (isRecord(record.offered) ? record.offered.tokens : "0")) ?? "0",
+        requestedTokens: tokenAmountField(firstDefined(record, ["requestedTokens", "requestTokens"]) ?? (isRecord(record.requested) ? record.requested.tokens : "0")) ?? "0",
         offeredItems: tradeItems(
           firstDefined(record, ["offeredItems", "offerItems"]) ??
             (isRecord(record.offered) ? record.offered.items : undefined),
@@ -745,12 +724,10 @@ export function itemStickerSlotCount(item: EconomyItemView) {
   return Math.max(0, Math.min(count, 6));
 }
 
-export function formatTokens(value: number | null | undefined) {
-  if (value === null || value === undefined || !Number.isFinite(value))
-    return "—";
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-    value,
-  );
+export function formatTokens(value: number | string | bigint | null | undefined) {
+  if (value === null || value === undefined) return "?";
+  try { return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenInteger(value, TOKEN_LIFETIME_MAX, -TOKEN_LIFETIME_MAX)); }
+  catch { return "?"; }
 }
 
 export function humanize(value: string) {

@@ -59,9 +59,9 @@ const inventoryStates: Array<{ value: EconomyItemState; label: string }> = [
   { value: "activation_pending", label: "VIP activation pending" },
 ];
 
-function formatTokens(value: number) {
+function formatTokens(value: number | string) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(
-    value,
+    BigInt(value),
   );
 }
 

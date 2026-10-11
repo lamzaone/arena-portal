@@ -778,11 +778,11 @@ export function InventoryManager({
       setDisplayWallet((current) => ({
         ...current,
         balance:
-          typeof result.balance === "number"
-            ? result.balance
-            : current.balance + payoutTokens,
+          typeof result.balance === "string" || typeof result.balance === "number"
+            ? String(result.balance)
+            : (BigInt(current.balance) + BigInt(payoutTokens)).toString(),
         earned:
-          current.earned === null ? null : current.earned + payoutTokens,
+          current.earned === null ? null : (BigInt(current.earned) + BigInt(payoutTokens)).toString(),
       }));
       bulkSaleRequestRef.current = null;
       setNotice({

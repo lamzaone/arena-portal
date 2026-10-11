@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { TOKEN_MAX, TOKEN_LIFETIME_MAX } from '../economy/token-amount.ts';
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
 import type { RowDataPacket } from 'mysql2/promise';
@@ -15,7 +17,8 @@ const player = '76561198000000001';
 const other = '76561198000000002';
 const initialBalance = 1000;
 let sequence = 0;
-const key = () => `casino-fixture-request-${++sequence}`;
+const runId = randomUUID();
+const key = () => `casino-fixture-${runId}-${++sequence}`;
 const instant = (overrides = {}) => ({ steamId: player, game: 'roulette' as const, stake: 20, selection: { kind: 'number', value: 36 }, idempotencyKey: key(), ...overrides });
 async function rows(query: string, args: unknown[] = []) { return (await fixture.pool.query<RowDataPacket[]>(query, args))[0]; }
 async function count(table: string) { return Number((await rows(`SELECT COUNT(*) AS n FROM ${table}`))[0].n); }
@@ -37,15 +40,15 @@ const integration = (name: string, fn: () => Promise<void>) => test(name, { skip
 
 integration('unsupported slot play never changes the wallet', async () => {
   await assert.rejects(api.playCasinoInstant({ steamId: player, game: 'slots', stake: 20, selection: {}, idempotencyKey: 'slot-unavailable-test-key' }), { code: 'slots_unavailable' });
-  assert.equal((await api.getCasinoBootstrap(player)).balance, initialBalance);
+  assert.equal((await api.getCasinoBootstrap(player)).balance,String(initialBalance));
   assert.equal(await count('portal_economy_operations'), 0);
 });
 integration('wins and losses use shared wallet ledger and persist immutable instant results', async () => {
   const win = await api.playCasinoInstant(instant());
-  assert.equal(win.balance, 1700); assert.equal(win.round.payoutTokens, 720);
+  assert.equal(win.balance,String(1700)); assert.equal(win.round.payoutTokens, 720);
   assert.deepEqual((await rows('SELECT delta FROM portal_token_ledger ORDER BY id')).map(row => Number(row.delta)), [-20, 720]);
   const loss = await api.playCasinoInstant(instant({ selection: { kind: 'number', value: 0 } }));
-  assert.equal(loss.balance, 1680); assert.equal(loss.round.payoutTokens, 0);
+  assert.equal(loss.balance,String(1680)); assert.equal(loss.round.payoutTokens, 0);
   const plinko = await api.playCasinoInstant(instant({ game: 'plinko', selection: { rows: 8, risk: 'low' } }));
   assert.equal(plinko.round.game, 'plinko'); assert.equal((plinko.round.details as {path: number[]}).path.length, 8);
 });
@@ -119,7 +122,7 @@ integration('blackjack timeout and disabled non-stake actions settle existing li
   process.env.CASINO_ENABLED = 'false';
   await assert.rejects(api.playCasinoInstant(instant()), {code:'casino_disabled'});
   await fixture.pool.execute('UPDATE portal_casino_rounds SET expires_at_ms = 0 WHERE id = ?', [started.round.id]);
-  const snapshot = await api.getCasinoBootstrap(player); assert.equal(snapshot.balance,1020); assert.equal(snapshot.activeBlackjack,null);
+  const snapshot = await api.getCasinoBootstrap(player); assert.equal(snapshot.balance,String(1020)); assert.equal(snapshot.activeBlackjack,null);
   await api.getCasinoBootstrap(player); assert.equal(await count('portal_token_ledger'),2);
   process.env.CASINO_ENABLED = 'true'; const second = await blackjack(); process.env.CASINO_ENABLED = 'false';
   const settled = await api.actCasinoBlackjack({steamId:player,roundId:second.started.round.id,action:'stand',idempotencyKey:key()});
@@ -142,7 +145,7 @@ integration('automatic cashout survives disconnect and disabled settings with ex
   const roundId = (await api.getCasinoBootstrap(player)).crash!.roundId;
   await api.betCasinoCrash({steamId:player,roundId,stake:20,autoCashout:200,idempotencyKey:key()});
   await flight(300,20000); process.env.CASINO_ENABLED = 'false';
-  const snapshot = await api.getCasinoBootstrap(player); assert.equal(snapshot.balance,1020); assert.equal(snapshot.crash!.bet!.cashoutMultiplier,200);
+  const snapshot = await api.getCasinoBootstrap(player); assert.equal(snapshot.balance,String(1020)); assert.equal(snapshot.crash!.bet!.cashoutMultiplier,200);
   const request = {steamId:player,roundId,idempotencyKey:key()};
   const result = await api.cashoutCasinoCrash(request); assert.equal(result.round.payoutTokens,40);
   await fixture.pool.execute('DELETE FROM portal_economy_operations'); assert.deepEqual(await api.cashoutCasinoCrash(request),result);
@@ -152,7 +155,7 @@ integration('automatic target equality loses and post-crash manual cashout never
   const roundId = (await api.getCasinoBootstrap(player)).crash!.roundId;
   await api.betCasinoCrash({steamId:player,roundId,stake:20,autoCashout:200,idempotencyKey:key()});
   await flight(200,12000);
-  const snapshot = await api.getCasinoBootstrap(player); assert.equal(snapshot.balance,980); assert.equal(snapshot.crash!.bet!.status,'lost');
+  const snapshot = await api.getCasinoBootstrap(player); assert.equal(snapshot.balance,String(980)); assert.equal(snapshot.crash!.bet!.status,'lost');
   await assert.rejects(api.cashoutCasinoCrash({steamId:player,roundId,idempotencyKey:key()}), {code:'round_unavailable'});
   assert.equal(await count('portal_token_ledger'),1);
 });
@@ -201,7 +204,7 @@ integration('accepted settings are saved and existing blackjack timeout uses its
 integration('blackjack natural and affordable double/split use correct total-return ledger', async () => {
   fixture.control.random = maximum => maximum === 13 ? 2 : maximum === 9 ? 1 : maximum === 7 ? 3 : maximum-1;
   const natural = await api.startCasinoBlackjack({steamId:player,stake:20,idempotencyKey:key()});
-  assert.equal(natural.round.payoutTokens,50); assert.equal(natural.balance,1030);
+  assert.equal(natural.round.payoutTokens,50); assert.equal(natural.balance,String(1030));
   fixture.control.random = maximum=>maximum-1;
   const doubled = await blackjack(['10','8']);
   const doubleResult = await api.actCasinoBlackjack({steamId:player,roundId:doubled.started.round.id,action:'double',idempotencyKey:key()});
@@ -242,8 +245,8 @@ integration('oversized deferred crash returns reject without debit and other act
   const second=await api.betCasinoCrash({steamId:other,roundId,stake:40,autoCashout:200,idempotencyKey:key()});
   await flight(300,12000);
   const third='76561198000000003';
-  const driving=await api.getCasinoBootstrap(third);assert.equal(driving.crash!.phase,'flying');assert.equal(driving.balance,0);
-  assert.equal((await api.getCasinoBootstrap(player)).balance,oversized+10);assert.equal((await api.getCasinoBootstrap(other)).balance,1040);
+  const driving=await api.getCasinoBootstrap(third);assert.equal(driving.crash!.phase,'flying');assert.equal(driving.balance,String(0));
+  assert.equal((await api.getCasinoBootstrap(player)).balance,String(oversized+10));assert.equal((await api.getCasinoBootstrap(other)).balance,String(1040));
   const payouts=await rows("SELECT account_steam_id,delta,reference_id,idempotency_key FROM portal_token_ledger WHERE line_key = 'payout' ORDER BY account_steam_id");
   assert.deepEqual(payouts.map(row=>[row.account_steam_id,Number(row.delta),row.reference_id]),[[player,30,first.round.id],[other,80,second.round.id]]);
   assert.notEqual(payouts[0].idempotency_key,payouts[1].idempotency_key);
@@ -254,7 +257,7 @@ integration('oversized possible blackjack return rejects before accepting an act
   process.env.CASINO_MAX_BET=String(oversized);
   await fixture.pool.execute('UPDATE portal_token_accounts SET balance = ?, lifetime_earned = ? WHERE steam_id = ?',[oversized,oversized,player]);
   await assert.rejects(api.startCasinoBlackjack({steamId:player,stake:oversized,idempotencyKey:key()}),{code:'invalid_input'});
-  assert.equal((await api.getCasinoBootstrap(player)).balance,oversized);assert.equal(await count('portal_token_ledger'),0);assert.equal(await count('portal_casino_rounds'),0);
+  assert.equal((await api.getCasinoBootstrap(player)).balance,String(oversized));assert.equal(await count('portal_token_ledger'),0);assert.equal(await count('portal_casino_rounds'),0);
 });
 integration('unrepresentable blackjack split exposure rolls back extra stake and private state',async()=>{
   const large=3000000000000000;
@@ -268,10 +271,10 @@ integration('unrepresentable blackjack split exposure rolls back extra stake and
   await assert.rejects(api.actCasinoBlackjack({steamId:player,roundId:started.round.id,action:'split',idempotencyKey:key()}),{code:'invalid_input'});
   const saved=(await rows('SELECT private_state FROM portal_casino_rounds WHERE id = ?',[started.round.id]))[0].private_state;
   assert.deepEqual(typeof saved==='string'?JSON.parse(saved):saved,state);
-  assert.equal((await api.getCasinoBootstrap(player)).balance,large);assert.equal(await count('portal_token_ledger'),1);assert.equal(await count('portal_casino_actions'),1);
+  assert.equal((await api.getCasinoBootstrap(player)).balance,String(large));assert.equal(await count('portal_token_ledger'),1);assert.equal(await count('portal_casino_actions'),1);
 });
 
-async function credit(amount: number) {
+async function credit(amount: number | string) {
   const {runEconomyMutation,lockTokenAccounts,applyTokenDelta} = await import('./portal-repository.ts');
   return runEconomyMutation({operationName:'fixture_credit',actorSteamId:player,idempotencyKey:key(),request:{amount},async work({connection,idempotencyKey}) {
     const wallets = await lockTokenAccounts(connection,[player]);
@@ -282,7 +285,7 @@ integration('instant admission rejects both winning and losing draws before rand
   await api.getCasinoBootstrap(player); // Create the shared clock before measuring game draws.
   for (const field of ['balance','lifetime_earned']) {
     await fixture.pool.execute('UPDATE portal_token_accounts SET balance = 1000, lifetime_earned = 1000 WHERE steam_id = ?',[player]);
-    await fixture.pool.execute(`UPDATE portal_token_accounts SET ${field} = ? WHERE steam_id = ?`,[Number.MAX_SAFE_INTEGER-5,player]);
+    await fixture.pool.execute(`UPDATE portal_token_accounts SET ${field} = ? WHERE steam_id = ?`,[(field === 'balance' ? TOKEN_MAX-5n : TOKEN_LIFETIME_MAX-5n).toString(),player]);
     for (const draw of [0,36]) {
       let draws=0; fixture.control.random=()=>{draws++;return draw;};
       await assert.rejects(api.playCasinoInstant(instant()),{code:'token_limit'});
@@ -297,7 +300,8 @@ integration('ordinary credits preserve combined deferred headroom and another ac
   const request={steamId:player,roundId,stake:20,autoCashout:200,idempotencyKey:key()};
   await api.betCasinoCrash(request);
   // Active Blackjack reserves 40; Crash can manually return floor(20*99.99)=1999.
-  const reserved=2039, amount=Number.MAX_SAFE_INTEGER-1000-reserved;
+  const reserved=2039, amount=(TOKEN_MAX-1000n-BigInt(reserved)).toString();
+  await fixture.pool.execute('UPDATE portal_token_accounts SET lifetime_earned = ? WHERE steam_id = ?',[(TOKEN_LIFETIME_MAX-TOKEN_MAX+1000n).toString(),player]);
   await credit(amount);
   await assert.rejects(credit(1),{code:'token_limit'});
   await fixture.pool.execute('DELETE FROM portal_economy_operations');
@@ -309,15 +313,15 @@ integration('ordinary credits preserve combined deferred headroom and another ac
   await assert.rejects(credit(1),{code:'token_limit'});
   await api.actCasinoBlackjack({steamId:player,roundId:bj.started.round.id,action:'stand',idempotencyKey:key()});
   await api.getCasinoBootstrap(other);
-  assert.equal(Number((await rows('SELECT lifetime_earned FROM portal_token_accounts WHERE steam_id = ?',[player]))[0].lifetime_earned),Number.MAX_SAFE_INTEGER);
+  assert.equal(String((await rows('SELECT lifetime_earned FROM portal_token_accounts WHERE steam_id = ?',[player]))[0].lifetime_earned),TOKEN_LIFETIME_MAX.toString());
   assert.equal((await rows("SELECT delta FROM portal_token_ledger WHERE reason = 'casino_payout'")).length,2);
 });
 integration('Blackjack natural ceiling and additional split/double headroom reject before debit',async()=>{
-  await fixture.pool.execute('UPDATE portal_token_accounts SET lifetime_earned = ? WHERE steam_id = ?',[Number.MAX_SAFE_INTEGER-49,player]);
+  await fixture.pool.execute('UPDATE portal_token_accounts SET lifetime_earned = ? WHERE steam_id = ?',[(TOKEN_LIFETIME_MAX-49n).toString(),player]);
   await assert.rejects(api.startCasinoBlackjack({steamId:player,stake:20,idempotencyKey:key()}),{code:'token_limit'});
   await fixture.pool.execute('UPDATE portal_token_accounts SET lifetime_earned = 1000 WHERE steam_id = ?',[player]);
   const {started,state}=await blackjack(['8','8']);
-  await credit(Number.MAX_SAFE_INTEGER-1000-79);
+  await fixture.pool.execute('UPDATE portal_token_accounts SET lifetime_earned = ? WHERE steam_id = ?',[(TOKEN_LIFETIME_MAX-79n).toString(),player]);
   for (const action of ['split','double'] as const) {
     await assert.rejects(api.actCasinoBlackjack({steamId:player,roundId:started.round.id,action,idempotencyKey:key()}),{code:'token_limit'});
   }
@@ -328,7 +332,7 @@ integration('Blackjack natural ceiling and additional split/double headroom reje
 integration('partial migration and unreserved old liabilities fail closed while ordinary unmigrated credits work',async()=>{
   await fixture.pool.query('RENAME TABLE portal_casino_reservations TO casino_fixture_reservations_backup');
   try {
-    assert.equal((await credit(1)).balance,1001);
+    assert.equal((await credit(1)).balance,String(1001));
     await assert.rejects(api.getCasinoBootstrap(player),{code:'casino_unavailable'});
     await assert.rejects(api.playCasinoInstant(instant()),{code:'casino_unavailable'});
   } finally { await fixture.pool.query('RENAME TABLE casino_fixture_reservations_backup TO portal_casino_reservations'); }
@@ -356,19 +360,19 @@ integration('ordinary credit reads new reservations after an older snapshot and 
     assert.equal(acquired,false,'ordinary credit waits for the casino wallet transaction');
     resume();await bet;
     const wallets=await locking;
-    await assert.rejects(applyTokenDelta({connection,wallets,steamId:player,delta:Number.MAX_SAFE_INTEGER-1000,reason:'fixture',referenceType:'fixture',referenceId:'snapshot',idempotencyKey:key(),lineKey:'credit',actorSteamId:player}),{code:'token_limit'});
+    await assert.rejects(applyTokenDelta({connection,wallets,steamId:player,delta:(TOKEN_MAX-1000n).toString(),reason:'fixture',referenceType:'fixture',referenceId:'snapshot',idempotencyKey:key(),lineKey:'credit',actorSteamId:player}),{code:'token_limit'});
   } finally {resume();fixture.control.beforeCommit=null;await connection.rollback();connection.release();}
-  assert.equal((await api.getCasinoBootstrap(player)).balance,980);
+  assert.equal((await api.getCasinoBootstrap(player)).balance,String(980));
 });
 integration('deferred admission checks both destination limits and aggregate outstanding exposure',async()=>{
   const roundId=(await api.getCasinoBootstrap(player)).crash!.roundId;
   for(const field of ['balance','lifetime_earned']) {
     await fixture.pool.execute('UPDATE portal_token_accounts SET balance = 1000, lifetime_earned = 1000 WHERE steam_id = ?',[player]);
-    await fixture.pool.execute(`UPDATE portal_token_accounts SET ${field} = ? WHERE steam_id = ?`,[Number.MAX_SAFE_INTEGER-5,player]);
+    await fixture.pool.execute(`UPDATE portal_token_accounts SET ${field} = ? WHERE steam_id = ?`,[(field === 'balance' ? TOKEN_MAX-5n : TOKEN_LIFETIME_MAX-5n).toString(),player]);
     await assert.rejects(api.betCasinoCrash({steamId:player,roundId,stake:20,idempotencyKey:key()}),{code:'token_limit'});
     await assert.rejects(api.startCasinoBlackjack({steamId:player,stake:20,idempotencyKey:key()}),{code:'token_limit'});
   }
-  await fixture.pool.execute('UPDATE portal_token_accounts SET balance = 1000, lifetime_earned = ? WHERE steam_id = ?',[Number.MAX_SAFE_INTEGER-2000,player]);
+  await fixture.pool.execute('UPDATE portal_token_accounts SET balance = 1000, lifetime_earned = ? WHERE steam_id = ?',[(TOKEN_LIFETIME_MAX-2000n).toString(),player]);
   await blackjack(); // 40 reserved leaves only 1960 for the next maximum 1999.
   await assert.rejects(api.betCasinoCrash({steamId:player,roundId,stake:20,idempotencyKey:key()}),{code:'token_limit'});
   assert.equal(await count('portal_casino_reservations'),1);
@@ -400,17 +404,17 @@ integration('instant configured overflow and Plinko maximum reject before drawin
   await fixture.pool.execute('UPDATE portal_token_accounts SET balance = ? WHERE steam_id = ?',[large,player]);
   await assert.rejects(api.playCasinoInstant(instant({stake:large})),{code:'invalid_input'});
   await assert.rejects(api.playCasinoInstant(instant({game:'plinko',stake:large,selection:{rows:16,risk:'high'}})),{code:'invalid_input'});
-  await fixture.pool.execute('UPDATE portal_token_accounts SET balance = 1000, lifetime_earned = ? WHERE steam_id = ?',[Number.MAX_SAFE_INTEGER-5,player]);
+  await fixture.pool.execute('UPDATE portal_token_accounts SET balance = 1000, lifetime_earned = ? WHERE steam_id = ?',[(TOKEN_LIFETIME_MAX-5n).toString(),player]);
   await assert.rejects(api.playCasinoInstant(instant({game:'plinko',selection:{rows:8,risk:'low'}})),{code:'token_limit'});
   assert.equal(draws,0);assert.equal(await count('portal_token_ledger'),0);
 });
 integration('ordinary balance credits stop at reserved headroom even when earned total has room',async()=>{
-  await fixture.pool.execute('UPDATE portal_token_accounts SET balance = ? WHERE steam_id = ?',[Number.MAX_SAFE_INTEGER-2000,player]);
+  await fixture.pool.execute('UPDATE portal_token_accounts SET balance = ? WHERE steam_id = ?',[(TOKEN_MAX-2000n).toString(),player]);
   const roundId=(await api.getCasinoBootstrap(player)).crash!.roundId;
   await api.betCasinoCrash({steamId:player,roundId,stake:20,autoCashout:200,idempotencyKey:key()});
   await credit(21);await assert.rejects(credit(1),{code:'token_limit'});
   await flight(10000,12000);await api.getCasinoBootstrap(other);
-  assert.equal((await credit(1959)).balance,Number.MAX_SAFE_INTEGER);
+  assert.equal((await credit(1959)).balance,TOKEN_MAX.toString());
 });
 integration('split replaces its reserved maximum once and settlement rollback restores it',async()=>{
   const {started}=await blackjack(['8','8']);
@@ -435,7 +439,7 @@ integration('multi Roulette persists one draw and atomic total with canonical du
   const zero={kind:'number',value:0};const red={kind:'color',value:'red'};
   const request=instant({stake:30,selection:{bets:[{selection:zero,stakeTokens:4},{selection:red,stakeTokens:20},{selection:zero,stakeTokens:6}]}});
   const result=await api.playCasinoInstant(request);
-  assert.equal(draws,1);assert.equal(result.round.stakeTokens,30);assert.equal(result.round.payoutTokens,360);assert.equal(result.balance,1330);
+  assert.equal(draws,1);assert.equal(result.round.stakeTokens,30);assert.equal(result.round.payoutTokens,360);assert.equal(result.balance,String(1330));
   assert.equal((result.round.details as RouletteMultiResult).bets.length,2);
   assert.deepEqual((await rows('SELECT delta FROM portal_token_ledger ORDER BY id')).map(row=>Number(row.delta)),[-30,360]);
   await fixture.pool.execute('DELETE FROM portal_economy_operations');
@@ -451,8 +455,8 @@ integration('Plinko batch debits full cost once and replays all saved paths afte
   const result=await api.playCasinoInstant(request);const details=result.round.details as PlinkoBatchResult;
   assert.equal(draws,40);assert.equal(result.round.stakeTokens,15);assert.equal(details.balls.length,5);
   assert.equal(result.round.payoutTokens,details.balls.reduce((sum,ball)=>sum+ball.payoutTokens,0));
-  assert.equal(result.balance,1000-15+details.payoutTokens);
-  assert.equal((await rows('SELECT SUM(delta) AS total FROM portal_token_ledger'))[0].total,String(result.balance-1000));
+  assert.equal(result.balance,String(1000-15+details.payoutTokens));
+  assert.equal((await rows('SELECT SUM(delta) AS total FROM portal_token_ledger'))[0].total,String(BigInt(result.balance)-1000n));
   await fixture.pool.execute('DELETE FROM portal_economy_operations');
   process.env.CASINO_ENABLED='false';process.env.CASINO_MAX_BET='2';
   assert.deepEqual(await api.playCasinoInstant(request),result);
@@ -476,7 +480,7 @@ integration('whole-board and batch affordability, limits and unsafe exposure rej
 });
 integration('batch headroom includes every ball and Roulette exposure accounts for incompatible wins',async()=>{
   await api.getCasinoBootstrap(player);let draws=0;fixture.control.random=()=>{draws++;return 0;};
-  await fixture.pool.execute('UPDATE portal_token_accounts SET lifetime_earned = ? WHERE steam_id = ?',[Number.MAX_SAFE_INTEGER-40,player]);
+  await fixture.pool.execute('UPDATE portal_token_accounts SET lifetime_earned = ? WHERE steam_id = ?',[(TOKEN_LIFETIME_MAX-40n).toString(),player]);
   await assert.rejects(api.playCasinoInstant(instant({game:'plinko',stake:20,selection:{rows:8,risk:'low',ballCount:2}})),{code:'token_limit'});
   assert.equal(draws,0);
   const result=await api.playCasinoInstant(instant({stake:40,selection:{bets:[{selection:{kind:'color',value:'red'},stakeTokens:20},{selection:{kind:'color',value:'black'},stakeTokens:20}]}}));
@@ -571,4 +575,53 @@ integration('identity warmup batches at most 100 with bounded cache, queue and n
     assert.deepEqual(cachedCrashIdentity(unavailable),{displayName:unavailable,avatarUrl:null});
     warmCrashIdentities([unavailable]);await new Promise(resolve=>setImmediate(resolve));assert.equal(calls,12);
   } finally {fixture.control.profiles=async()=>new Map();}
+});
+
+integration('staff can set award and take full UInt64 balances with exact receipts and ledger',async()=>{
+ const {staffAdjustTokens,getTokenWallet,getTokenLedger}=await import('./portal-repository.ts');
+ const base={actorSteamId:other,targetSteamId:player,reason:'UInt64 regression'};
+ const setRequest={...base,action:'set' as const,amount:TOKEN_MAX.toString(),idempotencyKey:key()};
+ const set=await staffAdjustTokens(setRequest);
+ assert.equal(set.wallet.balance,TOKEN_MAX.toString());
+ assert.equal(set.delta,(TOKEN_MAX-1000n).toString());
+ assert.deepEqual(await staffAdjustTokens(setRequest),set);
+ await assert.rejects(staffAdjustTokens({...base,action:'award',amount:'1',idempotencyKey:key()}),{code:'token_limit'});
+ const taken=await staffAdjustTokens({...base,action:'take',amount:TOKEN_MAX.toString(),idempotencyKey:key()});
+ assert.equal(taken.wallet.balance,'0');
+ assert.equal(taken.delta,(-TOKEN_MAX).toString());
+ const awarded=await staffAdjustTokens({...base,action:'award',amount:TOKEN_MAX.toString(),idempotencyKey:key()});
+ assert.equal(awarded.wallet.balance,TOKEN_MAX.toString());
+ assert.equal(awarded.wallet.lifetimeEarned,(TOKEN_MAX*2n).toString());
+ assert.equal((await getTokenWallet(player)).balance,TOKEN_MAX.toString());
+ const ledger=await getTokenLedger(player);
+ assert.ok(ledger.entries.some(entry=>entry.delta===(-TOKEN_MAX).toString()));
+});
+
+integration('wallet above the JavaScript safe integer limit can play and settle exactly',async()=>{
+ const balance='9007199254741993';
+ await fixture.pool.execute('UPDATE portal_token_accounts SET balance = ?, lifetime_earned = ? WHERE steam_id = ?',[balance,TOKEN_MAX.toString(),player]);
+ const win=await api.playCasinoInstant(instant());
+ assert.equal(win.balance,(BigInt(balance)+700n).toString());
+ const wallet=(await import('./portal-repository.ts')).getTokenWallet;
+ assert.equal((await wallet(player)).lifetimeEarned,(TOKEN_MAX+720n).toString());
+});
+
+integration('full UInt64 trade offers escrow, cancel, refund, and settle without rounding',async()=>{
+ const repo=await import('./portal-repository.ts');
+ await fixture.pool.execute('UPDATE portal_token_accounts SET balance = ? WHERE steam_id = ?',[TOKEN_MAX.toString(),player]);
+ await fixture.pool.execute('UPDATE portal_token_accounts SET balance = 0 WHERE steam_id = ?',[other]);
+ const create=()=>repo.createEconomyTrade({steamId:player,counterpartySteamId:other,offeredTokens:TOKEN_MAX.toString(),requestedTokens:'0',idempotencyKey:key()});
+ const cancelled=await create();
+ assert.equal((await repo.getTokenWallet(player)).balance,'0');
+ assert.equal((await repo.getEconomyTrade(cancelled.tradeId,player))!.offered.tokens,TOKEN_MAX.toString());
+ await repo.cancelEconomyTrade({steamId:player,tradeId:cancelled.tradeId,idempotencyKey:key()});
+ assert.equal((await repo.getTokenWallet(player)).balance,TOKEN_MAX.toString());
+ const offer=await create();
+ await repo.respondEconomyTrade({steamId:other,tradeId:offer.tradeId,decision:'accept',idempotencyKey:key()});
+ assert.equal((await repo.getTokenWallet(other)).balance,TOKEN_MAX.toString());
+ assert.equal((await repo.getTokenWallet(player)).balance,'0');
+ const requested=await repo.createEconomyTrade({steamId:player,counterpartySteamId:other,offeredTokens:'0',requestedTokens:TOKEN_MAX.toString(),idempotencyKey:key()});
+ await repo.respondEconomyTrade({steamId:other,tradeId:requested.tradeId,decision:'accept',idempotencyKey:key()});
+ assert.equal((await repo.getTokenWallet(player)).balance,TOKEN_MAX.toString());
+ assert.equal((await repo.getTokenWallet(other)).balance,'0');
 });

@@ -1,3 +1,4 @@
+import { tokenAmountField } from "../../../../lib/economy/token-amount.ts";
 import { getAdminAccess } from "@/lib/admin/access";
 import { getSession, verifyAdminActionToken } from "@/lib/auth/session";
 import {
@@ -111,13 +112,7 @@ export async function POST(request: Request) {
     if (action === "create") {
       const code = stringField(body.code, 64);
       const displayName = stringField(body.displayName, 120);
-      const tokenAmount =
-        typeof body.tokenAmount === "number" &&
-        Number.isSafeInteger(body.tokenAmount) &&
-        body.tokenAmount >= 0 &&
-        body.tokenAmount <= Number.MAX_SAFE_INTEGER
-          ? body.tokenAmount
-          : null;
+      const tokenAmount = tokenAmountField(body.tokenAmount);
       const maxRedemptions = optionalInteger(body.maxRedemptions, 2_147_483_647);
       if (
         !code ||

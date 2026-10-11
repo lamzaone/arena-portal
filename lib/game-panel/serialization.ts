@@ -1,3 +1,4 @@
+import { tokenInteger, TOKEN_LIFETIME_MAX } from "../economy/token-amount.ts";
 import type {
   EconomyInventoryItem,
   EconomyCatalogueItem,
@@ -27,9 +28,8 @@ export function safeInteger(value: number): number {
     );
   return value;
 }
-export function tokenText(value: number): string {
-  if (value < 0) throw new Error("Negative Token value.");
-  return String(safeInteger(value));
+export function tokenText(value: number | string): string {
+  return tokenInteger(value, TOKEN_LIFETIME_MAX).toString();
 }
 function text(value: string) {
   if (value.length > 512)

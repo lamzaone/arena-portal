@@ -123,7 +123,7 @@ export interface CasinoRoundPublic {
   details: RouletteResult | RouletteMultiResult | PlinkoResult | PlinkoBatchResult | BlackjackPublicState | CrashBetPublic | Record<string, unknown>;
 }
 export interface CasinoBootstrap {
-  balance: number;
+  balance: string;
   settings: CasinoSettings;
   activeBlackjack: CasinoRoundPublic | null;
   crash: CrashPublicSnapshot | null;

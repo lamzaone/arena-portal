@@ -11,7 +11,7 @@ import styles from "./player-workspace.module.css";
 
 type RedeemResult = {
   displayName: string;
-  tokensAwarded: number;
+  tokensAwarded: string;
   itemNames: string[];
 };
 
@@ -35,7 +35,7 @@ export function RedeemCodeForm({ csrf }: { csrf: string }) {
       });
       setResult({
         displayName: response.displayName ?? "Reward code",
-        tokensAwarded: response.tokensAwarded ?? 0,
+        tokensAwarded: response.tokensAwarded ?? "0",
         itemNames: response.itemNames ?? [],
       });
       setMessage(response.message ?? "Reward added to your Token account.");
@@ -101,8 +101,8 @@ export function RedeemCodeForm({ csrf }: { csrf: string }) {
           <div>
             <strong>{result.displayName} claimed</strong>
             <p>
-              {result.tokensAwarded
-                ? `+${result.tokensAwarded.toLocaleString()} Tokens`
+              {BigInt(result.tokensAwarded) > 0n
+                ? `+${BigInt(result.tokensAwarded).toLocaleString()} Tokens`
                 : "No Token reward"}
               {result.itemNames.length
                 ? ` · ${result.itemNames.join(", ")}`

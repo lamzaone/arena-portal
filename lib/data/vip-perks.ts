@@ -1,3 +1,4 @@
+import { tokenInteger, tokenAmountField, TOKEN_LIFETIME_MAX } from "../economy/token-amount.ts";
 import "server-only";
 
 import { createHash } from "node:crypto";
@@ -354,7 +355,7 @@ const offerSelect =
 
 export async function getVipPerkStorefront(steamIdValue?: string | null) {
   const database = getPool();
-  if (!database) return { offers: [] as VipPerkShopOffer[], owned: [] as EffectiveVipPerk[], balance: 0 };
+  if (!database) return { offers: [] as VipPerkShopOffer[], owned: [] as EffectiveVipPerk[], balance: "0" };
   const parsedSteamId = steamIdValue ? steamId(steamIdValue) : null;
   const [offerResult, owned, balanceResult] = await Promise.all([
     database.query<OfferRow[]>(
@@ -377,8 +378,8 @@ export async function getVipPerkStorefront(steamIdValue?: string | null) {
     offers: offerRows.map(toOffer),
     owned,
     balance: balanceRows[0]
-      ? integer(balanceRows[0].balance, "Token balance", 0)
-      : 0,
+      ? tokenInteger(balanceRows[0].balance).toString()
+      : "0",
   };
 }
 
@@ -1090,7 +1091,7 @@ export type VipPerkPurchaseResult = {
   perkId: number;
   perkName: string;
   tokenPrice: number;
-  balance: number;
+  balance: string;
   expiresAt: string;
 };
 
@@ -1101,8 +1102,8 @@ function parsedOperationResult(value: unknown): VipPerkPurchaseResult | null {
   }
   if (!candidate || typeof candidate !== "object") return null;
   const result = candidate as Partial<VipPerkPurchaseResult>;
-  if (!Number.isSafeInteger(result.offerId) || !Number.isSafeInteger(result.perkId) || typeof result.perkName !== "string" || !Number.isSafeInteger(result.tokenPrice) || !Number.isSafeInteger(result.balance) || typeof result.expiresAt !== "string") return null;
-  return result as VipPerkPurchaseResult;
+  if (!Number.isSafeInteger(result.offerId) || !Number.isSafeInteger(result.perkId) || typeof result.perkName !== "string" || !Number.isSafeInteger(result.tokenPrice) || tokenAmountField(result.balance) === null || typeof result.expiresAt !== "string") return null;
+  return { ...result, balance: tokenAmountField(result.balance)! } as VipPerkPurchaseResult;
 }
 
 export async function purchaseVipPerkOffer(input: {
@@ -1156,12 +1157,14 @@ export async function purchaseVipPerkOffer(input: {
       "INSERT IGNORE INTO portal_token_accounts (steam_id, balance, lifetime_earned, lifetime_spent) VALUES (?, 0, 0, 0)",
       [buyerSteamId],
     );
-    const [walletRows] = await connection.query<(RowDataPacket & { balance: number | string })[]>(
-      "SELECT balance FROM portal_token_accounts WHERE steam_id = ? FOR UPDATE",
+    const [walletRows] = await connection.query<(RowDataPacket & { balance: number | string; lifetime_spent: number | string })[]>(
+      "SELECT balance, lifetime_spent FROM portal_token_accounts WHERE steam_id = ? FOR UPDATE",
       [buyerSteamId],
     );
-    const balance = walletRows[0] ? integer(walletRows[0].balance, "Token balance", 0) : 0;
-    if (balance < parsedOffer.tokenPrice) fail("insufficient_tokens", `You need ${parsedOffer.tokenPrice.toLocaleString()} Tokens for this perk.`);
+    const balance = walletRows[0] ? tokenInteger(walletRows[0].balance) : 0n;
+    const nextSpent = tokenInteger(walletRows[0]?.lifetime_spent ?? 0, TOKEN_LIFETIME_MAX) + BigInt(parsedOffer.tokenPrice);
+    if (nextSpent > TOKEN_LIFETIME_MAX) fail("token_limit", "The lifetime Token limit was reached.");
+    if (balance < BigInt(parsedOffer.tokenPrice)) fail("insufficient_tokens", `You need ${parsedOffer.tokenPrice.toLocaleString()} Tokens for this perk.`);
 
     const [directGrantRows] = await connection.query<(RowDataPacket & { expires_at: Date | string | null })[]>(
       "SELECT expires_at FROM portal_vip_perk_player_grants WHERE steam_id = ? AND perk_id = ? AND revoked_at IS NULL AND starts_at <= CURRENT_TIMESTAMP AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP) ORDER BY expires_at DESC, id DESC FOR UPDATE",
@@ -1182,7 +1185,7 @@ export async function purchaseVipPerkOffer(input: {
     const startsAt = new Date();
     const baseline = latestExpiry && new Date(latestExpiry).valueOf() > startsAt.valueOf() ? new Date(latestExpiry) : startsAt;
     const expiresAt = new Date(baseline.valueOf() + parsedOffer.durationMinutes * 60_000);
-    const nextBalance = balance - parsedOffer.tokenPrice;
+    const nextBalance = (balance - BigInt(parsedOffer.tokenPrice)).toString();
 
     await connection.execute(
       "UPDATE portal_token_accounts SET balance = ?, lifetime_spent = lifetime_spent + ? WHERE steam_id = ?",

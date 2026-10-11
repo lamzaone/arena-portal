@@ -1,3 +1,4 @@
+import { TOKEN_MAX, TOKEN_LIFETIME_MAX } from "../economy/token-amount.ts";
 import 'server-only';
 import { createHash, randomInt, randomUUID } from 'node:crypto';
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
@@ -15,7 +16,7 @@ const ENGINE_VERSION = 'native-v1';
 type RoundRow = RowDataPacket & { id: string; steam_id: string; game: CasinoGame; request_key: string; status: 'active' | 'settled'; stake_tokens: number | string; payout_tokens: number | string | null; private_state: unknown; public_state: unknown; settings_snapshot: unknown; created_at_ms: number | string; settled_at_ms: number | string | null; expires_at_ms: number | string | null };
 type CrashRow = RowDataPacket & { id: string; opens_at_ms: number | string; start_at_ms: number | string; private_point: number; completed_at_ms: number | string | null };
 type BetRow = RowDataPacket & { id: string; round_id: string; steam_id: string; stake_tokens: number | string; auto_cashout: number | null; status: CrashBetPublic['status']; cashout_multiplier: number | null; payout_tokens: number | string | null };
-export type CasinoMutationResult = { balance: number; round: CasinoRoundPublic };
+export type CasinoMutationResult = { balance: string; round: CasinoRoundPublic };
 type LockedCasino = { connection: PoolConnection; wallets: Map<string, TokenWallet>; now: number; settings: CasinoSettings; crash: CrashRow | null; bets: BetRow[]; blackjack: RoundRow | null };
 type ActorRequest = { steamId: string; idempotencyKey: string };
 
@@ -52,12 +53,12 @@ function checkedMaximumReturn(stakeTokens: number, numerator: number, denominato
 // not a consistent snapshot that could predate a wait for that wallet lock.
 async function admitReturn(locked: LockedCasino, steamId: string, additionalStake: number, maximum: number, replacing?: string) {
   const wallet = locked.wallets.get(steamId)!;
-  if (wallet.balance < additionalStake) fail('insufficient_tokens','This account does not have enough Tokens.');
+  if (BigInt(wallet.balance) < BigInt(additionalStake)) fail('insufficient_tokens','This account does not have enough Tokens.');
   const [rows] = await locked.connection.query<Array<RowDataPacket & {round_id:string;maximum_return:string|number}>>('SELECT round_id, maximum_return FROM portal_casino_reservations WHERE steam_id = ? FOR UPDATE',[steamId]);
   let reserved = BigInt(maximum);
   for (const row of rows) if (row.round_id !== replacing) reserved += BigInt(row.maximum_return);
-  const ceiling = BigInt(Number.MAX_SAFE_INTEGER);
-  if (BigInt(wallet.balance)-BigInt(additionalStake)+reserved > ceiling || BigInt(wallet.lifetimeEarned)+reserved > ceiling || BigInt(wallet.lifetimeSpent)+BigInt(additionalStake) > ceiling)
+  const ceiling = TOKEN_MAX;
+  if (BigInt(wallet.balance)-BigInt(additionalStake)+reserved > ceiling || BigInt(wallet.lifetimeEarned)+reserved > TOKEN_LIFETIME_MAX || BigInt(wallet.lifetimeSpent)+BigInt(additionalStake) > TOKEN_LIFETIME_MAX)
     fail('token_limit','This wager could exceed the safe Token account limit.');
 }
 async function reserveReturn(locked: LockedCasino, steamId: string, id: string, maximum: number) {

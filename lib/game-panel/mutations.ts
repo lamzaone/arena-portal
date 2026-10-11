@@ -2,7 +2,7 @@ import type * as Repository from "../data/portal-repository";
 import type { PanelOperation, PanelArguments } from "./contracts";
 import type { PanelMutationContext } from "./storage";
 import { PanelApiError } from "./errors";
-import { parseTokens } from "./validation";
+import { parseTokenPrice, parseTokens } from "./validation";
 import { requireOnlinePartner } from "./reads";
 import {
   serializeWallet,
@@ -83,7 +83,7 @@ export function createPanelMutator(deps: Partial<Dependencies>) {
           const selection = args as PanelArguments["market.purchase"];
           raw = await d.purchaseMarketplaceSelection({
             ...selection,
-            expectedUnitPriceTokens: parseTokens(
+            expectedUnitPriceTokens: parseTokenPrice(
               selection.expectedUnitPriceTokens,
             ),
             ...common,

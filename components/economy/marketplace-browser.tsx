@@ -369,7 +369,7 @@ function MarketplacePurchaseAction({
 }: {
   item: EconomyItemView;
   pending: boolean;
-  walletBalance: number;
+  walletBalance: string;
   floatInput: string;
   seedInput: string;
   quote: MarketplaceQuote | null;
@@ -395,7 +395,7 @@ function MarketplacePurchaseAction({
   const canFetchMarketPrice = supportsFloat
     ? Boolean(item.catalogueId)
     : Boolean(item.marketHashName);
-  const unaffordable = knownPrice !== null && knownPrice > walletBalance;
+  const unaffordable = knownPrice !== null && BigInt(knownPrice) > BigInt(walletBalance);
   const minimumFloat = item.minFloat ?? 0;
   const maximumFloat = item.maxFloat ?? 1;
   const currentFloat =
@@ -572,7 +572,7 @@ function MarketplaceStandardListing({
 }: {
   item: EconomyItemView;
   pending: boolean;
-  walletBalance: number;
+  walletBalance: string;
   suggestedPurchaseFloat: string;
   onPurchase: (item: EconomyItemView, options: MarketplacePurchaseOptions) => Promise<boolean | undefined>;
 }) {
@@ -823,7 +823,7 @@ function MarketplaceContainerPanel({
 }: {
   item: EconomyItemView;
   pending: boolean;
-  walletBalance: number;
+  walletBalance: string;
   closing: boolean;
   onPurchase: (item: EconomyItemView, options: MarketplacePurchaseOptions) => void;
   onClose: () => void;
@@ -977,7 +977,7 @@ function MarketplaceContainerPanel({
         </div>
         {unaffordable && totalPrice !== null ? (
           <small className="crate-purchase-help" role="status">
-            Need {formatTokens(totalPrice - walletBalance)} more Tokens.
+            Need {formatTokens(BigInt(totalPrice) - BigInt(walletBalance))} more Tokens.
           </small>
         ) : null}
       </div>
@@ -1011,7 +1011,7 @@ function MarketplaceListing({
 }: {
   item: EconomyItemView;
   pending: boolean;
-  walletBalance: number;
+  walletBalance: string;
   suggestedPurchaseFloat: string;
   expanded: boolean;
   onContainerToggle: () => void;

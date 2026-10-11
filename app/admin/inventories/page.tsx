@@ -79,8 +79,8 @@ function validInventoryState(value: string | undefined): EconomyItemState | null
     : null;
 }
 
-function formatTokens(value: number) {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
+function formatTokens(value: number | string) {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(BigInt(value));
 }
 
 function inventoriesHref({

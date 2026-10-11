@@ -1,3 +1,4 @@
+import { tokenInteger } from "../economy/token-amount.ts";
 import { PANEL_OPERATIONS, type PanelArguments, type PanelOperation, type PanelRequest } from './contracts.ts';
 import { PanelApiError } from './errors.ts';
 import { ECONOMY_ITEM_TYPES, ECONOMY_RARITY_RANKS } from '../economy/item-taxonomy.ts';
@@ -6,7 +7,11 @@ const invalid = ():never => {throw new PanelApiError(400,'invalid_input','Choose
 export const isPanelSteamId = isIndividualSteamId64;
 export const OPERATION_ID = /^[0-9]{13}_[a-f0-9]{32}$/;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
-export function parseTokens(value:unknown):number {if(typeof value !== 'string' || !/^(0|[1-9][0-9]{0,15})$/.test(value) || BigInt(value)>BigInt(Number.MAX_SAFE_INTEGER)) invalid();return Number(value);}
+export function parseTokenPrice(value:unknown):number {if(typeof value !== 'string' || !/^(0|[1-9][0-9]{0,15})$/.test(value) || BigInt(value)>BigInt(Number.MAX_SAFE_INTEGER)) invalid();return Number(value);}
+export function parseTokens(value: unknown): string {
+  if (typeof value !== 'string') invalid();
+  try { return tokenInteger(value).toString(); } catch { return invalid(); }
+}
 export function operationCreatedAt(value:string):number {if(!OPERATION_ID.test(value)) invalid();return Number(value.slice(0,13));}
 type Check = (v:unknown)=>void;
 const text = (min:number,max:number,pattern?:RegExp):Check => v => {if(typeof v !== 'string'||v.length<min||v.length>max||/[\u0000-\u001f\u007f-\u009f]/.test(v)||(pattern&&!pattern.test(v))) invalid();};
@@ -39,7 +44,7 @@ export function parsePanelRequest(operation:string,value:unknown):PanelRequest<P
     case 'cases.open-bulk':case 'cases.reconcile':object(args,{crateItemIds:array(id,1,10)});break;
     case 'market.detail':object(args,{catalogueId:integer(1)});break;
     case 'market.quote':object(args,selection,selectionOptional);break;
-    case 'market.purchase':object(args,{...selection,expectedUnitPriceTokens:v=>{parseTokens(v);}},selectionOptional);break;
+    case 'market.purchase':object(args,{...selection,expectedUnitPriceTokens:v=>{parseTokenPrice(v);}},selectionOptional);break;
     case 'loadout.equip':object(args,{itemId:id,slots});break;
     case 'loadout.clear':object(args,{slots});break;
     case 'customize.rename':object(args,{itemId:id,nametag:text(1,128)},{nametagItemId:id});break;

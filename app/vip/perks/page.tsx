@@ -24,7 +24,7 @@ function pageNumber(value: string | undefined) {
 export default async function VipPerksPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const session = await getSession();
   const requestedPage = pageNumber((await searchParams).page);
-  let storefront: Awaited<ReturnType<typeof getVipPerkStorefront>> = { offers: [], owned: [], balance: 0 };
+  let storefront: Awaited<ReturnType<typeof getVipPerkStorefront>> = { offers: [], owned: [], balance: "0" };
   let roster: Awaited<ReturnType<typeof getEffectiveVipPerkPage>> = { entries: [], total: 0, page: requestedPage, pageSize: 25 };
   let storageError = !vipPerkStorageConfigured();
   let migrationNeeded = false;

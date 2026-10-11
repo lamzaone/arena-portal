@@ -72,7 +72,7 @@ export function PlinkoGame({ client }: { client: GameClient }) {
           client.error("Choose between 1 and 20 balls per batch.");
           return;
         }
-        if (!Number.isSafeInteger(value * ballCount) || value * ballCount > client.state.balance) {
+        if (!Number.isSafeInteger(value * ballCount) || BigInt(value * ballCount) > BigInt(client.state.balance)) {
           client.error("Your Token balance is too low for this full batch cost.");
           return;
         }

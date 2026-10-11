@@ -551,3 +551,35 @@ test('real casino server page fails closed with wallet, inherits one account nav
     }
   } finally { await browser?.close(); await new Promise(done => server.close(done)); }
 });
+
+test('UInt64 wallet renders exactly and remains usable for numeric casino stakes', async () => {
+  const balance='18446744073709540000';
+  const state={...initial(),balance};
+  const bundle=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {CasinoLobby} from './components/casino/casino-lobby';createRoot(document.getElementById('root')).render(<CasinoLobby initial={${JSON.stringify(state)}} steamId="ull-player" csrf="ull-csrf" themeKey="default"/>);`,loader:'tsx',resolveDir:process.cwd()},bundle:true,write:false,jsx:'automatic',define:{'process.env.NODE_ENV':'"development"'}});
+  const js=bundle.outputFiles[0].text;
+  const server=createServer((req,res)=>{res.setHeader('content-type',req.url==='/test.js'?'text/javascript':'text/html');res.end(req.url==='/test.js'?js:'<!doctype html><html><body><div id="root"></div><script src="/test.js"></script></body></html>');});
+  await new Promise(done=>server.listen(0,'127.0.0.1',done));
+  const browser=await chromium.launch();
+  try {
+    const page=await browser.newPage({reducedMotion:'reduce'});
+    const errors=[];page.on('pageerror',error=>errors.push(error.message));
+    let received;
+    await page.route('**/api/casino/**',async route=>{
+      if(route.request().method()==='GET'){await route.fulfill({json:{ok:true,...state}});return;}
+      received=route.request().postDataJSON();
+      const details=playRouletteMulti(received.stake,received.selection.bets,()=>0);
+      const result=round('roulette',details,received.stake);
+      state.balance=(BigInt(state.balance)-BigInt(received.stake)).toString();
+      state.history.unshift(result);
+      await route.fulfill({json:{ok:true,balance:state.balance,round:result}});
+    });
+    await page.goto(`http://127.0.0.1:${server.address().port}`);
+    assert.equal(await page.getByTestId('token-balance').textContent(),'18,446,744,073,709,540,000');
+    await page.getByRole('button',{name:'10 Token chip',exact:true}).click();
+    await page.getByRole('button',{name:'Red',exact:true}).click();
+    await page.getByRole('button',{name:'Spin wheel',exact:true}).click();
+    await page.waitForFunction(()=>document.querySelector('[data-testid="token-balance"]')?.textContent==='18,446,744,073,709,539,990');
+    assert.equal(received.stake,10);
+    assert.deepEqual(errors,[]);
+  } finally {await browser.close();await new Promise(done=>server.close(done));}
+});

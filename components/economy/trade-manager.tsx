@@ -1,5 +1,6 @@
 "use client";
 
+import { tokenAmountField } from "../../lib/economy/token-amount.ts";
 import {
   ArrowLeftRight,
   Check,
@@ -379,10 +380,7 @@ export function TradeManager({
 
   function tokenValue(value: string) {
     const normalized = value.trim();
-    if (!normalized) return 0;
-    if (!/^\d+$/.test(normalized)) return null;
-    const parsed = Number(normalized);
-    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+    return tokenAmountField(normalized || "0");
   }
 
   function submitTrade() {
@@ -401,9 +399,9 @@ export function TradeManager({
     }
     if (
       !offeredItemIds.length &&
-      !tokensOffered &&
+      tokensOffered === "0" &&
       !requestedItemIds.length &&
-      !tokensRequested
+      tokensRequested === "0"
     ) {
       setNotice({
         type: "error",
@@ -411,7 +409,7 @@ export function TradeManager({
       });
       return;
     }
-    if (tokensOffered > walletView.balance) {
+    if (BigInt(tokensOffered) > BigInt(walletView.balance)) {
       setNotice({
         type: "error",
         text: "Your offer cannot contain more tokens than your available wallet balance.",
@@ -768,9 +766,10 @@ export function TradeManager({
             Tokens you offer
             <input
               id="trade-offered-tokens"
-              type="number"
-              min="0"
-              max={walletView.balance}
+              type="text"
+              inputMode="numeric"
+              maxLength={20}
+              pattern="[0-9]+"
               value={offeredTokens}
               onChange={(event) => setOfferedTokens(event.target.value)}
             />
@@ -779,8 +778,10 @@ export function TradeManager({
             Tokens you request
             <input
               id="trade-requested-tokens"
-              type="number"
-              min="0"
+              type="text"
+              inputMode="numeric"
+              maxLength={20}
+              pattern="[0-9]+"
               value={requestedTokens}
               onChange={(event) => setRequestedTokens(event.target.value)}
               disabled={!selectedPlayer}

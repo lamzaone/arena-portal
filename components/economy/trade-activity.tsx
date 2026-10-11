@@ -27,7 +27,7 @@ function TradeAssets({ tradeId, side, title, items, tokens }: {
   side: "receive" | "give";
   title: string;
   items: EconomyTradeView["offeredItems"];
-  tokens: number;
+  tokens: string;
 }) {
   const headingId = `trade-${tradeId}-${side}`;
 
