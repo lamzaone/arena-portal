@@ -325,6 +325,8 @@ main.staff-page .staff-case-form label { max-width: none; }
 main.staff-page .staff-case-form > div { padding-top: 4px; gap: 8px; }
 main.staff-page .staff-case-form > div > :last-child { margin-left: auto; }
 main.staff-page .staff-case-heading > div:first-child > strong { display: block; margin-bottom: 6px; color: var(--theme-text); font-size: 15px; line-height: 1.4; }
+main.staff-page .staff-ticket-heading { min-width: 0; }
+main.staff-page .staff-ticket-heading > strong { overflow-wrap: anywhere; }
 main.staff-page .staff-appeal-source { padding: 10px 12px; border-left: 2px solid var(--theme-border-strong); background: var(--theme-control-bg); font-size: 12px; }
 main.staff-page .staff-table :is(th, td):last-child { text-align: right; }
 main.staff-page .staff-table td:last-child form { display: flex; justify-content: flex-end; }

@@ -37,6 +37,7 @@
     "test:vip": "node --experimental-strip-types --test lib/economy/vip-membership-conversion.test.ts lib/economy/vip-activation-state.test.ts && node --experimental-transform-types --test lib/data/arena-vip-authority-sync.test.mjs",
     "test:navigation": "node --experimental-strip-types --test components/primary-navigation-routes.test.ts",
     "test:staff": "node --experimental-strip-types --test lib/staff-directory.test.ts lib/data/public-staff-directory.test.mjs",
+    "test:staff-tickets:browser": "node --test app/admin/staff-tickets.browser.test.mjs",
     "test:loadout": "node --experimental-strip-types --test lib/economy/weapon-categories.test.ts lib/economy/loadout-selection.test.ts lib/economy/weapon-preview.test.ts lib/economy/weapon-model.test.ts lib/economy/weapon-customization.test.ts && node --experimental-transform-types --test lib/data/weapon-customization.test.ts",
     "test:inventory-lock": "node --experimental-strip-types --test lib/economy/inventory-sale-lock.test.ts",
     "test:inventory-selection": "node --experimental-strip-types --test lib/economy/inventory-selection.test.ts",

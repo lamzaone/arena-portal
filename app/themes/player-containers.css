@@ -11,6 +11,36 @@ html body [data-theme-surface="player-container"][data-ui="player-owned-containe
   box-shadow: var(--player-container-shadow, inset 3px 0 0 var(--theme-accent));
 }
 
+/* Case replies can be nested beneath both a viewer theme and another player's
+ * case theme. Their own surface must outrank global case-message decorations. */
+html body .case-message[data-theme][data-theme-owner="player"][data-theme-surface="player-container"][data-ui="player-owned-container"] {
+  border-color: var(--theme-border);
+  border-left-color: var(--player-container-accent, var(--theme-accent));
+  border-radius: var(--theme-radius);
+  color: var(--theme-text);
+  background: var(--player-container-bg, var(--theme-surface-muted));
+  box-shadow: var(--player-container-shadow, inset 3px 0 0 var(--theme-accent));
+}
+
+.case-message-header > [data-ui="player-identity"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.case-message .case-message-header a.player-identity {
+  display: inline-flex;
+  width: auto;
+  max-width: 100%;
+  align-items: center;
+  gap: 10px;
+  overflow: visible;
+}
+
+@media (max-width: 520px) {
+  .case-message-header { flex-wrap: wrap; gap: 6px 12px; }
+  .case-message-header > time { margin-left: 40px; }
+}
+
 html body [data-theme-surface="player-container"][data-ui="player-owned-container"]:is(
     [data-player-container-kind="record"],
     [data-player-container-kind="management"],

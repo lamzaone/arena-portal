@@ -5,6 +5,8 @@ import type { SteamProfile } from "@/lib/steam/profiles";
 import { formatPortalDate } from "@/components/formatters";
 import { PlayerIdentity } from "@/components/player-identity";
 import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
+import { CaseAttachments, CaseScreenshotProvider } from "@/components/case-screenshots";
+import { splitCaseOpeningAttachments } from "@/lib/cases/presentation";
 
 type CaseConversationProps = {
   openingBody: string;
@@ -62,14 +64,17 @@ function MessageCard({ authorId, authorType, body, createdAt, attachments, steam
       <time dateTime={createdAt}>{formatPortalDate(createdAt)}</time>
     </header>
     <p>{body}</p>
-    {attachments.length ? <div className="case-message-attachments">{attachments.map((attachment) => <a key={attachment.id} href={`/api/case-attachments/${attachment.id}`} target="_blank" rel="noreferrer">View screenshot: {attachment.fileName}</a>)}</div> : null}
+    <CaseAttachments attachments={attachments} />
   </ThemedPlayerContainer>;
 }
 
 export function CaseConversation({ openingBody, openingAt, openingAuthorId, messages, steamProfiles, viewerSteamId, playerIdentities }: CaseConversationProps) {
-  return <section className="case-conversation" aria-label="Case conversation">
+  const { openingAttachments, replies } = splitCaseOpeningAttachments(messages, openingAuthorId);
+  return <CaseScreenshotProvider attachments={messages.flatMap((message) => message.attachments)}>
+    <section className="case-conversation" aria-label="Case conversation">
     <div className="case-conversation-label">Conversation</div>
-    <MessageCard authorId={openingAuthorId} authorType="player" body={openingBody} createdAt={openingAt} attachments={[]} steamProfiles={steamProfiles} viewerSteamId={viewerSteamId} playerIdentities={playerIdentities} opening />
-    {messages.map((message) => <MessageCard key={message.id} authorId={message.authorId} authorType={message.authorType} body={message.body} createdAt={message.createdAt} attachments={message.attachments} steamProfiles={steamProfiles} viewerSteamId={viewerSteamId} playerIdentities={playerIdentities} />)}
-  </section>;
+    <MessageCard authorId={openingAuthorId} authorType="player" body={openingBody} createdAt={openingAt} attachments={openingAttachments} steamProfiles={steamProfiles} viewerSteamId={viewerSteamId} playerIdentities={playerIdentities} opening />
+    {replies.map((message) => <MessageCard key={message.id} authorId={message.authorId} authorType={message.authorType} body={message.body} createdAt={message.createdAt} attachments={message.attachments} steamProfiles={steamProfiles} viewerSteamId={viewerSteamId} playerIdentities={playerIdentities} />)}
+    </section>
+  </CaseScreenshotProvider>;
 }
