@@ -14,6 +14,7 @@ const primaryLinks = [
   { href: "/vip", label: "VIP" },
   { href: "/ranking", label: "Ranking" },
   { href: "/staff", label: "Staff" },
+  { href: "/warnings", label: "Warnings" },
 ] as const;
 const discordInviteUrl = "https://discord.gg/eEkXZpSzrD";
 

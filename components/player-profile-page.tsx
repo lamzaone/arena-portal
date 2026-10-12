@@ -10,6 +10,7 @@ import {
 } from "@/components/identity-group-badge";
 import { ProfileInventoryPreview } from "@/components/profile-inventory-preview";
 import { ProfileModerationHistory } from "@/components/profile-moderation-history";
+import { PlayerWarningHistory } from "@/components/player-warning-history";
 import { ProfileSettingsForm, type ProfileSettingsValue } from "@/components/profile-settings-form";
 import {
   ProfileThemeAvatarAdornment,
@@ -318,6 +319,7 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, di
           <HitMap stats={profile.hitStats} />
         </section> : null}
 
+        <PlayerWarningHistory steamId={steamId} />
         {isOwnProfile && dashboard ? <ProfileModerationHistory
           bans={dashboard.bans}
           sanctions={dashboard.sanctions}
