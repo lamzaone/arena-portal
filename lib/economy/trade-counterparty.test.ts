@@ -34,8 +34,28 @@ test("incoming trade identity is the sender when the viewer is the recipient", (
   assert.equal(trade.counterpartySteamId, senderSteamId);
   assert.notEqual(trade.counterpartySteamId, recipientSteamId);
   assert.equal(trade.direction, "incoming");
-  assert.equal(trade.offeredTokens, 250);
-  assert.equal(trade.requestedTokens, 100);
+  assert.equal(trade.offeredTokens, "250");
+  assert.equal(trade.requestedTokens, "100");
+});
+
+test("trade Token amounts preserve exact decimal strings beyond the safe integer range", () => {
+  const [nested, normalized] = economyTrades([
+    {
+      ...repositoryTrade,
+      offered: { ...repositoryTrade.offered, tokens: "18446744073709551615" },
+      requested: { ...repositoryTrade.requested, tokens: "9007199254740993" },
+    },
+    {
+      ...repositoryTrade,
+      offeredTokens: "9007199254740993",
+      requestedTokens: "18446744073709551615",
+    },
+  ]);
+
+  assert.equal(nested.offeredTokens, "18446744073709551615");
+  assert.equal(nested.requestedTokens, "9007199254740993");
+  assert.equal(normalized.offeredTokens, "9007199254740993");
+  assert.equal(normalized.requestedTokens, "18446744073709551615");
 });
 
 test("outgoing trade identity remains the recipient", () => {
