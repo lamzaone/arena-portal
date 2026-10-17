@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { LogIn, LogOut, ShieldCheck } from "lucide-react";
 
 import { getSession } from "@/lib/auth/session";
@@ -54,7 +53,9 @@ export async function SiteHeader({
               className="header-account"
               secondary={session.steamId}
             />
-            {staffAccess?.isAdmin ? <Link className="button button-quiet header-staff-link" href="/admin/bans" aria-label="Open staff panel"><ShieldCheck aria-hidden="true" /><span>Staff panel</span></Link> : null}
+            {/* Enter the staff workspace with a fresh session/theme render,
+                avoiding a cached client-navigation response at this boundary. */}
+            {staffAccess?.isAdmin ? <a className="button button-quiet header-staff-link" href="/admin/bans" aria-label="Open staff panel"><ShieldCheck aria-hidden="true" /><span>Staff panel</span></a> : null}
             <form action="/api/auth/logout" method="post">
               <button className="button button-quiet" type="submit" aria-label="Sign out"><LogOut aria-hidden="true" /> Sign out</button>
             </form>

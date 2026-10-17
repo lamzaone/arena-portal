@@ -61,7 +61,8 @@
     "test:item-grid": "node --experimental-strip-types --test lib/economy/item-grid-layout.test.ts app/api/economy/trade-partner-inventory.test.ts",
     "test:moderation": "node --experimental-transform-types --test lib/data/bans.test.ts lib/data/warnings.test.ts lib/moderation/warning-policy.test.ts",
     "test:moderation:browser": "node --test app/bans/bans.browser.test.mjs app/admin/warnings/warnings.browser.test.mjs",
-    "test:search:browser": "node --test components/ui/search-field.browser.test.mjs"
+    "test:search:browser": "node --test components/ui/search-field.browser.test.mjs",
+    "test:navigation:browser": "node --test components/site-header.browser.test.mjs"
   },
   "dependencies": {
     "@skinhub/cdn": "0.3.0",
