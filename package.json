@@ -27,7 +27,7 @@
     "discord:test": "npm --prefix discord-bot test",
     "migrate:arena-groups": "node scripts/migrate-arena-group-authority.mjs",
     "migrate:vip-scope": "node scripts/migrate-vip-scope.mjs",
-    "test": "npm run test:game-panel && npm run test:health && npm run test:appeals && npm run test:trades && npm run test:seo && npm run test:vip && npm run test:scope && npm run test:vip-scope-migration && npm run test:database && npm run test:navigation && npm run test:staff && npm run test:loadout && npm run test:inventory-lock && npm run test:inventory-selection && npm run test:crates && npm run test:sellback && npm run test:chat-colors && npm run test:steam && npm run test:server-status && npm run test:player-identities && npm run test:themes && npm run test:thumbnails && npm run test:catalogue && npm run test:market-pricing && npm run test:item-grid && npm run test:casino",
+    "test": "npm run test:game-panel && npm run test:health && npm run test:appeals && npm run test:trades && npm run test:seo && npm run test:vip && npm run test:scope && npm run test:vip-scope-migration && npm run test:database && npm run test:navigation && npm run test:moderation && npm run test:staff && npm run test:loadout && npm run test:inventory-lock && npm run test:inventory-selection && npm run test:crates && npm run test:sellback && npm run test:chat-colors && npm run test:steam && npm run test:server-status && npm run test:player-identities && npm run test:themes && npm run test:thumbnails && npm run test:catalogue && npm run test:market-pricing && npm run test:item-grid && npm run test:casino",
     "test:health": "node --experimental-strip-types --test app/api/health/route.test.ts lib/form-action-response.test.ts",
     "test:player-identities": "node --experimental-strip-types --test lib/player-identities.test.ts lib/player-search.test.ts",
     "test:themes": "node --experimental-strip-types --test lib/themes/registry.test.ts && node --experimental-transform-types --test lib/data/profile-theme-entitlements.test.ts",
@@ -58,7 +58,9 @@
     "test:thumbnails": "node --experimental-strip-types --test app/api/economy/market/preview/route.test.ts app/api/economy/thumbnail-session.test.ts lib/economy/weapon-thumbnail.test.ts lib/economy/thumbnail-cache.test.ts lib/economy/thumbnail-http.test.ts lib/economy/thumbnail-inventory.test.ts lib/economy/thumbnail-renderer.test.ts lib/economy/thumbnail-browser.test.ts lib/economy/thumbnail-paths.test.ts components/economy/thumbnail-client.test.ts lib/economy/trade-preview.test.ts scripts/weapon-thumbnail-warmup.test.mjs",
     "test:catalogue": "node --experimental-transform-types --test lib/data/cs2-finish-validity.test.ts && node --test scripts/cs2-catalogue-quarantine-policy.test.mjs scripts/remove-unpriced-custom-weapons-policy.test.mjs",
     "test:market-pricing": "node --experimental-strip-types --test app/api/economy/custom-finish-routes.test.ts lib/economy/external-market-prices.test.ts lib/economy/provider-cache.test.ts lib/economy/market-pricing.test.ts lib/economy/price-refresh.test.ts lib/economy/market-selection.test.ts",
-    "test:item-grid": "node --experimental-strip-types --test lib/economy/item-grid-layout.test.ts app/api/economy/trade-partner-inventory.test.ts"
+    "test:item-grid": "node --experimental-strip-types --test lib/economy/item-grid-layout.test.ts app/api/economy/trade-partner-inventory.test.ts",
+    "test:moderation": "node --experimental-transform-types --test lib/data/bans.test.ts lib/data/warnings.test.ts lib/moderation/warning-policy.test.ts",
+    "test:moderation:browser": "node --test app/bans/bans.browser.test.mjs app/admin/warnings/warnings.browser.test.mjs"
   },
   "dependencies": {
     "@skinhub/cdn": "0.3.0",

@@ -51,7 +51,7 @@ export function StaffSubmenu({
       icon: section.icon,
       scroll: true,
     }));
-  // items.push({ key: "warnings", href: "/admin/warnings", label: "Warnings", icon: ShieldCheck, scroll: true });
+  if (access.isAdmin) items.push({ key: "warnings", href: "/admin/warnings", label: "Warnings", icon: ShieldCheck, scroll: true });
 
   const community: SectionNavItem[] = access.isAdmin
     ? [{ key: "groups", href: "/admin/groups", label: "Groups & access", icon: UsersRound, scroll: true }]

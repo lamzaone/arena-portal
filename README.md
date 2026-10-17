@@ -2,6 +2,10 @@
 
 The player portal for the ARENA CS2 server: Steam sign-in, player dashboard, moderation records, appeals, tickets, and the Token Economy inventory, loadout, marketplace, trades, and staff item-management flows. Players buy crates and capsules from Market, then inspect and open owned containers from Inventory.
 
+The public **Bans** page at `/bans` is available without signing in and reads the same ban history as Staff > Bans. It supports player-name/SteamID search and pagination, with reasons, issuers, UTC dates, and active/expired status. It exposes no moderation actions, IP addresses, or server connection details. Old `/warnings` links redirect to `/bans`; warnings remain in player profiles and the protected Staff > Warnings workspace.
+
+Run `npm run test:moderation` for the ban repository and warning authorization/storage checks, and `npm run test:moderation:browser` for public access, staff controls, navigation, and responsive layouts using local fixtures.
+
 ## Sellback rate
 
 Set `ECONOMY_SELLBACK_PERCENT` in `lib/economy/sellback.ts` to the desired percentage. The payout calculation, inventory and sale text, audit rate, and related test expectations derive from it. The 5-Token minimum is controlled separately by `ECONOMY_SELLBACK_MINIMUM_TOKENS` in the same file. Run `npm run test:sellback` and `npm run test:game-panel` after changing either value, then rebuild the portal.

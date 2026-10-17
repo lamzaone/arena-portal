@@ -6,16 +6,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { NavigationIndicator } from "@/components/ui/navigation-indicator";
 import { DiscordMark } from "@/components/icons/discord-mark";
 
-import { isPrimaryNavigationLinkActive } from "./primary-navigation-routes";
-
-const primaryLinks = [
-  { href: "/", label: "Home" },
-  { href: "/modes", label: "Modes" },
-  { href: "/vip", label: "VIP" },
-  { href: "/ranking", label: "Ranking" },
-  { href: "/staff", label: "Staff" },
-  // { href: "/warnings", label: "Warnings" },
-] as const;
+import { isPrimaryNavigationLinkActive, primaryLinks } from "./primary-navigation-routes";
 const discordInviteUrl = "https://discord.gg/eEkXZpSzrD";
 
 function PrimaryNavigationLinks({ pathname }: { pathname: string | null }) {

@@ -22,6 +22,7 @@ test("publishes only stable public landing pages in the sitemap", async () => {
     "https://tapped.ro/ranking",
     "https://tapped.ro/market",
     "https://tapped.ro/staff",
+    "https://tapped.ro/bans",
   ]);
   assert.equal(urls.some((url) => /\/(?:admin|api|players|inventory|loadout|trades)(?:\/|$)/.test(url)), false);
 });

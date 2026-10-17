@@ -132,6 +132,8 @@ const builtinGamePermissions = [
   "admins.command.reloadadmins",
   "admins.command.groups",
   "admins.commands.admin",
+  "admins.commands.announce",
+  "admins.commands.notify",
   "admins.commands.ban",
   "admins.commands.globalban",
   "admins.commands.unban",

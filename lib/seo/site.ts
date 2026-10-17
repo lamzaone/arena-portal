@@ -11,7 +11,7 @@ const HOME_TITLE = "CS2 Arena Server Romania | TAPPED.RO";
 const HOME_DESCRIPTION =
   "Join TAPPED.RO, a competitive CS2 arena server in Romania with ranked 1v1 fights, custom duels, monthly rewards, VIP perks, and player loadouts.";
 
-const PUBLIC_ROUTES = ["/", "/modes", "/vip", "/ranking", "/market", "/staff"] as const;
+const PUBLIC_ROUTES = ["/", "/modes", "/vip", "/ranking", "/market", "/staff", "/bans"] as const;
 const PRIVATE_ROUTES = [
   "/admin/",
   "/api/",
@@ -25,6 +25,10 @@ const PRIVATE_ROUTES = [
   "/appeals",
 ] as const;
 const PAGE_SEO = {
+  "/bans": {
+    title: "CS2 Arena Ban List | TAPPED.RO",
+    description: "Search public TAPPED.RO CS2 server ban records by player name or SteamID. View ban reasons, issuing staff, and expiry dates.",
+  },
   "/casino": {
     title: "Token Casino | TAPPED.RO",
     description: "Play Roulette, Blackjack, Crash and Plinko with your shared TAPPED.RO Token wallet. Sign in with Steam to view your personal rounds and results.",

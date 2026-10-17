@@ -70,6 +70,7 @@ import {
 } from "@/lib/economy/sellback";
 import type { VipTimedConversionKind } from "@/lib/economy/vip-membership-conversion";
 import type { PanelTimingReporter } from "@/lib/game-panel/timing";
+import { getBansPage, type BanRecord } from "@/lib/data/bans";
 
 type StatRow = RowDataPacket & {
   name: string;
@@ -119,20 +120,6 @@ type AdminAuthorizationRow = RowDataPacket & {
   Groups: string;
   Immunity: number;
   Servers: string;
-};
-
-type StaffBanRow = RowDataPacket & {
-  Id: number;
-  SteamId64: string;
-  PlayerName: string;
-  ExpiresAt: number;
-  Length: number;
-  Reason: string;
-  AdminSteamId64: string;
-  AdminName: string;
-  Server: string;
-  GlobalBan: number | boolean;
-  CreatedAt: number;
 };
 
 type StaffSanctionRow = RowDataPacket & {
@@ -667,19 +654,7 @@ export type LeaderboardPage = {
   pageSize: number;
 };
 
-export type StaffBan = {
-  id: number;
-  steamId: string;
-  playerName: string;
-  expiresAt: number;
-  length: number;
-  reason: string;
-  adminSteamId: string;
-  adminName: string;
-  server: string;
-  global: boolean;
-  createdAt: number;
-};
+export type StaffBan = BanRecord;
 
 export type StaffSanction = {
   id: number;
@@ -1954,15 +1929,8 @@ export async function getStaffModeration(
   );
   const offset = (page - 1) * pageSize;
   const filter = moderationFilter(query);
-  const [banCount, bans, sanctionCount, sanctions] = await Promise.all([
-    safeGameQuery<CountRow>(
-      `SELECT COUNT(*) AS total FROM bans ${filter.sql}`,
-      filter.values,
-    ),
-    safeGameQuery<StaffBanRow>(
-      `SELECT Id, SteamId64, PlayerName, ExpiresAt, Length, Reason, AdminSteamId64, AdminName, Server, GlobalBan, CreatedAt FROM bans ${filter.sql} ORDER BY CreatedAt DESC LIMIT ? OFFSET ?`,
-      [...filter.values, pageSize, offset],
-    ),
+  const [banPage, sanctionCount, sanctions] = await Promise.all([
+    getBansPage(page, query, pageSize),
     safeGameQuery<CountRow>(
       `SELECT COUNT(*) AS total FROM sanctions ${filter.sql}`,
       filter.values,
@@ -1974,20 +1942,8 @@ export async function getStaffModeration(
   ]);
 
   return {
-    bans: bans.map((row) => ({
-      id: Number(row.Id),
-      steamId: String(row.SteamId64),
-      playerName: row.PlayerName || "Unknown player",
-      expiresAt: normalizeUnixTime(row.ExpiresAt),
-      length: Number(row.Length),
-      reason: row.Reason,
-      adminSteamId: String(row.AdminSteamId64),
-      adminName: row.AdminName || "Console",
-      server: row.Server,
-      global: Boolean(row.GlobalBan),
-      createdAt: normalizeUnixTime(row.CreatedAt),
-    })),
-    banTotal: Number(banCount[0]?.total ?? 0),
+    bans: banPage.bans,
+    banTotal: banPage.total,
     sanctions: sanctions.map((row) => ({
       id: Number(row.Id),
       steamId: String(row.SteamId64),
