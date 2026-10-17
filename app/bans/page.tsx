@@ -8,6 +8,8 @@ import { DataTable } from "@/components/ui/data-table";
 import { LinkPagination } from "@/components/ui/link-pagination";
 import { PortalShell } from "@/components/ui/portal-shell";
 import { ThemedPlayerTableRow } from "@/components/ui/themed-player-table-row";
+import { SearchNavigationForm, SearchSubmitButton } from "@/components/ui/search-field";
+import { ServerSearchField } from "@/components/ui/server-search-field";
 import { getSession } from "@/lib/auth/session";
 import { getBansPage } from "@/lib/data/bans";
 import { resolvePlayerIdentities, type PlayerIdentityData } from "@/lib/player-identities";
@@ -60,13 +62,10 @@ export default async function BansPage({ searchParams }: { searchParams: Promise
         <div><p className="tapped-kicker"><History aria-hidden="true" /> Server history</p><h2 id="ban-history-title">Ban list</h2></div>
         {listing.available ? <span>{listing.total.toLocaleString()} {listing.total === 1 ? "record" : "records"}</span> : null}
       </div>
-      <form className={styles.search} action="/bans" method="get" role="search" aria-label="Search ban records">
-        <label htmlFor="bans-search">Player name or SteamID
-          <span><Search aria-hidden="true" /><input id="bans-search" name="q" type="search" maxLength={64} defaultValue={query} placeholder="Find a player..." /></span>
-        </label>
-        <button className="button button-primary" type="submit">Search</button>
-        {query ? <Link className={styles.clear} href="/bans">Clear search</Link> : null}
-      </form>
+      <SearchNavigationForm className={styles.search} action="/bans" aria-label="Search ban records" resetFields={["page"]}>
+        <ServerSearchField id="bans-search" name="q" label="Player name or SteamID" maxLength={64} defaultValue={query} placeholder="Find a player..." />
+        <SearchSubmitButton />
+      </SearchNavigationForm>
 
       {!listing.available ? <div className={styles.empty} role="status"><Ban aria-hidden="true" /><h3>Ban history is temporarily unavailable.</h3><p>Please try again in a moment.</p></div>
         : listing.bans.length ? <>

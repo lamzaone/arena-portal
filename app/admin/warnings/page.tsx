@@ -1,6 +1,6 @@
 ﻿import { randomUUID } from "node:crypto";
 import Link from "next/link";
-import { CircleAlert, Search, ShieldCheck } from "lucide-react";
+import { CircleAlert, ShieldCheck } from "lucide-react";
 
 import { getAdminAccess, adminWriteConfigured } from "@/lib/admin/access";
 import { getSession, createAdminActionToken } from "@/lib/auth/session";
@@ -15,6 +15,8 @@ import { StaffSubmenu } from "@/components/staff-submenu";
 import { SignInRequired } from "@/components/sign-in-required";
 import { PlayerSearchField } from "@/components/player-search-field";
 import { PortalToast } from "@/components/success-toast";
+import { SearchNavigationForm, SearchSubmitButton } from "@/components/ui/search-field";
+import { ServerSearchField } from "@/components/ui/server-search-field";
 
 import styles from "./warnings.module.css";
 
@@ -71,7 +73,10 @@ export default async function WarningsPage({ searchParams }: { searchParams: Pro
 
     <section className={`panel ${styles.panel}`} aria-labelledby="warning-history-title">
       <div className={styles.sectionHeading}><div><p className="tapped-kicker"><ShieldCheck aria-hidden="true" /> Moderation history</p><h2 id="warning-history-title">Warning tracker</h2></div><span>{listing.total.toLocaleString()} {listing.total === 1 ? "record" : "records"}</span></div>
-      <form className={styles.search} action="/admin/warnings" method="get" role="search" aria-label="Search warning records"><label htmlFor="warning-search">Player name or SteamID<input id="warning-search" type="search" name="q" defaultValue={query} maxLength={100} placeholder="Find a player..." /></label><button type="submit" className="button button-secondary"><Search aria-hidden="true" />Search</button>{query ? <Link href="/admin/warnings">Clear search</Link> : null}</form>
+      <SearchNavigationForm className={styles.search} action="/admin/warnings" aria-label="Search warning records" resetFields={["page"]}>
+        <ServerSearchField id="warning-search" name="q" label="Player name or SteamID" defaultValue={query} maxLength={100} placeholder="Find a player..." />
+        <SearchSubmitButton variant="secondary" />
+      </SearchNavigationForm>
       {listing.warnings.length ? <DataTable className={styles.tableFrame} tableClassName={`staff-table ${styles.table}`} caption="Staff warning records">
         <thead><tr><th scope="col">Player</th><th scope="col">Reason</th><th scope="col">Issuer</th><th scope="col">Issued / expiry · UTC</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
         <tbody>{listing.warnings.map(warning => {

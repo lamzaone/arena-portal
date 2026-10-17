@@ -1,7 +1,7 @@
 "use client";
 
 import type { InputHTMLAttributes } from "react";
-import { useEffect, useState } from "react";
+import { useSearchDraft } from "@/components/ui/use-search-draft";
 
 import { SearchField } from "@/components/ui/search-field";
 
@@ -28,9 +28,7 @@ export function ServerSearchField({
   rootClassName,
   ...inputProps
 }: ServerSearchFieldProps) {
-  const [value, setValue] = useState(defaultValue);
-
-  useEffect(() => setValue(defaultValue), [defaultValue]);
+  const { draft: value, setDraft: setValue } = useSearchDraft(defaultValue);
 
   return <SearchField {...inputProps} id={id} label={label} value={value} onValueChange={setValue} helpText={helpText} rootClassName={rootClassName} />;
 }

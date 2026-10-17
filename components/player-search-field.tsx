@@ -16,6 +16,8 @@ import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
 import type { PlayerIdentityData } from "@/lib/player-identities";
 import { parsePlayerSearchResults as parsePlayers, type PlayerSearchResult } from "@/lib/player-search";
 import styles from "@/components/player-search-field.module.css";
+import { DEFAULT_SEARCH_DEBOUNCE_MS } from "@/components/ui/search-field";
+import { useSearchDraft } from "@/components/ui/use-search-draft";
 
 export const PLAYER_SEARCH_ENDPOINT = "/api/players/search";
 
@@ -115,8 +117,8 @@ export function PlayerSearchField({
   const errorId = `${inputId}-error`;
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [query, setQuery] = useState(defaultQuery);
   const [selected, setSelected] = useState<PlayerSearchResult | null>(null);
+  const { draft: query, setDraft: setQuery } = useSearchDraft(defaultQuery, draft => selected?.steamId ?? draft);
   const [results, setResults] = useState<PlayerSearchResult[]>([]);
   const [searchState, setSearchState] = useState<SearchState>("idle");
   const [open, setOpen] = useState(false);
@@ -139,10 +141,9 @@ export function PlayerSearchField({
   }, [localPlayers, trimmedQuery]);
 
   useEffect(() => {
-    setQuery(defaultQuery);
-    setSelected(null);
+    if (selected && query !== selected.displayName) setSelected(null);
     setValidationMessage("");
-  }, [defaultQuery]);
+  }, [query, selected]);
 
   useEffect(() => {
     if (disabled) {
@@ -202,7 +203,7 @@ export function PlayerSearchField({
           setSearchState(localMatches.length ? "ready" : "error");
           setOpen(true);
         });
-    }, 300);
+    }, DEFAULT_SEARCH_DEBOUNCE_MS);
 
     return () => {
       window.clearTimeout(timer);
@@ -251,6 +252,8 @@ export function PlayerSearchField({
     inputRef.current?.focus();
     if (autoSubmitOnSelect) {
       window.requestAnimationFrame(() => form?.requestSubmit());
+    } else {
+      window.requestAnimationFrame(() => inputRef.current?.dispatchEvent(new Event("input", { bubbles: true })));
     }
   }
 
@@ -275,6 +278,7 @@ export function PlayerSearchField({
     onQueryChange?.("");
     onSelectionChange?.(null);
     inputRef.current?.focus();
+    window.requestAnimationFrame(() => inputRef.current?.dispatchEvent(new Event("input", { bubbles: true })));
   }
 
   function handleInput(value: string) {
@@ -345,7 +349,7 @@ export function PlayerSearchField({
       <div className={styles.label}>
         <label className={styles.labelText} htmlFor={inputId}>{label}</label>
         <span className={styles.combobox} data-part="control" data-invalid={validationMessage ? "true" : "false"}>
-          <Search className={styles.searchIcon} aria-hidden="true" />
+          {searchState === "loading" ? <LoaderCircle className={`${styles.searchIcon} ${styles.spinner}`} aria-hidden="true" /> : <Search className={styles.searchIcon} aria-hidden="true" />}
           <input
             ref={inputRef}
             className={styles.input}
@@ -372,9 +376,7 @@ export function PlayerSearchField({
             }}
             onKeyDown={handleKeyDown}
           />
-          {searchState === "loading" ? (
-            <span className={styles.trailing} aria-hidden="true"><LoaderCircle className={styles.spinner} /></span>
-          ) : (selected || query) && !disabled ? (
+          {(selected || query) && !disabled ? (
             <button className={styles.trailing} type="button" onClick={clearSelection} aria-label="Clear player search">
               <X aria-hidden="true" />
             </button>

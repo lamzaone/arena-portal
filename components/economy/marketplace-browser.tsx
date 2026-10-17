@@ -46,6 +46,7 @@ import styles from "./player-workspace.module.css";
 import { useItemGridLayout } from "@/components/economy/item-grid";
 import { WeaponInspectButton } from "@/components/economy/weapon-inspect-button";
 import { PortalToast } from "@/components/success-toast";
+import { useSearchDraft } from "@/components/ui/use-search-draft";
 import {
   SearchNavigationForm,
   SearchField,
@@ -1067,10 +1068,10 @@ export function MarketplaceBrowser({
   }
   const layoutPending = measured && pagination.pageSize !== pageSize;
   const walletView = useMemo(() => economyWallet(wallet), [wallet]);
-  const [draft, setDraft] = useState<MarketplaceFilters>(() => ({
+  const { draft, setDraft, recordSubmission, reset: resetDraft } = useSearchDraft<MarketplaceFilters>({
     ...filters,
     itemType: validItemType(filters.itemType),
-  }));
+  });
   const [notice, setNotice] = useState<{
     type: "success" | "error";
     text: string;
@@ -1116,17 +1117,6 @@ export function MarketplaceBrowser({
   // silently change the exact float a player is about to buy. Each card starts
   // on its server-quoted default and lets the player select a specific float.
   const suggestedPurchaseFloat = formatFloat(DEFAULT_MARKET_FLOAT);
-
-  useEffect(() => {
-    setDraft({
-      ...filters,
-      itemType: validItemType(filters.itemType),
-    });
-  }, [
-    filters.itemType,
-    filters.query,
-    filters.rarity,
-  ]);
 
   useEffect(() => {
     if (!measured || draft.query !== filters.query || draft.itemType !== filters.itemType || draft.rarity !== filters.rarity) return;
@@ -1329,6 +1319,7 @@ export function MarketplaceBrowser({
         action="/market"
         instant
         resetFields={["page"]}
+        onNavigate={recordSubmission}
       >
         <input type="hidden" name="pageSize" value={pageSize} />
         <div className="market-filter-heading">
@@ -1387,7 +1378,7 @@ export function MarketplaceBrowser({
             </select>
           </label>
           <div className="market-filter-actions">
-            <Link className="button button-quiet" href={marketHref({ query: "", itemType: "", rarity: "" }, 1, pageSize)} scroll={false}>
+            <Link className="button button-quiet" href={marketHref({ query: "", itemType: "", rarity: "" }, 1, pageSize)} scroll={false} onClick={() => resetDraft({ query: "", itemType: "", rarity: "" })}>
               <X aria-hidden="true" /> Clear filters
             </Link>
           </div>

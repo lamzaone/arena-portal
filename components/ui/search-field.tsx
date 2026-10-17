@@ -13,12 +13,14 @@ import {
   useEffect,
   useContext,
   useRef,
+  useState,
   useTransition,
 } from "react";
 import { useRouter } from "next/navigation";
 
 import { announceNavigationStart } from "@/components/ui/navigation-progress";
 import styles from "@/components/ui/search-field.module.css";
+import { SearchSubmissionContext } from "@/components/ui/use-search-draft";
 
 export const DEFAULT_SEARCH_DEBOUNCE_MS = 280;
 
@@ -31,13 +33,14 @@ type SearchNavigationFormProps = Omit<
   action: string;
   /**
    * Debounces text entry and navigates immediately when a select, checkbox,
-   * or radio changes. Enter still submits immediately.
+   * or radio changes. Enabled by default; Enter still submits immediately.
    */
   instant?: boolean;
   debounceMs?: number;
   /** Query-string fields that should be removed whenever filters change. */
   resetFields?: readonly string[];
   replace?: boolean;
+  onNavigate?: () => void;
 };
 
 /**
@@ -47,21 +50,28 @@ type SearchNavigationFormProps = Omit<
  */
 export function SearchNavigationForm({
   action,
-  instant = false,
+  instant = true,
   debounceMs = DEFAULT_SEARCH_DEBOUNCE_MS,
   resetFields = [],
   replace = true,
   children,
   onChange,
   onInput,
+  onNavigate,
   ...formProps
 }: SearchNavigationFormProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const timerRef = useRef<number | null>(null);
+  const [submissionListeners] = useState(() => new Set<() => void>());
 
-  useEffect(() => () => {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+  useEffect(() => {
+    const cancel = () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    };
+    window.addEventListener("popstate", cancel);
+    return () => { cancel(); window.removeEventListener("popstate", cancel); };
   }, []);
 
   function navigate(form: HTMLFormElement) {
@@ -74,6 +84,8 @@ export function SearchNavigationForm({
     for (const field of resetFields) target.searchParams.delete(field);
     const href = `${target.pathname}${target.search}${target.hash}`;
     const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    onNavigate?.();
+    submissionListeners.forEach(listener => listener());
     if (href !== current) announceNavigationStart();
     startTransition(() => {
       if (replace) router.replace(href, { scroll: false });
@@ -83,11 +95,7 @@ export function SearchNavigationForm({
 
   function schedule(form: HTMLFormElement, delay: number) {
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    if (delay <= 0) {
-      timerRef.current = null;
-      navigate(form);
-      return;
-    }
+    // Let controlled selects/hidden player IDs commit before taking a snapshot.
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null;
       navigate(form);
@@ -107,6 +115,11 @@ export function SearchNavigationForm({
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
     if (target.type !== "search" && target.type !== "text") return;
+    if ((event.nativeEvent as globalThis.InputEvent).isComposing) {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+      return;
+    }
     schedule(event.currentTarget, debounceMs);
   }
 
@@ -128,19 +141,21 @@ export function SearchNavigationForm({
 
   return (
     <SearchNavigationPendingContext.Provider value={pending}>
-      <form
-        {...formProps}
-        action={action}
-        method="get"
-        role={formProps.role ?? "search"}
-        aria-busy={pending || undefined}
-        data-instant-search={instant ? "true" : undefined}
-        onChange={change}
-        onInput={input}
-        onSubmit={submit}
-      >
-        {children}
-      </form>
+      <SearchSubmissionContext.Provider value={submissionListeners}>
+        <form
+          {...formProps}
+          action={action}
+          method="get"
+          role={formProps.role ?? "search"}
+          aria-busy={pending || undefined}
+          data-instant-search={instant ? "true" : undefined}
+          onChange={change}
+          onInput={input}
+          onSubmit={submit}
+        >
+          {children}
+        </form>
+      </SearchSubmissionContext.Provider>
     </SearchNavigationPendingContext.Provider>
   );
 }
@@ -196,7 +211,7 @@ export function SearchField({
     <div data-ui="search-field" className={[styles.root, rootClassName].filter(Boolean).join(" ")}>
       <label className={labelHidden ? "sr-only" : styles.labelText} htmlFor={id}>{label}</label>
       <span className={styles.control} data-part="control">
-        <Search className={styles.icon} aria-hidden="true" />
+        {isPending ? <LoaderCircle className={`${styles.icon} ${styles.buttonSpinner}`} aria-hidden="true" /> : <Search className={styles.icon} aria-hidden="true" />}
         <input
           {...inputProps}
           ref={(node) => {
@@ -213,11 +228,7 @@ export function SearchField({
           aria-describedby={inputProps["aria-describedby"] ?? helpId}
           onChange={(event) => onValueChange(event.currentTarget.value)}
         />
-        {isPending ? (
-          <span className={styles.pending} aria-hidden="true">
-            <LoaderCircle />
-          </span>
-        ) : value && !disabled ? (
+        {value && !disabled ? (
           <button
             className={styles.clear}
             type="button"
@@ -267,7 +278,7 @@ export function SearchSubmitButton({
         className,
       ].filter(Boolean).join(" ")}
       type={type}
-      disabled={props.disabled || isPending}
+      disabled={props.disabled}
       aria-busy={isPending || undefined}
     >
       {isPending ? <LoaderCircle className={styles.buttonSpinner} aria-hidden="true" /> : <Search aria-hidden="true" />}

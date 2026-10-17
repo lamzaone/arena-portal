@@ -88,7 +88,7 @@ test("public bans access, navigation, and responsive presentation", async (t) =>
     });
     await t.test("search, paging and desktop/phone navigation retain their semantics", async () => {
       for (const width of [375, 768, 1024, 1440]) await withPage("guest", width, async page => {
-        assert.equal(await page.getByLabel("Player name or SteamID").inputValue(), "Arena & friend");
+        assert.equal(await page.getByRole("searchbox", { name: "Player name or SteamID", exact: true }).inputValue(), "Arena & friend");
         const form = page.locator('form[action="/bans"]');
         assert.equal((await form.getAttribute("method")).toLowerCase(), "get");
         const next = new URL(await page.getByRole("link", { name: "Next", exact: false }).getAttribute("href"), "https://tapped.ro");

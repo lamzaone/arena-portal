@@ -6,8 +6,8 @@ import styles from "./profile-moderation-history.module.css";
 export async function PlayerWarningHistory({ steamId }: { steamId: string }) {
   let warnings;
   try { warnings = await getPlayerWarnings(steamId); }
-  catch { return <section className="panel"><h2>Warnings</h2><p>Warning history is temporarily unavailable.</p></section>; }
-  return <section className={`panel ${styles.card}`} aria-labelledby="warning-history-title">
+  catch { return <section className={`panel ${styles.section}`}><h2>Warnings</h2><p>Warning history is temporarily unavailable.</p></section>; }
+  return <section className={`panel ${styles.card} ${styles.section}`} aria-labelledby="warning-history-title">
     <div className={styles.cardHeading}><h2 id="warning-history-title">Warnings</h2><span className={styles.count}>{warnings.length} {warnings.length === 1 ? "record" : "records"}</span></div>
     {warnings.length ? <ul className={styles.records}>{warnings.map(warning => <li key={warning.id} className={styles.record}>
       <strong className={styles.reason}>{warning.reason}</strong>

@@ -60,7 +60,8 @@
     "test:market-pricing": "node --experimental-strip-types --test app/api/economy/custom-finish-routes.test.ts lib/economy/external-market-prices.test.ts lib/economy/provider-cache.test.ts lib/economy/market-pricing.test.ts lib/economy/price-refresh.test.ts lib/economy/market-selection.test.ts",
     "test:item-grid": "node --experimental-strip-types --test lib/economy/item-grid-layout.test.ts app/api/economy/trade-partner-inventory.test.ts",
     "test:moderation": "node --experimental-transform-types --test lib/data/bans.test.ts lib/data/warnings.test.ts lib/moderation/warning-policy.test.ts",
-    "test:moderation:browser": "node --test app/bans/bans.browser.test.mjs app/admin/warnings/warnings.browser.test.mjs"
+    "test:moderation:browser": "node --test app/bans/bans.browser.test.mjs app/admin/warnings/warnings.browser.test.mjs",
+    "test:search:browser": "node --test components/ui/search-field.browser.test.mjs"
   },
   "dependencies": {
     "@skinhub/cdn": "0.3.0",

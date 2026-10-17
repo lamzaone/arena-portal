@@ -3,16 +3,16 @@
 .sectionHeading h2 { margin: 0; font-family: var(--font-display); font-size: clamp(1.3rem, 2.3vw, 1.8rem); font-weight: 400; letter-spacing: -.03em; }
 .sectionHeading > span { color: var(--theme-text-subtle); font-size: 12px; line-height: 1.6; }
 .issueForm { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 18px; }
-.issueForm > label, .search > label, .revokeForm label { display: grid; gap: 8px; min-width: 0; color: var(--theme-text-muted); font-size: 12px; font-weight: 600; }
-.issueForm :is(input, textarea), .search input, .revokeForm input { min-height: 44px; margin: 0; border: 1px solid var(--theme-border); border-radius: var(--theme-radius); background: var(--theme-control-bg); color: var(--theme-text); font: inherit; }
-.issueForm > label :is(input, textarea), .search input { padding: 10px 12px; }
+.issueForm > label, .revokeForm label { display: grid; gap: 8px; min-width: 0; color: var(--theme-text-muted); font-size: 12px; font-weight: 600; }
+.issueForm :is(input, textarea), .revokeForm input { min-height: 44px; margin: 0; border: 1px solid var(--theme-border); border-radius: var(--theme-radius); background: var(--theme-control-bg); color: var(--theme-text); font: inherit; }
+.issueForm > label :is(input, textarea) { padding: 10px 12px; }
 .issueForm textarea { resize: vertical; line-height: 1.6; }
 .issueForm label > small { color: var(--theme-text-subtle); font-size: 11px; font-weight: 400; }
 .reasonField { grid-column: 1 / -1; }
 .formFooter { display: flex; grid-column: 1 / -1; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding-top: 18px; border-top: 1px solid var(--theme-border); }
 .formFooter > span { color: var(--theme-text-subtle); font-size: 12px; }
 .search { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 20px; padding: 16px; border: 1px solid var(--theme-border); border-radius: var(--theme-radius); background: var(--theme-surface-muted); }
-.search > label { flex: 1 1 240px; max-width: 500px; }
+.search > div { flex: 1 1 240px; max-width: 500px; }
 .search > a { display: inline-flex; min-height: 44px; align-items: center; color: var(--theme-text-muted); font-size: 12px; text-decoration: underline; text-underline-offset: 4px; }
 .tableFrame { border: 1px solid var(--theme-border); border-radius: var(--theme-radius); }
 .table { min-width: 1120px; }
@@ -51,5 +51,5 @@
   .formFooter { align-items: stretch; flex-direction: column; }
   .formFooter > button { justify-content: center; }
   .search { padding: 12px; }
-  .search > label { flex-basis: 100%; }
+  .search > div { flex-basis: 100%; }
 }
