@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowLeft, ArrowRight, Ban, Clock3, Crosshair, Settings2, ShieldCheck, Target, UserRound, VolumeX } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Award, Ban, Clock3, Crosshair, Settings2, ShieldCheck, Target, ThumbsUp, UserRound, VolumeX } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import type { PlayerArenaStats } from "@/lib/data/player-arena-stats";
 
@@ -17,6 +17,9 @@ import type { ProfileHistoryPages } from "@/components/profile-history-paginatio
 import type { PlayerModerationHistory } from "@/lib/data/player-moderation-history";
 import type { PublicStatus } from "@/lib/server-link/protocol";
 import { ProfileSettingsForm, type ProfileSettingsValue } from "@/components/profile-settings-form";
+import { ProfileCommentSettings, ProfileCommunityPanel } from "@/components/profile-community";
+import type { ProfileCommunity } from "@/lib/profile-community";
+import communityStyles from "@/components/profile-community.module.css";
 import {
   ProfileThemeAvatarAdornment,
   ProfileThemeHeroDecoration,
@@ -54,6 +57,12 @@ type PlayerProfilePageProps = {
   initialServerStatus?: PublicStatus | null;
   moderationHistory?: PlayerModerationHistory;
   historyPages?: ProfileHistoryPages;
+  community?: {
+    initialCommunity: ProfileCommunity;
+    initialIdentities: Record<string, PlayerIdentityData>;
+    csrf: string;
+    viewerSteamId: string | null;
+  };
   profileSettings?: {
     csrf: string;
     initialSettings: ProfileSettingsValue;
@@ -199,7 +208,7 @@ function identityMembershipLabel(
   return "Custom portal group";
 }
 
-export function PlayerProfilePage({ staffControls, arenaStats, profile, identity, steamId, steamProfile, discordProfileUrl, isOwnProfile, isAuthenticated, profileInventory, profileThemeKey, relatedPlayerIdentities = {}, settingsOpen = false, profileSettings, initialServerStatus, moderationHistory, historyPages }: PlayerProfilePageProps) {
+export function PlayerProfilePage({ staffControls, arenaStats, profile, identity, steamId, steamProfile, discordProfileUrl, isOwnProfile, isAuthenticated, profileInventory, profileThemeKey, relatedPlayerIdentities = {}, settingsOpen = false, profileSettings, initialServerStatus, moderationHistory, historyPages, community }: PlayerProfilePageProps) {
   const displayName = steamProfile?.name ?? profile.displayName ?? "ARENA player";
   const dashboard = isDashboard(profile) ? profile : null;
   const activeBan = dashboard?.bans.find((ban) => isActiveSanction(ban.expiresAt));
@@ -258,6 +267,10 @@ export function PlayerProfilePage({ staffControls, arenaStats, profile, identity
                   <a className="public-player-steam-identity" href={steamProfileUrl} target="_blank" rel="noreferrer" title={`Open ${displayName}'s Steam profile`}>{steamId}</a>
                   <CopyToClipboardButton value={steamId} label={`Copy ${displayName}'s SteamID64`} />
                 </div>
+                {community?.initialCommunity.available && !showSettings ? <div className={communityStyles.heroSummary} aria-label="Community standing">
+                  <a href="#community"><ThumbsUp aria-hidden="true" /><span>Reputation <strong>{community.initialCommunity.reputation > 0 ? "+" : ""}{formatCount(community.initialCommunity.reputation)}</strong></span></a>
+                  <a href="#community"><Award aria-hidden="true" /><span>Commends <strong>{formatCount(community.initialCommunity.commendationTotal)}</strong></span></a>
+                </div> : null}
                 {discordProfileUrl ? <a className="profile-discord-link" href={discordProfileUrl} target="_blank" rel="noopener noreferrer" aria-label={`Open ${displayName}'s Discord profile in a new tab`}>
                   <DiscordMark /><span>Discord profile</span><ArrowRight aria-hidden="true" />
                 </a> : null}
@@ -288,6 +301,7 @@ export function PlayerProfilePage({ staffControls, arenaStats, profile, identity
                 <h2 id="profile-settings-title">Settings &amp; customisation</h2>
                 <p>Control who can browse your inventory and choose the profile presentation saved to this ARENA account.</p>
               </header>
+              {community ? <ProfileCommentSettings key={steamId} steamId={steamId} csrf={community.csrf} initialCommunity={community.initialCommunity} /> : null}
               <ProfileSettingsForm csrf={profileSettings.csrf} initialSettings={profileSettings.initialSettings} />
             </> : null}
           </section> : undefined}
@@ -340,6 +354,7 @@ export function PlayerProfilePage({ staffControls, arenaStats, profile, identity
           <HitMap stats={profile.hitStats} />
         </section> : null}
 
+        {!showSettings && community ? <ProfileCommunityPanel key={steamId} steamId={steamId} {...community} /> : null}
         <PlayerWarningHistory steamId={steamId} pages={historyPages} />
         {isOwnProfile && dashboard ? <ProfileModerationHistory
           steamId={steamId}

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import type { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 
 export type RecruitmentStatus = "submitted" | "reviewing" | "accepted" | "declined";
+export type RecruitmentFilters = { name: string; status: "all" | RecruitmentStatus };
 export type RecruitmentApplication = {
   id: string;
   steamId: string;
@@ -14,6 +15,7 @@ export type RecruitmentApplication = {
   steamGroupMember: boolean;
   playtimeSeconds: number | null;
   reason: string;
+  adminResponse: string | null;
   status: RecruitmentStatus;
   createdAt: number;
   reviewedBy: string | null;
@@ -32,8 +34,23 @@ type SettingsRow = RowDataPacket & { is_open: number; updated_by: string | null;
 type ApplicationRow = RowDataPacket & {
   id: string; steam_id: string; nickname: string; age: number; discord_profile: string;
   discord_linked: number; steam_group_member: number; playtime_seconds: number | string | null;
-  reason: string; status: RecruitmentStatus; created_at: number | string; reviewed_by: string | null; reviewed_at: number | string | null;
+  reason: string; admin_response?: string | null; status: RecruitmentStatus; created_at: number | string; reviewed_by: string | null; reviewed_at: number | string | null;
 };
+
+export function normalizeRecruitmentFilters(input?: { name?: string; status?: string }): RecruitmentFilters {
+  const name = typeof input?.name === "string" ? input.name.normalize("NFKC").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 128) : "";
+  const status = typeof input?.status === "string" ? input.status.trim().toLowerCase() : "all";
+  return { name, status: ["submitted", "reviewing", "accepted", "declined"].includes(status) ? status as RecruitmentStatus : "all" };
+}
+
+function adminResponse(value: string) {
+  if (typeof value !== "string") throw new Error("application-response");
+  // Feedback is stored and rendered as plain text. Preserve useful newlines,
+  // strip invisible control characters, and bound the normalized content.
+  const response = value.replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
+  if (response.length > 2000) throw new Error("application-response");
+  return response || null;
+}
 
 function validSteamId(value: string) {
   if (!/^7656119\d{10}$/.test(value)) throw new Error("application-details");
@@ -53,7 +70,7 @@ function application(row: ApplicationRow): RecruitmentApplication {
     discordProfile: row.discord_profile, discordLinked: Boolean(Number(row.discord_linked)),
     steamGroupMember: Boolean(Number(row.steam_group_member)),
     playtimeSeconds: row.playtime_seconds === null ? null : Number(row.playtime_seconds),
-    reason: row.reason, status: row.status, createdAt: Number(row.created_at),
+    reason: row.reason, adminResponse: row.admin_response ?? null, status: row.status, createdAt: Number(row.created_at),
     reviewedBy: row.reviewed_by, reviewedAt: row.reviewed_at === null ? null : Number(row.reviewed_at),
   };
 }
@@ -98,13 +115,24 @@ export function createStaffRecruitmentRepository(pool: Pick<Pool, "query" | "get
       const [rows] = await pool.query<ApplicationRow[]>("SELECT * FROM portal_staff_applications WHERE steam_id = ? ORDER BY created_at DESC, id DESC LIMIT 1", [steamId]);
       return rows[0] ? application(rows[0]) : null;
     },
-    async getPage(requestedPage: number) {
-      const [counts] = await pool.query<Array<RowDataPacket & { total: number | string }>>("SELECT COUNT(*) AS total FROM portal_staff_applications");
+    async getPage(requestedPage: number, inputFilters?: { name?: string; status?: string }) {
+      const filters = normalizeRecruitmentFilters(inputFilters);
+      const conditions: string[] = [];
+      const values: string[] = [];
+      if (filters.name) {
+        // '=' is an explicit LIKE escape character on both MariaDB and MySQL,
+        // independent of the connection's NO_BACKSLASH_ESCAPES SQL mode.
+        conditions.push("nickname LIKE ? ESCAPE '='");
+        values.push(`%${filters.name.replace(/[=%_]/g, character => `=${character}`)}%`);
+      }
+      if (filters.status !== "all") { conditions.push("status = ?"); values.push(filters.status); }
+      const where = conditions.length ? ` WHERE ${conditions.join(" AND ")}` : "";
+      const [counts] = await pool.query<Array<RowDataPacket & { total: number | string }>>(`SELECT COUNT(*) AS total FROM portal_staff_applications${where}`, values);
       const total = Number(counts[0]?.total ?? 0);
       const pageCount = Math.max(1, Math.ceil(total / 25));
       const page = Math.min(pageCount, Math.max(1, Number.isSafeInteger(requestedPage) ? requestedPage : 1));
-      const [rows] = await pool.query<ApplicationRow[]>("SELECT * FROM portal_staff_applications ORDER BY created_at DESC, id DESC LIMIT 25 OFFSET ?", [(page - 1) * 25]);
-      return { applications: rows.map(application), total, page, pageCount };
+      const [rows] = await pool.query<ApplicationRow[]>(`SELECT * FROM portal_staff_applications${where} ORDER BY created_at DESC, id DESC LIMIT 25 OFFSET ?`, [...values, (page - 1) * 25]);
+      return { applications: rows.map(application), total, page, pageCount, filters };
     },
     async submit(input: RecruitmentSubmission) {
       validSteamId(input.steamId);
@@ -141,15 +169,23 @@ export function createStaffRecruitmentRepository(pool: Pick<Pool, "query" | "get
         throw error;
       }
     },
-    async review(id: string, status: string, actorSteamId: string) {
+    async review(id: string, status: string, actorSteamId: string, response?: string) {
       validSteamId(actorSteamId);
-      if (!/^[0-9a-f-]{36}$/i.test(id) || !["reviewing", "accepted", "declined"].includes(status)) throw new Error("application-details");
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) || !["reviewing", "accepted", "declined"].includes(status)) throw new Error("application-details");
+      const normalizedResponse = response === undefined ? undefined : adminResponse(response);
       return transaction(pool, async (connection) => {
         const [rows] = await connection.query<ApplicationRow[]>("SELECT * FROM portal_staff_applications WHERE id = ? FOR UPDATE", [id]);
         if (!rows[0]) throw new Error("application-missing");
-        if (!["submitted", "reviewing"].includes(rows[0].status)) throw new Error("application-closed");
-        await connection.execute("UPDATE portal_staff_applications SET status = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?", [status, actorSteamId, Date.now(), id]);
-        await audit(connection, actorSteamId, `recruitment.application.${status}`, id);
+        const current = rows[0];
+        const sameStatus = current.status === status;
+        if (!["submitted", "reviewing"].includes(current.status) && !sameStatus) throw new Error("application-closed");
+        if (sameStatus && (normalizedResponse === undefined || normalizedResponse === (current.admin_response ?? null))) return;
+        if (normalizedResponse === undefined) {
+          await connection.execute("UPDATE portal_staff_applications SET status = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?", [status, actorSteamId, Date.now(), id]);
+        } else {
+          await connection.execute("UPDATE portal_staff_applications SET status = ?, admin_response = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?", [status, normalizedResponse, actorSteamId, Date.now(), id]);
+        }
+        await audit(connection, actorSteamId, `recruitment.application.${sameStatus ? "response_updated" : status}`, id);
       });
     },
   };

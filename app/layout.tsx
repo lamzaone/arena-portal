@@ -10,6 +10,7 @@ import { NavigationProgress } from "@/components/ui/navigation-progress";
 import { PanelEffects } from "@/components/ui/panel-effects";
 import { ButtonActionGuard } from "@/components/ui/button-action-guard";
 import { ModerationActionRuntime } from "@/components/ui/moderation-action-runtime";
+import { PortalVisualEffects } from "@/components/ui/portal-visual-effects";
 import { getSession } from "@/lib/auth/session";
 import { rootMetadata } from "@/lib/seo/site";
 import { resolvePortalThemeSurface } from "@/lib/themes/registry";
@@ -32,6 +33,8 @@ import "./navigation-system.css";
 import "./motion.css";
 import "./themes/rank-details.css";
 import "./ambient-polish.css";
+import "./themes/atmosphere.css";
+import "./themes/collection.css";
 
 export const metadata: Metadata = rootMetadata;
 
@@ -56,6 +59,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <GlobalThemeDocumentEffects themeKey={session?.profileThemeKey} />
         <CursorGridBackground />
         <PanelEffects />
+        <PortalVisualEffects />
         <ButtonActionGuard />
         <Suspense fallback={null}>
           <ProgressiveFormRuntime />

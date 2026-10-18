@@ -1,4 +1,5 @@
-import { Clock3, Coins, Sparkles, UsersRound } from "lucide-react";
+import Link from "next/link";
+import { ArrowUpRight, Clock3, Coins, Crown, Sparkles, UsersRound } from "lucide-react";
 
 import { formatDate } from "@/components/formatters";
 import { PlayerIdentity } from "@/components/player-identity";
@@ -67,6 +68,11 @@ export default async function VipPerksPage({ searchParams }: { searchParams: Pro
       </section>
 
       <VipSectionNav active="perks" />
+
+      <div className={styles.perkGuide}>
+        <div><span className={styles.guideIcon}><Coins aria-hidden="true" /></span><div><strong>Just the extras you want</strong><p>Use Tokens to activate individual perks immediately. Buying the same perk again adds time to its current expiry.</p></div></div>
+        <Link href="/vip"><span className={styles.guideIcon}><Crown aria-hidden="true" /></span><span><strong>Looking for a full membership?</strong><small>Compare VIP tiers and their included benefits</small></span><ArrowUpRight aria-hidden="true" /></Link>
+      </div>
 
       {storageError ? <aside className={styles.storageNotice} role="status"><Sparkles aria-hidden="true" /><div><strong>Perk offers are temporarily unavailable.</strong><span>{migrationNeeded ? "The perk catalogue is being updated. Please check back shortly." : "Please check back shortly or contact staff about an existing perk."}</span></div></aside> : null}
 

@@ -10,7 +10,7 @@ export type PortalThemeSurface =
  * into their server dependency graph.
  */
 export type PortalThemeIconKey = "crown" | "zap" | "shield" | "shieldCheck" | "gem" | "medal" | "sparkles" | "eclipse";
-export type PortalThemeBackgroundKey = "tapGodRain" | "rankAtmosphere" | "shadowAtmosphere";
+export type PortalThemeBackgroundKey = "tapGodRain" | "rankAtmosphere" | "shadowAtmosphere" | "portalAtmosphere";
 
 export type PortalThemeBadge = {
   className: string;

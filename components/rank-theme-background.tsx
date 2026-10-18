@@ -1,7 +1,9 @@
 import { RankThemeGeometry } from "@/components/rank-theme-geometry";
+import { getPortalTheme } from "@/lib/themes/registry";
 
 /** Decorative geometry only: no timers, pointer handlers, or client bundle. */
 export function RankThemeBackground({ themeKey }: { themeKey: string }) {
+  const level = getPortalTheme(themeKey).progression?.level ?? 1;
   return (
     <div className="rank-theme-backdrop" aria-hidden="true">
       <div className="rank-backdrop-grid" />
@@ -11,6 +13,9 @@ export function RankThemeBackground({ themeKey }: { themeKey: string }) {
         {Array.from({ length: 6 }, (_, index) => <i key={index} />)}
       </div>
       <div className="rank-backdrop-halo" />
+      <div className="rank-backdrop-planes" data-effect-quality={level}>
+        {Array.from({ length: level }, (_, index) => <span key={index} />)}
+      </div>
       <RankThemeGeometry themeKey={themeKey} />
     </div>
   );

@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowDownLeft, ArrowUpRight, Check, Coins, X } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Check, ChevronDown, Clock3, Coins, History, X } from "lucide-react";
+import { useState } from "react";
 
 import { formatPortalDate } from "@/components/formatters";
 import { PlayerIdentity } from "@/components/player-identity";
@@ -22,19 +23,21 @@ type TradeActivityProps = {
   onCancel: (tradeId: string) => void;
 };
 
-function TradeAssets({ tradeId, side, title, items, tokens }: {
+function TradeAssets({ tradeId, side, title, items, tokens, headingLevel }: {
   tradeId: string;
   side: "receive" | "give";
   title: string;
   items: EconomyTradeView["offeredItems"];
   tokens: string;
+  headingLevel: 5 | 6;
 }) {
   const headingId = `trade-${tradeId}-${side}`;
+  const Heading = headingLevel === 5 ? "h5" : "h6";
 
   return (
     <section className={styles.assets} aria-labelledby={headingId}>
       <div className={styles.assetsHeading}>
-        <h5 id={headingId}>{title}</h5>
+        <Heading id={headingId}>{title}</Heading>
         <span>{items.length} item{items.length === 1 ? "" : "s"}</span>
       </div>
       <p className={styles.tokens}><Coins aria-hidden="true" /><strong>{formatTokens(tokens)}</strong> tokens</p>
@@ -59,10 +62,11 @@ function TradeAssets({ tradeId, side, title, items, tokens }: {
   );
 }
 
-function TradeOffer({ trade, counterpartyIdentities, pending, pendingAction, onRespond, onCancel }: Omit<TradeActivityProps, "trades"> & { trade: EconomyTradeView }) {
+function TradeOffer({ trade, counterpartyIdentities, pending, pendingAction, onRespond, onCancel, headingLevel = 4 }: Omit<TradeActivityProps, "trades"> & { trade: EconomyTradeView; headingLevel?: 4 | 5 }) {
   const incoming = trade.direction === "incoming";
   const outgoing = trade.direction === "outgoing";
   const open = trade.status.toLowerCase() === "pending";
+  const Heading = headingLevel === 4 ? "h4" : "h5";
   const player = counterpartyIdentities[trade.counterpartySteamId] ?? {
     steamId: trade.counterpartySteamId,
     displayName: trade.counterpartySteamId,
@@ -80,11 +84,12 @@ function TradeOffer({ trade, counterpartyIdentities, pending, pendingAction, onR
       containerKind="record"
       ownerSteamId={trade.counterpartySteamId}
       profileThemeKey={player.profileThemeKey}
+      data-trade-status={trade.status.toLowerCase()}
       aria-label={`${incoming ? "Incoming" : outgoing ? "Outgoing" : "Trade"} offer #${trade.id}`}
     >
       <header className={styles.cardHeader}>
         <div className={styles.cardTitle}>
-          <h4>{incoming ? <ArrowDownLeft aria-hidden="true" /> : <ArrowUpRight aria-hidden="true" />}{incoming ? "Incoming offer" : outgoing ? "Outgoing offer" : "Trade offer"}</h4>
+          <Heading>{incoming ? <ArrowDownLeft aria-hidden="true" /> : <ArrowUpRight aria-hidden="true" />}{incoming ? "Incoming offer" : outgoing ? "Outgoing offer" : "Trade offer"}</Heading>
           <span className={`${styles.status}${open ? ` ${styles.pendingStatus}` : ""}`}>{humanize(trade.status)}</span>
         </div>
         <div className={styles.counterparty}>
@@ -103,6 +108,7 @@ function TradeOffer({ trade, counterpartyIdentities, pending, pendingAction, onR
           title={incoming || outgoing ? "You receive" : "Requested"}
           items={incoming ? trade.offeredItems : trade.requestedItems}
           tokens={incoming ? trade.offeredTokens : trade.requestedTokens}
+          headingLevel={headingLevel === 4 ? 5 : 6}
         />
         <TradeAssets
           tradeId={trade.id}
@@ -110,6 +116,7 @@ function TradeOffer({ trade, counterpartyIdentities, pending, pendingAction, onR
           title={incoming || outgoing ? "You give" : "Offered"}
           items={incoming ? trade.requestedItems : trade.offeredItems}
           tokens={incoming ? trade.requestedTokens : trade.offeredTokens}
+          headingLevel={headingLevel === 4 ? 5 : 6}
         />
       </div>
       {open && (incoming || outgoing) ? <footer className={styles.actions}>
@@ -122,32 +129,73 @@ function TradeOffer({ trade, counterpartyIdentities, pending, pendingAction, onR
   );
 }
 
+const PENDING_PAGE_SIZE = 4;
+const HISTORY_PAGE_SIZE = 6;
+
+function PendingTradeGroup({ direction, title, description, empty, trades, ...actions }: Omit<TradeActivityProps, "trades"> & {
+  direction: string;
+  title: string;
+  description: string;
+  empty: string;
+  trades: EconomyTradeView[];
+}) {
+  const [visibleCount, setVisibleCount] = useState(PENDING_PAGE_SIZE);
+  const offers = trades.filter((trade) => trade.direction === direction);
+  const remaining = Math.max(0, offers.length - visibleCount);
+  const headingId = `trade-pending-${direction}-title`;
+  const offersId = `trade-pending-${direction}-offers`;
+
+  return (
+    <section className={`${styles.group}${direction === "unknown" ? ` ${styles.otherGroup}` : ""}`} aria-labelledby={headingId}>
+      <header className={styles.groupHeader}>
+        <div><h4 id={headingId}>{title}</h4><p>{description}</p></div>
+        <span className={styles.count}>{offers.length} pending</span>
+      </header>
+      {offers.length ? <>
+        <div id={offersId} className={styles.offers}>{offers.slice(0, visibleCount).map((trade) => <TradeOffer key={trade.id} trade={trade} headingLevel={5} {...actions} />)}</div>
+        {remaining ? <button type="button" className={`button button-secondary ${styles.showMore}`} aria-controls={offersId} onClick={() => setVisibleCount((count) => count + PENDING_PAGE_SIZE)}><ChevronDown aria-hidden="true" /> Show more {title.toLowerCase()} ({remaining})</button> : null}
+      </> : <p className={styles.emptyGroup}>{empty}</p>}
+    </section>
+  );
+}
+
 export function TradeActivity({ trades, ...actions }: TradeActivityProps) {
+  const [historyVisibleCount, setHistoryVisibleCount] = useState(HISTORY_PAGE_SIZE);
+  const pendingTrades = trades.filter((trade) => trade.status.toLowerCase() === "pending");
+  const finishedTrades = trades.filter((trade) => trade.status.toLowerCase() !== "pending");
+  const remainingHistory = Math.max(0, finishedTrades.length - historyVisibleCount);
   const groups = [
-    { direction: "incoming", title: "Incoming", description: "Offers sent to you.", empty: "No incoming offers." },
-    { direction: "outgoing", title: "Outgoing", description: "Offers you have sent.", empty: "No outgoing offers." },
-    ...(trades.some((trade) => trade.direction === "unknown") ? [{ direction: "unknown", title: "Other offers", description: "Your remaining trade records.", empty: "" }] : []),
+    { direction: "incoming", title: "Incoming", description: "Review and respond to these offers.", empty: "You are all caught up. No offers need your response." },
+    { direction: "outgoing", title: "Outgoing", description: "Waiting for the other player to respond.", empty: "No open offers sent by you." },
+    ...(pendingTrades.some((trade) => trade.direction === "unknown") ? [{ direction: "unknown", title: "Other pending offers", description: "Open records with unavailable direction details.", empty: "" }] : []),
   ];
 
   return (
     <section id="trade-activity" className={`history-section ${styles.activity}`} aria-labelledby="trade-activity-title">
-      <div className="section-heading compact"><p className="eyebrow">Trade activity</p><h2 id="trade-activity-title">Incoming and outgoing offers</h2></div>
-      {trades.length ? <div className={styles.groups}>
-        {groups.map((group) => {
-          const offers = trades.filter((trade) => trade.direction === group.direction)
-            .sort((a, b) => Number(b.status.toLowerCase() === "pending") - Number(a.status.toLowerCase() === "pending"));
-          const pendingCount = offers.filter((trade) => trade.status.toLowerCase() === "pending").length;
-          return (
-            <section key={group.direction} className={`${styles.group}${group.direction === "unknown" ? ` ${styles.otherGroup}` : ""}`} aria-labelledby={`trade-${group.direction}-title`}>
-              <header className={styles.groupHeader}>
-                <div><h3 id={`trade-${group.direction}-title`}>{group.title}</h3><p>{group.description}</p></div>
-                <span className={styles.count}>{pendingCount} pending · {offers.length} total</span>
-              </header>
-              {offers.length ? <div className={styles.offers}>{offers.map((trade) => <TradeOffer key={trade.id} trade={trade} {...actions} />)}</div> : <p className={styles.emptyGroup}>{group.empty}</p>}
-            </section>
-          );
-        })}
-      </div> : <EconomyEmptyState title="No trade offers yet" description="Find another player above to exchange eligible inventory items or Tokens." />}
+      <div className="section-heading compact"><p className="eyebrow">Trade activity</p><h2 id="trade-activity-title">Your offers, at a glance</h2></div>
+      {trades.length ? <>
+        <section className={styles.pendingSection} aria-labelledby="trade-pending-title">
+          <header className={styles.sectionHeader}>
+            <span className={styles.sectionIcon}><Clock3 aria-hidden="true" /></span>
+            <div><p className={styles.sectionLabel}>Open offers</p><h3 id="trade-pending-title">Pending trades</h3><p>Offers stay here until they are accepted, declined, cancelled, or expired.</p></div>
+            <span className={`${styles.totalCount} ${styles.pendingCount}`}>{pendingTrades.length}<small>pending</small></span>
+          </header>
+          <div className={styles.groups}>
+            {groups.map((group) => <PendingTradeGroup key={group.direction} {...group} trades={pendingTrades} {...actions} />)}
+          </div>
+        </section>
+        <section className={styles.finishedSection} aria-labelledby="trade-finished-title">
+          <header className={styles.sectionHeader}>
+            <span className={styles.sectionIcon}><History aria-hidden="true" /></span>
+            <div><p className={styles.sectionLabel}>Past activity</p><h3 id="trade-finished-title">Finished trades</h3><p>Completed, declined, cancelled, and expired offers. No action needed.</p></div>
+            <span className={styles.totalCount}>{finishedTrades.length}<small>finished</small></span>
+          </header>
+          {finishedTrades.length ? <>
+            <div id="trade-finished-offers" className={`${styles.groups} ${styles.historyGrid}`}>{finishedTrades.slice(0, historyVisibleCount).map((trade) => <TradeOffer key={trade.id} trade={trade} {...actions} />)}</div>
+            {remainingHistory ? <button type="button" className={`button button-secondary ${styles.showMore}`} aria-controls="trade-finished-offers" onClick={() => setHistoryVisibleCount((count) => count + HISTORY_PAGE_SIZE)}><ChevronDown aria-hidden="true" /> Show more finished trades ({remainingHistory})</button> : null}
+          </> : <p className={styles.emptyGroup}>Your finished trades will appear here once an offer is resolved.</p>}
+        </section>
+      </> : <EconomyEmptyState title="No trade offers yet" description="Find another player above to exchange eligible inventory items or Tokens." />}
     </section>
   );
 }

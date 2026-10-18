@@ -39,6 +39,7 @@ export function TapGodRainBackground() {
         ))}
       </div>
       <span className="tap-god-rain-flash" />
+      <div className="tap-god-sigil-frames"><span /><span /><span /></div>
     </div>
   );
 }

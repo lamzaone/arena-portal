@@ -4,6 +4,7 @@ import type { ComponentType, SVGProps } from "react";
 import { TapGodRainBackground } from "@/components/tap-god-rain-background";
 import { RankThemeBackground } from "@/components/rank-theme-background";
 import { ShadowProfileAura, ShadowThemeBackground } from "@/components/shadow-theme-background";
+import { PortalAtmosphere } from "@/components/portal-atmosphere";
 import type {
   PortalThemeBackgroundKey,
   PortalThemeIconKey,
@@ -26,6 +27,7 @@ const themeBackgrounds = {
   tapGodRain: TapGodRainBackground,
   rankAtmosphere: RankThemeBackground,
   shadowAtmosphere: ShadowThemeBackground,
+  portalAtmosphere: PortalAtmosphere,
 } satisfies Record<PortalThemeBackgroundKey, ComponentType<{ themeKey: string }>>;
 
 const themeHeroDecorations = {

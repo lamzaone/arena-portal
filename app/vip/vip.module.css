@@ -1,3 +1,64 @@
+.page { --membership-radius: min(var(--theme-radius), 7px); }
+.hero { position: relative; }
+.heroLinks { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; margin-top: 24px; }
+.heroLinks a, .currentLink { display: inline-flex; align-items: center; gap: 8px; color: var(--theme-accent-soft); font-size: 12px; font-weight: 750; text-decoration: none; transition: color 180ms ease; }
+.heroLinks a:hover, .currentLink:hover { color: var(--theme-text); }
+.heroLinks a > svg, .currentLink > svg { width: 15px; height: 15px; }
+.currentLink { position: relative; margin-top: 15px; padding-top: 13px; border-top: 1px solid var(--theme-border); font-size: 11px; }
+.guide { display: grid; gap: 20px; padding: 28px 0 0; scroll-margin-top: 100px; }
+.guideHeading { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .7fr); align-items: end; gap: 24px; }
+.guideHeading h2 { margin: 6px 0 0; color: var(--theme-text); font-family: var(--font-display); font-size: clamp(30px, 3.5vw, 46px); font-weight: 400; letter-spacing: -.025em; line-height: 1.05; }
+.guideHeading > p { max-width: 440px; margin: 0; color: var(--theme-text-muted); font-size: 13px; line-height: 1.7; }
+.tierOverview { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(175px, 100%), 1fr)); gap: 10px; }
+.tierShortcut { position: relative; isolation: isolate; display: flex; min-width: 0; overflow: hidden; flex-direction: column; gap: 14px; padding: 19px 16px 15px; border: 1px solid color-mix(in srgb, var(--vip-tier-color) 33%, var(--theme-border)); border-top: 3px solid var(--vip-tier-color); border-radius: var(--membership-radius); color: var(--theme-text); background: radial-gradient(ellipse at 80% 0, color-mix(in srgb, var(--vip-tier-color) 12%, transparent), transparent 70%), linear-gradient(140deg, var(--theme-surface-raised), var(--theme-surface)); text-decoration: none; box-shadow: inset 0 1px 0 color-mix(in srgb, var(--theme-text) 5%, transparent), 0 10px 30px rgb(0 0 0 / .1); transition: border-color 220ms ease, box-shadow 220ms ease, background-color 220ms ease; }
+.tierShortcut::before { position: absolute; z-index: -1; inset: 0; content: ""; opacity: .22; pointer-events: none; background: repeating-linear-gradient(135deg, transparent 0 12px, color-mix(in srgb, var(--vip-tier-color) 16%, transparent) 12px 13px); mask-image: linear-gradient(135deg, transparent 30%, black); }
+.tierShortcut::after { position: absolute; z-index: -1; inset: 0; content: ""; opacity: 0; pointer-events: none; background: radial-gradient(circle at var(--panel-light-x, 70%) var(--panel-light-y, 20%), color-mix(in srgb, var(--vip-tier-color) 17%, transparent), transparent 70%); transition: opacity 250ms ease; }
+.tierShortcut:is(:hover, :focus-visible) { border-color: var(--vip-tier-color); box-shadow: 0 12px 35px color-mix(in srgb, var(--vip-tier-color) 12%, transparent), inset 0 1px 0 color-mix(in srgb, var(--vip-tier-color) 30%, transparent); }
+.tierShortcut:is(:hover, :focus-visible)::after { opacity: 1; }
+.tierShortcut:focus-visible { outline: 2px solid var(--theme-focus-ring); outline-offset: 3px; }
+.shortcutTop { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; min-height: 18px; color: color-mix(in srgb, var(--vip-tier-soft) 80%, var(--theme-text)); font-size: 9px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.shortcutTop > svg { width: 17px; height: 17px; color: var(--vip-tier-color); filter: drop-shadow(0 0 7px color-mix(in srgb, var(--vip-tier-color) 45%, transparent)); }
+.shortcutFlag { display: inline-flex; align-items: center; gap: 4px; letter-spacing: 0; }
+.shortcutFlag > svg { width: 12px; height: 12px; }
+.tierShortcut > strong { overflow-wrap: anywhere; font-family: var(--font-display); font-size: clamp(22px, 2.1vw, 30px); font-weight: 500; line-height: 1; letter-spacing: -.025em; }
+.shortcutBenefits { margin-top: -6px; color: var(--theme-text-muted); font-size: 10px; line-height: 1.5; }
+.shortcutPrice { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: auto; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--vip-tier-color) 22%, var(--theme-border)); }
+.shortcutPrice > span { color: var(--theme-text-muted); font-size: 10px; }
+.shortcutPrice strong { color: color-mix(in srgb, var(--vip-tier-soft) 80%, var(--theme-text)); font-size: 17px; font-weight: 800; }
+.shortcutPrice small { display: block; margin-top: 4px; color: var(--theme-text-muted); font-size: 10px; }
+.shortcutPrice > svg { width: 27px; height: 27px; padding: 6px; border: 1px solid color-mix(in srgb, var(--vip-tier-color) 30%, var(--theme-border)); border-radius: 4px; color: var(--vip-tier-soft); background: color-mix(in srgb, var(--vip-tier-color) 8%, transparent); transition: transform 220ms ease; }
+.tierShortcut:hover .shortcutPrice > svg { transform: translateY(3px); }
+.tierShortcut[data-current] { outline: 1px solid color-mix(in srgb, var(--vip-tier-color) 55%, transparent); outline-offset: 3px; }
+.comparison { min-width: 0; overflow: clip; border: 1px solid var(--theme-border-strong); border-radius: var(--membership-radius); background: color-mix(in srgb, var(--theme-surface-raised) 83%, transparent); }
+.comparison > summary { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 76px; padding: 17px 20px; color: var(--theme-text); cursor: pointer; list-style: none; }
+.comparison > summary::-webkit-details-marker { display: none; }
+.comparison > summary > span:first-child { display: flex; align-items: center; gap: 13px; font-size: 13px; font-weight: 800; }
+.comparison > summary > span:first-child > svg { flex: 0 0 auto; width: 22px; height: 22px; color: var(--theme-accent-soft); }
+.comparison summary small { display: block; margin-top: 5px; color: var(--theme-text-muted); font-size: 11px; font-weight: 400; line-height: 1.5; }
+.comparisonToggle { display: grid; place-items: center; flex: 0 0 auto; width: 29px; height: 29px; border: 1px solid var(--theme-border); border-radius: 4px; color: var(--theme-accent-soft); background: var(--theme-control-bg); font-size: 22px; line-height: 1; transition: transform 220ms ease; }
+.comparison[open] .comparisonToggle { transform: rotate(45deg); }
+.comparison > summary:hover { background: var(--theme-control-hover); }
+.comparison > summary:focus-visible, .comparisonScroll:focus-visible { outline: 2px solid var(--theme-focus-ring); outline-offset: -3px; }
+.comparisonScroll { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; scrollbar-color: var(--theme-border-strong) var(--theme-control-bg); border-top: 1px solid var(--theme-border); }
+.comparisonTable { width: 100%; min-width: 650px; border-collapse: collapse; text-align: left; }
+.comparisonTable th, .comparisonTable td { padding: 14px 16px; border-bottom: 1px solid var(--theme-border); border-right: 1px solid var(--theme-border); font-size: 11px; line-height: 1.6; vertical-align: top; }
+.comparisonTable th:last-child, .comparisonTable td:last-child { border-right: 0; }
+.comparisonTable thead th { color: var(--vip-tier-color, var(--theme-text)); background: var(--theme-control-bg); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+.comparisonTable tbody th { min-width: 130px; color: var(--theme-text); background: color-mix(in srgb, var(--theme-control-bg) 55%, transparent); font-weight: 650; }
+.comparisonTable tbody tr:last-child > * { border-bottom: 0; }
+.comparisonTable tbody tr:hover { background: color-mix(in srgb, var(--theme-accent) 4%, transparent); }
+.comparisonBenefit { display: grid; grid-template-columns: 12px minmax(0, 1fr); align-items: start; gap: 6px; color: var(--theme-text-muted); }
+.comparisonBenefit > svg { width: 12px; height: 12px; margin-top: 3px; color: var(--theme-accent-soft); }
+.notIncluded { color: var(--theme-text-subtle); }
+.comparisonNote { margin: 0; padding: 13px 20px; border-top: 1px solid var(--theme-border); color: var(--theme-text-muted); font-size: 10px; line-height: 1.65; }
+.membershipSteps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; padding: 0; border: 1px solid var(--theme-border); border-radius: var(--membership-radius); background: color-mix(in srgb, var(--theme-surface) 75%, transparent); list-style: none; }
+.membershipSteps li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 12px; min-width: 0; padding: 20px 17px; border-right: 1px solid var(--theme-border); }
+.membershipSteps li:last-child { border-right: 0; }
+.stepNumber { display: grid; width: 26px; height: 26px; align-items: center; border-top: 2px solid var(--theme-accent-soft); color: var(--theme-accent-soft); font-family: var(--font-display); font-size: 17px; line-height: 1; }
+.membershipSteps strong { display: block; margin-top: 2px; color: var(--theme-text); font-size: 12px; line-height: 1.5; }
+.membershipSteps p { margin: 7px 0 0; color: var(--theme-text-muted); font-size: 11px; line-height: 1.65; }
+.membershipSteps li > svg { width: 16px; height: 16px; margin-top: 5px; color: var(--theme-text-subtle); }
+
 .storageNotice {
   display: flex;
   align-items: center;
@@ -48,13 +109,14 @@
 .currentBadge { position: relative; margin-top: .1rem; }
 
 .catalogue {
-  --listing-card-radius: var(--theme-radius);
+  --listing-card-radius: var(--membership-radius);
+  padding-top: 34px;
 }
 
 .listingGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: .85rem;
+  gap: 18px;
   align-items: start;
 }
 
@@ -73,6 +135,7 @@
     linear-gradient(150deg, color-mix(in srgb, var(--theme-surface-raised) 94%, transparent), color-mix(in srgb, var(--theme-page-bg) 96%, transparent));
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--theme-text) 5%, transparent), var(--theme-shadow);
   transition: border-color 200ms ease, box-shadow 200ms ease, transform 200ms ease;
+  scroll-margin-top: 100px;
 }
 
 .tierCard:is(:hover, :focus-within) {
@@ -183,7 +246,7 @@
   flex: 1;
   min-width: 0;
   flex-direction: column;
-  padding: 1rem;
+  padding: 1.2rem;
 }
 
 .cardTitle {
@@ -551,11 +614,19 @@
 
 @media (max-width: 68rem) {
   .listingGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tierOverview { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .membershipSteps { grid-template-columns: 1fr; }
+  .membershipSteps li { border-right: 0; border-bottom: 1px solid var(--theme-border); }
+  .membershipSteps li:last-child { border-bottom: 0; }
 }
 
 @media (max-width: 46rem) {
   .storageNotice { margin-right: 0; margin-left: 0; }
   .listingGrid { grid-template-columns: 1fr; }
+  .guideHeading { grid-template-columns: 1fr; gap: 14px; }
+  .tierOverview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tierShortcut { padding: 16px 13px 13px; gap: 12px; }
+  .comparison > summary { padding: 16px; }
   .artwork { min-height: 8rem; aspect-ratio: 16 / 5.5; }
 }
 
@@ -569,7 +640,14 @@
 
 @media (prefers-reduced-motion: reduce) {
   .tierCard,
-  .artworkImage { transition: none; }
+  .artworkImage,
+  .heroLinks a,
+  .currentLink,
+  .tierShortcut,
+  .tierShortcut::after,
+  .shortcutPrice > svg,
+  .comparisonToggle { transition: none; }
   .tierCard:is(:hover, :focus-within),
   .tierCard:is(:hover, :focus-within) .artworkImage { transform: none; }
+  .tierShortcut:hover .shortcutPrice > svg { transform: none; }
 }

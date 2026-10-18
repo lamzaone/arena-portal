@@ -9,6 +9,7 @@ import { getPlayerArenaStats } from "@/lib/data/player-arena-stats";
 import { PlayerProfilePage } from "@/components/player-profile-page";
 import { PlayerServerPresence } from "@/components/player-server-presence";
 import { getPlayerModerationHistory } from "@/lib/data/player-moderation-history";
+import { getProfileCommunity } from "@/lib/data/profile-community";
 import { PortalShell } from "@/components/ui/portal-shell";
 import { createAdminActionToken, createProfileActionToken, getSession } from "@/lib/auth/session";
 import { getPlayerDashboard, getPlayerProfileInventoryPage, getPlayerProfileThemeKey, getPlayerSettings, getPublicPlayerProfile } from "@/lib/data/portal-repository";
@@ -33,7 +34,7 @@ export default async function PublicPlayerProfilePage({ params, searchParams }: 
   const settingsOpen = Boolean(isOwnProfile && query.settings === "1");
   const readPage = (value: string | undefined) => { const page = Number(value); return Number.isFinite(page) ? Math.max(1, Math.floor(page)) : 1; };
   const historyPages = { warnings: readPage(query.warningsPage), bans: readPage(query.bansPage), comms: readPage(query.commsPage) };
-  const [profile, steamProfiles, initialProfileInventory, initialProfileThemeKey, initialSettings, serverStatus, moderationHistory] = await Promise.all([
+  const [profile, steamProfiles, initialProfileInventory, initialProfileThemeKey, initialSettings, serverStatus, moderationHistory, profileCommunity] = await Promise.all([
     isOwnProfile ? getPlayerDashboard(steamId) : getPublicPlayerProfile(steamId),
     getSteamProfiles([steamId]),
     getPlayerProfileInventoryPage(session?.steamId ?? null, steamId),
@@ -41,6 +42,7 @@ export default async function PublicPlayerProfilePage({ params, searchParams }: 
     settingsOpen ? getPlayerSettings(steamId) : Promise.resolve(null),
     getServerStatus(),
     isOwnProfile ? getPlayerModerationHistory(steamId, historyPages.bans, historyPages.comms) : Promise.resolve(undefined),
+    getProfileCommunity(steamId, session?.steamId ?? null),
   ]);
 
   if (!profile) {
@@ -75,7 +77,7 @@ export default async function PublicPlayerProfilePage({ params, searchParams }: 
         ...(moderationHistory?.sanctions.records ?? profile.sanctions).map((sanction) => sanction.adminSteamId ?? ""),
       ]
     : [];
-  const [identity, relatedPlayerIdentities, discordProfileUrl] = await Promise.all([
+  const [identity, relatedPlayerIdentities, discordProfileUrl, commentIdentities] = await Promise.all([
     getEffectiveIdentity({
       steamId,
       vipGroupNames: profile.vipGroups.map((group) => group.externalKey ?? group.name),
@@ -85,6 +87,7 @@ export default async function PublicPlayerProfilePage({ params, searchParams }: 
       moderationActorIds.map((actorSteamId) => ({ steamId: actorSteamId })),
     ),
     getPublicDiscordProfileUrl(steamId),
+    resolvePlayerIdentities(profileCommunity.comments.records.map(comment => ({ steamId: comment.authorSteamId }))),
   ]);
 
   // External Admins.Core and VIPCore memberships remain authoritative in the
@@ -121,5 +124,5 @@ export default async function PublicPlayerProfilePage({ params, searchParams }: 
   const staffControls = session && viewerAccess?.isAdmin && targetAccess && (!targetAccess.isAdmin || canActOnTarget(viewerAccess, targetAccess))
     ? <ProfileStaffControls steamId={steamId} displayName={steamProfiles.get(steamId)?.name ?? profile.displayName ?? steamId} access={viewerAccess} csrf={createAdminActionToken(session)} online={serverStatus?.state === "online" && serverStatus.roster.some(player => player.steamId === steamId)} writesReady={adminWriteConfigured()} notice={query.notice} error={query.error} /> : null;
 
-  return <PlayerProfilePage staffControls={staffControls} arenaStats={arenaStats} profile={profile} identity={identity} steamId={steamId} steamProfile={steamProfiles.get(steamId)} discordProfileUrl={identity.groups.some((group) => group.key === discordVerifiedGroupKey()) ? discordProfileUrl : null} isOwnProfile={Boolean(isOwnProfile)} isAuthenticated={Boolean(session)} profileInventory={profileInventory} profileThemeKey={profileThemeKey} relatedPlayerIdentities={relatedPlayerIdentities} settingsOpen={settingsOpen} initialServerStatus={serverStatus} moderationHistory={moderationHistory} historyPages={historyPages} profileSettings={settings && session ? { csrf: createProfileActionToken(session), initialSettings: { inventoryVisibility: settings.inventoryVisibility, activeThemeId: settings.activeThemeId, activeThemeItemId: settings.activeThemeItemId, ownedThemes: settings.ownedThemes } } : undefined} />;
+  return <PlayerProfilePage staffControls={staffControls} arenaStats={arenaStats} profile={profile} identity={identity} steamId={steamId} steamProfile={steamProfiles.get(steamId)} discordProfileUrl={identity.groups.some((group) => group.key === discordVerifiedGroupKey()) ? discordProfileUrl : null} isOwnProfile={Boolean(isOwnProfile)} isAuthenticated={Boolean(session)} profileInventory={profileInventory} profileThemeKey={profileThemeKey} relatedPlayerIdentities={relatedPlayerIdentities} settingsOpen={settingsOpen} initialServerStatus={serverStatus} moderationHistory={moderationHistory} historyPages={historyPages} community={{ initialCommunity: profileCommunity, initialIdentities: commentIdentities, csrf: session ? createProfileActionToken(session) : "", viewerSteamId: session?.steamId ?? null }} profileSettings={settings && session ? { csrf: createProfileActionToken(session), initialSettings: { inventoryVisibility: settings.inventoryVisibility, activeThemeId: settings.activeThemeId, activeThemeItemId: settings.activeThemeItemId, ownedThemes: settings.ownedThemes } } : undefined} />;
 }

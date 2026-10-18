@@ -35,6 +35,15 @@ function sign(payload: string, secret: string) {
   return createHmac("sha256", secret).update(payload).digest("base64url");
 }
 
+function matchesActionToken(expected: string, token: string) {
+  if (!token || !expected || token.length !== expected.length) return false;
+  const candidate = Buffer.from(token);
+  const signed = Buffer.from(expected);
+  // Character counts are not byte counts. Malformed Unicode must be rejected
+  // before timingSafeEqual, which throws for buffers of different lengths.
+  return candidate.length === signed.length && timingSafeEqual(candidate, signed);
+}
+
 export async function createSessionToken(steamId: string) {
   if (!/^7656119\d{10}$/.test(steamId)) throw new Error("Invalid SteamID64.");
 
@@ -71,8 +80,7 @@ export function createAdminActionToken(session: PortalSession) {
 
 export function verifyAdminActionToken(session: PortalSession, token: string) {
   const expected = createAdminActionToken(session);
-  if (!token || !expected || token.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+  return matchesActionToken(expected, token);
 }
 
 // State-changing player endpoints use a separate, session-bound token. It is
@@ -86,8 +94,7 @@ export function createLoadoutActionToken(session: PortalSession) {
 
 export function verifyLoadoutActionToken(session: PortalSession, token: string) {
   const expected = createLoadoutActionToken(session);
-  if (!token || !expected || token.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+  return matchesActionToken(expected, token);
 }
 
 // Economy mutations have their own session-bound CSRF scope.  Keeping it
@@ -101,8 +108,7 @@ export function createEconomyActionToken(session: PortalSession) {
 
 export function verifyEconomyActionToken(session: PortalSession, token: string) {
   const expected = createEconomyActionToken(session);
-  if (!token || !expected || token.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+  return matchesActionToken(expected, token);
 }
 
 // Account privacy and profile presentation are isolated from economy and
@@ -122,8 +128,7 @@ export function verifyProfileActionToken(
   token: string,
 ) {
   const expected = createProfileActionToken(session);
-  if (!token || !expected || token.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+  return matchesActionToken(expected, token);
 }
 
 export function sessionCookieOptions() {

@@ -7,9 +7,13 @@ export const defaultTheme = {
   surfaces: {
     global: {
       className: "global-theme-default",
+      background: "portalAtmosphere",
+      documentEffects: { cursorGrid: "hidden" },
     },
     profile: {
       className: "profile-theme-default",
+      background: "portalAtmosphere",
+      documentEffects: { cursorGrid: "hidden" },
     },
     smallProfile: {
       className: "small-profile-theme-default",

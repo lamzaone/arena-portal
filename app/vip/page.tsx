@@ -50,6 +50,7 @@ import { buildPageMetadata } from "@/lib/seo/site";
 import { getSteamProfiles } from "@/lib/steam/profiles";
 
 import styles from "./vip.module.css";
+import { MembershipGuide } from "./membership-guide";
 
 export const metadata = buildPageMetadata("/vip");
 
@@ -612,7 +613,10 @@ export default async function VipPage({ searchParams }: VipPageProps) {
         : null,
     });
   }
-  const membershipCards = [...groupedListings.values()];
+  const membershipCards = [...groupedListings.values()].sort((a, b) => {
+    if (a.tier && b.tier) return a.tier.weight - b.tier.weight;
+    return Number(Boolean(b.tier)) - Number(Boolean(a.tier));
+  });
   const currentEffectiveMembership = currentTier
     ? [...effectiveGroups.values()].find(
         (group) => group.sourceType === "vipcore" &&
@@ -646,13 +650,14 @@ export default async function VipPage({ searchParams }: VipPageProps) {
   const currentPage = Math.min(vipRoster.page, totalPages);
 
   return (
-    <PortalShell authenticated={Boolean(session)} className="catalog-page vip-page">
+    <PortalShell authenticated={Boolean(session)} className={`catalog-page vip-page ${styles.page}`}>
 
-        <section className="catalog-hero" aria-labelledby="vip-title">
+        <section className={`catalog-hero ${styles.hero}`} aria-labelledby="vip-title">
           <div>
             <p className="tapped-kicker"><Crown aria-hidden="true" /> TAPPED.RO membership</p>
             <h1 id="vip-title">VIP <span>memberships</span></h1>
-            <p>Compare benefits, choose your duration, and request a membership. Sign in to see your current tier and upgrade options.</p>
+            <p>Make the arena yours. Compare every tier, find your favourite extras, and choose how long you want to stay VIP.</p>
+            <div className={styles.heroLinks}>{membershipCards.length ? <a href="#vip-guide-title"><Sparkles aria-hidden="true" /> Explore memberships</a> : null}<Link href="/vip/perks">Shop individual perks <Check aria-hidden="true" /></Link></div>
           </div>
           <aside
             className={`catalog-signal ${styles.currentSignal}`}
@@ -677,6 +682,7 @@ export default async function VipPage({ searchParams }: VipPageProps) {
                     ? "Your active tier is connected and ready to extend or upgrade."
                     : `${membershipCards.length} published membership group${membershipCards.length === 1 ? "" : "s"} with ${listings.length} access option${listings.length === 1 ? "" : "s"}.`}
             </small>
+            {session ? <Link className={styles.currentLink} href="/inventory">Manage membership items <PackageCheck aria-hidden="true" /></Link> : <a className={styles.currentLink} href="/api/auth/steam">Sign in with Steam <LockKeyhole aria-hidden="true" /></a>}
           </aside>
         </section>
 
@@ -684,11 +690,13 @@ export default async function VipPage({ searchParams }: VipPageProps) {
 
         {listingStorageError ? <aside className={styles.storageNotice} role="status"><PackageCheck aria-hidden="true" /><div><strong>Membership offers are temporarily unavailable.</strong><span>{listingMigrationNeeded ? "The membership catalogue is being updated. Please check back shortly." : "Please check back shortly or contact staff for help with your membership."}</span></div></aside> : null}
 
+        {membershipCards.length ? <MembershipGuide options={membershipCards} currentTierName={hasTierConflict ? null : currentTier?.name ?? null} /> : null}
+
         {listings.length ? (
           <section className={`vip-catalogue ${styles.catalogue}`} aria-labelledby="vip-memberships-title">
             <div className="catalog-section-heading">
-              <div><p className="tapped-kicker"><Sparkles aria-hidden="true" /> Available tiers</p><h2 id="vip-memberships-title">Compare memberships</h2></div>
-              <p>Each donation creates a private purchase request. Staff delivers the exact inventory item shown here; activate it from your inventory when it arrives.</p>
+              <div><p className="tapped-kicker"><Sparkles aria-hidden="true" /> Choose your duration</p><h2 id="vip-memberships-title">The details, tier by tier.</h2></div>
+              <p>Every option lists its price, duration, and effect on your current membership. A request opens a private ticket with staff.</p>
             </div>
             <div className={styles.listingGrid}>
               {membershipCards.map(({ group, listings: groupListings, tier }) => {
@@ -712,6 +720,7 @@ export default async function VipPage({ searchParams }: VipPageProps) {
 
                 return (
                   <article
+                    id={`vip-membership-${group.id}`}
                     data-ui="vip-tier-card"
                     data-relation={relationship}
                     data-owned={access.active ? "true" : "false"}

@@ -1,3 +1,5 @@
+import type { CommendationKind } from "./profile-community";
+
 export type StaffDirectoryDefinition = {
   key: string;
   name: string;
@@ -16,12 +18,27 @@ export type StaffDirectoryMembership = {
   enabled: boolean;
 };
 
+export type StaffActivityStatistics = {
+  bansIssued: number | null;
+  communications: { gags: number; mutes: number; silences: number } | null;
+  kicksIssued: number | null;
+  warningsIssued: number | null;
+  playtimeSeconds: number | null;
+};
+
+export type StaffDirectoryStatistics = StaffActivityStatistics & {
+  reputation: number | null;
+  commendations: number | null;
+  commendationCounts?: Record<CommendationKind, number> | null;
+};
+
 export type StaffDirectoryProfile = {
   name: string;
   avatarUrl: string | null;
   presence: "online" | "offline" | "unknown";
   profileThemeKey?: string | null;
   discordProfileUrl?: string | null;
+  statistics?: StaffDirectoryStatistics | null;
 };
 
 export type StaffDirectoryMember = StaffDirectoryProfile & {
@@ -83,6 +100,7 @@ export function buildStaffDirectory(
           discordProfileUrl: discordProfileUrl && /^https:\/\/discord\.com\/users\/[1-9]\d{16,19}$/.test(discordProfileUrl)
             ? discordProfileUrl
             : null,
+          ...(profile?.statistics ? { statistics: profile.statistics } : {}),
         };
         uniqueMembers.set(steamId, member);
         return member;

@@ -8,6 +8,8 @@ import { getPlayerProfileThemeKeys } from "@/lib/data/portal-repository";
 import { getStaffAdminMembershipSnapshot } from "@/lib/data/staff-admin-memberships";
 import { buildStaffDirectory, staffGroupKey, type StaffDirectory, type StaffDirectoryDefinition, type StaffDirectoryProfile } from "@/lib/staff-directory";
 import { getSteamProfiles } from "@/lib/steam/profiles";
+import { getPublicStaffStatistics } from "@/lib/data/public-staff-statistics";
+import { getProfileCommunitySummaries } from "@/lib/data/profile-community";
 
 type NativeGroupRow = RowDataPacket & { Name: string; Immunity: number; Servers: string | string[] };
 type ArenaGroupRow = RowDataPacket & {
@@ -117,10 +119,12 @@ export async function getPublicStaffDirectory(): Promise<StaffDirectory & { avai
     const ids = [...new Set(initial.groups.flatMap((group) => group.members.map((member) => member.steamId)))];
     const batches: string[][] = [];
     for (let index = 0; index < ids.length; index += 100) batches.push(ids.slice(index, index + 100));
-    const [steamBatches, themeKeys, discordProfileUrls] = await Promise.all([
+    const [steamBatches, themeKeys, discordProfileUrls, activity, community] = await Promise.all([
       Promise.all(batches.map((batch) => getSteamProfiles(batch))),
       getPlayerProfileThemeKeys(ids),
       readDiscordProfileUrls(ids),
+      getPublicStaffStatistics(ids),
+      getProfileCommunitySummaries(ids),
     ]);
     const profiles: Record<string, StaffDirectoryProfile> = {};
     for (const steamId of ids) {
@@ -128,6 +132,12 @@ export async function getPublicStaffDirectory(): Promise<StaffDirectory & { avai
         name: "", avatarUrl: null, presence: "unknown",
         profileThemeKey: themeKeys.get(steamId) ?? null,
         discordProfileUrl: discordProfileUrls.get(steamId) ?? null,
+        statistics: {
+          ...activity[steamId],
+          reputation: community[steamId]?.available ? community[steamId].reputation : null,
+          commendations: community[steamId]?.available ? community[steamId].commendationTotal : null,
+          commendationCounts: community[steamId]?.available ? { ...community[steamId].commendations } : null,
+        },
       };
     }
     for (const batch of steamBatches) {

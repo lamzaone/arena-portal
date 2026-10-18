@@ -8,9 +8,13 @@ export const betaTesterTheme = {
   surfaces: {
     global: {
       className: "global-theme-beta-tester",
+      background: "portalAtmosphere",
+      documentEffects: { cursorGrid: "hidden" },
     },
     profile: {
       className: "profile-theme-beta-tester",
+      background: "portalAtmosphere",
+      documentEffects: { cursorGrid: "hidden" },
       avatarAdornment: {
         className: "beta-tester-avatar-mark",
         icon: "zap",

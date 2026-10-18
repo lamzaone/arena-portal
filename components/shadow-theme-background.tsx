@@ -25,6 +25,7 @@ export function ShadowThemeBackground() {
         ))}
       </div>
       <span className="shadow-edge-light" />
+      <div className="shadow-glass-frames"><span /><span /><span /></div>
       <div className="shadow-ink-field">
         <span className="shadow-ink-ribbon shadow-ink-ribbon-left" />
         <span className="shadow-ink-ribbon shadow-ink-ribbon-right" />

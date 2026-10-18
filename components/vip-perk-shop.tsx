@@ -67,7 +67,7 @@ export function VipPerkShop({ offers, owned, csrf, initialBalance, authenticated
           const currentExpiry = purchasedExpirations[first.perkKey] ?? current?.expiresAt;
           const ownedPermanently = Boolean(current && current.expiresAt === null);
           return (
-            <article className={styles.shopCard} key={first.perkKey}>
+            <article className={styles.shopCard} key={first.perkKey} data-panel-light>
               <div className={styles.cardHeading}>
                 <span className={styles.perkIcon}><Sparkles aria-hidden="true" /></span>
                 <div><span>{first.perkCategory}</span><h3>{first.perkName}</h3></div>

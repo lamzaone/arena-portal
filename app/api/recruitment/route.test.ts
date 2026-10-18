@@ -49,6 +49,7 @@ const migration = readFileSync(new URL("../../../db/041_staff_recruitment.sql", 
   .replace(/,\s*KEY \w+\s*\([^)]*\)/g, "")
   .replace(/\) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci/g, ")");
 database.exec(migration);
+database.exec(readFileSync(new URL("../../../db/044_staff_recruitment_responses.sql", import.meta.url), "utf8").replace("ADD COLUMN IF NOT EXISTS", "ADD COLUMN").replace(" AFTER reason", ""));
 database.exec("CREATE TABLE portal_discord_links (steam_id TEXT PRIMARY KEY, discord_user_id TEXT); CREATE TABLE portal_audit_events (actor_type TEXT, actor_id TEXT, action TEXT, target_type TEXT, target_id TEXT); CREATE TABLE lvl_base (steam TEXT PRIMARY KEY, name TEXT, playtime INTEGER)");
 const steamId = "76561198000000001";
 function request(values: Record<string, string> = {}, admin = false, progressive = false) {
@@ -117,4 +118,67 @@ test("validation and duplicate errors survive native and enhanced submissions", 
   assert.equal(response.status, 200);
   assert.equal(new URL((await response.json()).redirect).searchParams.get("error"), "application-active");
   assert.equal(count(), 1);
+});
+
+test("staff reviews persist plain text responses with trusted session actors and preserve filters", async () => {
+  await apply(request());
+  const id = String(database.prepare("SELECT id FROM portal_staff_applications").get()?.id);
+  state.admin = true;
+  const response = await manage(request({ action: "review", id, status: "accepted", response: "  Welcome.\n<script>plain text</script>  ", actorSteamId: "76561198999999999", reviewedBy: "76561198999999999", returnName: "  Ａｐｐｌｉｃａｎｔ  ", returnStatus: " ACCEPTED ", returnPage: "2" }, true));
+  const url = destination(response);
+  assert.equal(url.pathname, "/admin/recruitment"); assert.equal(url.searchParams.get("notice"), "reviewed");
+  assert.equal(url.searchParams.get("name"), "Applicant"); assert.equal(url.searchParams.get("status"), "accepted"); assert.equal(url.searchParams.get("page"), "2");
+  const row = database.prepare("SELECT status, admin_response, reviewed_by FROM portal_staff_applications WHERE id = ?").get(id);
+  assert.deepEqual({ ...row }, { status: "accepted", admin_response: "Welcome.\n<script>plain text</script>", reviewed_by: steamId });
+  assert.equal(database.prepare("SELECT actor_id FROM portal_audit_events WHERE action = 'recruitment.application.accepted'").get()?.actor_id, steamId);
+});
+
+test("staff can update a final response while the original decision remains immutable", async () => {
+  await apply(request()); state.admin = true;
+  const id = String(database.prepare("SELECT id FROM portal_staff_applications").get()?.id);
+  await manage(request({ action: "review", id, status: "declined", response: "Please try again later." }, true));
+  assert.equal(destination(await manage(request({ action: "review", id, status: "declined", response: "New response." }, true))).searchParams.get("notice"), "reviewed");
+  assert.equal(database.prepare("SELECT admin_response FROM portal_staff_applications").get()?.admin_response, "New response.");
+  assert.equal(destination(await manage(request({ action: "review", id, status: "accepted", response: "Must not replace this." }, true))).searchParams.get("error"), "application-closed");
+  assert.equal(database.prepare("SELECT status, admin_response FROM portal_staff_applications").get()?.status, "declined");
+  assert.equal(database.prepare("SELECT admin_response FROM portal_staff_applications").get()?.admin_response, "New response.");
+  await manage(request({ action: "review", id, status: "declined" }, true));
+  assert.equal(database.prepare("SELECT admin_response FROM portal_staff_applications").get()?.admin_response, "New response.");
+  await manage(request({ action: "review", id, status: "declined", response: "\n  " }, true));
+  assert.equal(database.prepare("SELECT admin_response FROM portal_staff_applications").get()?.admin_response, null);
+});
+
+test("unauthorized accounts, stale verification and oversized responses cannot change feedback", async () => {
+  await apply(request());
+  const id = String(database.prepare("SELECT id FROM portal_staff_applications").get()?.id);
+  assert.equal(destination(await manage(request({ action: "review", id, status: "accepted", response: "Forged decision" }, true))).searchParams.get("error"), "forbidden");
+  state.admin = true; state.csrf = false;
+  assert.equal(destination(await manage(request({ action: "review", id, status: "accepted", response: "Stale form" }, true))).searchParams.get("error"), "verification");
+  state.csrf = true;
+  assert.equal(destination(await manage(request({ action: "review", id, status: "accepted", response: "x".repeat(2001) }, true))).searchParams.get("error"), "application-response");
+  const row = database.prepare("SELECT status, admin_response, reviewed_by FROM portal_staff_applications").get();
+  assert.deepEqual({ ...row }, { status: "submitted", admin_response: null, reviewed_by: null });
+});
+
+test("review returns only to known paths with sanitized filters in native and enhanced responses", async () => {
+  await apply(request()); state.admin = true;
+  const id = String(database.prepare("SELECT id FROM portal_staff_applications").get()?.id);
+  for (const progressive of [false, true]) {
+    const response = await manage(request({ action: "review", id, status: "reviewing", returnTo: "https://evil.example/steal", returnName: "  %_&?#=  ", returnStatus: "constructor", returnPage: "-1" }, true, progressive));
+    const url = progressive ? new URL((await response.json()).redirect) : destination(response);
+    assert.equal(url.origin, "http://localhost"); assert.equal(url.pathname, "/admin/recruitment"); assert.equal(url.hash, "");
+    assert.equal(url.searchParams.get("name"), "%_&?#="); assert.ok(url.searchParams.get("status") === null || url.searchParams.get("status") === "all");
+    assert.ok(url.searchParams.get("page") === null || url.searchParams.get("page") === "1");
+    assert.equal(url.searchParams.get("notice"), "reviewed");
+  }
+  const staff = destination(await manage(request({ action: "set-open", open: "no", returnTo: "/staff", returnName: "Applicant", returnStatus: "accepted", returnPage: "8" }, true)));
+  assert.equal(staff.pathname, "/staff"); assert.equal(staff.hash, "#recruitment"); assert.equal(staff.searchParams.get("name"), null);
+});
+
+test("baseline requirements remain advisory for younger, unlinked, low-hour non-members", async () => {
+  database.prepare("UPDATE lvl_base SET playtime = 0 WHERE steam = ?").run(steamId);
+  const response = await apply(request({ age: "13", steamGroupMember: "no", discordProfile: "https://discord.com/users/12345678901234567" }));
+  assert.equal(destination(response).searchParams.get("notice"), "submitted");
+  const row = database.prepare("SELECT age, steam_group_member, discord_linked, playtime_seconds FROM portal_staff_applications").get();
+  assert.deepEqual({ ...row }, { age: 13, steam_group_member: 0, discord_linked: 0, playtime_seconds: 0 });
 });

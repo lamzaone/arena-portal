@@ -12,9 +12,8 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
   const [session, directory] = await Promise.all([getSession(), getPublicStaffDirectory()]);
   const parameters = await searchParams;
   return (
-    <PortalShell authenticated={Boolean(session)} className="staff-page">
-      <RecruitmentSection session={session} parameters={parameters} />
-      <StaffShowcase directory={directory} />
+    <PortalShell authenticated={Boolean(session)} className="public-staff-page">
+      <StaffShowcase directory={directory} recruitment={<RecruitmentSection session={session} parameters={parameters} />} />
     </PortalShell>
   );
 }

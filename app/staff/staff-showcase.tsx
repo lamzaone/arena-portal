@@ -1,18 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
-import { ArrowDown, ArrowRight, ArrowUpRight, BadgeCheck, Crosshair, Crown, MessageCircle, Pause, Play, Search, ShieldCheck, Sparkles, Star, UsersRound } from "lucide-react";
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
+import { ArrowDown, ArrowRight, ArrowUpRight, BadgeCheck, BookOpen, Clock3, Crosshair, Crown, HandHelping, HeartHandshake, MessageCircle, Pause, Play, Search, ShieldCheck, Smile, Sparkles, Star, Swords, Trophy, UsersRound, VolumeX } from "lucide-react";
 
 import { ResilientRemoteImage } from "@/components/resilient-remote-image";
 import { BrandEmblem } from "@/components/brand-emblem";
 import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
 import { SearchField } from "@/components/ui/search-field";
 import type { StaffDirectory, StaffDirectoryGroup, StaffDirectoryMember } from "@/lib/staff-directory";
+import { commendationKinds, commendationLabels } from "@/lib/profile-community";
 
 import styles from "./staff.module.css";
 
 const groupIcons = { crown: Crown, shield: ShieldCheck, badge: BadgeCheck, star: Star, sparkles: Sparkles, users: UsersRound };
+const commendationIcons = { helpful: HandHelping, teacher: BookOpen, funny: Smile, pro_player: Swords, goat: Crown };
 
 function groupDescription(group: StaffDirectoryGroup) {
   // The seeded catalogue descriptions explain storage/authority to admins.
@@ -55,6 +57,7 @@ function MemberCard({ member, group, index, motion }: {
   }, [motion]);
 
   function tilt(event: PointerEvent<HTMLElement>) {
+    if (document.documentElement.dataset.visualMotion === "paused") { resetTilt(); return; }
     if (!motion || event.pointerType !== "mouse" || !window.matchMedia("(hover: hover) and (prefers-reduced-motion: no-preference)").matches) return;
     card.current = event.currentTarget;
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -71,6 +74,10 @@ function MemberCard({ member, group, index, motion }: {
   }
 
   const presence = member.presence === "online" ? "Steam online" : member.presence === "offline" ? "Steam offline" : "Steam member";
+  const statistics = member.statistics;
+  const number = (value: number | null | undefined) => value == null ? "—" : new Intl.NumberFormat("en").format(value);
+  const hours = statistics?.playtimeSeconds == null ? "—" : new Intl.NumberFormat("en", { maximumFractionDigits: 1 }).format(statistics.playtimeSeconds / 3600);
+  const reputation = `${statistics?.reputation != null && statistics.reputation > 0 ? "+" : ""}${number(statistics?.reputation)}`;
   return (
     <ThemedPlayerContainer
       as="article"
@@ -86,28 +93,53 @@ function MemberCard({ member, group, index, motion }: {
       onBlur={resetTilt}
     >
       <GroupIcon icon={group.icon} className={styles.cardWatermark} />
-      <Link className={styles.portraitLink} href={`/players/${member.steamId}`} prefetch={false} aria-label={`View ${member.name}'s profile`}>
+      <div className={styles.memberHeader}>
+        <Link className={styles.portraitLink} href={`/players/${member.steamId}`} prefetch={false} aria-label={`View ${member.name}'s profile`}>
         <div className={styles.avatar}>
           <ResilientRemoteImage src={member.avatarUrl} alt="" loading="lazy" fallback={<span>{member.name.trim().slice(0, 2).toUpperCase()}</span>} />
           <span className={styles.avatarBadge}><GroupIcon icon={group.icon} /></span>
         </div>
-      </Link>
-      <div className={styles.memberBody}>
+        </Link>
         <div className={styles.memberCopy}>
           <span className={styles.memberRole}><GroupIcon icon={group.icon} /><span>{group.name}</span></span>
           <h4><Link href={`/players/${member.steamId}`} prefetch={false}>{member.name}</Link></h4>
           <span className={styles.presence} data-presence={member.presence}><i aria-hidden="true" />{presence}</span>
         </div>
-        <div className={styles.cardActions}>
+      </div>
+      <dl className={styles.playerStanding} aria-label="Player standing">
+        <div><dt><Clock3 aria-hidden="true" />Hours played</dt><dd><strong>{hours}</strong><span>hrs</span></dd></div>
+        <div data-negative={statistics?.reputation != null && statistics.reputation < 0 || undefined}><dt><Trophy aria-hidden="true" />Reputation</dt><dd><strong>{reputation}</strong><span>points</span></dd></div>
+      </dl>
+      <dl className={styles.communicationMetrics} aria-label="Admin actions taken">
+        <div className={styles.communicationLabel}><ShieldCheck aria-hidden="true" /><span>Admin actions<br /> taken</span></div>
+        <div><dt>Bans</dt><dd>{number(statistics?.bansIssued)}</dd></div>
+        <div><dt>Kicks · portal</dt><dd>{number(statistics?.kicksIssued)}</dd></div>
+        <div><dt>Warns</dt><dd>{number(statistics?.warningsIssued)}</dd></div>
+      </dl>
+      <dl className={styles.communicationMetrics} aria-label="Communication restrictions issued">
+        <div className={styles.communicationLabel}><VolumeX aria-hidden="true" /><span>Communication<br /> restrictions issued</span></div>
+        <div><dt>Gags</dt><dd>{number(statistics?.communications?.gags)}</dd></div>
+        <div><dt>Mutes</dt><dd>{number(statistics?.communications?.mutes)}</dd></div>
+        <div><dt>Silences</dt><dd>{number(statistics?.communications?.silences)}</dd></div>
+      </dl>
+      <section className={styles.commendationsPanel} aria-label="Commendation breakdown">
+        <div className={styles.commendationsHeading}><h5><HeartHandshake aria-hidden="true" />Commends</h5><span><strong>{number(statistics?.commendations)}</strong><small>received</small></span></div>
+        <dl className={styles.commendationGrid}>
+          {commendationKinds.map(kind => {
+            const Icon = commendationIcons[kind];
+            return <div key={kind} data-commendation={kind}><dt><span><Icon aria-hidden="true" /></span>{commendationLabels[kind]}</dt><dd>{number(statistics?.commendationCounts?.[kind])}</dd></div>;
+          })}
+        </dl>
+      </section>
+      <div className={styles.cardActions}>
           <Link href={`/players/${member.steamId}`} prefetch={false} className={styles.profileAction} aria-label={`View ${member.name}'s profile`}>View profile <ArrowUpRight aria-hidden="true" /></Link>
           {member.discordProfileUrl ? <a href={member.discordProfileUrl} target="_blank" rel="noopener noreferrer" className={styles.discordAction} aria-label={`Open ${member.name}'s Discord profile (opens in a new tab)`}><MessageCircle aria-hidden="true" />Discord <ArrowUpRight aria-hidden="true" /></a> : null}
-        </div>
       </div>
     </ThemedPlayerContainer>
   );
 }
 
-export function StaffShowcase({ directory }: { directory: StaffDirectory & { available: boolean } }) {
+export function StaffShowcase({ directory, recruitment }: { directory: StaffDirectory & { available: boolean }; recruitment?: ReactNode }) {
   const showcase = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
@@ -170,7 +202,7 @@ export function StaffShowcase({ directory }: { directory: StaffDirectory & { ava
             window.history.replaceState(window.history.state, "", "#staff-directory");
           }}>Get to know the team <span><ArrowDown aria-hidden="true" /></span></a>
         </div>
-        <div className={styles.heroArt} aria-hidden="true">
+        <div className={styles.heroArt} data-depth-art aria-hidden="true">
           <span className={styles.artWord}>STAFF</span>
           <div className={styles.orbitScene}>
             <div className={styles.orbitRing} />
@@ -188,9 +220,11 @@ export function StaffShowcase({ directory }: { directory: StaffDirectory & { ava
         </dl>
       </section>
 
+      {recruitment}
+
       <section className={styles.directory} id="staff-directory" aria-labelledby="directory-title">
         <div className={styles.directoryHeading}>
-          <h2 id="directory-title">Find your people</h2>
+          <div><p className={styles.sectionKicker}>THE ROSTER</p><h2 id="directory-title">Good people. Better rounds.</h2></div>
           <button className={styles.motionToggle} type="button" onClick={() => setPaused(!paused)} disabled={reducedMotion} aria-pressed={paused || reducedMotion}>
             {motion ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}{reducedMotion ? "Reduced motion" : paused ? "Resume motion" : "Pause motion"}
           </button>
@@ -216,6 +250,7 @@ export function StaffShowcase({ directory }: { directory: StaffDirectory & { ava
               <span>{selectedGroup ? directory.groups.find((group) => group.key === selectedGroup)?.name : "The full team"}</span>
               <span className={styles.resultCount} role="status">{directory.available ? `${visibleMemberCount} ${visibleMemberCount === 1 ? "member" : "members"}` : "Unavailable"}</span>
             </div>
+            <p className={styles.statisticsNote}>Recorded server activity and community feedback. Silences count once. Kicks show confirmed portal actions; “—” means unavailable.</p>
             {!directory.available ? <div className={styles.empty} role="status"><ShieldCheck aria-hidden="true" /><h3>The team will be right back.</h3><p>The staff directory is temporarily unavailable. Please try again shortly.</p><a href="/staff">Try again <ArrowRight aria-hidden="true" /></a></div> : filtered.length === 0 ? <div className={styles.empty}><Search aria-hidden="true" /><h3>{directory.groups.length ? "No staff found." : "The lineup is on its way."}</h3><p>{directory.groups.length ? "Try another name or explore all admin groups." : "The team will appear here when admin groups are available."}</p>{query || selectedGroup ? <button type="button" onClick={clearFilters}>Show all staff <ArrowRight aria-hidden="true" /></button> : null}</div> : filtered.map((group) => {
               return <section className={styles.group} key={group.key} data-empty={group.members.length === 0} data-single={group.members.length === 1} style={{ "--group-color": group.color } as CSSProperties} aria-labelledby={`staff-group-${encodeURIComponent(group.key)}`}>
                 <div className={styles.groupHeading} data-staff-reveal="heading">

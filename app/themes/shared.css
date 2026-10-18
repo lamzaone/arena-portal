@@ -18,6 +18,14 @@
   min-height: 100vh;
 }
 
+/* Every profile backdrop is a fixed layer at level zero. Keep the complete
+   profile foreground above it, including sections with static positioning.
+   This is shared by default, membership and collectible themes alike. */
+.player-profile-page[data-theme-owner="profile"] > .shell {
+  position: relative;
+  z-index: 1;
+}
+
 /* A successful player profile is a full-page theme boundary. Its profile
    background replaces the signed-in viewer's global background for this route. */
 body:has(.player-profile-page[data-theme-owner="profile"])
