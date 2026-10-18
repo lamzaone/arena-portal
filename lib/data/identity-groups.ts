@@ -18,6 +18,7 @@ import {
 import {
   identityExternalBadgeLookupKey,
   isIdentityGroupBadgeIconKey,
+  isCustomGroupBadgeIconKey,
 } from "@/lib/content/identity-group-badges";
 import {
   getGameDatabasePool,
@@ -2265,7 +2266,7 @@ export async function createIdentityGroup(input: {
     "Badge icon",
     32,
   );
-  if (!isIdentityGroupBadgeIconKey(badgeIconKey)) {
+  if (!isIdentityGroupBadgeIconKey(badgeIconKey) && !isCustomGroupBadgeIconKey(badgeIconKey)) {
     identityError("invalid_input", "Select a supported badge icon.");
   }
   const badgeColor = identityColor(input.badgeColor, "Badge color");
@@ -2479,7 +2480,7 @@ export async function updateIdentityGroup(input: {
     "Badge icon",
     32,
   );
-  if (!isIdentityGroupBadgeIconKey(badgeIconKey)) {
+  if (!isIdentityGroupBadgeIconKey(badgeIconKey) && !isCustomGroupBadgeIconKey(badgeIconKey)) {
     identityError("invalid_input", "Select a supported badge icon.");
   }
   const badgeColor = identityColor(input.badgeColor, "Badge color");

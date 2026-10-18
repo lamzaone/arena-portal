@@ -30,6 +30,7 @@ registerHooks({
     return url ? { url, shortCircuit: true } : next(specifier, context);
   },
   load(url, context, next) {
+    if (url.endsWith(".css")) return { format: "module", shortCircuit: true, source: "export default {custom:'custom-symbol',symbol:'symbol-frame'}" };
     if (url.startsWith("file:") && url.endsWith(".tsx")) {
       return { format: "module", shortCircuit: true, source: transformSync(readFileSync(new URL(url), "utf8"), { loader: "tsx", jsx: "automatic", format: "esm" }).code };
     }
@@ -72,8 +73,17 @@ test("expanded rank and group symbols render distinct SVGs in actual identity ba
   assert.equal(shapes.size, expandedIcons.length, "each newly selectable symbol needs distinct artwork");
 });
 
+test("role-specific symbols and custom group emblems render through the shared badge", () => {
+  assert.match(renderBadge("castle"), /lucide-castle/);
+  assert.match(renderBadge("shield_user"), /lucide-shield-user/);
+  const key = "custom.0123456789abcdef01234567";
+  assert.match(renderBadge(key), /src="\/api\/group-badges\/0123456789abcdef01234567"/);
+  assert.doesNotMatch(renderBadge("custom.https://evil.test/a.svg"), /evil\.test/);
+});
+
 test("expanded symbols pass actual create and update validation before the storage boundary", async () => {
   for (const mutation of [createIdentityGroup, updateIdentityGroup]) {
+    await assert.rejects(mutation({ ...input, badgeIconKey: "custom.0123456789abcdef01234567" }), { code: "storage_unavailable" });
     for (const [badgeIconKey] of expandedIcons) {
       await assert.rejects(mutation({ ...input, badgeIconKey }), { code: "storage_unavailable" }, `${badgeIconKey} must be accepted by ${mutation.name}`);
     }

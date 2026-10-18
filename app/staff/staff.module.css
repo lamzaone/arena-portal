@@ -17,7 +17,7 @@
 .groupNav { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
 .groupNav button, .group { --group-ink: color-mix(in srgb, var(--group-color, var(--theme-accent-strong)) 68%, var(--theme-text)); }
 .groupNav button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; min-height: 44px; padding: 8px 10px; border: 1px solid var(--staff-line); border-radius: 2px; color: var(--theme-text-muted); background: color-mix(in srgb, var(--theme-page-bg) 55%, transparent); font-size: 10px; line-height: 1.5; transition: color .2s, border-color .2s, background .2s; }
-.groupNav button > svg { width: 17px; height: 17px; flex-shrink: 0; color: var(--group-ink); }
+.groupNav button > :is(svg, img) { width: 17px; height: 17px; flex-shrink: 0; color: var(--group-ink); }
 .groupNav button > span { min-width: 0; overflow-wrap: anywhere; }
 .groupNav b { display: grid; place-items: center; min-width: 20px; min-height: 22px; padding: 2px 5px; border: 1px solid var(--staff-line); border-radius: 2px; color: var(--theme-text); background: color-mix(in srgb, var(--theme-text) 3%, transparent); font-size: 9px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .groupNav button:hover { border-color: var(--theme-border-strong); color: var(--theme-text); background: var(--theme-control-hover); }
@@ -40,7 +40,7 @@
 .search { flex: 1 1 220px; min-width: 0; max-width: 310px; }
 .search [data-part="control"] { border-radius: 2px; }
 .directoryControls > .groupNav { flex: 2 1 480px; }
-.directoryControls > .groupNav button > svg { display: none; }
+.directoryControls > .groupNav button > :is(svg, img) { display: none; }
 .roster { min-width: 0; }
 .rosterMeta { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 16px; color: var(--theme-text-subtle); font-size: 10px; }
 .sectionKicker { margin: 0; color: var(--theme-text-muted); font-family: var(--font-body); font-size: 11px; font-weight: 600; line-height: 1.5; letter-spacing: 0; }
@@ -50,7 +50,7 @@
 .groupHeading { display: flex; align-items: center; gap: 11px; min-width: 0; margin-bottom: 12px; }
 .groupHeading::after { content: ""; display: block; flex: 1 0 48px; min-width: 48px; height: 2px; opacity: 1; background: #ef2346; box-shadow: 0 0 6px rgb(239 35 70 / 20%); pointer-events: none; }
 .groupEmblem { display: grid; place-items: center; width: 26px; height: 28px; flex-shrink: 0; color: var(--group-ink); }
-.groupEmblem svg { width: 25px; height: 25px; stroke-width: 1.6; }
+.groupEmblem :is(svg, img) { width: 25px; height: 25px; stroke-width: 1.6; }
 .groupTitle { min-width: 0; }
 .groupTitle h3 { margin: 0; color: var(--theme-text); font-family: var(--font-body); font-size: 12px; font-weight: 800; line-height: 1.5; letter-spacing: .09em; text-transform: uppercase; overflow-wrap: anywhere; }
 .groupTitle p { max-width: 75ch; margin: 4px 0 0; color: var(--theme-text-muted); font-size: 11px; line-height: 1.6; }
@@ -60,7 +60,7 @@
 /* Articles keep their player-owned theme surface, border and radius. */
 .card { container: staff-card / inline-size; position: relative; min-width: 0; width: 100%; box-sizing: border-box; border: 1px solid var(--theme-border); border-radius: var(--theme-radius); isolation: isolate; }
 .card::after { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; background: radial-gradient(ellipse at var(--shine-x, 5%) var(--shine-y, 15%), color-mix(in srgb, var(--theme-accent) 12%, transparent), transparent 70%); }
-.cardWatermark { position: absolute; z-index: -1; top: 50%; left: 34%; width: 150px; height: 150px; color: var(--theme-accent-soft); opacity: .055; stroke-width: .75; transform: translateY(-50%) rotate(-12deg); pointer-events: none; }
+:is(svg, img).cardWatermark { position: absolute; z-index: -1; top: 50%; left: 34%; width: 150px; height: 150px; color: var(--theme-accent-soft); opacity: .055; stroke-width: .75; transform: translateY(-50%) rotate(-12deg); pointer-events: none; }
 .card[data-staff-card="featured"] { padding: 16px; }
 .card[data-staff-card="featured"] .cardWatermark { top: 42%; left: 28%; width: 220px; height: 220px; opacity: .07; }
 .featuredLayout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; gap: 20px; min-width: 0; }
@@ -73,11 +73,11 @@
 .avatar > img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
 .avatar > span:not(.avatarBadge) { color: var(--theme-accent-soft); font-family: var(--font-display); font-size: 29px; }
 .avatarBadge { position: absolute; top: -7px; left: -7px; display: grid; place-items: center; width: 25px; height: 25px; border: 1px solid var(--theme-accent-strong); color: var(--theme-accent-soft); background: var(--theme-surface-raised); }
-.avatarBadge svg { width: 15px; height: 15px; stroke-width: 1.5; }
+.avatarBadge :is(svg, img) { width: 15px; height: 15px; stroke-width: 1.5; }
 .memberCopy { flex: 1; min-width: 0; }
 .memberRole { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 3px 6px; border: 1px solid color-mix(in srgb, var(--theme-accent-strong) 45%, transparent); border-radius: 1px; color: var(--theme-accent-soft); background: color-mix(in srgb, var(--theme-accent) 9%, transparent); font-size: 9px; font-weight: 650; line-height: 1.6; }
 .memberRole > span { min-width: 0; overflow-wrap: anywhere; }
-.memberRole svg { width: 12px; height: 12px; flex-shrink: 0; }
+.memberRole :is(svg, img) { width: 12px; height: 12px; flex-shrink: 0; }
 .memberCopy h4 { margin: 8px 0 7px; color: var(--theme-text); font-family: var(--font-display); font-size: 23px; font-weight: 400; line-height: 1.15; letter-spacing: -.025em; overflow-wrap: anywhere; }
 .memberCopy h4 a { color: inherit; transition: color .2s; }
 .memberCopy h4 a:hover { color: var(--theme-accent-soft); }
@@ -89,7 +89,7 @@
 .card[data-staff-card="featured"] .portraitLink { width: 130px; flex-basis: 130px; }
 .card[data-staff-card="featured"] .memberCopy h4 { font-size: 34px; }
 .card[data-staff-card="featured"] .avatarBadge { top: -8px; left: -8px; width: 34px; height: 34px; }
-.card[data-staff-card="featured"] .avatarBadge svg { width: 21px; height: 21px; }
+.card[data-staff-card="featured"] .avatarBadge :is(svg, img) { width: 21px; height: 21px; }
 .memberDescription { max-width: 45ch; margin: 0; color: var(--theme-text-muted); font-size: 12px; line-height: 1.8; }
 .memberMetrics { display: grid; align-content: start; gap: 8px; min-width: 0; }
 .playerStanding { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; min-width: 0; margin: 0; }
@@ -244,7 +244,7 @@
   .group { margin-top: 21px; }
   .groupHeading { gap: 9px; }
   .groupTitle h3 { font-size: 11px; letter-spacing: .06em; }
-  .groupEmblem, .groupEmblem svg { width: 22px; height: 22px; }
+  .groupEmblem, .groupEmblem :is(svg, img) { width: 22px; height: 22px; }
   .groupCount { font-size: 8px; }
   .card[data-staff-card="featured"] { padding: 14px; }
   .featuredLayout { gap: 20px; }
@@ -252,7 +252,7 @@
   .card[data-staff-card="featured"] .portraitLink { width: 96px; flex-basis: 96px; }
   .card[data-staff-card="featured"] .memberCopy h4 { font-size: 28px; }
   .card[data-staff-card="featured"] .avatarBadge { width: 28px; height: 28px; }
-  .card[data-staff-card="featured"] .avatarBadge svg { width: 18px; height: 18px; }
+  .card[data-staff-card="featured"] .avatarBadge :is(svg, img) { width: 18px; height: 18px; }
   .card[data-staff-card="featured"] .cardWatermark { left: 27%; width: 170px; height: 170px; }
   .memberDescription { font-size: 11px; }
   .memberHeader { gap: 16px; }

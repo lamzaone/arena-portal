@@ -118,7 +118,8 @@ test("full player profiles paint administrative, combat and community content ab
             if (geometry.groups && geometry.metadata && geometry.actions) {
               assert.equal(geometry.groupCount, 4, `${theme} ${width}: primary group remains by avatar and four additional real groups remain in the rack`);
               assert.ok(geometry.primary.height > 0);
-              assert.ok(geometry.groups.y >= geometry.metadata.bottom + 7);
+              assert.ok(geometry.groups.y >= geometry.name.bottom + 7, "group badges sit directly below the player name");
+              assert.ok(geometry.groups.bottom < geometry.metadata.y, "groups precede Steam and theme details");
               assert.ok(geometry.actions.y >= geometry.groups.bottom + 7);
               assert.equal(intersects(geometry.status, geometry.name), false, `${theme} ${width}: status never overlaps the full name`);
               assert.equal(intersects(geometry.status, geometry.metadata), false, `${theme} ${width}: presence stays separate from details`);

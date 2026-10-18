@@ -262,6 +262,9 @@ export function PlayerProfilePage({ staffControls, arenaStats, profile, identity
               <div className={headerStyles.heading}>
                 <div className="tapped-kicker"><UserRound aria-hidden="true" /> {isOwnProfile ? "Your player profile" : "Player profile"}</div>
                 <h1>{displayName}</h1>
+                {!showSettings && secondaryIdentityGroups.length > 0 ? <div className={`profile-identity-badge-rack ${headerStyles.groups}`}>
+                  <IdentityGroupBadgeList groups={secondaryIdentityGroups} compact label="Additional player groups" />
+                </div> : null}
               </div>
               {!showSettings ? <div className={headerStyles.status}><PlayerServerPresence steamId={steamId} initialStatus={initialServerStatus} /></div> : null}
             </div>
@@ -277,10 +280,6 @@ export function PlayerProfilePage({ staffControls, arenaStats, profile, identity
                   <ProfileThemeSurfaceBadge themeKey={profileTheme.key} surface="profile" />
                 </span> : null}
               </div>
-              {secondaryIdentityGroups.length > 0 ? <div className={`profile-identity-badge-rack ${headerStyles.groups}`}>
-                <span className={headerStyles.rowLabel}>Groups</span>
-                <IdentityGroupBadgeList groups={secondaryIdentityGroups} compact label="Additional player groups" />
-              </div> : null}
               {community?.initialCommunity.available || discordProfileUrl ? <div className={headerStyles.actions} role="group" aria-label="Profile links and community">
                 {community?.initialCommunity.available ? <>
                   <a href="#community"><ThumbsUp aria-hidden="true" /><span>Reputation <strong>{community.initialCommunity.reputation > 0 ? "+" : ""}{formatCount(community.initialCommunity.reputation)}</strong></span></a>

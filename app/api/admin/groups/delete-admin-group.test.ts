@@ -11,6 +11,7 @@ function exportsFor(module: string, error: string) {
   return `export class ${error} extends Error{}` + names.map(name => `export async function ${name}(input){globalThis.__deleteAdminGroupRoute.calls.push({method:'${name}',input});return {name:input.previousName,catalogueSynced:globalThis.__deleteAdminGroupRoute.synced}}`).join("\n");
 }
 const stubs: Record<string, string> = {
+  "@/lib/data/group-badge-symbols": "export class GroupBadgeSymbolError extends Error{};export const readGroupBadgeForm=request=>request.formData();export const saveGroupBadgeSymbol=async()=>{throw new Error('Unexpected symbol upload')};",
   "@/lib/data/identity-groups": exportsFor("@/lib/data/identity-groups", "IdentityGroupError"),
   "@/lib/data/external-group-management": exportsFor("@/lib/data/external-group-management", "ExternalGroupManagementError"),
   "@/lib/chat-colors": "export const normalizeChatColor=()=>'';export const normalizeChatStyle=()=>'';export const normalizeChatBadge=()=>'';",

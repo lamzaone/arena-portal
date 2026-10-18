@@ -16,8 +16,8 @@ import {
 import { GroupAdminNav } from "@/components/group-admin-nav";
 import {
   IdentityGroupBadge,
-  identityGroupBadgeIconOptions,
 } from "@/components/identity-group-badge";
+import { GroupBadgeSymbolPicker } from "@/components/group-badge-symbol-picker";
 import { PlayerSearchField } from "@/components/player-search-field";
 import { PlayerIdentity } from "@/components/player-identity";
 import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
@@ -148,6 +148,8 @@ const noticeMessages: Record<string, string> = {
 
 const errorMessages: Record<string, string> = {
   verification: "The form expired. Refresh this page and try again.",
+  badge_symbol_invalid: "Choose a valid PNG, WebP or JPG symbol, up to 256 KB and 512 × 512 pixels.",
+  badge_symbol_storage: "Custom symbol uploads are not enabled on this installation yet. Your group has not been changed.",
   "founder-required": "Only the externally assigned Founder can manage identity groups.",
   founder_required: "Only the externally assigned Founder can manage identity groups.",
   invalid_input: "Review the submitted fields and try again.",
@@ -546,7 +548,7 @@ function GroupCard({
 
       <details className={styles.groupDetails}>
       <summary><span>Edit identity &amp; badge</span><small>Name, colors, visibility &amp; priority</small></summary>
-      <form className={`staff-management-form ${styles.groupPresentationForm}`} action="/api/admin/groups" method="post" aria-label={`Edit ${group.displayName} presentation`}>
+      <form className={`staff-management-form ${styles.groupPresentationForm}`} action="/api/admin/groups" method="post" encType="multipart/form-data" aria-label={`Edit ${group.displayName} presentation`}>
         <MutationFields csrf={csrf} />
         <input type="hidden" name="groupId" value={group.id} />
         <div className={styles.presentationHeading}>
@@ -580,14 +582,7 @@ function GroupCard({
               Badge label
               <input name="badgeLabel" defaultValue={group.badgeLabel} maxLength={32} required />
             </label>
-            <label>
-              Badge icon
-              <select name="badgeIconKey" defaultValue={group.badgeIconKey}>
-                {identityGroupBadgeIconOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
+            <GroupBadgeSymbolPicker initialIcon={group.badgeIconKey} />
             <label className={styles.colorField}>
               Accent
               <input name="badgeColor" type="color" defaultValue={group.badgeColor} required />
@@ -1041,7 +1036,7 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
             <span className={styles.sourceBadge} data-source="custom">Arena custom</span>
             <strong>Custom Arena identity and presentation</strong>
           </div>
-          <form className={`staff-management-form ${styles.createGroupForm}`} action="/api/admin/groups" method="post">
+          <form className={`staff-management-form ${styles.createGroupForm}`} action="/api/admin/groups" method="post" encType="multipart/form-data">
             <MutationFields csrf={csrf} action="group-create" />
             <fieldset className={styles.formSection}>
               <legend>Group identity</legend>
@@ -1057,7 +1052,7 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
               <p>These values feed the shared badge component across profiles, tables, and compact player cards.</p>
               <div className={`${styles.formGrid} ${styles.badgeFormGrid}`}>
                 <label>Badge label<input name="badgeLabel" maxLength={32} required placeholder="BETA" /></label>
-                <label>Badge icon<select name="badgeIconKey" defaultValue="shield">{identityGroupBadgeIconOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+                <GroupBadgeSymbolPicker />
                 <label className={styles.colorField}>Accent<input name="badgeColor" type="color" defaultValue="#f0b35a" required /></label>
                 <label className={styles.colorField}>Badge background<input name="badgeSoftColor" type="color" defaultValue="#ffe4b8" required /></label>
               </div>

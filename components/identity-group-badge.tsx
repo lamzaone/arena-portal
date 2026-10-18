@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { IdentityGroupIcon } from "@/components/identity-group-icon";
 import { IDENTITY_GROUP_BADGE_ICON_OPTIONS } from "@/lib/content/identity-group-badges";
 import type { IdentityGroupBadgeData } from "@/lib/data/identity-groups";
+import styles from "./identity-group-badge.module.css";
 
 type IdentityGroupBadgeProps = {
   group: IdentityGroupBadgeData;
@@ -47,7 +48,7 @@ export function IdentityGroupBadge({
       aria-label={`${group.badgeLabel}, ${group.displayName}, ${sourceLabel} group`}
       role={listItem ? "listitem" : undefined}
     >
-      <IdentityGroupIcon icon={group.badgeIconKey} />
+      <span className={styles.symbol} aria-hidden="true"><IdentityGroupIcon icon={group.badgeIconKey} /></span>
       <span>{group.badgeLabel}</span>
     </span>
   );

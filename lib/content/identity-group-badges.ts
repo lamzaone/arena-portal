@@ -23,6 +23,24 @@ export const IDENTITY_GROUP_BADGE_ICON_OPTIONS = [
   { value: "code", label: "Code" },
   { value: "bot", label: "Bot" },
   { value: "verified", label: "Verified" },
+  { value: "castle", label: "Owner · Castle" },
+  { value: "shield_user", label: "Administrator · Shield" },
+  { value: "shield_half", label: "Senior staff · Split shield" },
+  { value: "shield_question", label: "Trial staff · Shield" },
+  { value: "chevrons", label: "Leadership · Chevrons" },
+  { value: "command", label: "Command" },
+  { value: "landmark", label: "Headquarters" },
+  { value: "scroll", label: "Secretary · Scroll" },
+  { value: "gavel", label: "Moderator · Gavel" },
+  { value: "scales", label: "Fair play · Scales" },
+  { value: "key", label: "Access · Key" },
+  { value: "megaphone", label: "Community · Megaphone" },
+  { value: "graduation", label: "Mentor · Graduation" },
+  { value: "helping", label: "Helper · Hand" },
+  { value: "gamepad", label: "Player · Gamepad" },
+  { value: "siren", label: "Enforcement · Siren" },
+  { value: "eye", label: "Observer · Eye" },
+  { value: "briefcase", label: "Manager · Briefcase" },
 ] as const;
 
 export type IdentityGroupBadgeIconKey =
@@ -36,6 +54,14 @@ export function isIdentityGroupBadgeIconKey(
   value: string,
 ): value is IdentityGroupBadgeIconKey {
   return identityGroupBadgeIconKeys.has(value);
+}
+
+export function isCustomGroupBadgeIconKey(value: string): boolean {
+  return /^custom\.[a-f0-9]{24}$/.test(value);
+}
+
+export function customGroupBadgeIconUrl(value: string): string | null {
+  return isCustomGroupBadgeIconKey(value) ? `/api/group-badges/${value.slice(7)}` : null;
 }
 
 export function identityExternalBadgeLookupKey(

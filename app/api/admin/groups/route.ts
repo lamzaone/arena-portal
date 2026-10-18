@@ -44,6 +44,7 @@ import {
   writeStaffActionAudit,
 } from "@/lib/data/portal-repository";
 import { formActionRedirect } from "@/lib/form-action-response";
+import { GroupBadgeSymbolError, readGroupBadgeForm, saveGroupBadgeSymbol } from "@/lib/data/group-badge-symbols";
 
 function redirect(
   request: Request,
@@ -125,7 +126,9 @@ export async function POST(request: Request) {
   if (!session) {
     return formActionRedirect(request, "/api/auth/steam");
   }
-  const formData = await request.formData();
+  let formData: FormData;
+  try { formData = await readGroupBadgeForm(request); }
+  catch { return redirect(request, "error", "badge_symbol_invalid"); }
   const redirectTab = returnTab(request, formData);
   const redirectResult = (key: "notice" | "error", value: string) =>
     redirect(request, key, value, text(formData, "groupId"), redirectTab);
@@ -142,6 +145,11 @@ export async function POST(request: Request) {
   };
   const action = text(formData, "action");
   const requestKey = text(formData, "requestKey");
+
+  async function badgeIconKey() {
+    const file = formData.get("badgeSymbol");
+    return file instanceof File && file.size > 0 ? saveGroupBadgeSymbol(file, session!.steamId) : text(formData, "badgeIconKey") || "shield";
+  }
 
   async function createGroupTag(groupId: number, label: string) {
     if (!bool(formData, "tagEnabled")) return;
@@ -326,7 +334,7 @@ export async function POST(request: Request) {
           displayName: text(formData, "displayName"),
           description: text(formData, "description"),
           badgeLabel: text(formData, "badgeLabel"),
-          badgeIconKey: text(formData, "badgeIconKey") || "shield",
+          badgeIconKey: await badgeIconKey(),
           badgeColor: text(formData, "badgeColor"),
           badgeSoftColor: text(formData, "badgeSoftColor"),
           profilePriority: number(formData, "profilePriority"),
@@ -349,7 +357,7 @@ export async function POST(request: Request) {
           displayName: text(formData, "displayName"),
           description: text(formData, "description"),
           badgeLabel: text(formData, "badgeLabel"),
-          badgeIconKey: text(formData, "badgeIconKey") || "shield",
+          badgeIconKey: await badgeIconKey(),
           badgeColor: text(formData, "badgeColor"),
           badgeSoftColor: text(formData, "badgeSoftColor"),
           profilePriority: number(formData, "profilePriority"),
@@ -582,6 +590,7 @@ export async function POST(request: Request) {
         return redirectResult("error", "action");
     }
   } catch (error) {
+    if (error instanceof GroupBadgeSymbolError) return redirectResult("error", error.code);
     if (error instanceof IdentityGroupError) {
       return redirectResult("error", error.code);
     }
