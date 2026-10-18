@@ -5,6 +5,17 @@
   color: var(--theme-text);
 }
 
+.root[data-embedded="true"] { gap: 12px; padding: 0 16px 18px; }
+.root[data-embedded="true"] .workspaceHeader { padding: 18px 20px; box-shadow: none; }
+.root[data-embedded="true"] .workspaceHeader h2 { font-size: 1.55rem; }
+.root[data-embedded="true"] .summaryCard { min-height: 70px; background: var(--theme-surface); }
+.root[data-embedded="true"] .roster { box-shadow: none; }
+
+@container staff-content (max-width: 620px) {
+  .root[data-embedded="true"] { padding: 0 10px 12px; }
+  .root[data-embedded="true"] .workspaceHeader { padding: 14px; }
+}
+
 .workspaceHeader {
   position: relative;
   isolation: isolate;
@@ -1441,3 +1452,5 @@
     background: Canvas;
   }
 }
+
+.editForm [hidden] { display: none !important; }

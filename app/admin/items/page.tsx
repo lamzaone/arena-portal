@@ -46,6 +46,7 @@ import {
 } from "@/lib/economy/item-taxonomy";
 
 import styles from "./items-admin.module.css";
+import { RefreshAllPrices } from "./refresh-all-prices";
 
 type AdminItemsPageProps = {
   searchParams: Promise<{
@@ -453,6 +454,7 @@ export default async function AdminItemsPage({
                 <h2 id="marketplace-lookup-title">Find a catalogue product</h2>
               </div>
             </div>
+            {access.canManageEconomy ? <RefreshAllPrices csrf={csrf} /> : null}
             <SearchNavigationForm action="/admin/items" role="search" instant>
               <input type="hidden" name="tab" value="marketplace" />
               {crateQuery ? <input type="hidden" name="crateQ" value={crateQuery} /> : null}

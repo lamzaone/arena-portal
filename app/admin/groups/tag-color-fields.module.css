@@ -31,7 +31,7 @@
   outline: 2px solid var(--theme-accent);
   outline-offset: 3px;
 }
-.fields { display: grid; gap: 18px; min-width: 0; }
+.fields { display: grid; gap: 18px; min-width: 0; container: tag-editor / inline-size; }
 .presentation { display: grid; grid-template-columns: minmax(160px, .65fr) minmax(0, 1.35fr); gap: 20px; align-items: center; }
 .preview {
   min-width: 0;
@@ -45,7 +45,11 @@
 .previewLabel svg { width: 13px; height: 13px; }
 .preview p { margin: 10px 0 8px; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
 .preview > small { display: block; color: #adadb9; font-size: 11px; line-height: 1.5; }
-.colorFields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.colorFields { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
+.channelTabs { display: flex; gap: 6px; padding: 5px; border: 1px solid var(--theme-border); border-radius: var(--theme-radius); background: var(--theme-control-bg); }
+.channelTabs button { flex: 1; min-width: 0; min-height: 40px; margin: 0; padding: 7px 10px; border: 1px solid transparent; border-radius: var(--theme-radius); background: transparent; color: var(--theme-text-muted); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.channelTabs button[aria-pressed="true"] { color: var(--theme-text); border-color: var(--theme-accent); background: var(--theme-control-hover); }
+.channelTabs button:focus-visible { outline: 2px solid var(--theme-focus-ring); outline-offset: 1px; }
 .picker { min-width: 0; margin: 0; padding: 0; border: 0; }
 .picker legend { margin-bottom: 8px; padding: 0; }
 .picker details { border: 1px solid var(--theme-border); border-radius: 5px; background: var(--theme-surface-raised); }
@@ -81,6 +85,8 @@
 }
 
 .identityFields, .channel { display: grid; gap: 14px; min-width: 0; }
+.channel { grid-template-columns: minmax(180px, .75fr) minmax(0, 2fr); gap: 22px; align-items: start; }
+.channel[hidden] { display: none; }
 .customColor { display: flex; align-items: end; gap: 8px; margin-bottom: 8px; }
 .form .customColor input[type="color"] { width: 44px; height: 44px; padding: 3px; flex-shrink: 0; cursor: pointer; }
 .colorEntry { display: grid; gap: 6px; min-width: 0; flex: 1; }
@@ -117,18 +123,23 @@
 .styleButtons button:disabled { opacity: .45; cursor: default; }
 
 .effectHelp, .effectDescription { margin: 8px 0; color: var(--theme-text-muted, #bdb6bd); font-size: 11px; line-height: 1.5; }
-.effectCards { display: grid; gap: 10px; }
-.effectCard { min-width: 0; padding: 12px; border: 1px solid var(--theme-border, #42333d); border-radius: 6px; background: var(--theme-surface-raised, #1b1118); }
-.effectCard[data-enabled="true"] { border-left: 3px solid var(--theme-accent, #e11d48); }
+.effectCards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; }
+.effectCard { min-width: 0; padding: 10px 12px; border: 1px solid var(--theme-border, #42333d); border-left: 3px solid transparent; border-radius: 6px; background: var(--theme-surface-raised, #1b1118); }
+.effectCard[data-enabled="true"] { border-left-color: var(--theme-accent, #e11d48); }
 .effectHeading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .effectHeading strong { color: var(--theme-text, #fff5f5); font-size: 13px; }
-.effectHeading button { min-width: 46px; min-height: 32px; border: 1px solid var(--theme-border, #42333d); border-radius: 20px; color: var(--theme-text-muted, #bdb6bd); background: transparent; cursor: pointer; font-size: 11px; }
-.effectHeading button[aria-pressed="true"] { color: #fff; border-color: var(--theme-accent, #e11d48); background: var(--theme-accent, #e11d48); }
+.effectHeading button { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; min-width: 64px; min-height: 36px; padding: 4px 9px; border: 1px solid var(--theme-border, #42333d); border-radius: 20px; color: var(--theme-text-muted, #bdb6bd); background: var(--theme-control-bg); cursor: pointer; font: inherit; font-size: 11px; }
+.effectHeading button > span { width: 12px; height: 12px; border-radius: 50%; background: var(--theme-text-subtle); }
+.effectHeading button[aria-checked="true"] { color: var(--theme-text); border-color: var(--theme-accent, #e11d48); background: color-mix(in srgb, var(--theme-accent) 18%, var(--theme-control-bg)); }
+.effectHeading button[aria-checked="true"] > span { background: var(--theme-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-accent) 15%, transparent); }
 .effectHeading button:focus-visible, .effectCard summary:focus-visible { outline: 2px solid var(--theme-accent, #e11d48); outline-offset: 3px; }
-.effectCurrent { display: grid; gap: 6px; color: var(--theme-text, #fff5f5); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.effectCurrent { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; color: var(--theme-text-muted, #bdb6bd); font-size: 10px; line-height: 1.6; overflow-wrap: anywhere; }
 .miniPalette { display: flex; gap: 3px; }
 .miniPalette i { width: 20px; height: 5px; border-radius: 2px; border: 1px solid #ffffff30; }
-.effectCard details > summary { margin-top: 10px; color: var(--theme-text-muted, #bdb6bd); cursor: pointer; font-size: 11px; }
+.effectCard details > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; margin-top: 3px; color: var(--theme-text-muted, #bdb6bd); cursor: pointer; font-size: 11px; list-style: none; }
+.effectCard details > summary::-webkit-details-marker { display: none; }
+.effectCard details > summary::after { content: "+"; color: var(--theme-accent); font-size: 18px; }
+.effectCard details[open] > summary::after { content: "−"; }
 .effectCard .effectSettings { grid-template-columns: 1fr; }
 .effectCard .effectColor { gap: 4px; }
 .effectColorInputs { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; }
@@ -151,3 +162,6 @@
   color: var(--muted, #a6a6ad);
 }
 .saveBar button { flex-shrink: 0; }
+@container tag-editor (max-width: 680px) {
+  .presentation, .channel, .effectCards { grid-template-columns: minmax(0, 1fr); }
+}

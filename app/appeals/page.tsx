@@ -2,6 +2,7 @@ import { AlertTriangle, ChevronDown, MessageSquareText, Shield } from "lucide-re
 import Link from "next/link";
 import styles from "../tickets/support-workspace.module.css";
 import appealStyles from "./appeals.module.css";
+import { PunishmentOverview } from "../tickets/punishment-overview";
 
 import { CaseStatusTag } from "@/components/case-status-tag";
 import { CaseConversation } from "@/components/case-conversation";
@@ -78,7 +79,7 @@ export default async function AppealsPage({ searchParams }: AppealsPageProps) {
   const closedAppeals = appeals.filter((appeal) => !isOpenAppeal(appeal.status));
   const activeBan = profile.bans.find((ban) => isActiveSanction(ban.expiresAt));
   const playerIdentities = await resolvePlayerIdentities(
-    [session.steamId, activeBan?.adminSteamId ?? "", ...appeals.flatMap((appeal) => [appeal.ban?.adminSteamId ?? "", ...appeal.messages.map((message) => message.authorId)])]
+    [session.steamId, ...profile.bans.map((ban) => ban.adminSteamId ?? ""), ...profile.sanctions.map((sanction) => sanction.adminSteamId ?? ""), ...appeals.flatMap((appeal) => [appeal.ban?.adminSteamId ?? "", ...appeal.messages.map((message) => message.authorId)])]
       .map((steamId) => ({ steamId })),
   );
   let storageReady = portalStorageConfigured();
@@ -99,15 +100,8 @@ export default async function AppealsPage({ searchParams }: AppealsPageProps) {
       {params.submitted && <PortalToast message="Your appeal was submitted. Staff updates will appear below." />}
       {params.replied && <PortalToast message="Your reply and any screenshots were sent to staff." />}
       {params.error && <PortalToast variant="danger" message={error} />}
+      <PunishmentOverview profile={profile} identities={playerIdentities} viewerSteamId={session.steamId} />
       <div className={`${styles.workspace} ${appealStyles.workspace}${openAppealId ? "" : ` ${appealStyles.withoutOpenAppeal}`}`}>
-        <section id="appeal-history" className={styles.history} aria-label="Appeal history">
-          <div className="section-heading compact"><h2>Open appeals</h2><span className={styles.count}>{openAppeals.length} open</span></div>
-          {openAppeals.length ? <div className="case-card-list">{openAppeals.map((appeal) => <AppealCase key={appeal.id} appeal={appeal} playerIdentities={playerIdentities} viewerSteamId={session.steamId} />)}</div> : <p className="empty-copy">You have no open appeals.</p>}
-          {closedAppeals.length ? <section className={appealStyles.closedHistory} aria-labelledby="closed-appeals-title">
-            <div className="section-heading compact"><h2 id="closed-appeals-title">Closed appeals</h2><span className={styles.count}>{closedAppeals.length}</span></div>
-            <div className="case-card-list">{closedAppeals.map((appeal) => <AppealCase key={appeal.id} appeal={appeal} playerIdentities={playerIdentities} viewerSteamId={session.steamId} />)}</div>
-          </section> : null}
-        </section>
         <aside className={styles.composer} aria-label="Appeal submission">
           {openAppealId ? <section className={`panel ${appealStyles.openNotice}`}>
             <MessageSquareText aria-hidden="true" />
@@ -116,7 +110,6 @@ export default async function AppealsPage({ searchParams }: AppealsPageProps) {
             <a className="button button-secondary" href={openAppeals.some((appeal) => appeal.id === openAppealId) ? `#appeal-${openAppealId}` : "/appeals"}>Continue appeal #{openAppealId}</a>
           </section> : null}
           {activeBan ? <>
-            <section className="panel appeal-ban"><div><span className="badge badge-danger">Active ban</span><h2>{activeBan.reason}</h2><p>Issued by <AdminProfileMention steamId={activeBan.adminSteamId} name={activeBan.adminSteamId ? playerIdentities[activeBan.adminSteamId]?.displayName ?? activeBan.adminName : activeBan.adminName} player={activeBan.adminSteamId ? playerIdentities[activeBan.adminSteamId] : undefined} /> on {formatDate(activeBan.createdAt)}. {activeBan.expiresAt ? `Ends ${formatDate(activeBan.expiresAt)}.` : "This ban is permanent until reviewed."}</p></div></section>
             {!openAppealId ? storageReady && appealEligibility?.eligible ? <form className="panel form-panel" action="/api/appeals" method="post" encType="multipart/form-data">
               <input type="hidden" name="action" value="create" />
               <div className="panel-heading"><h2>Submit an appeal</h2><p>Explain what happened and include useful context. You can have one open appeal at a time.</p></div>
@@ -126,8 +119,16 @@ export default async function AppealsPage({ searchParams }: AppealsPageProps) {
               <EvidenceGuidance />
               <button className="button button-primary" type="submit">Submit appeal</button>
             </form> : !storageReady ? <div className="notice notice-info"><AlertTriangle aria-hidden="true" /> Appeals are temporarily unavailable. Please try again later.</div> : <div className="notice notice-warning"><AlertTriangle aria-hidden="true" /><span>Your previous appeal was closed as still banned. You can submit a new appeal after <strong>{appealEligibility?.eligibleAt ? formatPortalDate(appealEligibility.eligibleAt) : "the seven-day review cooldown"}</strong>.</span></div> : null}
-          </> : <section className="empty-state compact"><h2>No active ban</h2><p>Your account has no active ban. You can still review your previous appeals here.</p></section>}
+          </> : <section className="empty-state compact"><h2>Need help with another issue?</h2><p>For communication restrictions or account questions, <Link href="/tickets">open a support ticket</Link>. Your previous appeals remain available below.</p></section>}
         </aside>
+        <section id="appeal-history" className={styles.history} aria-label="Appeal history">
+          <div className="section-heading compact"><h2>Open appeals</h2><span className={styles.count}>{openAppeals.length} open</span></div>
+          {openAppeals.length ? <div className="case-card-list">{openAppeals.map((appeal) => <AppealCase key={appeal.id} appeal={appeal} playerIdentities={playerIdentities} viewerSteamId={session.steamId} />)}</div> : <p className="empty-copy">You have no open appeals.</p>}
+          {closedAppeals.length ? <section className={appealStyles.closedHistory} aria-labelledby="closed-appeals-title">
+            <div className="section-heading compact"><h2 id="closed-appeals-title">Closed appeals</h2><span className={styles.count}>{closedAppeals.length}</span></div>
+            <div className="case-card-list">{closedAppeals.map((appeal) => <AppealCase key={appeal.id} appeal={appeal} playerIdentities={playerIdentities} viewerSteamId={session.steamId} />)}</div>
+          </section> : null}
+        </section>
       </div>
     </PortalShell>
   );

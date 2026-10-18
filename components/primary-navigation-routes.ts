@@ -1,6 +1,6 @@
 export const primaryLinks: readonly { href: string; label: string }[] = [
   { href: "/", label: "Home" },
-  { href: "/modes", label: "Modes" },
+  { href: "/features", label: "Features" },
   { href: "/vip", label: "VIP" },
   { href: "/ranking", label: "Ranking" },
   { href: "/staff", label: "Staff" },

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
+
 import {
   type PoolConnection,
   type ResultSetHeader,
@@ -898,6 +900,140 @@ export async function updateRuntimeVipCoreGroup(input: {
   }
   const catalogueSynced = await completeRenameAndRefreshPortal(input, renameIntent);
   return { name, catalogueSynced };
+}
+
+export async function deleteRuntimeAdminsCoreGroup(input: {
+  actorSteamId: string;
+  requestKey: string;
+  rowId: unknown;
+  previousName: string;
+}) {
+  const rowId = normalizedInteger(input.rowId, "Admins.Core row ID", 1, Number.MAX_SAFE_INTEGER);
+  const previousName = normalizedName(input.previousName, 100, "Existing group name");
+  if (isFounderName(previousName)) fail("founder_invariant", "Founder cannot be deleted through the portal.");
+  if (!/^7656119\d{10}$/.test(input.actorSteamId)) fail("external_group_details", "The acting staff SteamID64 is invalid.");
+  const result = await withGameTransaction(async (connection) => {
+    const [definitions] = await connection.query<AdminGroupRow[]>(
+      "SELECT Id, Name, Permissions, Servers, Immunity FROM `groups` ORDER BY Name, Id FOR UPDATE",
+    );
+    const existing = definitions.find(row => Number(row.Id) === rowId);
+    if (!existing || String(existing.Name) !== previousName) {
+      fail("external_group_not_found", "That exact Admins.Core definition changed or was already deleted. Refresh the page.");
+    }
+    const name = String(existing.Name);
+    if (isFounderName(name)) fail("founder_invariant", "Founder cannot be deleted through the portal.");
+    const normalizedIdentity = (value: string) => value.normalize("NFKC").trim().toLocaleLowerCase("en-US");
+    if (definitions.some(row => Number(row.Id) !== rowId && normalizedIdentity(String(row.Name)) === normalizedIdentity(name))) {
+      fail("external_group_scope_conflict", "This Admin group name belongs to multiple native rows. Resolve that scope ambiguity before deleting it.");
+    }
+    if (!appliesToServer(storedStringList(existing.Servers, 256))) {
+      fail("external_group_scope_conflict", "That Admins.Core definition is no longer bound to this server.");
+    }
+    const [admins] = await connection.query<AdminAssignmentRow[]>(
+      "SELECT Id, Groups, Permissions, Servers FROM admins ORDER BY Id FOR UPDATE",
+    );
+    type ArenaDeleteGroup = RowDataPacket & {
+      id: number | string; external_key: string; definition: unknown;
+      legacy_portal_group_id: number | string | null;
+    };
+    const [arenaGroups] = await connection.query<ArenaDeleteGroup[]>(
+      "SELECT id, external_key, definition, legacy_portal_group_id FROM arena_groups " +
+        "WHERE group_type = 'admin' ORDER BY id FOR UPDATE",
+    );
+    const nativeIdentity = (value: unknown): number | null => {
+      let parsed = value;
+      try { if (typeof value === "string") parsed = JSON.parse(value); }
+      catch { fail("external_group_scope_conflict", "An Arena Admin definition has invalid scope provenance. Repair it before deleting this group."); }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+      const native = (parsed as Record<string, unknown>).nativeRowId;
+      if (native === undefined || native === null) return null;
+      const id = Number(native);
+      if (!Number.isSafeInteger(id) || id < 1) fail("external_group_scope_conflict", "An Arena Admin definition has invalid native row provenance.");
+      return id;
+    };
+    const relatedGroups = arenaGroups.filter(group =>
+      normalizedIdentity(String(group.external_key)) === normalizedIdentity(name) || nativeIdentity(group.definition) === rowId);
+    if (relatedGroups.length > 1 || relatedGroups.some(group =>
+      normalizedIdentity(String(group.external_key)) !== normalizedIdentity(name) ||
+      nativeIdentity(group.definition) !== null && nativeIdentity(group.definition) !== rowId)) {
+      fail("external_group_scope_conflict", "That native definition does not map uniquely to its Arena Admin authority. Synchronize or repair its scope mapping first.");
+    }
+
+    type Membership = RowDataPacket & {
+      membership_uuid: string; steam_id: string; scope_id: number | string;
+      starts_at: Date | string; expires_at: Date | string | null; row_version: number | string;
+    };
+    let revokedMemberships = 0;
+    for (const group of relatedGroups) {
+      const groupId = Number(group.id);
+      const [scopes] = await connection.query<Array<RowDataPacket & { scope_id: number | string; definition_override: unknown }>>(
+        "SELECT scope_id, definition_override FROM arena_group_scopes WHERE group_id = ? ORDER BY scope_id FOR UPDATE", [groupId],
+      );
+      if (scopes.some(scope => nativeIdentity(scope.definition_override) !== null && nativeIdentity(scope.definition_override) !== rowId)) {
+        fail("external_group_scope_conflict", "An Arena scope is owned by another native Admin definition. Delete only after resolving that mixed scope mapping.");
+      }
+      const [pending] = await connection.query<RowDataPacket[]>(
+        "SELECT command_uuid FROM arena_membership_commands WHERE target_group_id = ? " +
+          "AND status IN ('received', 'processing', 'manual_review') ORDER BY command_uuid LIMIT 1 FOR UPDATE", [groupId],
+      );
+      if (pending.length) fail("external_group_in_use", "This Admin group has a pending membership operation. Let it finish before deleting the definition.");
+      const [memberships] = await connection.query<Membership[]>(
+        "SELECT membership_uuid, steam_id, scope_id, starts_at, expires_at, row_version " +
+          "FROM arena_group_memberships WHERE group_id = ? AND status IN ('active', 'conflict') " +
+          "ORDER BY scope_id, membership_uuid FOR UPDATE", [groupId],
+      );
+      const now = new Date();
+      for (const membership of memberships) {
+        const version = Number(membership.row_version);
+        if (!Number.isSafeInteger(version) || version < 1) fail("external_group_scope_conflict", "An Arena membership version is invalid. Refresh before deleting this group.");
+        const [changed] = await connection.execute<ResultSetHeader>(
+          "UPDATE arena_group_memberships SET status = 'revoked', revoked_at = ?, revoked_by_actor = ?, " +
+            "revoke_reason = 'Admin definition deleted by staff', row_version = row_version + 1 " +
+            "WHERE membership_uuid = ? AND group_id = ? AND scope_id = ? AND row_version = ? AND status IN ('active', 'conflict')",
+          [now, input.actorSteamId, membership.membership_uuid, groupId, Number(membership.scope_id), version],
+        );
+        if (changed.affectedRows !== 1) fail("external_group_not_found", "An Arena membership changed before this definition could be deleted.");
+        await connection.execute(
+          "INSERT INTO arena_membership_outbox (event_uuid, deduplication_key, event_type, aggregate_type, aggregate_key, " +
+            "membership_uuid, steam_id, group_id, scope_id, payload) VALUES (?, ?, ?, 'arena_group_membership', ?, ?, ?, ?, ?, ?)",
+          [randomUUID(), `admin-group-delete:${rowId}:${membership.membership_uuid}:${version + 1}`,
+            "identity.group_membership.revoked", membership.membership_uuid, membership.membership_uuid,
+            membership.steam_id, groupId, Number(membership.scope_id), JSON.stringify({
+              schemaVersion: 1, action: "revoked", groupType: "admin", membershipUuid: membership.membership_uuid,
+              steamId: membership.steam_id, arenaGroupId: groupId, legacyPortalGroupId: group.legacy_portal_group_id,
+              scopeId: Number(membership.scope_id), startsAt: membership.starts_at, expiresAt: membership.expires_at,
+              status: "revoked", rowVersion: version + 1, actorSteamId: input.actorSteamId,
+              reason: "Admin definition deleted by staff", definitionDeleted: true, nativeRowId: rowId,
+            })],
+        );
+        revokedMemberships++;
+      }
+    }
+    let removedAssignments = 0;
+    for (const admin of admins) {
+      let groups: unknown;
+      try { groups = typeof admin.Groups === "string" ? JSON.parse(admin.Groups) : admin.Groups; }
+      catch { fail("external_group_scope_conflict", "A native Admin group list is malformed. Repair its JSON before deleting this definition."); }
+      if (!Array.isArray(groups) || !groups.every(group => typeof group === "string")) {
+        fail("external_group_scope_conflict", "A native Admin group list is not a string array. Repair it before deleting this definition.");
+      }
+      const storedGroups = groups as string[];
+      const remaining = storedGroups.filter(group => normalizedIdentity(group) !== normalizedIdentity(name));
+      if (remaining.length === storedGroups.length) continue;
+      const [changed] = await connection.execute<ResultSetHeader>(
+        "UPDATE admins SET Groups = ? WHERE Id = ? AND Groups <=> ?",
+        [JSON.stringify(remaining), Number(admin.Id), typeof admin.Groups === "string" ? admin.Groups : JSON.stringify(admin.Groups)],
+      );
+      if (changed.affectedRows !== 1) fail("external_group_not_found", "A native Admin assignment changed before this definition could be deleted.");
+      removedAssignments++;
+    }
+    const [deleted] = await connection.execute<ResultSetHeader>("DELETE FROM `groups` WHERE Id = ? AND Name = ?", [rowId, name]);
+    if (deleted.affectedRows !== 1) fail("external_group_not_found", "That exact Admin definition changed before it could be deleted.");
+    await synchronizeAdminsAuthority(connection, { actorSteamId: input.actorSteamId });
+    return { name, removedAssignments, revokedMemberships };
+  });
+  const catalogueSynced = await refreshPortalCatalogue(input);
+  return { ...result, catalogueSynced };
 }
 
 export async function deleteRuntimeVipCoreGroup(input: {

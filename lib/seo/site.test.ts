@@ -17,7 +17,7 @@ test("publishes only stable public landing pages in the sitemap", async () => {
 
   assert.deepEqual(urls, [
     "https://tapped.ro/",
-    "https://tapped.ro/modes",
+    "https://tapped.ro/features",
     "https://tapped.ro/vip",
     "https://tapped.ro/ranking",
     "https://tapped.ro/market",
@@ -46,6 +46,7 @@ test("keeps public pages crawlable while excluding private portal surfaces", asy
     "/settings",
     "/tickets",
     "/appeals",
+    "/communications",
   ]);
   assert.equal(policy.sitemap, "https://tapped.ro/sitemap.xml");
 });
@@ -72,7 +73,7 @@ test("gives each public discovery page a unique canonical search identity", asyn
   const seo = await import("./site.ts");
 
   assert.equal(typeof seo.buildPageMetadata, "function");
-  const entries = (["/modes", "/vip", "/ranking", "/market", "/staff"] as const).map((pathname) => ({
+  const entries = (["/features", "/vip", "/ranking", "/market", "/staff"] as const).map((pathname) => ({
     pathname,
     metadata: seo.buildPageMetadata(pathname),
   }));

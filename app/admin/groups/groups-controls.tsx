@@ -10,9 +10,10 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
 } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronRight } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ArrowUpRight, Check, ChevronLeft, ChevronRight, UsersRound } from "lucide-react";
 
 import { SearchField } from "@/components/ui/search-field";
 
@@ -123,14 +124,20 @@ export function GroupWorkspace({
       : groups[0]?.id ?? null,
   );
   const [query, setQuery] = useState("");
+  const [includeDisabled, setIncludeDisabled] = useState(
+    groups.some(group => group.id === initialSelectedId && group.groupType === "custom" && !group.enabled),
+  );
   const [sort, setSort] = useState<GroupSort>({
     key: "name",
     direction: "ascending",
   });
   const deferredQuery = useDeferredValue(query);
+  const groupRail = useRef<HTMLDivElement>(null);
+  const [railScroll, setRailScroll] = useState({ previous: false, next: false });
   const panels = Children.toArray(children);
   const filteredGroups = useMemo(
     () => groups
+      .filter(group => group.groupType !== "custom" || group.enabled || includeDisabled)
       .filter((group) => matches([
         group.displayName,
         group.key,
@@ -139,7 +146,7 @@ export function GroupWorkspace({
         group.enabled ? "enabled active" : "disabled inactive",
       ].join(" "), deferredQuery))
       .sort((left, right) => compareGroups(left, right, sort)),
-    [deferredQuery, groups, sort],
+    [deferredQuery, groups, sort, includeDisabled],
   );
   const selectedGroup =
     filteredGroups.find((group) => group.id === selectedId) ??
@@ -147,6 +154,23 @@ export function GroupWorkspace({
     null;
   const visibleSelectedId = selectedGroup?.id ?? null;
   const statusId = `${id}-status`;
+
+  useEffect(() => {
+    const rail = groupRail.current;
+    if (!rail) return;
+    const updateScroll = () => setRailScroll({
+      previous: rail.scrollLeft > 2,
+      next: rail.scrollLeft + rail.clientWidth < rail.scrollWidth - 2,
+    });
+    updateScroll();
+    const observer = new ResizeObserver(updateScroll);
+    observer.observe(rail);
+    rail.addEventListener("scroll", updateScroll, { passive: true });
+    return () => {
+      observer.disconnect();
+      rail.removeEventListener("scroll", updateScroll);
+    };
+  }, [filteredGroups]);
 
   useEffect(() => {
     if (visibleSelectedId === null || visibleSelectedId === selectedId) return;
@@ -173,10 +197,6 @@ export function GroupWorkspace({
     }));
   }
 
-  function ariaSort(key: GroupSortKey): GroupSort["direction"] | undefined {
-    return sort.key === key ? sort.direction : undefined;
-  }
-
   function sortButtonLabel(key: GroupSortKey, label: string) {
     const defaultDirection = key === "members" ? "descending" : "ascending";
     if (sort.key !== key) {
@@ -196,104 +216,95 @@ export function GroupWorkspace({
   }
 
   return (
-    <div className={styles.groupWorkspace}>
+    <div className={styles.groupWorkspace} data-ui="group-workspace">
       <aside className={styles.groupNavigator} aria-label="Group selector">
-        <div className={styles.navigatorHeading}>
-          <div>
-            <span>Group browser</span>
-            <strong>{groups.length} available</strong>
+        <div className={styles.navigatorToolbar}>
+          <div className={styles.navigatorHeading}>
+            <div>
+              <span>Choose a group</span>
+              <strong>{filteredGroups.length} of {groups.length} groups</strong>
+            </div>
           </div>
-          <output htmlFor={`${id}-search`}>{filteredGroups.length}</output>
-        </div>
-        <div className={styles.navigatorSearch}>
-          <SearchField
-            id={`${id}-search`}
-            label="Find a group"
-            value={query}
-            onValueChange={setQuery}
-            onClear={() => setQuery("")}
-            placeholder="Name, key, source, or status"
-            autoComplete="off"
-            maxLength={100}
-            pending={query !== deferredQuery}
-            aria-describedby={statusId}
-          />
+          <div className={styles.navigatorSearch}>
+            <SearchField
+              id={`${id}-search`}
+              label="Find a group"
+              value={query}
+              onValueChange={setQuery}
+              onClear={() => setQuery("")}
+              placeholder="Name, key, source, or status"
+              autoComplete="off"
+              maxLength={100}
+              pending={query !== deferredQuery}
+              aria-describedby={statusId}
+            />
+          </div>
+          <div className={styles.navigatorSort} role="group" aria-label="Sort groups">
+            {([["name", "Group name"], ["type", "Group type"], ["members", "Member count"]] as const).map(([key, label]) => (
+              <button key={key} type="button" onClick={() => changeSort(key)} aria-label={sortButtonLabel(key, label)} aria-pressed={sort.key === key}>
+                {key === "name" ? "Name" : key === "type" ? "Type" : "Members"} {sortIcon(key)}
+              </button>
+            ))}
+          </div>
+          {groups.some(group => group.groupType === "custom" && !group.enabled) ? <label className={styles.inactiveGroupsToggle}>
+            <input type="checkbox" checked={includeDisabled} onChange={event => setIncludeDisabled(event.target.checked)} />Show disabled groups
+          </label> : null}
+          {railScroll.previous || railScroll.next ? <div className={styles.railControls} role="group" aria-label="Browse group cards">
+            <button type="button" aria-label="Scroll groups left" aria-controls={`${id}-rail`} disabled={!railScroll.previous} onClick={() => groupRail.current?.scrollBy({ left: -280, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" })}><ChevronLeft aria-hidden="true" /></button>
+            <button type="button" aria-label="Scroll groups right" aria-controls={`${id}-rail`} disabled={!railScroll.next} onClick={() => groupRail.current?.scrollBy({ left: 280, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" })}><ChevronRight aria-hidden="true" /></button>
+          </div> : null}
         </div>
         <span className="sr-only" id={statusId} role="status" aria-live="polite">
           {filteredGroups.length} matching group{filteredGroups.length === 1 ? "" : "s"}.
           {selectedGroup ? ` ${selectedGroup.displayName} selected.` : " No group selected."}
           {` Sorted by ${sort.key}, ${sort.direction}.`}
         </span>
-        <div className={styles.groupNavigationList}>
+        <div className={styles.groupNavigationList} id={`${id}-rail`} ref={groupRail}>
           {filteredGroups.length ? (
-            <table className={styles.groupNavigationTable}>
-              <caption className="sr-only">Connected groups. Select a column heading to sort.</caption>
-              <thead>
-                <tr>
-                  <th scope="col" aria-sort={ariaSort("name")}>
-                    <button type="button" onClick={() => changeSort("name")} aria-label={sortButtonLabel("name", "Group name")}>
-                      Group {sortIcon("name")}
-                    </button>
-                  </th>
-                  <th scope="col" aria-sort={ariaSort("type")}>
-                    <button type="button" onClick={() => changeSort("type")} aria-label={sortButtonLabel("type", "Group type")}>
-                      Type {sortIcon("type")}
-                    </button>
-                  </th>
-                  <th scope="col" aria-sort={ariaSort("members")}>
-                    <button type="button" onClick={() => changeSort("members")} aria-label={sortButtonLabel("members", "Member count")}>
-                      Members {sortIcon("members")}
-                    </button>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredGroups.map((group) => {
-                  const selected = group.id === visibleSelectedId;
-                  const relatedCount = group.tagCount + group.privilegeCount + group.rewardCount;
-                  return (
-                    <tr
-                      key={group.id}
-                      data-selected={selected ? "true" : "false"}
-                      style={{ "--group-accent": group.accent } as CSSProperties}
+            <ul className={styles.groupNavigationChoices} aria-label="Available groups">
+              {filteredGroups.map((group) => {
+                const selected = group.id === visibleSelectedId;
+                const relatedCount = group.tagCount + group.privilegeCount + group.rewardCount;
+                return (
+                  <li
+                    key={group.id}
+                    data-group-id={group.id}
+                    data-selected={selected ? "true" : "false"}
+                    style={{ "--group-accent": group.accent } as CSSProperties}
+                  >
+                    <button
+                      className={styles.groupNavigationItem}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => selectGroup(group.id)}
                     >
-                      <td>
-                        <button
-                          className={styles.groupNavigationItem}
-                          type="button"
-                          aria-pressed={selected}
-                          onClick={() => selectGroup(group.id)}
-                        >
-                          <span className={styles.groupNavigationAccent} aria-hidden="true" />
-                          <span className={styles.groupNavigationCopy}>
-                            <span>
-                              <strong>{group.displayName}</strong>
-                              <i data-enabled={group.enabled ? "true" : "false"}>
-                                {group.enabled ? "Active" : "Disabled"}
-                              </i>
-                            </span>
-                            <code>{group.key}</code>
-                            <small>{relatedCount} linked</small>
-                          </span>
-                          <ChevronRight aria-hidden="true" />
-                        </button>
-                      </td>
-                      <td>
-                        <span className={styles.groupTypeBadge} data-group-type={group.groupType}>
-                          {groupTypeLabel(group.groupType)}
+                      <span className={styles.groupNavigationAccent} aria-hidden="true" />
+                      <span className={styles.groupNavigationCopy}>
+                        <span>
+                          <strong>{group.displayName}</strong>
+                          <i data-enabled={group.enabled ? "true" : "false"}>
+                            {group.enabled ? "Active" : "Disabled"}
+                          </i>
                         </span>
-                        <small>{group.source}</small>
-                      </td>
-                      <td data-column="members">{group.memberCount}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        <code>{group.key}</code>
+                        <small>{group.memberCount} member{group.memberCount === 1 ? "" : "s"} · {relatedCount} linked · {group.source}</small>
+                      </span>
+                      <span className={styles.groupSelectionMark} aria-hidden="true">
+                        {selected ? <Check /> : <ChevronRight />}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
           ) : (
             <p className={styles.navigatorEmpty}>No groups match this search.</p>
           )}
         </div>
+        {selectedGroup ? <div className={styles.selectionContext}>
+          <span><span className={styles.selectionDot} aria-hidden="true" /><strong>{selectedGroup.displayName}</strong> selected</span>
+          <a href={`#assignments-${selectedGroup.id}`}><UsersRound aria-hidden="true" /> Members &amp; access <ArrowUpRight aria-hidden="true" /></a>
+        </div> : null}
       </aside>
 
       <div className={styles.groupWorkspacePanels}>

@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Check, Crosshair, Crown, Gamepad2, Paintbrush, Sparkles, Swords, Trophy } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUpRight, Crosshair, Crown, Gamepad2, Paintbrush, ShieldCheck, Sparkles, Swords, Trophy } from "lucide-react";
 
 import { BrandEmblem } from "@/components/brand-emblem";
+import { DiscordCommunityPanel } from "@/components/discord-community-panel";
+import { ArenaBrandScene } from "@/components/home/arena-brand-scene";
 import { LiveServerPanel } from "@/components/live-server-panel";
 import { PortalShell } from "@/components/ui/portal-shell";
 import { getSession } from "@/lib/auth/session";
 import { buildHomeMetadata, buildHomeStructuredData } from "@/lib/seo/site";
+import styles from "./home.module.css";
 
 export const metadata: Metadata = buildHomeMetadata();
 
@@ -14,63 +17,50 @@ export default async function HomePage() {
   const session = await getSession();
   const serverName = process.env.NEXT_PUBLIC_SERVER_NAME ?? "ARENA.TAPPED.RO";
   const connectUrl = process.env.NEXT_PUBLIC_SERVER_CONNECT_URL ?? "steam://connect/arena.tapped.ro";
-  const structuredData = buildHomeStructuredData();
+  const profileUrl = session ? `/players/${session.steamId}` : "/api/auth/steam";
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(structuredData).replace(/</g, "\\u003c"),
-        }}
-      />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(buildHomeStructuredData()).replace(/</g, "\\u003c") }} />
       <PortalShell authenticated={Boolean(session)} className="home-page">
-
-        <section className="tapped-hero" id="server" aria-labelledby="hero-title">
-          <div className="hero-copy hero-reveal">
-            <p className="tapped-kicker"><span className="live-line" /> TAPPED.RO <i /> Counter-Strike community</p>
-            <h1 id="hero-title">Your next round.<br /><span>Your arena.</span></h1>
-            <p className="tapped-lede">Romania&apos;s CS2 arena community. Jump into ranked 1v1s, challenge a friend, and make every round count.</p>
-            <div className="hero-actions">
-              <a className="button button-primary button-large" href={connectUrl}><Gamepad2 aria-hidden="true" /> Connect to ARENA <ArrowRight aria-hidden="true" /></a>
-              {session ? (
-                <Link className="button button-secondary button-large" href={`/players/${session.steamId}`}>Open profile</Link>
-              ) : (
-                <a className="button button-secondary button-large" href="/api/auth/steam">Steam login</a>
-              )}
+        <div className={styles.home}>
+          <section className={styles.hero} id="server" aria-labelledby="hero-title">
+            <div className={styles.heroCopy}>
+              <p className={styles.eyebrow}><span /> Counter-Strike 2 · Romania</p>
+              <h1 id="hero-title">Your next round.<br /><span>Your arena.</span></h1>
+              <p className={styles.lede}>Fast 1v1 rounds. A rival worth beating. A collection that&apos;s yours. Welcome to <strong>{serverName}</strong>.</p>
+              <div className={styles.actions}>
+                <a className="button button-primary button-large" href={connectUrl}><Gamepad2 aria-hidden="true" /> Play on ARENA <ArrowUpRight aria-hidden="true" /></a>
+                <Link className="button button-secondary button-large" href="/features">Explore features <ArrowRight aria-hidden="true" /></Link>
+              </div>
+              <div className={styles.heroDetails}><span>Ranked arena rounds</span><span>Custom duels</span><span>One connected player hub</span></div>
+              <a className={styles.scrollLink} href="#live"><span><ArrowDown aria-hidden="true" /></span>See what&apos;s happening</a>
             </div>
-            <nav className="home-quick-access" aria-label="Player shortcuts">
-              <Link href="/ranking"><Trophy aria-hidden="true" /><span>Rankings<small>Find your place</small></span><ArrowRight aria-hidden="true" /></Link>
-              <Link href={session ? "/inventory" : "/api/auth/steam"}><Paintbrush aria-hidden="true" /><span>Inventory<small>Manage your items</small></span><ArrowRight aria-hidden="true" /></Link>
-              <Link href="/vip"><Crown aria-hidden="true" /><span>Memberships<small>Compare benefits</small></span><ArrowRight aria-hidden="true" /></Link>
-            </nav>
-            <div className="hero-meta" aria-label="Server details">
-              <span><i /> {serverName}</span>
-              <span><i /> Romania · EU community</span>
-              <span><i /> Ranked 1v1 focus</span>
+            <ArenaBrandScene />
+          </section>
+          <nav className={styles.shortcuts} aria-label="Player shortcuts">
+            <Link href="/ranking"><Trophy aria-hidden="true" /><span>Rankings<small>Follow the climb</small></span><ArrowUpRight aria-hidden="true" /></Link>
+            <Link href={session ? "/inventory" : "/api/auth/steam"}><Paintbrush aria-hidden="true" /><span>Your collection<small>Open, trade, equip</small></span><ArrowUpRight aria-hidden="true" /></Link>
+            <Link href="/vip"><Crown aria-hidden="true" /><span>Memberships<small>Find your benefits</small></span><ArrowUpRight aria-hidden="true" /></Link>
+            <Link href={profileUrl}><ShieldCheck aria-hidden="true" /><span>{session ? "Your profile" : "Steam sign-in"}<small>Your progress, together</small></span><ArrowUpRight aria-hidden="true" /></Link>
+          </nav>
+          <section className={styles.liveSection} id="live" aria-labelledby="live-title">
+            <div className={styles.sectionHeading}><div><p className={styles.eyebrow}><span /> The community, right now</p><h2 id="live-title">One server. <span>Always a story.</span></h2></div><p>See the arena as it happens.<br />Keep the conversation going on Discord.</p></div>
+            <div className={styles.liveGrid}><LiveServerPanel /><DiscordCommunityPanel /></div>
+          </section>
+          <section className={styles.explore} id="features" aria-labelledby="features-title">
+            <div className={styles.sectionHeading}><div><p className={styles.eyebrow}><Sparkles aria-hidden="true" /> Built around your game</p><h2 id="features-title">More than <span>the next frag.</span></h2></div><Link href="/features">The full playbook <ArrowRight aria-hidden="true" /></Link></div>
+            <div className={styles.featureGrid}>
+              <Link className={`${styles.featureCard} ${styles.arenaCard}`} href="/features#arena" data-ui="feature-card"><span className={styles.cardIndex}>01 / THE ARENA</span><Crosshair className={styles.featureIcon} aria-hidden="true" /><h3>Find your rhythm.<br />Climb the ladder.</h3><p>Choose your weapons and round preferences, face your next opponent, and follow your place in the rankings.</p><span className={styles.cardLink}>Inside the arena <ArrowUpRight aria-hidden="true" /></span><div className={styles.arenaVisual} aria-hidden="true"><span>03</span><i /><span>02</span><i /><strong>01</strong></div></Link>
+              <Link className={styles.featureCard} href="/features#duels" data-ui="feature-card"><span className={styles.cardIndex}>02 / YOUR CHALLENGE</span><Swords className={styles.featureIcon} aria-hidden="true" /><h3>Set the rules.<br />Settle the score.</h3><p>Pick an opponent, a weapon format, and a match length. Play a quick first-to-one or keep the rivalry going.</p><div className={styles.tags}><span>First to 1 / 10 / 20</span><span>Endless</span></div><span className={styles.cardLink}>Explore custom duels <ArrowUpRight aria-hidden="true" /></span></Link>
+              <Link className={styles.featureCard} href="/features#economy" data-ui="feature-card"><span className={styles.cardIndex}>03 / YOUR COLLECTION</span><Paintbrush className={styles.featureIcon} aria-hidden="true" /><h3>Earn it.<br />Make it yours.</h3><p>Earn Tokens, open cases, browse the market, and build a loadout. Manage your collection on the site or with <code>/panel</code> in game.</p><div className={styles.tags}><span>Inventory</span><span>Cases</span><span>Trading</span></div><span className={styles.cardLink}>Meet your player hub <ArrowUpRight aria-hidden="true" /></span></Link>
             </div>
-          </div>
-
-          <LiveServerPanel />
-        </section>
-
-        <section className="mode-intro" id="modes" aria-labelledby="modes-title">
-          <div className="section-title hero-reveal"><p className="tapped-kicker"><Sparkles aria-hidden="true" /> Explore ARENA</p><h2 id="modes-title">Everything for your game.</h2><p>Modes, rewards, and your collection. Pick where to go next.</p></div>
-          <div className="tapped-bento">
-            <article className="bento-card bento-arena hero-reveal"><div className="bento-index">01 <span>ARENA</span></div><div className="bento-icon"><Crosshair aria-hidden="true" /></div><h3>Interactive ARENA<br />1v1 system.</h3><p>Move through a live ladder of arena duels. Win, climb, and keep the momentum.</p><Link className="bento-link" href="/modes">Explore arena modes <ArrowRight aria-hidden="true" /></Link><div className="arena-readout"><span>01</span><i /><span>02</span><i /><span>03</span><b>LIVE</b></div></article>
-            <article className="bento-card bento-duels hero-reveal hero-delay-one"><div className="bento-index">02 <span>DUELS</span></div><div className="bento-icon"><Swords aria-hidden="true" /></div><h3>Make the match yours.</h3><p>Challenge anyone through custom duels with the format you want.</p><ul className="rule-list"><li><Check aria-hidden="true" /> Custom type</li><li><Check aria-hidden="true" /> Single round</li><li><Check aria-hidden="true" /> First to 10 or 20</li><li><Check aria-hidden="true" /> Infinite</li></ul><Link className="bento-link" href="/modes#duels">All duel features <ArrowRight aria-hidden="true" /></Link></article>
-            <article className="bento-card bento-vip hero-reveal hero-delay-two" id="vip"><div className="bento-index">03 <span>VIP</span></div><div className="bento-icon"><Crown aria-hidden="true" /></div><h3>Earn your edge.</h3><div className="vip-tier"><strong>ULTIMATE</strong><span>Free with <em>arena.tapped.ro</em> in your nickname.</span></div><div className="vip-tier diamond"><strong>DIAMOND</strong><span>Try it free for 24h with <em>/viptest</em>.</span></div><Link className="bento-link" href="/vip">View every VIP benefit <ArrowRight aria-hidden="true" /></Link></article>
-            <article className="bento-card bento-loadout hero-reveal hero-delay-one"><div className="bento-index">04 <span>INVENTORY</span></div><div className="bento-icon"><Paintbrush aria-hidden="true" /></div><h3>Earn. Unbox. Equip.</h3><p>Build a personal collection with Tokens, drops, cases, and tradable cosmetics.</p>{session ? <Link href="/inventory">Open inventory <ArrowRight aria-hidden="true" /></Link> : <a href="/api/auth/steam">Open inventory <ArrowRight aria-hidden="true" /></a>}</article>
-            {/* <article className="bento-card bento-ranking hero-reveal hero-delay-two" id="rewards"><div className="bento-index">05 <span>RANKING</span></div><div className="bento-icon"><Trophy aria-hidden="true" /></div><div><h3>Climb. Earn.<br /><span>Repeat.</span></h3><p>Track your ranking all month and compete for monthly rewards.</p></div><Link className="rank-link" href="/ranking">View the leaderboard <ArrowRight aria-hidden="true" /></Link></article> */}
-          </div>
-        </section>
-
-        <section className="tapped-account-callout hero-reveal" aria-label="Player portal">
-          <div><p className="tapped-kicker"><BrandEmblem width={28} /> Your player hub</p><h2>Your progress.<br /><span>All together.</span></h2></div>
-          <div className="account-copy"><p>Use Steam to track your rank, VIP and admin groups, loadout, support tickets, and moderation history—all in one player profile.</p>{session ? <Link className="button button-primary" href={`/players/${session.steamId}`}>Open profile <ArrowRight aria-hidden="true" /></Link> : <a className="button button-primary" href="/api/auth/steam">Create your profile <ArrowRight aria-hidden="true" /></a>}</div>
-        </section>
-
-        <footer className="tapped-footer"><span><BrandEmblem width={32} /> TAPPED.RO <i /> ARENA.TAPPED.RO</span><a href={connectUrl}>Connect now <ArrowRight aria-hidden="true" /></a></footer>
+          </section>
+          <section className={styles.membershipRail} aria-label="Community benefits">
+            <div className={styles.membershipIcon}><Crown aria-hidden="true" /></div><div><p className={styles.eyebrow}>A little extra, for your game</p><h2>Make yourself at home.</h2><p>Explore VIP tiers, try DIAMOND with <code>/viptest</code>, or get ULTIMATE by wearing <strong>arena.tapped.ro</strong> in your nickname. Trial limits apply.</p></div><Link className="button button-secondary" href="/vip">Discover VIP <ArrowRight aria-hidden="true" /></Link>
+          </section>
+          <footer className={styles.footer}><span><BrandEmblem width={30} /> TAPPED.RO <i /> {serverName}</span><Link href="/staff">Meet the people behind it <ArrowUpRight aria-hidden="true" /></Link></footer>
+        </div>
       </PortalShell>
     </>
   );

@@ -50,6 +50,37 @@
   min-width: 0;
 }
 
+.refreshPrices {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-control-radius, 5px);
+  background: var(--theme-surface-muted);
+}
+
+.refreshPrices > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+}
+
+.refreshPrices p {
+  flex: 1 1 240px;
+  margin: 0;
+  color: var(--theme-text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.refreshPrices > p:empty { display: none; }
+.refreshPrices > p[data-error] { color: var(--theme-danger, #fb7185); }
+.refreshPrices button:disabled { cursor: wait; opacity: .7; }
+.refreshSpinner { animation: refresh-price-spin 1s linear infinite; }
+@keyframes refresh-price-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .refreshSpinner { animation: none; } }
+
 .lookupPanel :global(.button) {
   min-height: 44px;
   justify-content: center;

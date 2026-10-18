@@ -34,8 +34,9 @@ function actionView(action: string) {
 
 function redirect(request: Request, kind: "notice" | "error", message: string, view = "definitions") {
   const offerView = view === "offers";
-  const url = new URL(offerView ? "/admin/groups/listings" : "/admin/groups/perks", request.url);
+  const url = new URL(offerView ? "/admin/groups/listings" : "/admin/groups", request.url);
   url.searchParams.set("view", offerView ? "perks" : view);
+  if (!offerView) { url.searchParams.set("tab", "custom-access"); url.hash = "vip-perks"; }
   url.searchParams.set(kind, message);
   return formActionRedirect(request, url);
 }

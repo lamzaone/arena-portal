@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { GroupAdminNav } from "@/components/group-admin-nav";
+import groupStyles from "../groups-page.module.css";
 import { IdentityGroupBadge } from "@/components/identity-group-badge";
 import { SignInRequired } from "@/components/sign-in-required";
 import { StaffSubmenu } from "@/components/staff-submenu";
@@ -258,9 +259,10 @@ export default async function GroupListingsPage({
     <PortalShell authenticated className={`staff-page ${styles.page}`} navigation={<StaffSubmenu access={access} active="groups" />}>
       <AdminPageHeader
         id="group-listings-title"
-        title="Group listings"
+        title="Shop listings"
         description="Manage membership packages and individual perk offers for the VIP page and Marketplace."
         access={access}
+        className={groupStyles.pageHero}
       />
 
       <GroupAdminNav activeKey="listings" />

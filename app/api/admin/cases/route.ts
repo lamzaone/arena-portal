@@ -2,6 +2,8 @@ import { canActOnTarget, getAdminAccess } from "@/lib/admin/access";
 import { getSession, verifyAdminActionToken } from "@/lib/auth/session";
 import { addStaffCaseReply, enqueueStaffUnban, getStaffAppealTarget, getStaffTicketTarget, writeStaffActionAudit } from "@/lib/data/portal-repository";
 import { formActionRedirect } from "@/lib/form-action-response";
+import { parseCasePriority } from "@/lib/cases/priority";
+import { setStaffCasePriority } from "@/lib/cases/priority-repository";
 
 const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const maxScreenshotBytes = 5 * 1024 * 1024;
@@ -13,7 +15,9 @@ function redirect(request: Request, tab: "appeals" | "tickets", key: "notice" | 
 }
 
 function parseCaseId(value: FormDataEntryValue | null) {
-  const id = Number.parseInt(String(value ?? ""), 10);
+  const raw = String(value ?? "");
+  if (!/^\d+$/.test(raw)) return null;
+  const id = Number(raw);
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
@@ -35,6 +39,7 @@ export async function POST(request: Request) {
 
   const actor = await getAdminAccess(session.steamId);
   if (!actor.isAdmin) return redirect(request, tab, "error", "forbidden");
+  if (!["appeal-reply", "appeal-close-banned", "appeal-close-unbanned", "appeal-priority", "ticket-reply", "ticket-close-solved", "ticket-close-unsolved", "ticket-priority"].includes(action)) return redirect(request, tab, "error", "case");
   const caseId = parseCaseId(formData.get("caseId"));
   if (!caseId) return redirect(request, tab, "error", "case");
   const body = String(formData.get("body") ?? "").trim();
@@ -48,6 +53,13 @@ export async function POST(request: Request) {
       if (!appeal) return redirect(request, "appeals", "error", "case");
       const target = await getAdminAccess(appeal.steamId);
       if (target.isAdmin && !canActOnTarget(actor, target)) return redirect(request, "appeals", "error", "immunity");
+
+      if (action === "appeal-priority") {
+        const priority = parseCasePriority(formData.get("priority"));
+        if (!priority) return redirect(request, "appeals", "error", "priority");
+        await setStaffCasePriority({ caseType: "appeal", caseId, priority, actorSteamId: actor.steamId });
+        return redirect(request, "appeals", "notice", "priority-saved");
+      }
 
       if (action === "appeal-close-unbanned") {
         await enqueueStaffUnban({ steamId: appeal.steamId, actorSteamId: actor.steamId, actorName: actor.displayName });
@@ -69,6 +81,12 @@ export async function POST(request: Request) {
 
     const ticket = await getStaffTicketTarget(caseId);
     if (!ticket) return redirect(request, "tickets", "error", "case");
+    if (action === "ticket-priority") {
+      const priority = parseCasePriority(formData.get("priority"));
+      if (!priority) return redirect(request, "tickets", "error", "priority");
+      await setStaffCasePriority({ caseType: "ticket", caseId, priority, actorSteamId: actor.steamId });
+      return redirect(request, "tickets", "notice", "priority-saved");
+    }
     if (action === "ticket-close-solved") {
       await addStaffCaseReply({ caseType: "ticket", caseId, actorSteamId: actor.steamId, body, status: "solved", screenshot });
       await writeStaffActionAudit(actor.steamId, "staff.ticket.solved", "ticket", String(caseId));
@@ -85,6 +103,7 @@ export async function POST(request: Request) {
     }
     return redirect(request, "tickets", "error", "message");
   } catch (error) {
-    return redirect(request, tab, "error", error instanceof Error && error.message === "screenshot" ? "screenshot" : "database");
+    const reason = error instanceof Error && ["screenshot", "priority-storage", "case"].includes(error.message) ? error.message : "database";
+    return redirect(request, tab, "error", reason);
   }
 }

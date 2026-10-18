@@ -16,7 +16,7 @@
 .explore > span { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid var(--theme-border-strong); border-radius: 50%; color: var(--theme-accent-strong); transition: background .25s, translate .25s; }
 .explore svg { width: 16px; height: 16px; }
 .explore:hover > span { background: var(--theme-control-hover); translate: 0 3px; }
-.heroArt { grid-area: art; position: relative; width: 100%; max-width: 470px; min-width: 0; aspect-ratio: 47 / 40; display: grid; place-items: center; justify-self: center; isolation: isolate; pointer-events: none; }
+.heroArt { grid-area: art; position: relative; width: 100%; max-width: 470px; min-width: 0; aspect-ratio: 47 / 40; display: grid; place-items: center; justify-self: center; isolation: isolate; pointer-events: none; overflow: clip; }
 .heroArt::before { content: ""; position: absolute; inset: 0 -4%; background: radial-gradient(ellipse, color-mix(in srgb, var(--theme-accent) 18%, transparent), transparent 68%); z-index: -1; animation: haloBreathe 8s ease-in-out infinite; }
 .artWord { position: absolute; top: 0; left: 50%; transform: translateX(-50%); color: transparent; -webkit-text-stroke: 1px color-mix(in srgb, var(--theme-accent-strong) 18%, transparent); font-family: var(--font-display); font-size: clamp(84px, 10vw, 145px); letter-spacing: -.045em; line-height: 1; z-index: -1; }
 .orbitScene { position: relative; width: 100%; aspect-ratio: 47 / 36; perspective: 1000px; }
@@ -70,18 +70,18 @@
 .groupTitle p { margin: 5px 0 0; color: var(--theme-text-muted); font-size: 13px; line-height: 1.6; }
 .groupCount { color: var(--theme-text-subtle); font-size: 11px; white-space: nowrap; }
 .memberGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; min-width: 0; }
-.card { position: relative; display: grid; grid-template-columns: clamp(148px, 13vw, 188px) minmax(0, 1fr); align-items: center; gap: 24px; min-width: 0; padding: 24px; border: 1px solid var(--theme-border); border-radius: var(--theme-radius); isolation: isolate; transition: border-color .25s, box-shadow .25s; }
+.card { position: relative; display: grid; grid-template-columns: clamp(74px, 6.5vw, 94px) minmax(0, 1fr); align-items: center; gap: 20px; min-width: 0; padding: 20px; border: 1px solid var(--theme-border); border-radius: var(--theme-radius); isolation: isolate; transition: border-color .25s, box-shadow .25s; }
 .card::after { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; background: radial-gradient(ellipse at var(--shine-x, 15%) var(--shine-y, 20%), color-mix(in srgb, var(--theme-accent-strong) 12%, transparent), transparent 65%); opacity: .6; transition: opacity .3s; }
 .card:hover::after, .card:focus-within::after { opacity: 1; }
 .cardWatermark { position: absolute; right: 14px; bottom: 12px; width: 130px; height: 130px; color: var(--theme-accent-strong); opacity: .035; stroke-width: .6; z-index: -1; transform: rotate(-14deg); pointer-events: none; }
 .portraitLink { display: block; min-width: 0; border-radius: calc(var(--theme-radius) + 4px); perspective: 900px; }
 .avatar { position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 1; border: 1px solid var(--theme-border-strong); border-radius: inherit; background: var(--theme-avatar-bg); box-shadow: 0 12px 26px rgb(0 0 0 / 18%), 0 0 0 5px color-mix(in srgb, var(--theme-accent-strong) 6%, transparent); transform: rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)); transition: transform .25s var(--staff-ease), box-shadow .25s; }
 .avatar > img { display: block; width: 100%; height: 100%; position: absolute; inset: 0; object-fit: cover; border-radius: inherit; }
-.avatar > span:not(.avatarBadge) { font-family: var(--font-display); font-size: clamp(44px, 5vw, 72px); color: var(--theme-accent-soft); }
-.avatarBadge { position: absolute; bottom: -8px; right: -8px; display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--theme-border-strong); border-radius: var(--theme-radius); color: var(--group-ink); background: var(--theme-surface-raised); box-shadow: 0 4px 12px rgb(0 0 0 / 20%); }
-.avatarBadge svg { width: 18px; height: 18px; }
+.avatar > span:not(.avatarBadge) { font-family: var(--font-display); font-size: clamp(22px, 2.5vw, 36px); color: var(--theme-accent-soft); }
+.avatarBadge { position: absolute; bottom: -6px; right: -6px; display: grid; place-items: center; width: 26px; height: 26px; border: 1px solid var(--theme-border-strong); border-radius: var(--theme-radius); color: var(--group-ink); background: var(--theme-surface-raised); box-shadow: 0 4px 12px rgb(0 0 0 / 20%); }
+.avatarBadge svg { width: 14px; height: 14px; }
 .portraitLink:hover .avatar, .portraitLink:focus-visible .avatar { box-shadow: 0 14px 28px rgb(0 0 0 / 20%), 0 0 0 5px color-mix(in srgb, var(--theme-accent-strong) 16%, transparent); }
-.memberBody { display: flex; flex-direction: column; align-self: stretch; justify-content: center; gap: 22px; min-width: 0; }
+.memberBody { display: flex; flex-direction: column; align-self: stretch; justify-content: center; gap: 16px; min-width: 0; }
 .memberCopy { min-width: 0; }
 .memberRole { display: inline-flex; align-items: center; gap: 6px; color: var(--group-ink); font-size: 11px; font-weight: 600; line-height: 1.5; }
 .memberRole > span { min-width: 0; overflow-wrap: anywhere; }
@@ -101,7 +101,7 @@
 .discordAction { color: var(--theme-text-muted); background: var(--theme-control-bg); }
 .cardActions a:hover { border-color: var(--theme-accent-strong); color: var(--theme-text); background: var(--theme-control-hover); }
 .group[data-single="true"] .memberGrid { grid-template-columns: minmax(0, 1fr); }
-.group[data-single="true"] .card { grid-template-columns: 224px minmax(0, 1fr); gap: 32px; }
+.group[data-single="true"] .card { grid-template-columns: 112px minmax(0, 1fr); gap: 26px; }
 .group[data-single="true"] .memberBody { flex-direction: row; align-items: center; justify-content: space-between; gap: 32px; }
 .group[data-single="true"] .memberCopy { flex: 1; }
 .group[data-single="true"] .memberCopy h4 { font-size: clamp(30px, 4vw, 52px); }
@@ -140,9 +140,9 @@
   .hero { gap: 24px; }
   .stats { gap: 16px; padding-top: 18px; }
   .stats dd { font-size: 28px; }
-  .card { grid-template-columns: 152px minmax(0, 1fr); gap: 22px; padding: 20px; }
+  .card { grid-template-columns: 76px minmax(0, 1fr); gap: 18px; padding: 18px; }
   .memberGrid { grid-template-columns: minmax(0, 1fr); }
-  .group[data-single="true"] .card { grid-template-columns: 184px minmax(0, 1fr); gap: 24px; }
+  .group[data-single="true"] .card { grid-template-columns: 92px minmax(0, 1fr); gap: 20px; }
   .group[data-single="true"] .memberBody { flex-direction: column; align-items: stretch; gap: 18px; }
   .group[data-single="true"] .cardActions { flex-direction: row; flex-shrink: 1; padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--theme-border); }
 }
@@ -178,8 +178,8 @@
   .groupTitle h3 { font-size: 22px; }
   .groupTitle p { font-size: 12px; }
   .groupCount { margin-left: 48px; flex-basis: 100%; }
-  .card, .group[data-single="true"] .card { grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 24px; padding: 24px 20px 20px; }
-  .portraitLink { width: min(184px, 100%); }
+  .card, .group[data-single="true"] .card { grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 20px; padding: 20px 18px 18px; }
+  .portraitLink { width: min(92px, 100%); }
   .memberBody, .group[data-single="true"] .memberBody { width: 100%; gap: 18px; }
   .memberCopy { text-align: center; }
   .memberCopy h4, .group[data-single="true"] .memberCopy h4 { font-size: clamp(26px, 7vw, 34px); }

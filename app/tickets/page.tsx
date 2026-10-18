@@ -1,6 +1,7 @@
 import { AlertTriangle, MessageSquareText, Ticket } from "lucide-react";
 import Link from "next/link";
 import styles from "./support-workspace.module.css";
+import { PunishmentOverview } from "./punishment-overview";
 
 import { CaseStatusTag } from "@/components/case-status-tag";
 import { CaseConversation } from "@/components/case-conversation";
@@ -11,7 +12,7 @@ import { PortalShell } from "@/components/ui/portal-shell";
 import { ThemedPlayerContainer } from "@/components/ui/themed-player-container";
 import { getSession } from "@/lib/auth/session";
 import { getIdentityGroupListing, type IdentityGroupListing } from "@/lib/data/identity-group-listings";
-import { getTickets, portalStorageConfigured, type PortalTicket } from "@/lib/data/portal-repository";
+import { getTickets, getPlayerDashboard, portalStorageConfigured, type PortalTicket } from "@/lib/data/portal-repository";
 import {
   identityGroupListingRequestCopy,
   isPublishedDonationListing,
@@ -72,7 +73,9 @@ export default async function TicketsPage({ searchParams }: TicketsPageProps) {
   const session = await getSession();
   if (!session) return <SignInRequired title="Support tickets" description="Use your verified Steam account to report bugs, player issues, staff concerns, or request VIP privately." />;
 
-  const [tickets, params] = await Promise.all([getTickets(session.steamId), searchParams]);
+  const [tickets, profile, params] = await Promise.all([getTickets(session.steamId), getPlayerDashboard(session.steamId), searchParams]);
+  const openTickets = tickets.filter(canReply);
+  const closedTickets = tickets.filter((ticket) => !canReply(ticket));
   const requestedListingId = listingId(params.listing);
   let requestedListing: IdentityGroupListing | null = null;
   if (requestedListingId) {
@@ -83,7 +86,7 @@ export default async function TicketsPage({ searchParams }: TicketsPageProps) {
     }
   }
   const playerIdentities = await resolvePlayerIdentities(
-    [session.steamId, ...tickets.flatMap((ticket) => ticket.messages.map((message) => message.authorId))]
+    [session.steamId, ...profile.bans.map((ban) => ban.adminSteamId ?? ""), ...profile.sanctions.map((sanction) => sanction.adminSteamId ?? ""), ...tickets.flatMap((ticket) => ticket.messages.map((message) => message.authorId))]
       .map((steamId) => ({ steamId })),
   );
   const storageReady = portalStorageConfigured();
@@ -99,16 +102,21 @@ export default async function TicketsPage({ searchParams }: TicketsPageProps) {
 
   return (
     <PortalShell authenticated className="tapped-page">
-      <PageHeading eyebrow={<><Ticket aria-hidden="true" /> Player support</>} title="Tickets" description="Get private help with reports, bugs, your account, or a membership purchase." actions={<div className={styles.headingActions}><a className="button button-secondary" href="#ticket-history">Your tickets ({tickets.length})</a><Link className="button button-quiet" href="/appeals">Ban appeals</Link></div>} />
+      <PageHeading eyebrow={<><Ticket aria-hidden="true" /> Player support</>} title="Tickets" description="Get private help with reports, bugs, your account, or a membership purchase." actions={<div className={styles.headingActions}><a className="button button-secondary" href="#open-tickets">Open tickets ({openTickets.length})</a><Link className="button button-quiet" href="/appeals">Ban appeals</Link></div>} />
       {params.submitted && <PortalToast message="Ticket created. You can follow staff updates and reply below." />}
       {params.replied && <PortalToast message="Your reply and any screenshots were sent to staff." />}
       {params.error && <PortalToast variant="danger" message={error} />}
       {invalidListingRequest ? <PortalToast variant="danger" message="That membership listing is no longer published. Choose a current option from the VIP page." /> : null}
+      <PunishmentOverview profile={profile} identities={playerIdentities} viewerSteamId={session.steamId} />
       <div className={styles.workspace}>
+      <div className={styles.actionArea}>
       <div className={styles.composer}>
       {storageReady ? <form className="panel form-panel" action="/api/tickets" method="post" encType="multipart/form-data"><input type="hidden" name="action" value="create" />{vipRequest && requestedListing ? <input type="hidden" name="listingId" value={requestedListing.id} /> : null}<div className="panel-heading"><h2>{vipRequest ? "Request membership purchase" : "Create ticket"}</h2><p>{vipRequest ? "Review the membership, duration, and price below. These details are fixed for this request." : "Choose a category and describe what happened. Staff replies appear in your ticket history."}</p></div><div className="form-grid"><label htmlFor="ticket-category">Category<select id="ticket-category" name="category" defaultValue={vipRequest ? "vip" : "player-report"}><option value="player-report">Report a player</option><option value="admin-report">Report an admin</option><option value="bug">Bug report</option><option value="account">Account help</option><option value="vip">VIP purchase</option><option value="other">Other</option></select></label><label htmlFor="ticket-subject">Subject<input id="ticket-subject" name="subject" minLength={4} maxLength={120} required placeholder="Short summary" defaultValue={vipRequest?.subject} readOnly={Boolean(vipRequest)} /></label></div><label htmlFor="ticket-body">Details<textarea id="ticket-body" name="body" minLength={10} maxLength={5000} required placeholder="Include names, approximate time, map, and any evidence links that can help staff investigate." defaultValue={vipRequest?.body} readOnly={Boolean(vipRequest)} /></label><label htmlFor="ticket-screenshots">Screenshots (optional)<input id="ticket-screenshots" name="screenshots" type="file" accept="image/png,image/jpeg,image/webp" multiple /></label><EvidenceGuidance /><button className="button button-primary" type="submit"><MessageSquareText aria-hidden="true" /> Submit ticket</button></form> : <div className="notice notice-info"><AlertTriangle aria-hidden="true" /> Portal storage needs to be configured before tickets can be submitted.</div>}
       </div>
-      <section id="ticket-history" className={`history-section case-history ${styles.history}`} aria-label="Ticket history"><div className="section-heading compact"><h2>Ticket history</h2><span className={styles.count}>{tickets.filter(canReply).length} open / {tickets.length} total</span></div>{tickets.length ? <div className="case-card-list">{tickets.map((ticket) => <TicketCase key={ticket.id} ticket={ticket} playerIdentities={playerIdentities} viewerSteamId={session.steamId} />)}</div> : <p className="empty-copy">No tickets have been created from this Steam account.</p>}</section>
+      <aside className={styles.supportNote} aria-label="Support guidance"><h2>A clear path to help</h2><p>Choose the closest category, describe what happened, and attach the evidence staff needs. Your conversation stays private.</p><p>Already sent a ticket? Add updates to the same conversation below so staff can follow the full story.</p><p>Appealing a ban? Use <Link href="/appeals">ban appeals</Link> to request a review.</p></aside>
+      </div>
+      <section id="open-tickets" className={`case-history ${styles.history}`} aria-labelledby="open-tickets-title"><div className="section-heading compact"><h2 id="open-tickets-title">Open tickets</h2><span className={styles.count}>{openTickets.length} open</span></div>{openTickets.length ? <div className="case-card-list">{openTickets.map((ticket) => <TicketCase key={ticket.id} ticket={ticket} playerIdentities={playerIdentities} viewerSteamId={session.steamId} />)}</div> : <p className="empty-copy">No open tickets. Create a ticket above when you need help.</p>}</section>
+      <section id="ticket-history" className={`history-section case-history ${styles.history}`} aria-labelledby="ticket-history-title"><div className="section-heading compact"><h2 id="ticket-history-title">Ticket history</h2><span className={styles.count}>{closedTickets.length} closed / {tickets.length} total</span></div>{closedTickets.length ? <div className="case-card-list">{closedTickets.map((ticket) => <TicketCase key={ticket.id} ticket={ticket} playerIdentities={playerIdentities} viewerSteamId={session.steamId} />)}</div> : <p className="empty-copy">Your completed tickets will appear here.</p>}</section>
       </div>
     </PortalShell>
   );

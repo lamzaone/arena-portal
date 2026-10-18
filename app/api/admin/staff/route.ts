@@ -7,6 +7,7 @@ import { normalizeVipGroup } from "@/lib/content/group-presentation";
 import {
   assignStaffAdminMembership,
   extendStaffAdminMembership,
+  editStaffAdminMembership,
   removeStaffAdminMembership,
   StaffAdminMembershipError,
   type StaffAdminMembershipReference,
@@ -27,10 +28,19 @@ import {
 function redirect(request: Request, tab: "admins" | "vips", key: "notice" | "error", value: string) {
   const assignment = tab === "admins" ? "admin" : "vip";
   const url = new URL("/admin/groups", request.url);
-  url.searchParams.set("tab", "membership");
+  url.searchParams.set("tab", assignment);
+  try {
+    const referer = new URL(request.headers.get("referer") ?? "", request.url);
+    if (referer.origin === new URL(request.url).origin && referer.pathname === "/admin/groups") {
+      for (const field of ["group", "player"]) {
+        const value = referer.searchParams.get(field);
+        if (value && /^\d+$/.test(value)) url.searchParams.set(field, value);
+      }
+    }
+  } catch {}
   url.searchParams.set("assignment", assignment);
   url.searchParams.set(key, value);
-  url.hash = `${assignment}-assignments`;
+  url.hash = url.searchParams.has("group") ? `group-${url.searchParams.get("group")}` : `${assignment}-assignments`;
   return formActionRedirect(request, url);
 }
 
@@ -291,6 +301,29 @@ export async function POST(request: Request) {
         steamId,
       );
       return redirect(request, "admins", "notice", "admin-extended");
+    }
+
+    if (action === "admin-membership-edit") {
+      if (!actor.canManageAdmins) return redirect(request, "admins", "error", "admin-permission");
+      const target = await getAdminAccess(steamId);
+      if (!canActOnTarget(actor, target)) return redirect(request, "admins", "error", "immunity");
+      const reference = adminMembershipReference(formData, steamId);
+      const newGroup = exactStoredAdminGroup(formData.get("newGroup"));
+      const expiryMode = formData.get("expiryMode");
+      const durationMinutes = assignmentDurationMinutes(formData.get("durationMinutes"));
+      const reason = String(formData.get("reason") ?? "");
+      const expectedExpiresAt = String(formData.get("expectedExpiresAt") ?? "");
+      if (!reference || !newGroup ||
+        (expiryMode !== "keep" && expiryMode !== "replace" && expiryMode !== "permanent") ||
+        durationMinutes === null || expiryMode === "replace" && durationMinutes === 0 ||
+        reference.source === "native" && expiryMode === "replace" || reason.length > 180 ||
+        expectedExpiresAt.length > 40 || expectedExpiresAt && !Number.isFinite(Date.parse(expectedExpiresAt))) {
+        return redirect(request, "admins", "error", "admin-details");
+      }
+      await editStaffAdminMembership({ reference, newGroup, expiryMode, durationMinutes,
+        expectedExpiresAt, reason, actorSteamId: actor.steamId, actorImmunity: actor.immunity });
+      await writeStaffActionAudit(actor.steamId, "staff.admin.membership.edited", "steam-player", steamId);
+      return redirect(request, "admins", "notice", "admin-edited");
     }
 
     if (action === "admin-membership-remove") {

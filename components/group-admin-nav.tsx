@@ -1,103 +1,37 @@
-import {
-  Database,
-  Gift,
-  KeyRound,
-  ShieldCheck,
-  ShoppingBag,
-  Sparkles,
-  Tags,
-  UsersRound,
-} from "lucide-react";
+import Link from "next/link";
+import { ArrowUpRight, KeyRound, ShieldCheck, ShoppingBag, UsersRound, Crown } from "lucide-react";
 
-import { SectionNav } from "@/components/ui/section-nav";
+import styles from "./group-admin-nav.module.css";
 
-export type GroupAdminNavKey =
-  | "connected"
-  | "create"
-  | "membership"
-  | "tags"
-  | "permissions"
-  | "awards"
-  | "perks"
-  | "listings";
+export type GroupAdminNavKey = "admin" | "vip" | "custom" | "custom-access" | "perks" | "listings";
 
-const groupAdminNavItems = [
-  {
-    key: "connected",
-    href: "/admin/groups?tab=connected",
-    label: "Connected groups",
-    icon: Database,
-  },
-  {
-    key: "create",
-    href: "/admin/groups?tab=create",
-    label: "Create group",
-    icon: ShieldCheck,
-  },
-  {
-    key: "membership",
-    href: "/admin/groups?tab=membership",
-    label: "Assignments",
-    icon: UsersRound,
-  },
-  {
-    key: "tags",
-    href: "/admin/groups?tab=tags",
-    label: "Chat tags",
-    icon: Tags,
-  },
-  {
-    key: "permissions",
-    href: "/admin/groups?tab=permissions",
-    label: "Permissions",
-    icon: KeyRound,
-  },
-  {
-    key: "awards",
-    href: "/admin/groups?tab=awards",
-    label: "Direct awards",
-    icon: Gift,
-  },
-  {
-    key: "perks",
-    href: "/admin/groups/perks",
-    label: "VIP perks",
-    icon: Sparkles,
-  },
-  {
-    key: "listings",
-    href: "/admin/groups/listings",
-    label: "Shop listings",
-    icon: ShoppingBag,
-  },
-] as const;
-
-export function GroupAdminNav({
-  activeKey,
-  selectedGroupId = null,
-  canManageGroups = true,
-}: {
+export function GroupAdminNav({ activeKey, selectedGroupId = null, canManageGroups = true }: {
   activeKey: GroupAdminNavKey;
   selectedGroupId?: number | null;
   canManageGroups?: boolean;
 }) {
-  const items = groupAdminNavItems
-    .filter((item) => canManageGroups || item.key === "membership")
-    .map((item) => ({
-    ...item,
-    href:
-      item.key === "connected" && selectedGroupId !== null
-        ? `${item.href}&group=${encodeURIComponent(String(selectedGroupId))}`
-        : item.href,
-    }));
-
+  const items = [
+    { key: "admin", href: "/admin/groups?tab=admin", label: "Admin", description: "Staff roles & authority", icon: ShieldCheck },
+    { key: "vip", href: "/admin/groups?tab=vip", label: "VIP", description: "Tiers, benefits & members", icon: Crown },
+    { key: "custom", href: "/admin/groups?tab=custom", label: "Custom", description: "Community groups & rewards", icon: UsersRound },
+    ...(canManageGroups ? [
+      { key: "custom-access", href: "/admin/groups?tab=custom-access", label: "Custom tags & permissions", description: "Chat styles, privileges & perks", icon: KeyRound },
+      { key: "listings", href: "/admin/groups/listings", label: "Shop listings", description: "Membership & perk offers", icon: ShoppingBag },
+    ] : []),
+  ].map(item => ({ ...item, href: selectedGroupId !== null && item.key === activeKey
+    ? `${item.href}${item.href.includes("?") ? "&" : "?"}group=${selectedGroupId}` : item.href }));
+  const selectedKey = activeKey === "perks" ? "custom-access" : activeKey;
   return (
-    <SectionNav
-      activeKey={activeKey}
-      ariaLabel="Group management sections"
-      className="group-admin-menu"
-      dense
-      items={items}
-    />
+    <nav className={`group-admin-menu ${styles.nav}`} aria-label="Group management sections" data-ui="group-admin-nav">
+      {items.map(item => {
+        const Icon = item.icon;
+        const active = selectedKey === item.key;
+        return <Link key={item.key} href={item.href} scroll={false} className={styles.item} data-active={active} aria-current={active ? "page" : undefined}>
+          <span className={styles.icon}><Icon aria-hidden="true" /></span>
+          <span className={styles.copy}><strong>{item.label}</strong><small>{item.description}</small></span>
+          <ArrowUpRight className={styles.arrow} aria-hidden="true" />
+        </Link>;
+      })}
+    </nav>
   );
 }

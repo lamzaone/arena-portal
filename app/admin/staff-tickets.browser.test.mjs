@@ -20,7 +20,7 @@ const identities = Object.fromEntries([
 }]));
 const ticket = {
   id: 10, steamId: ownerId, category: "other", subject: "Ticket with screenshots", body: "Original report body.",
-  status: "open", createdAt, updatedAt: createdAt,
+  status: "open", priority: "high", createdAt, updatedAt: createdAt,
   messages: [
     { id: 1, authorId: ownerId, authorType: "player", body: "Screenshots attached to the original ticket.", createdAt,
       attachments: [attachment(1, "original-one.png"), attachment(2, "original-two.png")] },
@@ -35,7 +35,7 @@ test("staff ticket presentation and screenshot viewer", async (t) => {
   const boundaries = {
     "@/lib/auth/session": `export const getSession=async()=>({steamId:'${staffId}',profileThemeKey:'tap_god'}); export const createAdminActionToken=()=> 'fixture-csrf';`,
     "@/lib/admin/access": "export const adminWriteConfigured=()=>true; export const getAdminAccess=async()=>({isAdmin:true,isFounder:false,canUnban:true,groups:['Staff'],displayName:'Blue staff',immunity:10});",
-    "@/lib/data/portal-repository": `export const getStaffTickets=async()=>({tickets:[${JSON.stringify(ticket)}],total:1,pageSize:25}); export const getStaffAppeals=async()=>null; export const getStaffModeration=async()=>null;`,
+    "@/lib/data/portal-repository": `export const getStaffTickets=async()=>({tickets:[${JSON.stringify(ticket)}],total:1,pageSize:25,priorityAvailable:true}); export const getStaffAppeals=async()=>null; export const getStaffModeration=async()=>null;`,
     "@/lib/player-identities": `export const resolvePlayerIdentities=async()=>(${JSON.stringify(identities)});`,
     "@/components/ui/portal-shell": "import React from 'react'; export const PortalShell=({children,className})=><main className={className}>{children}</main>;",
     "next/link": "import React from 'react'; export default function Link({children,...props}){return <a {...props}>{children}</a>}",
@@ -92,6 +92,24 @@ test("staff ticket presentation and screenshot viewer", async (t) => {
           assert.ok(role.x >= avatar.x + avatar.width, "reply role should be to the right of the player picture");
           assert.ok(name.y < avatar.y + avatar.height, JSON.stringify({ avatar, name, role, image: await header.locator(".player-identity-avatar").evaluate((el) => ({ width: getComputedStyle(el).width, height: getComputedStyle(el).height, display: getComputedStyle(el).display, visibility: getComputedStyle(el).visibility, transform: getComputedStyle(el).transform })) }));
         }
+      });
+    });
+    await t.test("case filters and persisted staff priority remain usable at desktop and phone widths", async () => {
+      for (const width of [1440, 390]) await withPage(width, async (page) => {
+        const filter = page.getByLabel("Case status");
+        await filter.waitFor();
+        assert.deepEqual(await filter.locator("option").allTextContents(), ["All cases", "Open", "Closed", "No staff reply", "Replied · still open", "Solved", "Unsolved"]);
+        assert.equal(await page.getByLabel("Search cases", { exact: true }).count(), 1);
+        assert.equal(await page.locator('[data-priority="high"]').textContent(), "high priority");
+        await page.locator(".staff-case-details > summary").click();
+        const priority = page.getByLabel("Staff priority");
+        assert.equal(await priority.inputValue(), "high");
+        const form = priority.locator("xpath=ancestor::form");
+        assert.equal(await form.getAttribute("action"), "/api/admin/cases");
+        assert.equal(await form.locator('input[name="csrf"]').inputValue(), "fixture-csrf");
+        assert.equal(await form.locator('input[name="caseId"]').inputValue(), "10");
+        assert.equal(await form.locator('input[name="action"]').inputValue(), "ticket-priority");
+        assert.equal(await form.getByRole("button", { name: "Save priority", exact: true }).isEnabled(), true);
       });
     });
     await t.test("original post owns its avatar and screenshots, without a generated reply", async () => {

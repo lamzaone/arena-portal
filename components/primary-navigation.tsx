@@ -5,9 +5,10 @@ import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { NavigationIndicator } from "@/components/ui/navigation-indicator";
 import { DiscordMark } from "@/components/icons/discord-mark";
+import { COMMUNITY_DISCORD_INVITE } from "@/lib/discord/public-community";
 
 import { isPrimaryNavigationLinkActive, primaryLinks } from "./primary-navigation-routes";
-const discordInviteUrl = "https://discord.gg/eEkXZpSzrD";
+const discordInviteUrl = COMMUNITY_DISCORD_INVITE;
 
 function PrimaryNavigationLinks({ pathname }: { pathname: string | null }) {
   return primaryLinks.map(({ href, label }, index) => {

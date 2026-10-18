@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle, ArrowLeft, ArrowRight, Ban, Clock3, Crosshair, Settings2, ShieldCheck, Target, UserRound, VolumeX } from "lucide-react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import type { PlayerArenaStats } from "@/lib/data/player-arena-stats";
 
 import { CopyToClipboardButton } from "@/components/copy-to-clipboard-button";
 import { formatDate, formatPlaytime, isActiveSanction } from "@/components/formatters";
@@ -11,6 +12,10 @@ import {
 import { ProfileInventoryPreview } from "@/components/profile-inventory-preview";
 import { ProfileModerationHistory } from "@/components/profile-moderation-history";
 import { PlayerWarningHistory } from "@/components/player-warning-history";
+import { PlayerServerPresence } from "@/components/player-server-presence";
+import type { ProfileHistoryPages } from "@/components/profile-history-pagination";
+import type { PlayerModerationHistory } from "@/lib/data/player-moderation-history";
+import type { PublicStatus } from "@/lib/server-link/protocol";
 import { ProfileSettingsForm, type ProfileSettingsValue } from "@/components/profile-settings-form";
 import {
   ProfileThemeAvatarAdornment,
@@ -33,6 +38,8 @@ import { resolvePortalThemeSurface } from "@/lib/themes/registry";
 type SharedProfile = PlayerDashboard | PublicPlayerProfile;
 
 type PlayerProfilePageProps = {
+  staffControls?: ReactNode;
+  arenaStats?: PlayerArenaStats | null;
   profile: SharedProfile;
   identity: EffectiveIdentity;
   steamId: string;
@@ -44,6 +51,9 @@ type PlayerProfilePageProps = {
   profileThemeKey?: string | null;
   relatedPlayerIdentities?: Readonly<Record<string, PlayerIdentityData>>;
   settingsOpen?: boolean;
+  initialServerStatus?: PublicStatus | null;
+  moderationHistory?: PlayerModerationHistory;
+  historyPages?: ProfileHistoryPages;
   profileSettings?: {
     csrf: string;
     initialSettings: ProfileSettingsValue;
@@ -189,7 +199,7 @@ function identityMembershipLabel(
   return "Custom portal group";
 }
 
-export function PlayerProfilePage({ profile, identity, steamId, steamProfile, discordProfileUrl, isOwnProfile, isAuthenticated, profileInventory, profileThemeKey, relatedPlayerIdentities = {}, settingsOpen = false, profileSettings }: PlayerProfilePageProps) {
+export function PlayerProfilePage({ staffControls, arenaStats, profile, identity, steamId, steamProfile, discordProfileUrl, isOwnProfile, isAuthenticated, profileInventory, profileThemeKey, relatedPlayerIdentities = {}, settingsOpen = false, profileSettings, initialServerStatus, moderationHistory, historyPages }: PlayerProfilePageProps) {
   const displayName = steamProfile?.name ?? profile.displayName ?? "ARENA player";
   const dashboard = isDashboard(profile) ? profile : null;
   const activeBan = dashboard?.bans.find((ban) => isActiveSanction(ban.expiresAt));
@@ -205,8 +215,6 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, di
     ? formatCount(profile.leaderboardTotal)
     : "No rank";
   const steamProfileUrl = `https://steamcommunity.com/profiles/${steamId}`;
-  const presence = steamProfile?.presence ?? "unknown";
-  const presenceLabel = presence === "online" ? "Steam online" : presence === "offline" ? "Steam offline" : "Steam status unavailable";
   const { surface: profileThemeSurface, theme: profileTheme } =
     resolvePortalThemeSurface(profileThemeKey, "profile");
   const primaryIdentityGroup = identity.groups[0] ?? null;
@@ -233,7 +241,7 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, di
           <ProfileThemeHeroDecoration themeKey={profileTheme.key} />
           <div className="public-player-copy">
             {!isOwnProfile ? <Link className="back-link" href="/ranking"><ArrowLeft aria-hidden="true" /> Server ranking</Link> : null}
-            <div className="public-player-identity" data-presence={presence}>
+            <div className="public-player-identity">
               <div className="public-player-avatar-shell">
                 <div className={`public-player-avatar${isBanned ? " is-banned" : ""}`}>
                   <ResilientRemoteImage src={steamProfile?.avatarFull} alt={`${displayName}'s Steam avatar`} referrerPolicy="no-referrer" fallback={<span className="public-player-avatar-fallback" aria-hidden="true">{avatarInitial(displayName)}</span>} />
@@ -243,7 +251,7 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, di
                 {primaryIdentityGroup ? <span className="profile-primary-group-badge"><IdentityGroupBadge group={primaryIdentityGroup} compact /></span> : null}
               </div>
               <div>
-                <p className="tapped-kicker"><UserRound aria-hidden="true" /> {isOwnProfile ? "Your player profile" : "Player profile"}<span className="profile-presence" title={presenceLabel}><i aria-hidden="true" /> {presenceLabel}</span></p>
+                <div className="tapped-kicker"><UserRound aria-hidden="true" /> {isOwnProfile ? "Your player profile" : "Player profile"}<PlayerServerPresence steamId={steamId} initialStatus={initialServerStatus} /></div>
                 <h1>{displayName}</h1>
                 <div className="profile-steam-theme-row">
                   <ProfileThemeSurfaceBadge themeKey={profileTheme.key} surface="profile" />
@@ -268,6 +276,7 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, di
           </aside>
         </section>
 
+        {staffControls}
         <ProfileTabs
           inventory={<ProfileInventoryPreview preview={profileInventory} steamId={steamId} isOwnProfile={isOwnProfile} />}
           inventoryCount={profileInventory.canView ? profileInventory.total : 0}
@@ -316,11 +325,26 @@ export function PlayerProfilePage({ profile, identity, steamId, steamProfile, di
             </div>
             <div className="rank-progress" aria-label={`K4 rank progression: ${levelRank.name}`}><div><span>{levelRank.name}</span><strong>{nextLevelRank ? `${formatCount(Math.max(0, nextLevelRank.points - profile.points))} points to ${nextLevelRank.tag}` : "Highest K4 rank"}</strong></div><div className="rank-progress-track" role="progressbar" aria-label="Progress to next rank" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(rankProgress)}><i style={{ width: `${rankProgress}%`, backgroundColor: levelRank.hex }} /></div></div>
           </article>
+          {arenaStats ? <article className="panel combat-panel">
+            <div className="panel-heading"><h2>Arena performance</h2><p>More from your K4 gameplay record.</p></div>
+            <div className="combat-stat-grid">
+              <div><span>Rounds won</span><strong>{formatCount(arenaStats.roundWins)}</strong><ShieldCheck aria-hidden="true" /></div>
+              <div><span>Round win rate</span><strong>{arenaStats.roundWinRate === null ? "-" : `${arenaStats.roundWinRate.toFixed(1)}%`}</strong><Target aria-hidden="true" /></div>
+              <div><span>Assists</span><strong>{formatCount(arenaStats.assists)}</strong><UserRound aria-hidden="true" /></div>
+              <div><span>Accuracy</span><strong>{arenaStats.accuracy === null ? "-" : `${arenaStats.accuracy.toFixed(1)}%`}</strong><Crosshair aria-hidden="true" /></div>
+              <div><span>Damage dealt</span><strong>{formatCount(arenaStats.damage)}</strong><Target aria-hidden="true" /></div>
+              <div><span>Matches played</span><strong>{formatCount(arenaStats.gamesPlayed)}</strong><ShieldCheck aria-hidden="true" /></div>
+              {arenaStats.highestKillstreak !== null ? <div><span>Highest killstreak</span><strong>{formatCount(arenaStats.highestKillstreak)}</strong><Crosshair aria-hidden="true" /></div> : null}
+            </div>
+          </article> : null}
           <HitMap stats={profile.hitStats} />
         </section> : null}
 
-        <PlayerWarningHistory steamId={steamId} />
+        <PlayerWarningHistory steamId={steamId} pages={historyPages} />
         {isOwnProfile && dashboard ? <ProfileModerationHistory
+          steamId={steamId}
+          history={moderationHistory}
+          pages={historyPages}
           bans={dashboard.bans}
           sanctions={dashboard.sanctions}
           relatedPlayerIdentities={relatedPlayerIdentities}

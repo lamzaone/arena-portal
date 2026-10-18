@@ -8,6 +8,8 @@ import {
 import { ProgressiveFormRuntime } from "@/components/ui/progressive-form-runtime";
 import { NavigationProgress } from "@/components/ui/navigation-progress";
 import { PanelEffects } from "@/components/ui/panel-effects";
+import { ButtonActionGuard } from "@/components/ui/button-action-guard";
+import { ModerationActionRuntime } from "@/components/ui/moderation-action-runtime";
 import { getSession } from "@/lib/auth/session";
 import { rootMetadata } from "@/lib/seo/site";
 import { resolvePortalThemeSurface } from "@/lib/themes/registry";
@@ -29,6 +31,7 @@ import "./navigation-progress.css";
 import "./navigation-system.css";
 import "./motion.css";
 import "./themes/rank-details.css";
+import "./ambient-polish.css";
 
 export const metadata: Metadata = rootMetadata;
 
@@ -53,8 +56,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <GlobalThemeDocumentEffects themeKey={session?.profileThemeKey} />
         <CursorGridBackground />
         <PanelEffects />
-        <ProgressiveFormRuntime />
+        <ButtonActionGuard />
         <Suspense fallback={null}>
+          <ProgressiveFormRuntime />
+          <ModerationActionRuntime />
           <NavigationProgress />
         </Suspense>
         <div id="main-content" className="portal-content" tabIndex={-1}>

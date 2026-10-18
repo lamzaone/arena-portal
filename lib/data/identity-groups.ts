@@ -313,6 +313,7 @@ type ArenaIdentityGroupTargetRow = RowDataPacket & {
   scope_name?: string;
   scope_type?: "global" | "server";
   scope_enabled?: number | boolean;
+  scope_registry_enabled?: number | boolean;
 };
 
 type ArenaIdentityMembershipMutationRow = RowDataPacket & {
@@ -891,7 +892,7 @@ async function lockArenaGroupForProjection(
 async function lockArenaGlobalGroupTarget(
   connection: PoolConnection,
   projection: Pick<IdentityGroupRow, "id" | "group_key" | "source_type">,
-  options: { requireEnabled?: boolean; requireCustom?: boolean } = {},
+  options: { requireEnabled?: boolean; requireCustom?: boolean; scopeId?: number } = {},
 ) {
   const group = await lockArenaGroupForProjection(connection, projection);
   if (options.requireCustom && group.group_type !== "custom") {
@@ -906,24 +907,24 @@ async function lockArenaGlobalGroupTarget(
       "arena_group.external_key, arena_group.enabled, arena_group.row_version, " +
       "scope.id AS scope_id, scope.scope_uuid, scope.scope_key, " +
       "scope.display_name AS scope_name, scope.scope_type, " +
-      "group_scope.enabled AS scope_enabled " +
+      "group_scope.enabled AS scope_enabled, scope.enabled AS scope_registry_enabled " +
       "FROM arena_groups AS arena_group " +
       "INNER JOIN arena_group_scopes AS group_scope ON group_scope.group_id = arena_group.id " +
       "INNER JOIN arena_scopes AS scope ON scope.id = group_scope.scope_id " +
-      "WHERE arena_group.id = ? AND scope.scope_type = 'global' AND scope.scope_key = 'global' " +
+      "WHERE arena_group.id = ? AND " + (options.scopeId === undefined ? "scope.scope_type = 'global' AND scope.scope_key = 'global' " : "scope.id = ? ") +
       "ORDER BY scope.id LIMIT 1 FOR UPDATE",
-    [Number(group.arena_group_id)],
+    options.scopeId === undefined ? [Number(group.arena_group_id)] : [Number(group.arena_group_id), options.scopeId],
   );
   const target = scopeRows[0];
   if (!target) {
     identityError(
       "group_not_found",
-      "That Arena group is not enabled in the global scope.",
+      "That Arena group is unavailable in the selected scope.",
     );
   }
   if (
     options.requireEnabled &&
-    (!asBoolean(target.enabled) || !asBoolean(target.scope_enabled))
+    (!asBoolean(target.enabled) || !asBoolean(target.scope_enabled) || !asBoolean(target.scope_registry_enabled))
   ) {
     identityError("group_disabled", "Only an enabled Arena group can receive members.");
   }
@@ -2937,6 +2938,7 @@ export async function removeIdentityGroupMembership(input: {
   const authority = await withArenaIdentityTransaction(async (connection) => {
     const target = await lockArenaGlobalGroupTarget(connection, projection, {
       requireCustom: true,
+      scopeId: reference?.scopeId,
     });
     const membership = await lockArenaCustomMembership(connection, {
       target,
@@ -3018,6 +3020,7 @@ export async function extendIdentityGroupMembership(input: {
   const authority = await withArenaIdentityTransaction(async (connection) => {
     const target = await lockArenaGlobalGroupTarget(connection, projection, {
       requireCustom: true,
+      scopeId: reference?.scopeId,
       requireEnabled: true,
     });
     const membership = await lockArenaCustomMembership(connection, {
@@ -3040,8 +3043,7 @@ export async function extendIdentityGroupMembership(input: {
     );
     const rowVersion = Number(membership.row_version) + 1;
     const [updated] = await connection.execute<ResultSetHeader>(
-      "UPDATE arena_group_memberships SET starts_at = LEAST(starts_at, CURRENT_TIMESTAMP(6)), " +
-        "expires_at = ?, granted_by_actor = ?, row_version = row_version + 1 " +
+      "UPDATE arena_group_memberships SET expires_at = ?, granted_by_actor = ?, row_version = row_version + 1 " +
         "WHERE membership_uuid = ? AND row_version = ? AND status = 'active'",
       [
         nextExpiry,
@@ -3087,6 +3089,43 @@ export async function extendIdentityGroupMembership(input: {
   return { ...authority, rewardSyncPending: rewards === null };
 }
 
+export async function editIdentityGroupMembership(input: {
+  actor: IdentityFounderActor; requestKey: string; groupId: number; steamId: string;
+  membershipUuid?: string | null; scopeId?: number | null; rowVersion?: number | null;
+  expiryMode: "replace" | "permanent"; durationMinutes?: number;
+}) {
+  const actorSteamId = requireFounder(input.actor);
+  const requestKey = identityRequestKey(input.requestKey);
+  const groupId = identityId(input.groupId, "Group ID");
+  const steamId = identitySteamId(input.steamId, "Player SteamID64");
+  const reference = exactArenaMembershipReference(input);
+  if (!reference || !["replace", "permanent"].includes(input.expiryMode)) identityError("invalid_input", "Choose an exact membership and expiry change.");
+  const minutes = input.expiryMode === "permanent" ? 0 : identityInteger(input.durationMinutes, "Duration", 1, 525_600);
+  const projection = await readPortalGroupProjection(groupId);
+  const authority = await withArenaIdentityTransaction(async connection => {
+    const target = await lockArenaGlobalGroupTarget(connection, projection, { requireCustom: true, requireEnabled: true, scopeId: reference.scopeId });
+    const membership = await lockArenaCustomMembership(connection, { target, steamId, reference });
+    if (!membership || membership.status !== "active") identityError("membership_not_found", "That membership is no longer active.");
+    const startsAt = new Date(membership.starts_at).getTime();
+    if (!Number.isFinite(startsAt)) identityError("membership_not_found", "That membership has an invalid start date.");
+    const expiresAt = minutes === 0 ? null : new Date(Math.max(Date.now(), startsAt) + minutes * 60_000);
+    const rowVersion = Number(membership.row_version) + 1;
+    const [updated] = await connection.execute<ResultSetHeader>(
+      "UPDATE arena_group_memberships SET expires_at = ?, row_version = row_version + 1 WHERE membership_uuid = ? AND row_version = ? AND status = 'active'",
+      [expiresAt, membership.membership_uuid, Number(membership.row_version)],
+    );
+    if (updated.affectedRows !== 1) identityError("membership_not_found", "That membership changed. Refresh before editing it.");
+    await writeArenaCustomMembershipOutbox(connection, {
+      action: "assigned", membershipUuid: String(membership.membership_uuid), groupId: Number(target.arena_group_id),
+      portalGroupId: groupId, scopeId: Number(target.scope_id), steamId, startsAt: membership.starts_at,
+      expiresAt, status: "active", rowVersion, actorSteamId, reason: "staff-expiry-edited",
+    });
+    return { groupId, steamId, expiresAt: expiresAt?.toISOString() ?? null, rowVersion };
+  });
+  const rewards = await reconcileCustomMembershipRewardsFailSoft(steamId, `${requestKey}:membership-edit`);
+  return { ...authority, rewardSyncPending: rewards === null };
+}
+
 export async function createIdentityChatTag(input: {
   actor: IdentityFounderActor;
   requestKey: string;
@@ -3099,6 +3138,7 @@ export async function createIdentityChatTag(input: {
   nameStyle?: string;
   messageStyle?: string;
   badgeKey?: string;
+  assignTo?: { groupId: number } | { steamId: string; durationMinutes?: number; reason?: string };
 }) {
   const actorSteamId = requireFounder(input.actor);
   const requestKey = identityRequestKey(input.requestKey);
@@ -3122,13 +3162,29 @@ export async function createIdentityChatTag(input: {
       [key, text, colorToken, nameColorToken, messageColorToken, presentation.tagStyle, presentation.nameStyle, presentation.messageStyle, presentation.badgeKey, actorSteamId],
     );
     const tagId = Number(result.insertId);
+    if (input.assignTo && "groupId" in input.assignTo) {
+      const groupId = identityId(input.assignTo.groupId, "Group ID");
+      await lockGroup(connection, groupId);
+      await connection.execute(
+        "INSERT INTO portal_identity_group_chat_tags (group_id, tag_id, sort_order, assigned_by_steam_id) VALUES (?, ?, 0, ?)",
+        [groupId, tagId, actorSteamId],
+      );
+    } else if (input.assignTo) {
+      const steamId = identitySteamId(input.assignTo.steamId, "Player SteamID64");
+      const expiresAt = identityExpiry(input.assignTo.durationMinutes ?? 0);
+      const reason = identityOptionalText(input.assignTo.reason, "Grant reason", 180);
+      await connection.execute(
+        "INSERT INTO portal_identity_player_chat_tags (steam_id, tag_id, starts_at, expires_at, assigned_by_steam_id, grant_reason, revoked_at, revoked_by_steam_id) VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?, ?, NULL, NULL)",
+        [steamId, tagId, expiresAt, actorSteamId, reason],
+      );
+    }
     await writeIdentityAudit(connection, {
       requestKey: `${requestKey}:tag-create`,
       actorSteamId,
       action: "identity.tag.created",
       targetType: "chat-tag",
       targetId: String(tagId),
-      metadata: { key, text, colorToken, nameColorToken, messageColorToken, ...presentation },
+      metadata: { key, text, colorToken, nameColorToken, messageColorToken, ...presentation, assignTo: input.assignTo ?? null },
     });
     return { tagId };
   });

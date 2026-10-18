@@ -1,6 +1,9 @@
 import { TOKEN_MAX, TOKEN_LIFETIME_MAX, tokenInteger, type TokenAmountInput } from "../economy/token-amount.ts";
 import "server-only";
 import { CLOSED_APPEAL_STATUSES } from "@/lib/cases/appeal-status";
+import { caseQueueWhere, type StaffCaseFilters } from "@/lib/cases/staff-queue";
+import { getStaffCasePriorities } from "@/lib/cases/priority-repository";
+import type { CasePriority } from "@/lib/cases/priority";
 import { enqueueDiscordNotification } from "@/lib/discord/notification-repository";
 import { cs2FinishValiditySql, getCs2Finish, getCs2PaintkitWear, isValidCs2Finish, isCs2CatalogueFinishAvailable } from "@/lib/economy/cs2-finish-catalogue";
 
@@ -333,6 +336,10 @@ type LoadoutMusicRow = RowDataPacket & {
 export type PortalBridgeEvent =
   | "moderation.ban"
   | "moderation.unban"
+  | "moderation.kick"
+  | "moderation.gag"
+  | "moderation.mute"
+  | "moderation.silence"
   | "loadout.weapon.set"
   | "loadout.weapon.reset"
   | "loadout.knife.set"
@@ -622,12 +629,14 @@ export type VipRosterPage = {
 };
 
 export type StaffAppeal = BanAppeal & {
+  priority: CasePriority;
   steamId: string;
   closedBy: string | null;
   closedAt: string | null;
 };
 
 export type StaffTicket = PortalTicket & {
+  priority: CasePriority;
   steamId: string;
   closedBy: string | null;
   closedAt: string | null;
@@ -2514,28 +2523,31 @@ async function getCaseMessages(
   }
 }
 
-export async function getStaffAppeals(pageInput: number, pageSize = 25) {
+export async function getStaffAppeals(pageInput: number, pageSize = 25, filters: StaffCaseFilters = {}) {
   const pool = getPortalPool();
   const page = clampStaffPage(pageInput);
-  if (!pool) return { appeals: [] as StaffAppeal[], total: 0, page, pageSize };
+  if (!pool) return { appeals: [] as StaffAppeal[], total: 0, page, pageSize, priorityAvailable: false };
   try {
     const offset = (page - 1) * pageSize;
+    const { where, values } = caseQueueWhere("appeal", filters);
     const [[countRows], [rows]] = await Promise.all([
       pool.query<CountRow[]>(
-        "SELECT COUNT(*) AS total FROM portal_ban_appeals",
+        `SELECT COUNT(*) AS total FROM portal_ban_appeals c ${where}`, values,
       ),
       pool.query<StaffAppealRow[]>(
-        "SELECT id, steam_id, ban_id, body, status, created_at, updated_at, closed_by, closed_at FROM portal_ban_appeals ORDER BY updated_at DESC LIMIT ? OFFSET ?",
-        [pageSize, offset],
+        `SELECT c.id, c.steam_id, c.ban_id, c.body, c.status, c.created_at, c.updated_at, c.closed_by, c.closed_at FROM portal_ban_appeals c ${where} ORDER BY c.updated_at DESC, c.id DESC LIMIT ? OFFSET ?`,
+        [...values, pageSize, offset],
       ),
     ]);
     const appealBans = await getAppealBans(
       rows.map((row) => (row.ban_id == null ? null : Number(row.ban_id))),
     );
+    const { priorities, available: priorityAvailable } = await getStaffCasePriorities("appeal", rows.map((row) => Number(row.id)));
     const appeals = await Promise.all(
       rows.map(async (row) => ({
         id: Number(row.id),
         steamId: String(row.steam_id),
+        priority: priorities.get(Number(row.id)) ?? "normal",
         banId: row.ban_id == null ? null : Number(row.ban_id),
         body: row.body,
         ban:
@@ -2550,29 +2562,32 @@ export async function getStaffAppeals(pageInput: number, pageSize = 25) {
         messages: await getCaseMessages(pool, "appeal", Number(row.id)),
       })),
     );
-    return { appeals, total: Number(countRows[0]?.total ?? 0), page, pageSize };
+    return { appeals, total: Number(countRows[0]?.total ?? 0), page, pageSize, priorityAvailable };
   } catch {
-    return { appeals: [] as StaffAppeal[], total: 0, page, pageSize };
+    return { appeals: [] as StaffAppeal[], total: 0, page, pageSize, priorityAvailable: false };
   }
 }
 
-export async function getStaffTickets(pageInput: number, pageSize = 25) {
+export async function getStaffTickets(pageInput: number, pageSize = 25, filters: StaffCaseFilters = {}) {
   const pool = getPortalPool();
   const page = clampStaffPage(pageInput);
-  if (!pool) return { tickets: [] as StaffTicket[], total: 0, page, pageSize };
+  if (!pool) return { tickets: [] as StaffTicket[], total: 0, page, pageSize, priorityAvailable: false };
   try {
     const offset = (page - 1) * pageSize;
+    const { where, values } = caseQueueWhere("ticket", filters);
     const [[countRows], [rows]] = await Promise.all([
-      pool.query<CountRow[]>("SELECT COUNT(*) AS total FROM portal_tickets"),
+      pool.query<CountRow[]>(`SELECT COUNT(*) AS total FROM portal_tickets c ${where}`, values),
       pool.query<StaffTicketRow[]>(
-        "SELECT id, steam_id, category, subject, body, status, created_at, updated_at, closed_by, closed_at FROM portal_tickets ORDER BY updated_at DESC LIMIT ? OFFSET ?",
-        [pageSize, offset],
+        `SELECT c.id, c.steam_id, c.category, c.subject, c.body, c.status, c.created_at, c.updated_at, c.closed_by, c.closed_at FROM portal_tickets c ${where} ORDER BY c.updated_at DESC, c.id DESC LIMIT ? OFFSET ?`,
+        [...values, pageSize, offset],
       ),
     ]);
+    const { priorities, available: priorityAvailable } = await getStaffCasePriorities("ticket", rows.map((row) => Number(row.id)));
     const tickets = await Promise.all(
       rows.map(async (row) => ({
         id: Number(row.id),
         steamId: String(row.steam_id),
+        priority: priorities.get(Number(row.id)) ?? "normal",
         category: row.category,
         subject: row.subject,
         body: row.body,
@@ -2584,9 +2599,9 @@ export async function getStaffTickets(pageInput: number, pageSize = 25) {
         messages: await getCaseMessages(pool, "ticket", Number(row.id)),
       })),
     );
-    return { tickets, total: Number(countRows[0]?.total ?? 0), page, pageSize };
+    return { tickets, total: Number(countRows[0]?.total ?? 0), page, pageSize, priorityAvailable };
   } catch {
-    return { tickets: [] as StaffTicket[], total: 0, page, pageSize };
+    return { tickets: [] as StaffTicket[], total: 0, page, pageSize, priorityAvailable: false };
   }
 }
 
@@ -2599,7 +2614,7 @@ export async function enqueueStaffBan(input: {
   actorName: string;
   serverGuid: string;
 }) {
-  return enqueuePortalBridgeEvent("moderation.ban", input.steamId, input);
+  return enqueuePortalBridgeEvent("moderation.ban", input.steamId, { ...input, queuedAt: new Date().toISOString() });
 }
 
 export async function enqueueStaffUnban(input: {

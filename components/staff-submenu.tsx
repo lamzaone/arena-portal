@@ -8,6 +8,8 @@ import {
   Ticket,
   UsersRound,
   ShieldCheck,
+  VolumeX,
+  UserRoundPlus,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -16,6 +18,7 @@ import type { AdminAccess } from "@/lib/admin/access";
 
 export const staffModerationSections = [
   { id: "bans", label: "Bans", icon: Ban },
+  { id: "communications", label: "Communications", icon: VolumeX },
   { id: "appeals", label: "Appeals", icon: BadgeCheck },
   { id: "tickets", label: "Tickets", icon: Ticket },
 ] as const;
@@ -28,7 +31,8 @@ export type StaffSection =
   | "groups"
   | "items"
   | "inventories"
-  | "redeem";
+  | "redeem"
+  | "recruitment";
 
 type StaffSubmenuAccess = Pick<
   AdminAccess,
@@ -54,7 +58,7 @@ export function StaffSubmenu({
   if (access.isAdmin) items.push({ key: "warnings", href: "/admin/warnings", label: "Warnings", icon: ShieldCheck, scroll: true });
 
   const community: SectionNavItem[] = access.isAdmin
-    ? [{ key: "groups", href: "/admin/groups", label: "Groups & access", icon: UsersRound, scroll: true }]
+    ? [{ key: "groups", href: "/admin/groups", label: "Groups & access", icon: UsersRound, scroll: true }, { key: "recruitment", href: "/admin/recruitment", label: "Recruitment", icon: UserRoundPlus, scroll: true }]
     : [];
   const economy: SectionNavItem[] = [];
   if (access.canViewEconomy) {

@@ -9,9 +9,9 @@ const BRAND_IMAGE = {
 };
 const HOME_TITLE = "CS2 Arena Server Romania | TAPPED.RO";
 const HOME_DESCRIPTION =
-  "Join TAPPED.RO, a competitive CS2 arena server in Romania with ranked 1v1 fights, custom duels, monthly rewards, VIP perks, and player loadouts.";
+  "Join TAPPED.RO, a CS2 arena server in Romania with ranked 1v1 rounds, custom duels, Tokens, cases, player trading, VIP perks, and connected loadouts.";
 
-const PUBLIC_ROUTES = ["/", "/modes", "/vip", "/ranking", "/market", "/staff", "/bans"] as const;
+const PUBLIC_ROUTES = ["/", "/features", "/vip", "/ranking", "/market", "/staff", "/bans"] as const;
 const PRIVATE_ROUTES = [
   "/admin/",
   "/api/",
@@ -23,6 +23,7 @@ const PRIVATE_ROUTES = [
   "/settings",
   "/tickets",
   "/appeals",
+  "/communications",
 ] as const;
 const PAGE_SEO = {
   "/bans": {
@@ -38,10 +39,10 @@ const PAGE_SEO = {
     description:
       "Meet the people behind TAPPED.RO. Explore our CS2 arena staff, browse admin groups, and get to know the team keeping our community connected.",
   },
-  "/modes": {
-    title: "CS2 1v1 Arena Modes | TAPPED.RO",
+  "/features": {
+    title: "CS2 Arena Features & Player Guide | TAPPED.RO",
     description:
-      "Explore TAPPED.RO arena modes: ranked CS2 1v1 rounds, custom player duels, weapon formats, and competitive challenges hosted in Romania.",
+      "Explore TAPPED.RO: arena rounds, custom duels, Token rewards, cases, trading, loadouts, VIP, Discord, and community systems in one CS2 player guide.",
   },
   "/vip": {
     title: "CS2 Arena VIP Benefits | TAPPED.RO",
@@ -51,7 +52,7 @@ const PAGE_SEO = {
   "/ranking": {
     title: "CS2 Arena Rankings Romania | TAPPED.RO",
     description:
-      "Follow the TAPPED.RO CS2 arena leaderboard, compare Romanian community rankings, and compete for monthly 1v1 rewards.",
+      "Follow the TAPPED.RO CS2 arena leaderboard, compare ranking points and combat stats, and track your progress in the Romanian 1v1 community.",
   },
   "/market": {
     title: "CS2 Arena Market & Inventory | TAPPED.RO",

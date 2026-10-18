@@ -5,10 +5,18 @@ import { authorizeWarning } from "@/lib/moderation/warning-policy";
 import { formActionRedirect } from "@/lib/form-action-response";
 
 export async function POST(request: Request) {
-  const redirect = (key: string, message: string) => formActionRedirect(request, `/admin/warnings?${key}=${encodeURIComponent(message)}`);
+  let returnPath = "/admin/warnings";
+  const redirect = (key: string, message: string) => formActionRedirect(request, `${returnPath}?${key}=${encodeURIComponent(message)}`);
   const session = await getSession();
   if (!session) return formActionRedirect(request, "/api/auth/steam");
   const form = await request.formData();
+  const steamId = String(form.get("steamId") ?? "").trim();
+  if (form.get("action") === "issue" && /^7656119\d{10}$/.test(steamId)) {
+    try {
+      const referer = new URL(request.headers.get("referer") ?? "");
+      if (referer.origin === new URL(request.url).origin && referer.pathname === `/players/${steamId}`) returnPath = referer.pathname;
+    } catch { /* Staff warning forms keep their default destination. */ }
+  }
   if (!verifyAdminActionToken(session, String(form.get("csrf") ?? ""))) return redirect("error", "Verification failed.");
   if (!adminWriteConfigured()) return redirect("error", "Moderation writes are disabled.");
   try {
@@ -18,7 +26,6 @@ export async function POST(request: Request) {
     const reason = String(form.get("reason") ?? "").trim();
     if (reason.length < 2 || reason.length > 500) return redirect("error", "Provide a reason between 2 and 500 characters.");
     if (action === "issue") {
-      const steamId = String(form.get("steamId") ?? "").trim();
       authorizeWarning(actor, await getAdminAccess(steamId), "issue");
       await issuePlayerWarning({ id, steamId, reason, playerName: String(form.get("playerName") ?? "").trim() || "Unknown player", durationMinutes: Number(form.get("durationMinutes")), serverGuid: await getServerGuid(), actorSteamId: actor.steamId, actorName: actor.displayName });
     } else if (action === "revoke") {

@@ -53,15 +53,15 @@ export function ChatEffectEditor({ label, name, value, color, onChange }: {
           controls.includes("m") ? options.mode === "steps" ? "Stepped" : "Smooth" : ""].filter(Boolean).join(" · ");
         return <section className={styles.effectCard} data-enabled={enabled} key={effect} aria-label={`${prefix} effect`}>
           <div className={styles.effectHeading}><strong>{title}</strong>
-            <button type="button" aria-label={`${title}`} aria-pressed={enabled} onClick={() => onChange(toggleChatStyle(value, effect))}>{enabled ? "On" : "Off"}</button>
+            <button type="button" role="switch" aria-label={`${prefix} enabled`} aria-checked={enabled} onClick={() => onChange(toggleChatStyle(value, effect))}><span aria-hidden="true" />{enabled ? "On" : "Off"}</button>
           </div>
-          <p className={styles.effectDescription}>{descriptions[effect]}</p>
           <div className={styles.effectCurrent}>
             {controls.includes("c") && <span className={styles.miniPalette} aria-hidden="true">{effectiveColors.map((entry, index) => <i key={index} style={{ background: entry }} />)}</span>}
             <span>{summary}</span>
           </div>
-          <details key={`${effect}-${enabled}`} open={enabled}>
+          <details>
             <summary>{title} settings</summary>
+            <p className={styles.effectDescription}>{descriptions[effect]}</p>
             <div className={styles.effectSettings}>
               {controls.includes("f") && <label>{effect === "pulse" ? "Pulse frequency" : effect === "sparkle" ? "Sparkle frequency" : "Cycle frequency"}
                 <select aria-label={`${prefix} frequency`} value={options.frequency} onChange={(event) => update({ frequency: Number(event.target.value) })}>

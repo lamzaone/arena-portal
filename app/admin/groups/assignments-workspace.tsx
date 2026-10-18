@@ -81,6 +81,9 @@ export type AssignmentsWorkspaceProps = Readonly<{
   canManageVips: boolean;
   canManageGroups?: boolean;
   assignmentView?: AssignmentWorkspaceView;
+  groupFilterId?: number;
+  initialPlayerSteamId?: string;
+  lockView?: boolean;
   actionUrl?: string;
   customActionUrl?: string;
   requestKeySeed?: string;
@@ -929,9 +932,38 @@ function VipEditForm({
   );
 }
 
+function MembershipEditForm({ assignment, groups, csrf, actionUrl, customActionUrl, requestKeySeed }: {
+  assignment: AdminAssignment | CustomAssignment; groups: readonly IdentityGroup[]; csrf: string;
+  actionUrl: string; customActionUrl: string; requestKeySeed: string;
+}) {
+  const native = assignment.kind === "admin" && assignment.record.source === "native";
+  const [expiryMode, setExpiryMode] = useState(assignment.kind === "admin" ? "keep" : "replace");
+  const choices = groups.filter(group => group.sourceType === "admins_core" && group.enabled && normalize(group.externalKey ?? group.displayName) !== "founder");
+  return <details className={styles.editDisclosure}>
+    <summary><PencilLine aria-hidden="true" /> Edit {assignment.kind === "admin" ? "Admin" : "custom"} access</summary>
+    <form className={styles.editForm} action={assignment.kind === "admin" ? actionUrl : customActionUrl} method="post">
+      <input type="hidden" name="csrf" value={csrf} />
+      <input type="hidden" name="requestKey" value={`${requestKeySeed}.edit.${assignment.groupDefinition?.id ?? "native"}.${assignment.record.rowVersion ?? 0}`} />
+      <input type="hidden" name="action" value={assignment.kind === "admin" ? "admin-membership-edit" : "membership-edit"} />
+      <input type="hidden" name="expectedExpiresAt" value={assignment.expiresAt ?? ""} />
+      {assignment.kind === "admin" ? <AdminReferenceFields record={assignment.record} /> : <CustomReferenceFields assignment={assignment} />}
+      {assignment.kind === "admin" ? <label>Admin group<select name="newGroup" defaultValue={assignment.groupName} required>
+        {!choices.some(group => normalize(group.externalKey ?? group.displayName) === normalize(assignment.groupName)) ? <option>{assignment.groupName}</option> : null}
+        {choices.map(group => <option key={group.id} value={group.externalKey ?? group.displayName}>{group.displayName}</option>)}
+      </select></label> : null}
+      {native ? <><input type="hidden" name="expiryMode" value="keep" /><p>Native Admin access is permanent. This changes only the selected group; other groups and direct permissions stay attached.</p></> : <label>Expiry change<select name="expiryMode" value={expiryMode} onChange={event => setExpiryMode(event.currentTarget.value)}>
+        {assignment.kind === "admin" ? <option value="keep">Keep current expiry</option> : null}<option value="replace">Replace remaining duration</option><option value="permanent">Make permanent</option>
+      </select></label>}
+      <label hidden={native || expiryMode !== "replace"}>Duration (minutes)<input name="durationMinutes" type="number" min="1" max="525600" defaultValue="1440" required={!native && expiryMode === "replace"} /><small>1440 = 1 day. The original start date and server scope are preserved.</small></label>
+      <ConfirmSubmitButton className={styles.primaryButton} confirmation={`Save edited ${assignment.groupName} access for ${assignment.playerName}?`}><ShieldCheck aria-hidden="true" /> Save access</ConfirmSubmitButton>
+    </form>
+  </details>;
+}
+
 function AssignmentRecordCard({
   actionUrl,
   assignment,
+  groups,
   canManageAdmins,
   canManageGroups,
   canManageVips,
@@ -943,6 +975,7 @@ function AssignmentRecordCard({
 }: {
   actionUrl: string;
   assignment: Assignment;
+  groups: readonly IdentityGroup[];
   canManageAdmins: boolean;
   canManageGroups: boolean;
   canManageVips: boolean;
@@ -1076,6 +1109,7 @@ function AssignmentRecordCard({
 
       {canManage ? (
         <div className={styles.recordActions} aria-label={`Manage ${assignment.groupName} for ${assignment.playerName}`}>
+          {assignment.kind !== "vip" && mutable ? <MembershipEditForm assignment={assignment} groups={groups} csrf={csrf} actionUrl={actionUrl} customActionUrl={customActionUrl} requestKeySeed={requestKeySeed} /> : null}
           {assignment.kind === "vip" && mutable ? (
             <VipEditForm
               actionUrl={actionUrl}
@@ -1130,6 +1164,8 @@ function AssignmentRecordCard({
 }
 
 function QuickAdd({
+  initialPlayerSteamId,
+  initialVipGroup,
   actionUrl,
   adminGroups,
   canManageAdmins,
@@ -1143,6 +1179,8 @@ function QuickAdd({
   vipGroups,
   vipScopes,
 }: {
+  initialPlayerSteamId?: string;
+  initialVipGroup?: string;
   actionUrl: string;
   adminGroups: readonly IdentityGroup[];
   canManageAdmins: boolean;
@@ -1164,7 +1202,7 @@ function QuickAdd({
   if (!showAdmin && !showVip && !showCustom) return null;
 
   return (
-    <details className={styles.quickAdd} data-ui="assignment-quick-add">
+    <details className={styles.quickAdd} data-ui="assignment-quick-add" open={Boolean(initialPlayerSteamId)}>
       <summary>
         <span className={styles.quickAddIcon}><Plus aria-hidden="true" /></span>
         <span>
@@ -1186,13 +1224,13 @@ function QuickAdd({
               id={`${generatedId}-admin-player`}
               name="steamId"
               label="Player"
-              mode="target"
+              mode="target" defaultQuery={initialPlayerSteamId}
               required
               includeSelf
             />
             <label>
               Admin group
-              <select name="groupId" defaultValue="" required>
+              <select name="groupId" defaultValue={adminGroups.length === 1 ? String(adminGroups[0].id) : ""} required>
                 <option value="" disabled>Choose a group</option>
                 {adminGroups.map((group) => (
                   <option key={group.id} value={group.id}>
@@ -1229,14 +1267,14 @@ function QuickAdd({
               id={`${generatedId}-vip-player`}
               name="steamId"
               label="Player"
-              mode="target"
+              mode="target" defaultQuery={initialPlayerSteamId}
               required
               includeSelf
               companionNameField="name"
             />
             <label>
               VIP tier
-              <select name="group" defaultValue="" required>
+              <select name="group" defaultValue={initialVipGroup ?? ""} required>
                 <option value="" disabled>Choose a tier</option>
                 {vipGroups.map((group) => <option key={group}>{group}</option>)}
               </select>
@@ -1281,13 +1319,13 @@ function QuickAdd({
               id={`${generatedId}-custom-player`}
               name="steamId"
               label="Player"
-              mode="target"
+              mode="target" defaultQuery={initialPlayerSteamId}
               required
               includeSelf
             />
             <label>
               Custom group
-              <select name="groupId" defaultValue="" required>
+              <select name="groupId" defaultValue={customGroups.length === 1 ? String(customGroups[0].id) : ""} required>
                 <option value="" disabled>Choose a group</option>
                 {customGroups.map((group) => (
                   <option key={group.id} value={group.id}>{group.displayName}</option>
@@ -1357,13 +1395,16 @@ export function AssignmentsWorkspace({
   canManageGroups = false,
   canManageVips,
   assignmentView = "all",
+  groupFilterId,
+  initialPlayerSteamId,
+  lockView = false,
   actionUrl = "/api/admin/staff",
   customActionUrl = "/api/admin/groups",
   requestKeySeed = "assignment-session",
 }: AssignmentsWorkspaceProps) {
   const [view, setView] = useState<AssignmentWorkspaceView>(assignmentView);
-  const [query, setQuery] = useState("");
-  const [selectedPlayerSteamId, setSelectedPlayerSteamId] = useState<string | null>(null);
+  const [query, setQuery] = useState(initialPlayerSteamId ?? "");
+  const [selectedPlayerSteamId, setSelectedPlayerSteamId] = useState<string | null>(initialPlayerSteamId ?? null);
   const [searchResetKey, setSearchResetKey] = useState(0);
   const [scope, setScope] = useState("all");
   const [status, setStatus] = useState<StatusFilter>("all");
@@ -1387,19 +1428,19 @@ export function AssignmentsWorkspace({
       identities,
       vipPlayers,
       vipScopes: effectiveVipScopes,
-    }),
-    [adminPlayers, effectiveVipScopes, groups, identities, vipPlayers],
+    }).filter(assignment => groupFilterId === undefined || assignment.groupDefinition?.id === groupFilterId),
+    [adminPlayers, effectiveVipScopes, groupFilterId, groups, identities, vipPlayers],
   );
   const adminGroups = useMemo(
     () => groups.filter((group) =>
-      group.enabled &&
+      (groupFilterId === undefined || group.id === groupFilterId) && group.enabled &&
       group.sourceType === "admins_core" &&
       normalize(group.externalKey ?? group.displayName) !== "founder"),
-    [groups],
+    [groupFilterId, groups],
   );
   const customGroups = useMemo(
-    () => groups.filter((group) => group.enabled && group.sourceType === "custom"),
-    [groups],
+    () => groups.filter((group) => (groupFilterId === undefined || group.id === groupFilterId) && group.enabled && group.sourceType === "custom"),
+    [groupFilterId, groups],
   );
   const profileSearchPlayers = useMemo(
     () => Object.values(identities).map((identity): PlayerSearchResult => ({
@@ -1474,14 +1515,15 @@ export function AssignmentsWorkspace({
   return (
     <section
       className={styles.root}
-      id="assignments"
+      id={`assignments-${groupFilterId ?? generatedId}`}
       data-ui="assignments-workspace"
+      data-embedded={lockView}
       aria-labelledby={`${generatedId}-title`}
     >
-      <header className={styles.workspaceHeader}>
+      <header className={styles.workspaceHeader} data-panel-light>
         <div>
           <p className={styles.eyebrow}><UsersRound aria-hidden="true" /> Access control</p>
-          <h2 id={`${generatedId}-title`}>Assignments</h2>
+          <h2 id={`${generatedId}-title`}>{lockView ? "Members & access" : "Assignments"}</h2>
           <p>Find a player, review their access, and update the selected membership.</p>
         </div>
         <span className={styles.liveSource}><Database aria-hidden="true" /> Live Arena records</span>
@@ -1494,7 +1536,7 @@ export function AssignmentsWorkspace({
         <SummaryCard icon={ShieldAlert} label="players need review" value={reviewCount} tone="warning" />
       </div>
 
-      <div className={styles.segmented} role="group" aria-label="Assignment type">
+      {!lockView ? <div className={styles.segmented} role="group" aria-label="Assignment type">
         <button type="button" data-active={view === "all"} aria-pressed={view === "all"} onClick={() => setView("all")}>
           <UsersRound aria-hidden="true" /> All <span>{assignments.length}</span>
         </button>
@@ -1507,9 +1549,11 @@ export function AssignmentsWorkspace({
         <button id="custom-assignments" type="button" data-active={view === "custom"} aria-pressed={view === "custom"} onClick={() => setView("custom")}>
           <UsersRound aria-hidden="true" /> Custom <span>{customCount}</span>
         </button>
-      </div>
+      </div> : null}
 
       <QuickAdd
+        initialPlayerSteamId={initialPlayerSteamId}
+        initialVipGroup={groups.find(group => group.id === groupFilterId)?.externalKey ?? undefined}
         actionUrl={actionUrl}
         adminGroups={adminGroups}
         canManageAdmins={canManageAdmins}
@@ -1520,7 +1564,7 @@ export function AssignmentsWorkspace({
         customGroups={customGroups}
         requestKeySeed={requestKeySeed}
         view={view}
-        vipGroups={vipGroups}
+        vipGroups={lockView && groupFilterId !== undefined && view === "vip" ? vipGroups.filter(name => normalize(name) === normalize(groups.find(group => group.id === groupFilterId)?.externalKey ?? "")) : vipGroups}
         vipScopes={effectiveVipScopes}
       />
 
@@ -1545,6 +1589,7 @@ export function AssignmentsWorkspace({
             localPlayers={profileSearchPlayers}
             mode="query"
             name="assignmentPlayerQuery"
+            defaultQuery={query}
             placeholder="Player name or SteamID64"
             helpText="Choose a profile for an exact match, or keep typing to filter assignments."
             onQueryChange={setQuery}
@@ -1632,6 +1677,7 @@ export function AssignmentsWorkspace({
                     <AssignmentRecordCard
                       actionUrl={actionUrl}
                       assignment={assignment}
+                      groups={groups}
                       canManageAdmins={canManageAdmins}
                       canManageGroups={canManageGroups}
                       canManageVips={canManageVips}

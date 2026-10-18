@@ -61,7 +61,9 @@ function ChatColorPicker({ label, name, value, onChange, optional = false, teamC
 }
 
 function TagColorFieldsEditor({ text = "", color = "[gold]", nameColor = "", messageColor = "",
-  tagStyle = "", nameStyle = "", messageStyle = "", badgeKey = "" }: {
+  tagStyle = "", nameStyle = "", messageStyle = "", badgeKey = "", showSaveBar = true, textRequired = true }: {
+  showSaveBar?: boolean;
+  textRequired?: boolean;
   text?: string;
   color?: string;
   nameColor?: string | null;
@@ -71,6 +73,8 @@ function TagColorFieldsEditor({ text = "", color = "[gold]", nameColor = "", mes
   messageStyle?: string;
   badgeKey?: string;
 }) {
+  const channelId = useId();
+  const [activeChannel, setActiveChannel] = useState<"tag" | "name" | "message">("tag");
   const [tagText, setTagText] = useState(text);
   const [tagColor, setTagColor] = useState(color);
   const [playerColor, setPlayerColor] = useState(nameColor ?? "");
@@ -83,14 +87,14 @@ function TagColorFieldsEditor({ text = "", color = "[gold]", nameColor = "", mes
     tagEffects !== tagStyle || nameEffects !== nameStyle || messageEffects !== messageStyle || badge !== badgeKey;
   return (
     <div className={styles.fields}>
-      <div className={styles.saveBar}>
+      {showSaveBar ? <div className={styles.saveBar}>
         <span role="status">{dirty ? "Unsaved changes — save to apply your settings." : "Showing current settings."}</span>
         <button type="submit">Save tag settings</button>
-      </div>
+      </div> : null}
       <div className={styles.presentation}>
         <div className={styles.identityFields}>
           <label className={styles.textField}>Tag text
-            <input name="tagText" maxLength={64} required placeholder="[BETA]" value={tagText}
+            <input name="tagText" maxLength={64} required={textRequired} placeholder="Automatic from group name" value={tagText}
               onChange={(event) => setTagText(event.target.value)} />
           </label>
           <label className={styles.textField}>Workshop badge
@@ -110,16 +114,19 @@ function TagColorFieldsEditor({ text = "", color = "[gold]", nameColor = "", mes
           <small>Approximate effects and badges. The Workshop HUD maps unsupported HEX colors to its 528-color palette. Inherited colors depend on server/group settings.</small>
         </div>
       </div>
+      <div className={styles.channelTabs} role="group" aria-label="Chat channel">
+        {([["tag", "Tag"], ["name", "Player name"], ["message", "Message"]] as const).map(([key, label]) => <button key={key} type="button" aria-pressed={activeChannel === key} aria-controls={`${channelId}-${key}`} onClick={() => setActiveChannel(key)}>{label}</button>)}
+      </div>
       <div className={styles.colorFields}>
-        <div className={styles.channel}>
+        <div id={`${channelId}-tag`} className={styles.channel} hidden={activeChannel !== "tag"}>
           <ChatColorPicker label="Tag color" name="colorToken" value={tagColor} onChange={setTagColor} />
           <ChatEffectEditor color={chatColorPreview(tagColor)} label="Tag styles" name="tagStyle" value={tagEffects} onChange={setTagEffects} />
         </div>
-        <div className={styles.channel}>
+        <div id={`${channelId}-name`} className={styles.channel} hidden={activeChannel !== "name"}>
           <ChatColorPicker label="Name color" name="nameColorToken" value={playerColor} onChange={setPlayerColor} optional teamColor />
           <ChatEffectEditor color={chatColorPreview(playerColor, "#B4A0FF")} label="Name styles" name="nameStyle" value={nameEffects} onChange={setNameEffects} />
         </div>
-        <div className={styles.channel}>
+        <div id={`${channelId}-message`} className={styles.channel} hidden={activeChannel !== "message"}>
           <ChatColorPicker label="Message color" name="messageColorToken" value={chatColor} onChange={setChatColor} optional />
           <ChatEffectEditor color={chatColorPreview(chatColor)} label="Message styles" name="messageStyle" value={messageEffects} onChange={setMessageEffects} />
         </div>

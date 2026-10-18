@@ -1,5 +1,8 @@
 "use client";
 
+const pendingActions = new Map<string, Promise<EconomyActionResult>>();
+const ACTION_COOLDOWN_MS = 500;
+
 export type EconomyActionResult = {
   ok: boolean;
   message?: string;
@@ -47,11 +50,33 @@ export function createEconomyIdempotencyKey() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}-${Math.random().toString(36).slice(2, 14)}`;
 }
 
-export async function postEconomyAction(
+export function postEconomyAction(
   path: string,
   csrf: string,
   payload: Record<string, unknown>,
   requestId = createEconomyIdempotencyKey(),
+) {
+  // A second click can reach us before React paints the pending state. Match
+  // the intended operation rather than its newly generated idempotency key.
+  const key = JSON.stringify([path, csrf, Object.entries(payload).sort(([a], [b]) => a.localeCompare(b))]);
+  const pending = pendingActions.get(key);
+  if (pending) return pending;
+
+  const startedAt = performance.now();
+  const operation = sendEconomyAction(path, csrf, payload, requestId).finally(async () => {
+    const remaining = ACTION_COOLDOWN_MS - (performance.now() - startedAt);
+    if (remaining > 0) await new Promise(resolve => setTimeout(resolve, remaining));
+    pendingActions.delete(key);
+  });
+  pendingActions.set(key, operation);
+  return operation;
+}
+
+async function sendEconomyAction(
+  path: string,
+  csrf: string,
+  payload: Record<string, unknown>,
+  requestId: string,
 ) {
   const response = await fetch(path, {
     method: "POST",

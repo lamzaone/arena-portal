@@ -1,7 +1,7 @@
 "use client";
 
-import { startTransition, useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PortalToast } from "@/components/success-toast";
 
 import { announceNavigationStart } from "@/components/ui/navigation-progress";
@@ -207,7 +207,7 @@ function responseNavigation(payload: unknown) {
 
   try {
     return {
-      refresh: record.refresh === true,
+      refresh: record.refresh !== false,
       replace: record.replace === true,
       url: new URL(record.redirect, window.location.href),
     };
@@ -237,6 +237,12 @@ function dispatchFormEvent(
  */
 export function ProgressiveFormRuntime() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [navigationPending, startNavigation] = useTransition();
+  const navigationPendingRef = useRef(navigationPending);
+  const refreshDestination = useRef<string | null>(null);
+  navigationPendingRef.current = navigationPending;
   const [pendingCount, setPendingCount] = useState(0);
   const [notice, setNotice] = useState<SubmissionNotice | null>(null);
   const noticeId = useRef(0);
@@ -246,6 +252,14 @@ export function ProgressiveFormRuntime() {
     setNotice({ id: noticeId.current, kind, message });
   }, []);
 
+  useEffect(() => {
+    const current = `${pathname}${searchParams.size ? `?${searchParams}` : ""}`;
+    if (refreshDestination.current !== current) return;
+    refreshDestination.current = null;
+    // Refresh only once the destination commits; refreshing immediately after
+    // push can refresh the previous page and leave a cached destination stale.
+    startNavigation(() => router.refresh());
+  }, [pathname, searchParams, router, startNavigation]);
 
   useEffect(() => {
     const inFlight = new WeakSet<HTMLFormElement>();
@@ -259,17 +273,22 @@ export function ProgressiveFormRuntime() {
       const href = `${url.pathname}${url.search}${url.hash}`;
       const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
       if (href !== current) announceNavigationStart();
-      startTransition(() => {
+      const destinationQuery = url.searchParams.toString();
+      const destination = `${url.pathname}${destinationQuery ? `?${destinationQuery}` : ""}`;
+      const currentUrl = new URL(window.location.href);
+      const currentQuery = currentUrl.searchParams.toString();
+      const samePage = destination === `${currentUrl.pathname}${currentQuery ? `?${currentQuery}` : ""}`;
+      if (refresh && !samePage) refreshDestination.current = destination;
+      startNavigation(() => {
         if (href === current) router.refresh();
         else if (replace) router.replace(href, { scroll });
         else router.push(href, { scroll });
-        if (refresh && href !== current) router.refresh();
+        if (refresh && samePage && href !== current) router.refresh();
       });
     }
 
     function settleAfterNavigation(
       form: HTMLFormElement,
-      previousHref: string,
       settle: () => void,
     ) {
       const startedAt = performance.now();
@@ -278,8 +297,8 @@ export function ProgressiveFormRuntime() {
         // result streams in. Keep actions disabled until the old UI is gone
         // (or the URL commits), with a fail-safe for an interrupted transition.
         if (
-          !form.isConnected ||
-          window.location.href !== previousHref ||
+          (performance.now() - startedAt >= 500 &&
+            (!form.isConnected || (!navigationPendingRef.current && !refreshDestination.current))) ||
           performance.now() - startedAt >= 12_000
         ) {
           settle();
@@ -314,6 +333,7 @@ export function ProgressiveFormRuntime() {
       }
 
       inFlight.add(form);
+      const submittedAt = performance.now();
       const restore = setPending(form, target.submitter);
       setPendingCount((count) => count + 1);
       dispatchFormEvent(form, "start", {
@@ -384,20 +404,21 @@ export function ProgressiveFormRuntime() {
           // Keep the pending state until the App Router starts replacing the
           // server-rendered result. This also blocks accidental double actions.
           deferredSettlement = true;
-          const previousHref = window.location.href;
           navigate(
             redirectUrl,
             form.dataset.progressiveScroll === "top",
             payloadNavigation?.replace,
-            payloadNavigation?.refresh,
+            payloadNavigation?.refresh ?? true,
           );
-          settleAfterNavigation(form, previousHref, settle);
+          settleAfterNavigation(form, settle);
           return;
         }
 
         const successMessage = responseMessage(payload, "Action completed.");
         showNotice(successMessage, "status");
-        startTransition(() => router.refresh());
+        deferredSettlement = true;
+        startNavigation(() => router.refresh());
+        settleAfterNavigation(form, settle);
       } catch (error) {
         // A request can fail after the server has already committed its
         // mutation. Never retry automatically: repeating grants, sanctions,
@@ -426,7 +447,7 @@ export function ProgressiveFormRuntime() {
           message,
         });
       } finally {
-        if (!deferredSettlement) settle();
+        if (!deferredSettlement) window.setTimeout(settle, Math.max(0, 500 - (performance.now() - submittedAt)));
       }
     }
 
@@ -438,7 +459,7 @@ export function ProgressiveFormRuntime() {
     // first chance to prevent the native submission.
     document.addEventListener("submit", onSubmit);
     return () => document.removeEventListener("submit", onSubmit);
-  }, [router, showNotice]);
+  }, [router, showNotice, startNavigation]);
 
   return (
     <>

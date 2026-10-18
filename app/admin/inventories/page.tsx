@@ -36,6 +36,8 @@ import {
 import { resolvePlayerIdentities } from "@/lib/player-identities";
 import { normalizeItemGridPageSize } from "@/lib/economy/item-grid-layout";
 
+import styles from "./inventories-admin.module.css";
+
 type AdminInventoriesPageProps = {
   searchParams: Promise<{
     q?: string;
@@ -253,13 +255,13 @@ export default async function AdminInventoriesPage({ searchParams }: AdminInvent
 
         {notice ? <PortalToast message={notice} /> : null}
         {error ? <PortalToast variant="danger" message={error} /> : null}
-        <section className="staff-inventories-layout">
+        <section className={`staff-inventories-layout ${styles.layout}`}>
           <aside className="panel staff-player-directory">
             <div className="staff-player-directory-heading">
               <div><p className="eyebrow"><UserRoundSearch aria-hidden="true" /> Player directory</p><h2>Inventories</h2></div>
               <span>{players.total} known</span>
             </div>
-            <SearchNavigationForm className="staff-player-search" action="/admin/inventories">
+            <SearchNavigationForm className="staff-player-search" action="/admin/inventories" role="search" resetFields={["page", "inventoryPage"]}>
               <PlayerSearchField
                 name="q"
                 selectionName="steamId"

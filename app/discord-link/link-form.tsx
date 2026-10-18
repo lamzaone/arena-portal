@@ -1,12 +1,15 @@
 "use client";
 
 import { CheckCircle2, Link2 } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
+import { type FormEvent, useRef, useState } from "react";
 import { AsyncButton } from "@/components/ui/async-button";
 import type { DiscordLink } from "@/lib/discord/link-repository";
 import styles from "./link.module.css";
 
 export function DiscordLinkForm({ csrf, initialLink, available }: { csrf: string; initialLink: DiscordLink | null; available: boolean }) {
+  const router = useRouter();
+  const inFlight = useRef(false);
   const [link, setLink] = useState(initialLink);
   const [code, setCode] = useState("");
   const [pending, setPending] = useState(false);
@@ -14,7 +17,8 @@ export function DiscordLinkForm({ csrf, initialLink, available }: { csrf: string
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending || !code.trim()) return;
+    if (inFlight.current || pending || !code.trim()) return;
+    inFlight.current = true;
     setPending(true);
     setError(null);
     try {
@@ -26,9 +30,11 @@ export function DiscordLinkForm({ csrf, initialLink, available }: { csrf: string
       if (!response.ok || !result.ok || !result.link) throw new Error(result.message || "Your Discord account could not be linked.");
       setLink(result.link);
       setCode("");
+      router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Discord linking is temporarily unavailable. Try again later.");
     } finally {
+      inFlight.current = false;
       setPending(false);
     }
   }

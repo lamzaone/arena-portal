@@ -1,0 +1,88 @@
+/* A shared finish. Every color belongs to the nearest equipped theme. */
+:is(.portal-page, .player-profile-page) {
+  position: relative;
+  isolation: isolate;
+  --surface-glint: color-mix(in srgb, var(--theme-text) 7%, transparent);
+  --surface-halo: color-mix(in srgb, var(--theme-accent) 11%, transparent);
+}
+
+:is(.portal-page, .player-profile-page)::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 65% 480px at 12% 0, color-mix(in srgb, var(--theme-accent) 9%, transparent), transparent 80%),
+    radial-gradient(ellipse 45% 640px at 100% 24%, color-mix(in srgb, var(--theme-text) 2.5%, transparent), transparent 80%);
+}
+
+.portal-navigation .site-header {
+  background-color: color-mix(in srgb, var(--theme-surface) 91%, transparent);
+  border-color: color-mix(in srgb, var(--theme-border) 80%, transparent);
+  box-shadow: 0 12px 40px #0003, inset 0 1px 0 var(--surface-glint);
+  backdrop-filter: blur(18px) saturate(115%);
+}
+
+.portal-content :where([data-ui="panel"], .panel, .staff-record-section, .staff-editor-panel, .staff-case, .economy-panel) {
+  border-radius: calc(var(--theme-radius) + 5px);
+  box-shadow: 0 12px 36px #0002, inset 0 1px 0 var(--surface-glint);
+}
+
+.portal-content :where([data-ui="page-heading"], .staff-page-header) {
+  padding-block: 8px 22px;
+  border-image: linear-gradient(90deg, var(--theme-border-strong), var(--theme-border), transparent) 1;
+}
+
+.portal-content :where(h1, h2, h3) { text-wrap: balance; }
+.portal-content :where(p) { text-wrap: pretty; }
+.portal-content :where(.button, button, summary) { -webkit-tap-highlight-color: transparent; }
+.portal-content :where(button:not(:disabled), summary) { cursor: pointer; }
+.portal-content :where(button:disabled) { cursor: not-allowed; }
+.portal-content :where(a, button, summary, input, select, textarea):focus-visible {
+  outline: 2px solid var(--theme-focus-ring);
+  outline-offset: 4px;
+}
+
+.portal-content :where(.button-primary) {
+  box-shadow: 0 5px 20px color-mix(in srgb, var(--theme-accent) 18%, transparent), inset 0 1px 0 #ffffff1c;
+}
+.portal-content :where(input, select, textarea) { color-scheme: dark; }
+.portal-content :where([data-ui="data-table"]) { border-radius: calc(var(--theme-radius) + 4px); }
+.portal-content :where(th) { letter-spacing: .025em; }
+.portal-content :where(td) { font-variant-numeric: tabular-nums; }
+
+.portal-content :where([data-ui="panel"], [data-panel-light]) { position: relative; }
+.portal-content :where([data-ui="panel"], [data-panel-light])::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(460px circle at var(--panel-light-x, 50%) var(--panel-light-y, 0%), color-mix(in srgb, var(--theme-accent-soft) 9%, transparent), transparent 75%);
+  transition: opacity 350ms ease;
+}
+.portal-content :where([data-panel-lit="true"])::after { opacity: 1; }
+
+.portal-content [data-panel-depth="active"] {
+  transform: perspective(800px) rotateX(var(--panel-rotate-x, 0deg)) rotateY(var(--panel-rotate-y, 0deg)) translateZ(10px);
+  transition: transform 180ms ease-out;
+  will-change: transform;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .portal-content :where(.button-primary):hover:not(:disabled) {
+    box-shadow: 0 8px 28px color-mix(in srgb, var(--theme-accent) 27%, transparent), inset 0 1px 0 #ffffff24;
+  }
+}
+@media (max-width: 640px) {
+  .portal-navigation .site-header { backdrop-filter: blur(10px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .portal-content [data-panel-depth] { transform: none !important; will-change: auto; }
+  .portal-content :where([data-ui="panel"], [data-panel-light])::after { display: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .portal-navigation .site-header { background-color: var(--theme-surface); backdrop-filter: none; }
+}

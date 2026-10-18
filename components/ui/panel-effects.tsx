@@ -10,9 +10,10 @@ export function PanelEffects() {
   useEffect(() => {
     const motion = window.matchMedia("(prefers-reduced-motion: no-preference)");
     const pointer = window.matchMedia("(hover: hover) and (pointer: fine)");
-    const cards = ".home-page .bento-card, .modes-page .duel-main-card, .vip-page [data-ui='vip-tier-card']";
-    const artwork = ".bento-icon, .duel-main-icon, [data-part='artwork'] img";
+    const cards = "[data-panel-light], [data-depth-card], [data-ui='panel'], [data-ui='feature-card'], .home-page .bento-card, .modes-page .duel-main-card, .vip-page [data-ui='vip-tier-card']";
+    const artwork = "[data-depth-art], .bento-icon, .duel-main-icon, [data-part='artwork'] img";
     let active: HTMLElement | null = null;
+    let activeCard: HTMLElement | null = null;
     let frame = 0;
 
     const reset = () => {
@@ -21,23 +22,34 @@ export function PanelEffects() {
       active?.style.removeProperty("--panel-rotate-x");
       active?.style.removeProperty("--panel-rotate-y");
       active?.removeAttribute("data-panel-depth");
+      activeCard?.style.removeProperty("--panel-light-x");
+      activeCard?.style.removeProperty("--panel-light-y");
+      activeCard?.removeAttribute("data-panel-lit");
       active = null;
+      activeCard = null;
     };
     const move = (event: PointerEvent) => {
       if (!motion.matches || !pointer.matches || event.pointerType === "touch") return;
       const card = event.target instanceof Element ? event.target.closest<HTMLElement>(cards) : null;
+      if (card?.closest('[data-paused="true"]')) { reset(); return; }
       const target = card?.querySelector<HTMLElement>(artwork) ?? null;
-      if (active !== target) reset();
-      if (!card || !target) return;
+      if (activeCard !== card || active !== target) reset();
+      if (!card) return;
       active = target;
+      activeCard = card;
       const bounds = card.getBoundingClientRect();
       const x = Math.max(-1, Math.min(1, (event.clientX - bounds.left) / bounds.width * 2 - 1));
       const y = Math.max(-1, Math.min(1, (event.clientY - bounds.top) / bounds.height * 2 - 1));
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        target.dataset.panelDepth = "active";
-        target.style.setProperty("--panel-rotate-x", `${-y * 6}deg`);
-        target.style.setProperty("--panel-rotate-y", `${x * 8}deg`);
+        card.dataset.panelLit = "true";
+        card.style.setProperty("--panel-light-x", `${(x + 1) * 50}%`);
+        card.style.setProperty("--panel-light-y", `${(y + 1) * 50}%`);
+        if (target) {
+          target.dataset.panelDepth = "active";
+          target.style.setProperty("--panel-rotate-x", `${-y * 5}deg`);
+          target.style.setProperty("--panel-rotate-y", `${x * 7}deg`);
+        }
       });
     };
 

@@ -25,6 +25,23 @@ export async function getPlayerWarnings(steamId: string): Promise<PlayerWarning[
   return rows.map(normalize);
 }
 
+export type PlayerWarningsPage = { warnings: PlayerWarning[]; total: number; page: number; pageSize: number };
+
+/** Exact player/server pagination keeps older warnings reachable without sending an unbounded history. */
+export async function getPlayerWarningsPage(steamId: string, pageInput = 1): Promise<PlayerWarningsPage> {
+  const pageSize = 10;
+  const pool = getPortalDatabasePool();
+  if (!pool) return { warnings: [], total: 0, page: 1, pageSize };
+  const values = [steamId, configuredGameServerGuid()];
+  const where = "steam_id = ? AND server_guid = ?";
+  const [counts] = await pool.execute<(RowDataPacket & { total: number })[]>(`SELECT COUNT(*) AS total FROM portal_warnings WHERE ${where}`, values);
+  const total = Number(counts[0]?.total ?? 0);
+  const requested = Number.isFinite(pageInput) ? Math.max(1, Math.floor(pageInput)) : 1;
+  const page = Math.min(requested, Math.max(1, Math.ceil(total / pageSize)));
+  const [rows] = await pool.execute<WarningRow[]>(`SELECT ${columns} FROM portal_warnings WHERE ${where} ORDER BY issued_at DESC, id DESC LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`, values);
+  return { warnings: rows.map(normalize), total, page, pageSize };
+}
+
 export async function getWarningsPage(query = "", page = 1) {
   const pool = getPortalDatabasePool();
   if (!pool) return { warnings: [] as PlayerWarning[], total: 0 };

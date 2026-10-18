@@ -6,13 +6,16 @@
 .grid {
   display: grid;
   min-width: 0;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 14px;
 }
 
 .card {
   min-width: 0;
+  position: relative;
+  overflow: hidden;
+  background-image: radial-gradient(ellipse at 100% 0, color-mix(in srgb, var(--theme-accent, var(--purple)) 5%, transparent), transparent 58%);
 }
 
 .cardHeading {
@@ -25,12 +28,55 @@
   margin-bottom: 16px;
 }
 
-.cardHeading > h3 {
+.cardHeading > :is(h2, h3) {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   margin: 0;
   font-family: var(--font-display);
   font-size: 1rem;
   line-height: 1.35;
 }
+
+.cardHeading > :is(h2, h3) > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--theme-accent-soft, var(--purple-bright));
+}
+
+.historyFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--theme-border, var(--border));
+}
+
+.expandButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  gap: 8px;
+  padding: 6px 11px;
+  border: 1px solid color-mix(in srgb, var(--theme-accent, var(--purple)) 24%, transparent);
+  border-radius: 7px;
+  color: var(--theme-accent-soft, var(--purple-bright));
+  background: color-mix(in srgb, var(--theme-accent, var(--purple)) 7%, transparent);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.expandButton > svg { width: 14px; height: 14px; }
+.expandButton:hover { background: color-mix(in srgb, var(--theme-accent, var(--purple)) 14%, transparent); }
+.expandButton:focus-visible { outline: 2px solid var(--theme-focus-ring, var(--purple-bright)); outline-offset: 3px; }
+.revocation { grid-column: 1 / -1; margin: 3px 0 0; color: var(--theme-text-muted, var(--muted)); font-size: 11px; overflow-wrap: anywhere; }
 
 .appealsLink {
   display: inline-flex;

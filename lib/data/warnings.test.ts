@@ -33,7 +33,7 @@ registerHooks({ resolve(specifier, context, next) {
   }
   return next(specifier, context);
 } });
-const { issuePlayerWarning, getPlayerWarnings, revokePlayerWarning, getWarningTarget, getWarningsPage } = await import("./warnings.ts");
+const { issuePlayerWarning, getPlayerWarnings, getPlayerWarningsPage, revokePlayerWarning, getWarningTarget, getWarningsPage } = await import("./warnings.ts");
 db.exec(`CREATE TABLE portal_warnings (id TEXT PRIMARY KEY, steam_id TEXT, player_name TEXT, server_guid TEXT, reason TEXT, issuer_steam_id TEXT, issuer_name TEXT, issued_at INTEGER, expires_at INTEGER, acknowledged_at INTEGER, revoked_at INTEGER, revoked_by TEXT, revoke_reason TEXT);
 CREATE TABLE portal_audit_events (actor_type TEXT, actor_id TEXT, action TEXT, target_type TEXT, target_id TEXT, metadata TEXT);`);
 const server = "01234567-89ab-cdef-0123-456789abcdef";
@@ -78,4 +78,20 @@ test("expiry leaves an immutable history row and cannot be revoked after expiry"
   await revokePlayerWarning(input.id, input.actorSteamId, "Too late");
   const rows = await getPlayerWarnings(input.steamId);
   assert.equal(rows.length, 1); assert.equal(rows[0].revokedAt, null);
+});
+
+test("player warning pagination reaches older records beyond the former 100-record limit and isolates player/server", async () => {
+  const insert = db.prepare("INSERT INTO portal_warnings (id, steam_id, server_guid, reason, issuer_name, issued_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
+  for (let index = 1; index <= 105; index++) insert.run(`warning-${index}`, input.steamId, server, `Reason ${index}`, "Moderator", index * 1000, index * 2000);
+  insert.run("other-player", input.actorSteamId, server, "Private other record", "Moderator", 9999999, 9999999);
+  insert.run("other-server", input.steamId, "21234567-89ab-cdef-0123-456789abcdef", "Remote record", "Moderator", 9999999, 9999999);
+  const first = await getPlayerWarningsPage(input.steamId, 1);
+  assert.equal(first.total, 105);
+  assert.equal(first.warnings.length, 10);
+  assert.equal(first.warnings[0].reason, "Reason 105");
+  const last = await getPlayerWarningsPage(input.steamId, 11);
+  assert.deepEqual(last.warnings.map((warning) => warning.reason), ["Reason 5", "Reason 4", "Reason 3", "Reason 2", "Reason 1"]);
+  assert.equal(last.page, 11);
+  assert.equal((await getPlayerWarningsPage(input.steamId, Number.MAX_SAFE_INTEGER)).page, 11);
+  for (const page of [NaN, Infinity, -1, 0]) assert.equal((await getPlayerWarningsPage(input.steamId, page)).page, 1);
 });

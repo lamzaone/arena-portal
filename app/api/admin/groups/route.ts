@@ -1,3 +1,4 @@
+import { normalizeChatColor, normalizeChatStyle, normalizeChatBadge } from "@/lib/chat-colors";
 import { getAdminAccess } from "@/lib/admin/access";
 import { getSession, verifyAdminActionToken } from "@/lib/auth/session";
 import {
@@ -12,6 +13,7 @@ import {
   detachIdentityGroupPrivilege,
   detachIdentityGroupTag,
   extendIdentityGroupMembership,
+  editIdentityGroupMembership,
   grantIdentityPlayerPrivilege,
   grantIdentityPlayerTag,
   getIdentityAdminSnapshot,
@@ -31,6 +33,7 @@ import {
 import {
   createRuntimeAdminsCoreGroup,
   createRuntimeVipCoreGroup,
+  deleteRuntimeAdminsCoreGroup,
   deleteRuntimeVipCoreGroup,
   ExternalGroupManagementError,
   updateRuntimeAdminsCoreGroup,
@@ -47,11 +50,11 @@ function redirect(
   key: "notice" | "error",
   value: string,
   groupId?: string,
-  tab = "connected",
+  tab = "admin",
 ) {
   const url = new URL("/admin/groups", request.url);
   url.searchParams.set(key, value);
-  if (["connected", "create", "membership", "tags", "permissions", "awards"].includes(tab)) {
+  if (["admin", "vip", "custom", "custom-access", "connected", "create", "membership", "tags", "permissions", "awards"].includes(tab)) {
     url.searchParams.set("tab", tab);
   }
   if (tab === "membership") {
@@ -60,7 +63,7 @@ function redirect(
   }
   if (groupId && /^\d+$/.test(groupId)) {
     url.searchParams.set("group", groupId);
-    if (tab === "connected") url.hash = `group-${groupId}`;
+    if (["connected", "admin", "vip", "custom"].includes(tab)) url.hash = `group-${groupId}`;
   }
   return formActionRedirect(request, url);
 }
@@ -70,7 +73,8 @@ function text(formData: FormData, key: string) {
 }
 
 function number(formData: FormData, key: string) {
-  return Number.parseInt(text(formData, key), 10);
+  const value = text(formData, key);
+  return /^-?\d+$/.test(value) ? Number(value) : Number.NaN;
 }
 
 function optionalNumber(formData: FormData, key: string) {
@@ -86,6 +90,7 @@ function bool(formData: FormData, key: string) {
 
 function returnTab(request: Request, formData: FormData) {
   const allowed = new Set([
+    "admin", "vip", "custom", "custom-access",
     "connected",
     "create",
     "membership",
@@ -105,14 +110,14 @@ function returnTab(request: Request, formData: FormData) {
     }
   }
   const action = text(formData, "action");
-  if (action === "group-create") return "create";
-  if (action.startsWith("membership-")) return "membership";
-  if (action === "tag-create" || action === "tag-update") return "tags";
+  if (action === "group-create") return "custom";
+  if (action.startsWith("membership-")) return "custom";
+  if (action === "tag-create" || action === "tag-update") return "custom-access";
   if (action === "privilege-create" || action === "privilege-update") {
-    return "permissions";
+    return "custom-access";
   }
-  if (action.startsWith("player-")) return "awards";
-  return "connected";
+  if (action.startsWith("player-")) return "custom-access";
+  return "admin";
 }
 
 export async function POST(request: Request) {
@@ -138,7 +143,39 @@ export async function POST(request: Request) {
   const action = text(formData, "action");
   const requestKey = text(formData, "requestKey");
 
+  async function createGroupTag(groupId: number, label: string) {
+    if (!bool(formData, "tagEnabled")) return;
+    await createIdentityChatTag({ actor, requestKey: `${requestKey}:inline`,
+      key: `group.${groupId}.${requestKey.replace(/[^a-z0-9]/gi, "").slice(0, 20).toLowerCase()}`,
+      text: text(formData, "tagText") || `[${label.slice(0, 60)}]`,
+      colorToken: text(formData, "colorToken") || "[gold]",
+      nameColorToken: text(formData, "nameColorToken"), messageColorToken: text(formData, "messageColorToken"),
+      tagStyle: text(formData, "tagStyle"), nameStyle: text(formData, "nameStyle"), messageStyle: text(formData, "messageStyle"), badgeKey: text(formData, "badgeKey"),
+      assignTo: { groupId },
+    });
+  }
+  async function tagRuntimeGroup(sourceType: "admins_core" | "vipcore", name: string) {
+    if (!bool(formData, "tagEnabled")) return;
+    const snapshot = await getIdentityAdminSnapshot();
+    const group = snapshot.groups.find(entry => entry.sourceType === sourceType && entry.externalKey?.toLowerCase() === name.toLowerCase());
+    if (!group) throw new IdentityGroupError("group_not_found", "The runtime definition was saved but its presentation is unavailable. Synchronize the catalogue, then create its tag.");
+    await createGroupTag(group.id, name);
+  }
+
   try {
+    if (bool(formData, "tagEnabled")) {
+      try {
+        const tagText = text(formData, "tagText").normalize("NFKC");
+        if (tagText.length > 64 || /[\r\n\0]/.test(tagText)) throw new Error("Tag text must fit on one line.");
+        normalizeChatColor(text(formData, "colorToken") || "[gold]");
+        normalizeChatColor(text(formData, "nameColorToken"), true);
+        normalizeChatColor(text(formData, "messageColorToken"), true);
+        for (const channel of ["tagStyle", "nameStyle", "messageStyle"]) normalizeChatStyle(text(formData, channel));
+        normalizeChatBadge(text(formData, "badgeKey"));
+      } catch { throw new IdentityGroupError("invalid_input", "Review the group tag text, colors and effects before creating the group."); }
+      const snapshot = await getIdentityAdminSnapshot();
+      if (snapshot.richChatTagsAvailable === false) throw new IdentityGroupError("rich_chat_migration_required", "Apply the chat migration before creating a group tag.");
+    }
     switch (action) {
       case "external-catalogue-sync":
         await syncExternalIdentityCatalogue({ actor, requestKey });
@@ -153,6 +190,11 @@ export async function POST(request: Request) {
           serverGuids: text(formData, "serverGuids"),
           immunity: text(formData, "immunity"),
         });
+        let tagPending = bool(formData, "tagEnabled") && !result.catalogueSynced;
+        if (result.catalogueSynced) {
+          try { await tagRuntimeGroup("admins_core", result.name); }
+          catch { tagPending = true; }
+        }
         await writeStaffActionAudit(
           actor.steamId,
           "identity.admins-core-group.created",
@@ -161,7 +203,7 @@ export async function POST(request: Request) {
         );
         return redirectResult(
           "notice",
-          result.catalogueSynced
+          tagPending ? "external-group-created-tag-pending" : result.catalogueSynced
             ? "external-admin-group-created"
             : "external-group-saved-sync-pending",
         );
@@ -192,6 +234,15 @@ export async function POST(request: Request) {
         );
       }
 
+      case "external-admin-group-delete": {
+        const result = await deleteRuntimeAdminsCoreGroup({
+          actorSteamId: actor.steamId, requestKey,
+          rowId: text(formData, "runtimeRowId"), previousName: text(formData, "previousName"),
+        });
+        await writeStaffActionAudit(actor.steamId, "identity.admins-core-group.deleted", "admins-core-group", result.name);
+        return redirect(request, "notice", result.catalogueSynced ? "external-admin-group-deleted" : "external-group-delete-sync-pending", undefined, "admin");
+      }
+
       case "external-vip-group-create": {
         const result = await createRuntimeVipCoreGroup({
           actorSteamId: actor.steamId,
@@ -201,6 +252,11 @@ export async function POST(request: Request) {
           values: text(formData, "valuesJson"),
           enabled: bool(formData, "runtimeEnabled"),
         });
+        let tagPending = bool(formData, "tagEnabled") && !result.catalogueSynced;
+        if (result.catalogueSynced) {
+          try { await tagRuntimeGroup("vipcore", result.name); }
+          catch { tagPending = true; }
+        }
         await writeStaffActionAudit(
           actor.steamId,
           "identity.vipcore-group.created",
@@ -209,7 +265,7 @@ export async function POST(request: Request) {
         );
         return redirectResult(
           "notice",
-          result.catalogueSynced
+          tagPending ? "external-group-created-tag-pending" : result.catalogueSynced
             ? "external-vip-group-created"
             : "external-group-saved-sync-pending",
         );
@@ -258,7 +314,7 @@ export async function POST(request: Request) {
             ? "external-vip-group-deleted"
             : "external-group-delete-sync-pending",
           undefined,
-          "connected",
+          "vip",
         );
       }
 
@@ -275,12 +331,14 @@ export async function POST(request: Request) {
           badgeSoftColor: text(formData, "badgeSoftColor"),
           profilePriority: number(formData, "profilePriority"),
         });
+        try { await createGroupTag(createdGroup.groupId, text(formData, "badgeLabel") || text(formData, "displayName")); }
+        catch { return redirect(request, "notice", "group-created-tag-pending", String(createdGroup.groupId), "custom"); }
         return redirect(
           request,
           "notice",
           "group-created",
           String(createdGroup.groupId),
-          "connected",
+          "custom",
         );
 
       case "group-update":
@@ -305,7 +363,7 @@ export async function POST(request: Request) {
           requestKey,
           groupId: number(formData, "groupId"),
         });
-        return redirectResult("notice", "group-archived");
+        return redirect(request, "notice", "group-archived", undefined, "custom");
 
       case "membership-assign":
         await assignIdentityGroup({
@@ -330,6 +388,13 @@ export async function POST(request: Request) {
         });
         return redirectResult("notice", "membership-removed");
 
+      case "membership-edit":
+        if (!["replace", "permanent"].includes(text(formData, "expiryMode"))) return redirectResult("error", "invalid_input");
+        await editIdentityGroupMembership({ actor, requestKey, groupId: number(formData, "groupId"), steamId: text(formData, "steamId"),
+          membershipUuid: text(formData, "membershipUuid"), scopeId: optionalNumber(formData, "scopeId"), rowVersion: optionalNumber(formData, "rowVersion"),
+          expiryMode: text(formData, "expiryMode") as "replace" | "permanent", durationMinutes: number(formData, "durationMinutes") });
+        return redirectResult("notice", "membership-edited");
+
       case "membership-extend":
         await extendIdentityGroupMembership({
           actor,
@@ -348,6 +413,10 @@ export async function POST(request: Request) {
           actor,
           requestKey,
           key: text(formData, "tagKey"),
+          assignTo: text(formData, "tagTarget") === "player"
+            ? { steamId: text(formData, "steamId"), durationMinutes: number(formData, "durationMinutes"), reason: text(formData, "reason") }
+            : /^group:[1-9]\d*$/.test(text(formData, "tagTarget"))
+              ? { groupId: Number(text(formData, "tagTarget").slice(6)) } : undefined,
           text: text(formData, "tagText"),
           colorToken: text(formData, "colorToken"),
           nameColorToken: text(formData, "nameColorToken"),

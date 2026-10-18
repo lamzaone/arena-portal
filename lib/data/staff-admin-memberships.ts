@@ -85,6 +85,8 @@ export type StaffAdminMembershipReference =
   | StaffAdminNativeMembershipReference
   | StaffAdminPortalMembershipReference;
 
+export type StaffAdminMembershipExpiryMode = "keep" | "replace" | "permanent";
+
 export class StaffAdminMembershipError extends Error {
   constructor(
     public readonly code:
@@ -677,7 +679,7 @@ async function lockArenaAdminContext(
     }
   }
   const definitions = [...definitionsByPortalId.values()];
-  return { definitions, memberships };
+  return { definitions, memberships, scopedDefinitions: definitionRows };
 }
 
 function requireEnabledDefinition(
@@ -1329,6 +1331,169 @@ async function detachNativeAdminGroup(
     steamId: reference.steamId,
     adminGroupNames: result.scopedRemainingGroups,
   });
+  return result;
+}
+
+/** Edits exactly one existing assignment without replacing its provenance. */
+export async function editStaffAdminMembership(input: {
+  reference: StaffAdminMembershipReference;
+  actorSteamId: string;
+  actorImmunity: number;
+  newGroup: string;
+  expiryMode: StaffAdminMembershipExpiryMode;
+  durationMinutes: number;
+  expectedExpiresAt?: string | null;
+  reason?: string | null;
+}) {
+  const actorSteamId = requireSteamId(input.actorSteamId);
+  const actorImmunity = requireActorImmunity(input.actorImmunity);
+  const newGroup = exactStoredGroup(input.newGroup);
+  const reason = optionalReason(input.reason);
+  if (!["keep", "replace", "permanent"].includes(input.expiryMode)) {
+    adminMembershipError("admin-membership-invalid", "Choose a valid Admin membership expiry mode.");
+  }
+  const duration = input.expiryMode === "replace"
+    ? extensionDurationMinutes(input.durationMinutes) : 0;
+  if (isFounderGroup(newGroup)) {
+    adminMembershipError("admin-membership-founder", "Founder authority cannot be assigned or edited through the portal.");
+  }
+  const reference = input.reference.source === "native"
+    ? { source: "native" as const, ...requireNativeReference(input.reference) }
+    : { source: "portal" as const, ...requirePortalReference(input.reference) };
+  if (reference.source === "native" && input.expiryMode === "replace") {
+    adminMembershipError("admin-membership-invalid", "Native Admins.Core assignments are permanent and cannot have a timed expiry.");
+  }
+  const result = await withGameTransaction(async (connection) => {
+    const native = await lockScopedNativeAdminContext(connection, reference.steamId);
+    if (native.immunity > actorImmunity) {
+      adminMembershipError("admin-membership-immunity", "The target administrator has greater immunity than the acting administrator.");
+    }
+    const arena = await lockArenaAdminContext(connection, reference.steamId);
+    requirePortalTargetWithinActor(arena, native.definitions, actorImmunity);
+
+    if (reference.source === "native") {
+      const row = native.row;
+      if (!row || Number(row.Id) !== reference.adminId) {
+        adminMembershipError("admin-membership-not-found", "That exact native Admins.Core row no longer exists.");
+      }
+      if (!isAssignedToConfiguredGameServer(storedStringList(row.Servers))) {
+        adminMembershipError("admin-membership-stale", "That native Admin is not assigned to this server.");
+      }
+      let groups: unknown;
+      try { groups = typeof row.Groups === "string" ? JSON.parse(row.Groups) : row.Groups; }
+      catch { adminMembershipError("admin-membership-stale", "The stored native group list is not a valid JSON array."); }
+      if (!Array.isArray(groups) || !groups.every(group => typeof group === "string")) {
+        adminMembershipError("admin-membership-stale", "The stored native group list is not a valid string array.");
+      }
+      const storedGroups = groups as string[];
+      // Snapshot display names trim padding. Resolve that one raw token while
+      // rejecting normalized duplicates and preserving the JSON compare-and-swap.
+      const matching = storedGroups.filter(group => group.trim() === reference.storedGroup.trim());
+      const identityMatches = storedGroups.filter(group => groupIdentity(group) === groupIdentity(reference.storedGroup));
+      if (matching.length !== 1 || identityMatches.length !== 1) {
+        adminMembershipError("admin-membership-stale", "That exact native group assignment changed before it could be edited.");
+      }
+      const selectedStoredGroup = matching[0];
+      if (isFounderGroup(reference.storedGroup)) {
+        adminMembershipError("admin-membership-founder", "Founder authority cannot be edited through the portal.");
+      }
+      const previous = requireLiveRuntimeDefinition({ external_key: reference.storedGroup }, native.definitions);
+      const destination = requireLiveRuntimeDefinition({ external_key: newGroup }, native.definitions);
+      requireRankWithinActor(previous.immunity, actorImmunity);
+      requireRankWithinActor(destination.immunity, actorImmunity);
+      const canonicalGroup = destination.definition.Name;
+      if (storedGroups.some(group => group !== selectedStoredGroup && groupIdentity(group) === groupIdentity(canonicalGroup))) {
+        adminMembershipError("admin-membership-conflict", "That native group is already assigned to this administrator.");
+      }
+      const nextGroups = storedGroups.map(group => group === selectedStoredGroup ? canonicalGroup : group);
+      requireRankWithinActor(runtimeImmunity(nextGroups, storedStringList(row.Servers), native.definitions), actorImmunity);
+      if (JSON.stringify(nextGroups) !== JSON.stringify(storedGroups)) {
+        const [updated] = await connection.execute<ResultSetHeader>(
+          "UPDATE admins SET Groups = ? WHERE Id = ? AND SteamId64 = ? AND Groups <=> ?",
+          [JSON.stringify(nextGroups), reference.adminId, reference.steamId,
+            typeof row.Groups === "string" ? row.Groups : JSON.stringify(row.Groups)],
+        );
+        if (updated.affectedRows !== 1) {
+          adminMembershipError("admin-membership-stale", "That native Admin row changed before it could be edited.");
+        }
+      }
+      return {
+        source: "native" as const, steamId: reference.steamId,
+        recordKey: `native:${reference.adminId}:${encodeURIComponent(canonicalGroup)}`,
+        group: canonicalGroup, expiresAt: null, adminGroupNames: nextGroups,
+      };
+    }
+
+    const membership = requireMutableArenaMembership(arena.memberships, reference);
+    if (membership.revoked_at !== null || membership.membership_status !== "active") {
+      adminMembershipError("admin-membership-not-found", "That Arena Admin membership has been revoked.");
+    }
+    if (!asBoolean(membership.group_enabled)) {
+      adminMembershipError("admin-membership-stale", "That Arena Admin group or scope is disabled.");
+    }
+    const previous = requireLiveRuntimeDefinition(membership, native.definitions);
+    requireRankWithinActor(previous.immunity, actorImmunity);
+    requireRankWithinActor(membership.rank_weight, actorImmunity);
+    const targetDefinitions = arena.scopedDefinitions.filter(definition =>
+      Number(definition.scope_id) === reference.scopeId && groupIdentity(definition.external_key) === groupIdentity(newGroup));
+    if (targetDefinitions.length !== 1) {
+      adminMembershipError("admin-membership-stale", "The destination Admin group is not a unique enabled definition in this exact scope.");
+    }
+    const destination = requireEnabledDefinition(targetDefinitions, Number(targetDefinitions[0].id));
+    const liveDestination = requireLiveRuntimeDefinition(destination, native.definitions);
+    requireRankWithinActor(liveDestination.immunity, actorImmunity);
+    requireRankWithinActor(destination.rank_weight, actorImmunity);
+    const destinationIdentity = requireArenaDefinitionIdentity(destination);
+    const identity = requireArenaMembershipIdentity(membership);
+    if (arena.memberships.some(other => other.membership_uuid !== identity.membershipUuid &&
+      Number(other.arena_group_id) === destinationIdentity.arenaGroupId && Number(other.scope_id) === identity.scopeId)) {
+      adminMembershipError("admin-membership-conflict", "A membership for that Admin group already exists in this exact scope.");
+    }
+    const currentExpiry = asDate(membership.expires_at);
+    const expectedExpiry = input.expectedExpiresAt ? asDate(input.expectedExpiresAt) : null;
+    if ((currentExpiry === null) !== (expectedExpiry === null) ||
+      currentExpiry && expectedExpiry && Math.abs(currentExpiry.getTime() - expectedExpiry.getTime()) > 1_000) {
+      adminMembershipError("admin-membership-stale", "That Admin membership expiry changed before it could be edited.");
+    }
+    const startsAt = asDate(membership.starts_at)!;
+    const expiresAt = input.expiryMode === "keep" ? currentExpiry
+      : input.expiryMode === "permanent" ? null
+      : new Date(Math.max(Date.now(), startsAt.getTime()) + duration * 60_000);
+    if (expiresAt && expiresAt.getTime() > maximumTimestampSeconds * 1_000) {
+      adminMembershipError("admin-membership-invalid", "The Admin membership expiry exceeds the supported date.");
+    }
+    const [updated] = await connection.execute<ResultSetHeader>(
+      "UPDATE arena_group_memberships SET group_id = ?, expires_at = ?, row_version = row_version + 1 " +
+        "WHERE membership_uuid = ? AND group_id = ? AND scope_id = ? AND steam_id = ? " +
+        "AND row_version = ? AND status = 'active' AND revoked_at IS NULL " +
+        "AND (expires_at <=> ? OR ABS(TIMESTAMPDIFF(SECOND, expires_at, ?)) <= 1)",
+      [destinationIdentity.arenaGroupId, expiresAt, identity.membershipUuid,
+        identity.arenaGroupId, identity.scopeId, reference.steamId, identity.rowVersion, expectedExpiry, expectedExpiry],
+    );
+    if (updated.affectedRows !== 1) {
+      adminMembershipError("admin-membership-stale", "That exact Admin membership changed before it could be edited.");
+    }
+    // Existing consumers treat this event as a complete refreshed entitlement.
+    // Keep their allowlisted event name and describe the edit in metadata.
+    await writeArenaAdminMembershipOutbox(connection, {
+      action: "extended", membershipUuid: identity.membershipUuid,
+      arenaGroupId: destinationIdentity.arenaGroupId, portalGroupId: Number(destination.id),
+      scopeId: identity.scopeId, steamId: reference.steamId, startsAt: membership.starts_at,
+      expiresAt, status: "active", rowVersion: identity.rowVersion + 1, actorSteamId, reason,
+      metadata: { edited: true, expiryMode: input.expiryMode, previousArenaGroupId: identity.arenaGroupId,
+        previousExpiresAt: currentExpiry?.toISOString() ?? null },
+    });
+    return {
+      source: "portal" as const, steamId: reference.steamId,
+      recordKey: `portal:${identity.membershipUuid}`, membershipUuid: identity.membershipUuid,
+      scopeId: identity.scopeId, rowVersion: identity.rowVersion + 1,
+      groupId: Number(destination.id), group: destination.external_key,
+      expiresAt: expiresAt?.toISOString() ?? null,
+    };
+  });
+  if (result.source === "native") {
+    await reconcileIdentityGroupRewards({ steamId: result.steamId, adminGroupNames: result.adminGroupNames });
+  }
   return result;
 }
 
