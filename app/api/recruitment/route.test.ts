@@ -160,19 +160,29 @@ test("unauthorized accounts, stale verification and oversized responses cannot c
   assert.deepEqual({ ...row }, { status: "submitted", admin_response: null, reviewed_by: null });
 });
 
-test("review returns only to known paths with sanitized filters in native and enhanced responses", async () => {
-  await apply(request()); state.admin = true;
-  const id = String(database.prepare("SELECT id FROM portal_staff_applications").get()?.id);
-  for (const progressive of [false, true]) {
-    const response = await manage(request({ action: "review", id, status: "reviewing", returnTo: "https://evil.example/steal", returnName: "  %_&?#=  ", returnStatus: "constructor", returnPage: "-1" }, true, progressive));
-    const url = progressive ? new URL((await response.json()).redirect) : destination(response);
-    assert.equal(url.origin, "http://localhost"); assert.equal(url.pathname, "/admin/recruitment"); assert.equal(url.hash, "");
-    assert.equal(url.searchParams.get("name"), "%_&?#="); assert.ok(url.searchParams.get("status") === null || url.searchParams.get("status") === "all");
-    assert.ok(url.searchParams.get("page") === null || url.searchParams.get("page") === "1");
-    assert.equal(url.searchParams.get("notice"), "reviewed");
+test("review returns only to known paths with sanitized filters in native and enhanced responses", async (context) => {
+  for (const { siteUrl, origin, name } of [
+    { siteUrl: "", origin: "http://localhost", name: "request origin without SITE_URL" },
+    { siteUrl: "https://tapped.ro", origin: "https://tapped.ro", name: "configured public origin" },
+  ]) {
+    await context.test(name, async (scenario) => {
+      scenario.mock.property(process, "env", { ...process.env, SITE_URL: siteUrl });
+      assert.equal(destination(await apply(request())).searchParams.get("notice"), "submitted");
+      state.admin = true;
+      const id = String(database.prepare("SELECT id FROM portal_staff_applications").get()?.id);
+      for (const progressive of [false, true]) {
+        const response = await manage(request({ action: "review", id, status: "reviewing", returnTo: "https://evil.example/steal", returnName: "  %_&?#=  ", returnStatus: "constructor", returnPage: "-1" }, true, progressive));
+        assert.equal(response.status, progressive ? 200 : 303);
+        const url = progressive ? new URL((await response.json()).redirect) : destination(response);
+        assert.equal(url.origin, origin); assert.equal(url.pathname, "/admin/recruitment"); assert.equal(url.hash, "");
+        assert.equal(url.searchParams.get("name"), "%_&?#="); assert.ok(url.searchParams.get("status") === null || url.searchParams.get("status") === "all");
+        assert.ok(url.searchParams.get("page") === null || url.searchParams.get("page") === "1");
+        assert.equal(url.searchParams.get("notice"), "reviewed");
+      }
+      const staff = destination(await manage(request({ action: "set-open", open: "no", returnTo: "/staff", returnName: "Applicant", returnStatus: "accepted", returnPage: "8" }, true)));
+      assert.equal(staff.origin, origin); assert.equal(staff.pathname, "/staff"); assert.equal(staff.hash, "#recruitment"); assert.equal(staff.searchParams.get("name"), null);
+    });
   }
-  const staff = destination(await manage(request({ action: "set-open", open: "no", returnTo: "/staff", returnName: "Applicant", returnStatus: "accepted", returnPage: "8" }, true)));
-  assert.equal(staff.pathname, "/staff"); assert.equal(staff.hash, "#recruitment"); assert.equal(staff.searchParams.get("name"), null);
 });
 
 test("baseline requirements remain advisory for younger, unlinked, low-hour non-members", async () => {
