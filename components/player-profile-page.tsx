@@ -19,7 +19,7 @@ import type { PublicStatus } from "@/lib/server-link/protocol";
 import { ProfileSettingsForm, type ProfileSettingsValue } from "@/components/profile-settings-form";
 import { ProfileCommentSettings, ProfileCommunityPanel } from "@/components/profile-community";
 import type { ProfileCommunity } from "@/lib/profile-community";
-import communityStyles from "@/components/profile-community.module.css";
+import headerStyles from "@/components/player-profile-header.module.css";
 import {
   ProfileThemeAvatarAdornment,
   ProfileThemeHeroDecoration,
@@ -246,12 +246,12 @@ export function PlayerProfilePage({ staffControls, arenaStats, profile, identity
           themeKey={profileThemeKey ?? null}
           settingsActive={isOwnProfile && settingsOpen}
         />
-        <section className="public-player-hero shared-profile-hero">
+        <section className={`public-player-hero shared-profile-hero ${headerStyles.hero}${showSettings ? ` ${headerStyles.settingsHero}` : ""}`}>
           <ProfileThemeHeroDecoration themeKey={profileTheme.key} />
-          <div className="public-player-copy">
+          <div className={`public-player-copy ${headerStyles.copy}`}>
             {!isOwnProfile ? <Link className="back-link" href="/ranking"><ArrowLeft aria-hidden="true" /> Server ranking</Link> : null}
-            <div className="public-player-identity">
-              <div className="public-player-avatar-shell">
+            <div className={`public-player-identity ${headerStyles.identity}`}>
+              <div className={`public-player-avatar-shell ${headerStyles.avatarShell}`}>
                 <div className={`public-player-avatar${isBanned ? " is-banned" : ""}`}>
                   <ResilientRemoteImage src={steamProfile?.avatarFull} alt={`${displayName}'s Steam avatar`} referrerPolicy="no-referrer" fallback={<span className="public-player-avatar-fallback" aria-hidden="true">{avatarInitial(displayName)}</span>} />
                   {isBanned ? <span className="banned-avatar-overlay">BANNED</span> : null}
@@ -259,26 +259,38 @@ export function PlayerProfilePage({ staffControls, arenaStats, profile, identity
                 <ProfileThemeAvatarAdornment themeKey={profileTheme.key} />
                 {primaryIdentityGroup ? <span className="profile-primary-group-badge"><IdentityGroupBadge group={primaryIdentityGroup} compact /></span> : null}
               </div>
-              <div>
-                <div className="tapped-kicker"><UserRound aria-hidden="true" /> {isOwnProfile ? "Your player profile" : "Player profile"}<PlayerServerPresence steamId={steamId} initialStatus={initialServerStatus} /></div>
+              <div className={headerStyles.heading}>
+                <div className="tapped-kicker"><UserRound aria-hidden="true" /> {isOwnProfile ? "Your player profile" : "Player profile"}</div>
                 <h1>{displayName}</h1>
-                <div className="profile-steam-theme-row">
-                  <ProfileThemeSurfaceBadge themeKey={profileTheme.key} surface="profile" />
+              </div>
+              {!showSettings ? <div className={headerStyles.status}><PlayerServerPresence steamId={steamId} initialStatus={initialServerStatus} /></div> : null}
+            </div>
+            {!showSettings ? <>
+              <div className={`profile-steam-theme-row ${headerStyles.metadata}`} role="group" aria-label="Profile details">
+                <span className={headerStyles.steamIdentity}>
+                  <span className={headerStyles.rowLabel}>SteamID</span>
                   <a className="public-player-steam-identity" href={steamProfileUrl} target="_blank" rel="noreferrer" title={`Open ${displayName}'s Steam profile`}>{steamId}</a>
-                  <CopyToClipboardButton value={steamId} label={`Copy ${displayName}'s SteamID64`} />
-                </div>
-                {community?.initialCommunity.available && !showSettings ? <div className={communityStyles.heroSummary} aria-label="Community standing">
+                  <CopyToClipboardButton className={headerStyles.copyButton} value={steamId} label={`Copy ${displayName}'s SteamID64`} />
+                </span>
+                {profileThemeSurface.badge ? <span className={headerStyles.themeIdentity}>
+                  <span className={headerStyles.rowLabel}>Theme</span>
+                  <ProfileThemeSurfaceBadge themeKey={profileTheme.key} surface="profile" />
+                </span> : null}
+              </div>
+              {secondaryIdentityGroups.length > 0 ? <div className={`profile-identity-badge-rack ${headerStyles.groups}`}>
+                <span className={headerStyles.rowLabel}>Groups</span>
+                <IdentityGroupBadgeList groups={secondaryIdentityGroups} compact label="Additional player groups" />
+              </div> : null}
+              {community?.initialCommunity.available || discordProfileUrl ? <div className={headerStyles.actions} role="group" aria-label="Profile links and community">
+                {community?.initialCommunity.available ? <>
                   <a href="#community"><ThumbsUp aria-hidden="true" /><span>Reputation <strong>{community.initialCommunity.reputation > 0 ? "+" : ""}{formatCount(community.initialCommunity.reputation)}</strong></span></a>
                   <a href="#community"><Award aria-hidden="true" /><span>Commends <strong>{formatCount(community.initialCommunity.commendationTotal)}</strong></span></a>
-                </div> : null}
-                {discordProfileUrl ? <a className="profile-discord-link" href={discordProfileUrl} target="_blank" rel="noopener noreferrer" aria-label={`Open ${displayName}'s Discord profile in a new tab`}>
+                </> : null}
+                {discordProfileUrl ? <a className={headerStyles.discord} href={discordProfileUrl} target="_blank" rel="noopener noreferrer" aria-label={`Open ${displayName}'s Discord profile in a new tab`}>
                   <DiscordMark /><span>Discord profile</span><ArrowRight aria-hidden="true" />
                 </a> : null}
-                {secondaryIdentityGroups.length > 0 ? <div className="profile-identity-badge-rack">
-                  <IdentityGroupBadgeList groups={secondaryIdentityGroups} compact />
-                </div> : null}
-              </div>
-            </div>
+              </div> : null}
+            </> : null}
           </div>
           <aside className="public-rank-card">
             <span>SERVER PLACEMENT</span>

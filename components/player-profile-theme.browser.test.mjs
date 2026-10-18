@@ -26,13 +26,15 @@ test("full player profiles paint administrative, combat and community content ab
       const viewer=resolvePortalThemeSurface(viewerTheme,'global');document.documentElement.className=viewer.surface.className;document.documentElement.dataset.theme=viewer.theme.key;document.documentElement.dataset.themeSurface='global';
       window.fixtureViewer={steamId:'76561198000000001',profileThemeKey:viewerTheme};window.fixtureAccess={isAdmin:true,isAssignedToServer:true,immunity:100,permissions:new Set(['*']),canManageAdmins:true,canManageVips:true,canManageGroups:true};
       const hitStats={totalHits:1000,healthDamage:100000,armorDamage:42000,head:420,chest:220,stomach:100,leftArm:70,rightArm:60,leftLeg:60,rightLeg:50,neck:20};
-      const profile={steamId,displayName:'Profile visual fixture',points:3600,leaderboardPosition:12,leaderboardTotal:100,playtimeSeconds:360000,kills:1800,deaths:1200,headshots:900,totalKills:2200,totalHeadshots:1100,noscopes:35,hitStats,vipGroups:[],adminGroups:[],isBanned:false,...(own?{sourceConnected:true,hasGameRecord:true,rank:12,gamesPlayed:200,gameWins:120,gameLosses:80,bans:[],sanctions:[],kickHistoryAvailable:true,skinSummary:{skins:0,knives:0,gloves:0,agents:0,musicKits:0}}:{})};
+      const crowded=query.has('crowded');
+      const groups=crowded?[['Owner','OWNER','admins_core','crown','#ff677c'],['Verified','VERIFIED','custom','badge','#8bd6e9'],['VIP Ultimate','VIP ULTIMATE','vipcore','star','#a39aff'],['Beta Tester','BETA TESTER','custom','sparkles','#8ce5b6'],['Community tournament champion','TOURNAMENT CHAMPION','custom','shield','#ffc66b']].map(([displayName,badgeLabel,sourceType,badgeIconKey,badgeColor],index)=>({id:index+1,key:displayName.toLowerCase(),displayName,badgeLabel,sourceType,badgeIconKey,badgeColor,badgeSoftColor:badgeColor,externalKey:displayName,hasPortalMembership:true,membershipExpiresAt:null,tags:[],privileges:[]})):[];
+      const profile={steamId,displayName:crowded?'TAP GOD · An exceptionally long community player name':'Profile visual fixture',points:3600,leaderboardPosition:12,leaderboardTotal:100,playtimeSeconds:360000,kills:1800,deaths:1200,headshots:900,totalKills:2200,totalHeadshots:1100,noscopes:35,hitStats,vipGroups:[],adminGroups:[],isBanned:false,...(own?{sourceConnected:true,hasGameRecord:true,rank:12,gamesPlayed:200,gameWins:120,gameLosses:80,bans:[],sanctions:[],kickHistoryAvailable:true,skinSummary:{skins:0,knives:0,gloves:0,agents:0,musicKits:0}}:{})};
       const community={available:true,reputation:8,commendationTotal:12,commendations:{helpful:4,teacher:2,funny:2,pro_player:3,goat:1},commentsEnabled:true,myReputation:0,myCommendations:[],comments:{records:[{id:'e91a2f90-e577-44b1-bc67-000000000001',authorSteamId:'76561198000000003',body:'A visible comment in the author’s own theme.',createdAt:1792321200000,canDelete:true}],page:1,pageSize:10,total:1}};
       const authorTheme=query.get('author')||'vip_gold';const identities={'76561198000000003':{steamId:'76561198000000003',displayName:'Themed comment author',avatarUrl:null,presence:'unknown',profileThemeKey:authorTheme,identityGroups:[]}};
       const inventory={visibility:'private',canView:false,items:[],total:0,page:1,pageSize:12};
-      const status={state:'online',players:1,maxPlayers:32,bots:0,map:'de_mirage',checkedAt:'2026-10-18T10:00:00.000Z',lastSeenAt:'2026-10-18T10:00:00.000Z',roster:[{steamId,name:profile.displayName}]};
+      const presence=query.get('presence')||'offline';const status=presence==='unknown'?null:{state:'online',players:1,maxPlayers:32,bots:0,map:'de_mirage',checkedAt:new Date().toISOString(),lastSeenAt:new Date().toISOString(),roster:presence==='online'?[{steamId,name:profile.displayName}]:[]};
       createRoot(document.getElementById('root')).render(<>{createPortal(<GlobalThemeBackground themeKey={viewerTheme}/>,document.body)}<GlobalThemeDocumentEffects themeKey={viewerTheme}/><PanelEffects/><PortalVisualEffects/><div className='portal-content'>
-      <PlayerProfilePage steamId={steamId} profile={profile} identity={{groups:[],tags:[],privileges:[],directPrivileges:[]}} isOwnProfile={own} isAuthenticated profileThemeKey={themeKey} profileInventory={inventory} initialServerStatus={status}
+      <PlayerProfilePage steamId={steamId} profile={profile} identity={{groups,tags:[],privileges:[],directPrivileges:[]}} steamProfile={crowded?{name:profile.displayName,avatarFull:null,presence:'online'}:undefined} discordProfileUrl={crowded?'https://discord.com/users/123456789012345678':undefined} isOwnProfile={own} isAuthenticated profileThemeKey={themeKey} profileInventory={inventory} initialServerStatus={status}
       settingsOpen={own&&query.has('settings')} profileSettings={{csrf:'fixture-csrf',initialSettings:{inventoryVisibility:'private',activeThemeId:null,activeThemeItemId:null,ownedThemes:[]}}}
       arenaStats={{roundWins:120,roundWinRate:60,assists:70,accuracy:33.4,damage:43000,gamesPlayed:200,highestKillstreak:null}}
       staffControls={<ProfileStaffControls steamId={steamId} displayName={profile.displayName} access={window.fixtureAccess} csrf='fixture-csrf' online writesReady/>}
@@ -65,7 +67,7 @@ test("full player profiles paint administrative, combat and community content ab
     else if (path.startsWith("/images/")) {
       try { response.setHeader("Content-Type", extname(path) === ".svg" ? "image/svg+xml" : "image/png"); response.end(await readFile(resolve("public", path.slice(1)))); }
       catch { response.statusCode = 404; response.end(); }
-    } else if (path === "/api/server-status") { response.setHeader("Content-Type", "application/json"); response.end(JSON.stringify({ state: "online", roster: [], checkedAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(), players: 0, maxPlayers: 32, bots: 0, map: "de_mirage" })); }
+    } else if (path === "/api/server-status") { const query = new URL(request.headers.referer || "http://localhost").searchParams; const presence = query.get("presence") || "offline"; if (presence === "unknown") { response.statusCode = 503; response.end(); } else { const steamId = query.has("own") ? "76561198000000001" : "76561198000000002"; response.setHeader("Content-Type", "application/json"); response.end(JSON.stringify({ state: "online", roster: presence === "online" ? [{ steamId, name: "Fixture player" }] : [], checkedAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(), players: 0, maxPlayers: 32, bots: 0, map: "de_mirage" })); } }
     else { response.setHeader("Content-Type", "text/html"); response.end('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/fixture.css"></head><body><div id="root"></div><script src="/fixture.js"></script></body></html>'); }
   });
   await new Promise(done => server.listen(0, "127.0.0.1", done));
@@ -82,9 +84,10 @@ test("full player profiles paint administrative, combat and community content ab
   try {
     browser = await chromium.launch({ headless: true });
     const origin = `http://127.0.0.1:${server.address().port}`;
-    async function open(query, width = 1440, reducedMotion = "reduce", paused = false) {
+    async function open(query, width = 1440, reducedMotion = "reduce", paused = false, clockTime = null) {
       const page = await browser.newPage({ viewport: { width, height: 1000 }, reducedMotion });
       page.setDefaultTimeout(6000);
+      if (clockTime !== null) await page.clock.install({ time: clockTime });
       await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, route => route.abort());
       if (paused) await page.addInitScript(() => localStorage.setItem("portal:decorative-motion", "paused"));
       const errors = []; page.on("pageerror", error => errors.push(error.message));
@@ -93,6 +96,92 @@ test("full player profiles paint administrative, combat and community content ab
       await page.waitForTimeout(reducedMotion === "reduce" ? 50 : 600);
       return { page, errors };
     }
+    await t.test("crowded profile headers keep status, memberships, metadata and actions separate and usable at every breakpoint", async () => {
+      const failures = [];
+      for (const theme of ["tap_god", "default", "beta_tester", "owner", "shadow"]) {
+        for (const width of [390, 768, 1440]) {
+          const { page, errors } = await open(`theme=${theme}&viewer=owner&crowded=1&presence=online`, width);
+          try {
+            const hero = page.locator(".public-player-hero");
+            await hero.scrollIntoViewIfNeeded();
+            await hero.screenshot({ path: resolve(directory, `header-${theme}-${width}.png`), animations: "disabled" });
+            const geometry = await hero.evaluate(element => {
+              const box = node => { if (!node) return null; const { x, y, width, height, right, bottom } = node.getBoundingClientRect(); return { x, y, width, height, right, bottom }; };
+              const status = element.querySelector("[data-server-presence]");
+              const groups = element.querySelector('[aria-label="Additional player groups"]');
+              const actions = element.querySelector('[aria-label="Profile links and community"]');
+              const metadata = element.querySelector('[aria-label="Profile details"]');
+              return { hero: box(element), status: box(status), name: box(element.querySelector("h1")), statusInsideKicker: Boolean(status?.closest(".tapped-kicker")), primary: box(element.querySelector(".profile-primary-group-badge")), groupCount: groups?.querySelectorAll('[role="listitem"]').length ?? 0, groups: box(groups), metadata: box(metadata), actions: box(actions), controls: actions ? [...actions.querySelectorAll("a,button")].map(box) : [], overflow: document.documentElement.scrollWidth > innerWidth };
+            });
+            const intersects = (left, right) => left.x < right.right - 1 && left.right > right.x + 1 && left.y < right.bottom - 1 && left.bottom > right.y + 1;
+            if (geometry.statusInsideKicker || !geometry.groups || !geometry.actions || !geometry.metadata) failures.push(`${theme} ${width}: header requires separate presence, membership, metadata and action rows`);
+            if (geometry.groups && geometry.metadata && geometry.actions) {
+              assert.equal(geometry.groupCount, 4, `${theme} ${width}: primary group remains by avatar and four additional real groups remain in the rack`);
+              assert.ok(geometry.primary.height > 0);
+              assert.ok(geometry.groups.y >= geometry.metadata.bottom + 7);
+              assert.ok(geometry.actions.y >= geometry.groups.bottom + 7);
+              assert.equal(intersects(geometry.status, geometry.name), false, `${theme} ${width}: status never overlaps the full name`);
+              assert.equal(intersects(geometry.status, geometry.metadata), false, `${theme} ${width}: presence stays separate from details`);
+              for (const control of geometry.controls) {
+                assert.ok(control.height >= 37 && control.height <= 42, `${theme} ${width}: consistent compact actions`);
+                assert.ok(control.width < 225, `${theme} ${width}: actions retain content-sized widths`);
+                assert.ok(control.x >= geometry.hero.x && control.right <= geometry.hero.right, `${theme} ${width}: every action stays inside the header`);
+              }
+            }
+            assert.equal(await hero.locator('[data-server-presence="online"]').count(), 1);
+            assert.equal(geometry.overflow, false, `${theme} ${width}: no horizontal overflow`);
+            assert.equal(await hero.getByRole("link", { name: /Discord profile/ }).getAttribute("href"), "https://discord.com/users/123456789012345678");
+            assert.equal(await hero.getByRole("link", { name: "76561198000000002", exact: true }).getAttribute("href"), "https://steamcommunity.com/profiles/76561198000000002");
+            await hero.getByRole("button", { name: /Copy .*SteamID64/ }).focus();
+            assert.equal(await hero.getByRole("button", { name: /Copy .*SteamID64/ }).evaluate(element => element === document.activeElement), true);
+            assert.deepEqual(errors, []);
+          } finally { await page.close(); }
+        }
+      }
+      assert.deepEqual(failures, []);
+    });
+    await t.test("server presence stays explicit for live membership, offline players and unavailable rosters", async () => {
+      for (const presence of ["online", "offline", "unknown"]) {
+        for (const width of [390, 768, 1440]) {
+        const { page, errors } = await open(`theme=tap_god&crowded=1&presence=${presence}`, width);
+        try {
+          const status = page.locator(`[data-server-presence="${presence}"]`);
+          assert.equal(await status.count(), 1, "Steam online must never imply CS2 roster membership");
+          assert.match(await status.innerText(), presence === "online" ? /Online on server/ : presence === "offline" ? /Offline/ : /Server status unavailable/);
+          assert.match(await status.innerText(), /ARENA\.TAPPED\.RO/);
+          assert.equal(await status.evaluate(element => parseFloat(getComputedStyle(element).borderRadius) <= 8), true, "presence uses an outlined status panel");
+          assert.equal(await status.locator("i").evaluate(element => getComputedStyle(element).animationName), "none", "reduced motion stops the status glow");
+          const bounds = await status.boundingBox();
+          assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width, `${presence} ${width}: status and server context remain within the viewport`);
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+          await page.locator(".public-player-hero").screenshot({ path: resolve(directory, `presence-${presence}-${width}.png`), animations: "disabled" });
+          assert.deepEqual(errors, []);
+        } finally { await page.close(); }
+        }
+      }
+    });
+    await t.test("status expires after failed heartbeat polls and recovers only from a fresh server roster", async () => {
+      const { page, errors } = await open("theme=shadow&crowded=1&presence=online", 390, "reduce", false, Date.now());
+      try {
+        await page.route("**/api/server-status", route => route.fulfill({ status: 503, body: "Unavailable" }));
+        const failedPoll = page.waitForResponse(response => response.url().endsWith("/api/server-status") && response.status() === 503);
+        await page.clock.fastForward(46_000);
+        await failedPoll;
+        await page.locator('[data-server-presence="unknown"]').waitFor();
+        await page.route("**/api/server-status", route => route.fulfill({ json: { state: "online", roster: [{ steamId: "76561198000000002", name: "Reconnected player" }], checkedAt: new Date().toISOString(), lastSeenAt: new Date().toISOString(), players: 1, maxPlayers: 32, bots: 0, map: "de_mirage" } }));
+        await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+        await page.locator('[data-server-presence="online"]').waitFor();
+        assert.deepEqual(errors, []);
+      } finally { await page.close(); }
+    });
+    await t.test("the persisted global motion pause stops the online status glow", async () => {
+      const { page, errors } = await open("theme=beta_tester&crowded=1&presence=online", 390, "no-preference", true);
+      try {
+        assert.equal(await page.locator('[data-server-presence="online"] i').evaluate(element => getComputedStyle(element).animationName), "none");
+        assert.deepEqual(errors, []);
+      } finally { await page.close(); }
+    });
+    if (process.env.PROFILE_HEADER_ONLY !== "1") {
     await t.test("no equipped theme paints staff controls and combat content instead of hiding them behind its opaque backdrop", async () => {
       const { page, errors } = await open("viewer=shadow");
       try {
@@ -165,5 +254,6 @@ test("full player profiles paint administrative, combat and community content ab
         } finally { await settings.page.close(); }
       }
     });
+    }
   } finally { await browser?.close(); await new Promise(done => server.close(done)); }
 });

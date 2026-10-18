@@ -42,6 +42,7 @@ export function PlayerServerPresence({ steamId, initialStatus = null }: { steamI
   const description = presence === "online" ? "Connected to ARENA.TAPPED.RO · live server roster" : presence === "offline" ? "Not connected to ARENA.TAPPED.RO · live server roster" : "The server's live roster is currently unavailable.";
 
   return <span className={styles.presence} data-server-presence={presence} role="status" aria-live="polite" title={description}>
-    <i className={styles.indicator} aria-hidden="true" /><span>{label}</span>
+    <i className={styles.indicator} aria-hidden="true" />
+    <span className={styles.copy}><strong>{label}</strong><small>ARENA.TAPPED.RO</small></span>
   </span>;
 }

@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import test from "node:test";
 import { build } from "esbuild";
 import { chromium } from "playwright";
+import sharp from "sharp";
 
 const steamId = "76561198000000001";
 const staffResponse = "Thanks <script>window.fixtureResponseInjected = true</script> for your application.\nPlease contact a staff member for the next step.";
@@ -20,7 +21,13 @@ const applications = [
 const member = (id, name, theme) => ({ steamId: id, name, avatarUrl: null, presence: "online", profileThemeKey: theme, discordProfileUrl: "https://discord.com/users/12345678901234567", statistics: { bansIssued: 42, communications: { gags: 15, mutes: 8, silences: 6 }, kicksIssued: 23, warningsIssued: 17, playtimeSeconds: 1297800, reputation: 28, commendations: 51, commendationCounts: { helpful: 11, teacher: 7, funny: 13, pro_player: 9, goat: 11 } } });
 const directory = { available: true, memberCount: 3, onlineCount: 3, groups: [{ key: "founder", name: "Founder", description: "The community starts here.", icon: "crown", color: "#c69246", members: [member(steamId, "Founder name", "tap_god")] }, { key: "guardian", name: "Guardian", description: "Here to help our players.", icon: "shield", color: "#859bdd", members: [member("76561198000000002", "Guardian one", "shadow"), member("76561198000000003", "Guardian two", "beta_tester")] }] };
 
-test("recruitment forms, staff access, themes and compact public cards work across screen sizes", async t => {
+const crowdedGroups = [
+  { key: "secretary", name: "Secretary", description: "Supporting the team.", icon: "medal", color: "#c68ac7", members: [member("76561198000000004", "Community Secretary", "moderator")] },
+  { key: "administrators", name: "Administrators", description: "Keeping every round fair.", icon: "badge", color: "#ffb56a", members: [member("76561198000000005", "Admin teammate", "administrator"), member("76561198000000006", "Second administrator", "vip_gold")] },
+  { key: "community-support", name: "Community Support and Player Relations", description: "Helping the community.", icon: "headphones", color: "#b192ff", members: [member("76561198000000007", "Long community support name", "shadow"), member("76561198000000008", "Support teammate", "beta_tester")] },
+];
+
+test("recruitment forms, staff access, themes and the public staff directory work across screen sizes", async t => {
   const boundaries = {
     "@/lib/auth/session": `export const getSession=async()=>window.fixtureState==='guest'?null:{steamId:['other-player','wrong-owner'].includes(window.fixtureState)?'76561198000000099':'${steamId}'};export const createAdminActionToken=()=> 'staff-csrf';export const createProfileActionToken=()=> 'player-csrf';`,
     "@/lib/admin/access": `export const getAdminAccess=async()=>({isAdmin:['staff','staff-closed'].includes(window.fixtureState),isFounder:false,displayName:'Staff player',groups:['Guardian'],immunity:20,canUnban:true});`,
@@ -32,7 +39,7 @@ test("recruitment forms, staff access, themes and compact public cards work acro
     "next/navigation": "export const useRouter=()=>({replace(){},push(){},refresh(){}});export const usePathname=()=>location.pathname;export const useSearchParams=()=>new URLSearchParams(location.search);",
   };
   const bundle = await build({
-    stdin: { contents: `import React from'react';import{createRoot}from'react-dom/client';import{RecruitmentSection}from'./app/staff/recruitment-section';import{StaffShowcase}from'./app/staff/staff-showcase';import{SiteHeader}from'./components/site-header';import{getSession}from'@/lib/auth/session';import RecruitmentPage from'./app/admin/recruitment/page';const params=new URLSearchParams(location.search),admin=location.pathname==='/admin/recruitment'||params.get('mode')==='admin',fixtureDirectory=${JSON.stringify(directory)};if(params.get('odd')==='1'){fixtureDirectory.groups[1].members.push({...fixtureDirectory.groups[1].members[0],steamId:'76561198000000004',name:'Guardian three'});fixtureDirectory.memberCount=4;fixtureDirectory.onlineCount=4}if(params.get('metrics')==='missing')for(const group of fixtureDirectory.groups)for(const member of group.members)member.statistics={bansIssued:null,communications:{gags:null,mutes:null,silences:null},kicksIssued:null,warningsIssued:null,playtimeSeconds:null,reputation:null,commendations:null,commendationCounts:null};window.fixtureState=params.get('state')||(admin?'staff':'member');window.fixturePrivateReads=0;window.fixtureOwnReads=[];window.fixturePageRequests=[];const root=createRoot(document.getElementById('root'));(async()=>{if(admin)root.render(await RecruitmentPage({searchParams:Promise.resolve(Object.fromEntries(params))}));else{const section=await RecruitmentSection({session:await getSession(),parameters:Object.fromEntries(params)});root.render(<main className="tapped-page portal-page public-staff-page"><div className="shell">{await SiteHeader({authenticated:false})}<StaffShowcase directory={fixtureDirectory} recruitment={section}/></div></main>)}})();`, loader: "tsx", resolveDir: process.cwd() },
+    stdin: { contents: `import React from'react';import{createRoot}from'react-dom/client';import{RecruitmentSection}from'./app/staff/recruitment-section';import{StaffShowcase}from'./app/staff/staff-showcase';import{SiteHeader}from'./components/site-header';import{createPortal}from'react-dom';import{GlobalThemeBackground}from'./components/profile-theme-slots';import{resolvePortalThemeSurface}from'./lib/themes/registry';import{getSession}from'@/lib/auth/session';import RecruitmentPage from'./app/admin/recruitment/page';const params=new URLSearchParams(location.search),admin=location.pathname==='/admin/recruitment'||params.get('mode')==='admin',fixtureDirectory=${JSON.stringify(directory)};if(params.get('layout')==='crowded'){fixtureDirectory.groups.push(...${JSON.stringify(crowdedGroups)});fixtureDirectory.memberCount=8;fixtureDirectory.onlineCount=8}if(params.get('odd')==='1'){fixtureDirectory.groups[1].members.push({...fixtureDirectory.groups[1].members[0],steamId:'76561198000000004',name:'Guardian three'});fixtureDirectory.memberCount=4;fixtureDirectory.onlineCount=4}if(params.get('metrics')==='missing')for(const group of fixtureDirectory.groups)for(const member of group.members)member.statistics={bansIssued:null,communications:{gags:null,mutes:null,silences:null},kicksIssued:null,warningsIssued:null,playtimeSeconds:null,reputation:null,commendations:null,commendationCounts:null};window.fixtureState=params.get('state')||(admin?'staff':'member');window.fixturePrivateReads=0;window.fixtureOwnReads=[];window.fixturePageRequests=[];const viewerTheme=params.get('theme')||'default',viewer=resolvePortalThemeSurface(viewerTheme,'global');document.documentElement.className=viewer.surface.className;document.documentElement.dataset.theme=viewer.theme.key;const root=createRoot(document.getElementById('root')); (async()=>{if(admin)root.render(await RecruitmentPage({searchParams:Promise.resolve(Object.fromEntries(params))}));else{const section=await RecruitmentSection({session:await getSession(),parameters:Object.fromEntries(params)});root.render(<>{createPortal(<GlobalThemeBackground themeKey={viewerTheme}/>,document.body)}<main className="tapped-page portal-page public-staff-page"><div className="shell">{await SiteHeader({authenticated:false})}<StaffShowcase directory={fixtureDirectory} recruitment={section}/></div></main></>)}})();`, loader: "tsx", resolveDir: process.cwd() },
     bundle: true, write: false, outfile: "fixture.js", jsx: "automatic", define: { "process.env.NODE_ENV": '"development"' },
     plugins: [{ name: "recruitment-boundaries", setup(builder) {
       builder.onResolve({ filter: /.*/ }, ({ path }) => path in boundaries ? { path, namespace: "fixture" } : undefined);
@@ -58,7 +65,7 @@ test("recruitment forms, staff access, themes and compact public cards work acro
     else if (request.url === "/fixture.css") { response.setHeader("content-type", "text/css"); response.end(css); }
     else if (request.url === "/images/branding/tapped-emblem.svg") { response.setHeader("content-type", "image/svg+xml"); response.end(await readFile("public/images/branding/tapped-emblem.svg")); }
     else if (request.url === "/no-script-recruitment") { response.setHeader("content-type", "text/html"); response.end(`<!doctype html><html class="global-theme-default" data-theme="default" data-theme-surface="global"><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/fixture.css"></head><body><main class="tapped-page portal-page public-staff-page"><div class="shell"><h1>Staff recruitment</h1>${renderedModule.exports.noScriptForm}</div></main></body></html>`); }
-    else { response.setHeader("content-type", "text/html"); response.end('<!doctype html><html class="global-theme-default" data-theme="default" data-theme-surface="global"><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/fixture.css"></head><body><div id="root"></div><script src="/fixture.js"></script></body></html>'); }
+    else { response.setHeader("content-type", "text/html"); response.end('<!doctype html><html class="global-theme-default" data-theme="default" data-theme-surface="global"><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/fixture.css"></head><body><div id="root" class="portal-content"></div><script src="/fixture.js"></script></body></html>'); }
   });
   await new Promise(done => server.listen(0, "127.0.0.1", done));
   let browser;
@@ -71,14 +78,153 @@ test("recruitment forms, staff access, themes and compact public cards work acro
       const errors = [];
       page.on("pageerror", error => errors.push(error.message));
       try {
-        await page.goto(`http://127.0.0.1:${server.address().port}/?${new URLSearchParams({ state, mode, ...query })}`);
+        await page.goto(`http://127.0.0.1:${server.address().port}${mode === "admin" ? "/admin/recruitment" : "/staff"}?${new URLSearchParams({ state, mode, theme, ...query })}`);
         await page.locator("main").waitFor();
-        if (theme !== "default") await page.evaluate(theme => { document.documentElement.className = `global-theme-${theme.replaceAll("_", "-")}`; document.documentElement.dataset.theme = theme; }, theme);
         await check(page);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${state}/${mode}/${width} overflows: ${JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('body *')].filter(element => element.scrollWidth > element.clientWidth + 1).map(element => ({tag:element.tagName,class:element.className,scroll:element.scrollWidth,client:element.clientWidth,right:element.getBoundingClientRect().right})).slice(0,20)))}`);
         assert.deepEqual(errors, []);
       } finally { await page.close(); }
     }
+    await t.test("rank headings paint a continuous red divider above every actual theme background", async () => {
+      const themes = ["default", "vip_silver", "vip_gold", "vip_diamond", "vip_ultimate", "staff", "moderator", "administrator", "senior_administrator", "owner", "beta_tester", "shadow", "tap_god"];
+      const cases = [...themes.map(theme => [1440, theme]), [390, "tap_god"], [768, "tap_god"], [1920, "tap_god"]];
+      for (const [width, theme] of cases) await withPage("closed", width, async page => {
+        assert.equal(await page.locator('[data-theme-background-surface="global"]').count(), 1, "exercise the production theme backdrop");
+        const headings = page.locator('section[data-featured] > div:first-child');
+        for (const heading of await headings.all()) {
+          const line = await heading.evaluate(element => {
+            const style = getComputedStyle(element, "::after");
+            return { width: parseFloat(style.width), height: parseFloat(style.height), color: style.backgroundColor, opacity: style.opacity, display: style.display };
+          });
+          assert.ok(line.width >= 48 && line.height >= 2 && line.opacity === "1" && line.display !== "none", `rank divider needs visible area at ${theme}/${width}: ${JSON.stringify(line)}`);
+          const headingBounds = await heading.boundingBox();
+          const titleBounds = await heading.locator('h3').boundingBox();
+          const countBounds = await heading.locator(':scope > span').last().boundingBox();
+          const shot = await heading.screenshot();
+          const { data, info } = await sharp(shot).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+          const start = Math.max(0, Math.ceil(titleBounds.x + titleBounds.width - headingBounds.x + 7));
+          const end = Math.min(info.width, Math.floor(countBounds.x - headingBounds.x - 7));
+          let redPixels = 0;
+          for (let y = 0; y < info.height; y++) for (let x = start; x < end; x++) {
+            const offset = (y * info.width + x) * info.channels;
+            const [red, green, blue] = data.subarray(offset, offset + 3);
+            if (red > 110 && red > green * 1.8 && red > blue * 1.4) redPixels++;
+          }
+          assert.ok(end - start >= 40 && redPixels >= (end - start) * 1.5, `rank divider must paint red across its visible rule at ${theme}/${width}: ${redPixels} pixels across ${end - start}px`);
+        }
+        if (theme === "tap_god") {
+          await mkdir(".cache/recruitment-previews", { recursive: true });
+          await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+          await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+          await page.screenshot({ path: `.cache/recruitment-previews/crowded-tap-god-${width}.png`, fullPage: true });
+        }
+      }, "public", theme, "reduce", { layout: "crowded" });
+    });
+    await t.test("recruitment is encountered before the staff directory", async () => {
+      for (const width of [390, 768, 1440, 1920]) await withPage("member", width, async page => {
+        const recruitment = page.locator("#recruitment");
+        const sidebar = page.locator("[data-staff-sidebar]");
+        const before = await recruitment.evaluate(element => Boolean(element.compareDocumentPosition(document.querySelector("[data-staff-sidebar]")) & Node.DOCUMENT_POSITION_FOLLOWING));
+        assert.equal(before, true, "recruitment must precede the roster in reading and keyboard order");
+        const recruitmentBounds = await recruitment.boundingBox(), sidebarBounds = await sidebar.boundingBox();
+        assert.ok(recruitmentBounds.y + recruitmentBounds.height <= sidebarBounds.y + 1, "recruitment must appear above the staff workspace");
+      });
+    });
+    await t.test("single-member compact roles share the ordinary card width instead of stretching", async () => {
+      for (const width of [390, 768, 1440, 1920]) await withPage("closed", width, async page => {
+        const secretary = page.locator('section[aria-labelledby="staff-group-secretary"] article[data-staff-card="compact"]');
+        const ordinary = page.locator('section[aria-labelledby="staff-group-guardian"] article[data-staff-card="compact"]').first();
+        const a = await secretary.boundingBox(), b = await ordinary.boundingBox();
+        assert.ok(Math.abs(a.width - b.width) <= 1, "singleton and ordinary compact cards must use the same width at " + width + "px; got " + a.width + " and " + b.width);
+        assert.ok(Math.abs(a.x - b.x) <= 1, "singleton compact roles align with the first ordinary column");
+        if (width === 768) assert.ok(a.width <= 640, "tablet compact cards stay within a readable 640px row");
+        const summary = secretary.locator("summary");
+        const parts = await Promise.all([summary.locator(':scope > div'), summary.locator('dl[aria-label="Member overview"]'), summary.locator(':scope > span')].map(part => part.boundingBox()));
+        for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) {
+          const p = parts[i], q = parts[j];
+          assert.ok(p.x + p.width <= q.x + 1 || q.x + q.width <= p.x + 1 || p.y + p.height <= q.y + 1 || q.y + q.height <= p.y + 1, "compact identity, statistics and Details remain separate");
+        }
+        await summary.click();
+        assert.equal(await secretary.locator('dl[aria-label="Admin actions taken"]').isVisible(), true);
+        assert.equal(await secretary.getByRole("link", { name: "View Community Secretary's profile", exact: true }).isVisible(), true);
+      }, "public", "tap_god", "reduce", { layout: "crowded" });
+    });
+    await t.test("compact staff rows hide full statistics until their native disclosure opens", async () => {
+      for (const width of [390, 1440]) await withPage("closed", width, async page => {
+        const guardians = page.locator('section[aria-labelledby="staff-group-guardian"]');
+        const disclosures = guardians.locator("details[data-staff-details]");
+        assert.equal(await disclosures.count(), 2, "each compact staff member needs a native details disclosure");
+        const details = disclosures.first();
+        const summary = details.locator(":scope > summary");
+        assert.equal(await summary.getAttribute("aria-label"), "Details for Guardian one");
+        assert.equal(await details.getAttribute("open"), null);
+        assert.match(await summary.innerText(), /Guardian one/);
+        const overview = summary.locator('dl[aria-label="Member overview"]');
+        assert.equal(await overview.isVisible(), true);
+        assert.deepEqual(await overview.locator("dt").allTextContents(), ["Hours", "Reputation", "Commends"]);
+        assert.deepEqual(await overview.locator("dd > strong").allTextContents(), ["360.5", "+28", "51"]);
+        assert.equal(await summary.locator("a, button, input").count(), 0, "the native summary must not contain competing interactive controls");
+        assert.equal(await details.locator('dl[aria-label="Admin actions taken"]').isVisible(), false);
+        const profile = details.getByRole("link", { name: "View Guardian one's profile", exact: true });
+        const discord = details.getByRole("link", { name: "Open Guardian one's Discord profile (opens in a new tab)", exact: true });
+        assert.equal(await profile.isVisible(), false);
+        await summary.focus();
+        await page.keyboard.press("Enter");
+        assert.notEqual(await details.getAttribute("open"), null);
+        assert.equal(await details.locator('dl[aria-label="Admin actions taken"]').isVisible(), true);
+        assert.equal(await profile.isVisible(), true);
+        assert.equal(await profile.getAttribute("href"), "/players/76561198000000002");
+        assert.equal(await discord.isVisible(), true);
+        assert.equal(await discord.getAttribute("href"), "https://discord.com/users/12345678901234567");
+        assert.equal(await discord.getAttribute("target"), "_blank");
+        assert.match(await discord.getAttribute("rel"), /noopener/);
+        assert.match(await discord.getAttribute("rel"), /noreferrer/);
+        await page.keyboard.press("Space");
+        assert.equal(await details.getAttribute("open"), null);
+        assert.equal(await profile.isVisible(), false);
+      });
+    });
+    await t.test("sidebar and top role filters stay synchronized while searching and resetting the directory", async () => {
+      for (const width of [390, 1440]) await withPage("closed", width, async page => {
+        const sidebar = page.getByRole("navigation", { name: "Staff roles", exact: true });
+        const filters = page.getByRole("navigation", { name: "Filter staff by admin group", exact: true });
+        const cards = page.locator('article[data-ui="player-owned-container"]');
+        const search = page.getByRole("searchbox", { name: "Search staff by name, group or Steam ID", exact: true });
+        async function selected(name) {
+          for (const nav of [sidebar, filters]) {
+            assert.equal(await nav.getByRole("button", { name: new RegExp(`^${name}\\b`) }).getAttribute("aria-pressed"), "true");
+            assert.equal(await nav.locator('button[aria-pressed="true"]').count(), 1);
+          }
+        }
+        assert.deepEqual(await cards.locator("h4").allTextContents(), ["Founder name", "Guardian one", "Guardian two"]);
+        for (const nav of [sidebar, filters]) assert.deepEqual(await nav.locator("button b").allTextContents(), ["3", "1", "2"], "role controls keep the directory's real member counts and order");
+        await selected("All staff");
+        await sidebar.getByRole("button", { name: /^Guardian\b/ }).focus();
+        await page.keyboard.press("Enter");
+        await selected("Guardian");
+        assert.deepEqual(await cards.locator("h4").allTextContents(), ["Guardian one", "Guardian two"]);
+        await search.fill("Guardian one");
+        assert.equal(await cards.count(), 1);
+        await filters.getByRole("button", { name: /^Founder\b/ }).click();
+        await selected("Founder");
+        assert.equal(await cards.count(), 0, "role and name filters apply together");
+        assert.equal(await page.getByRole("heading", { name: "No staff found.", exact: true }).isVisible(), true);
+        await page.getByRole("button", { name: /^Show all staff\b/ }).click();
+        assert.equal(await search.inputValue(), "");
+        await selected("All staff");
+        assert.equal(await cards.count(), 3);
+        await filters.getByRole("button", { name: /^Guardian\b/ }).click();
+        await selected("Guardian");
+        await sidebar.getByRole("button", { name: /^All staff\b/ }).click();
+        await selected("All staff");
+        await search.fill("76561198000000003");
+        assert.deepEqual(await cards.locator("h4").allTextContents(), ["Guardian two"]);
+        await search.fill("Ｆｏｕｎｄｅｒ");
+        assert.deepEqual(await cards.locator("h4").allTextContents(), ["Founder name"], "staff search normalizes full-width names");
+        await search.fill("guardian");
+        assert.deepEqual(await cards.locator("h4").allTextContents(), ["Guardian one", "Guardian two"], "staff search also matches role names");
+      });
+    });
     await t.test("application reviews initially expose only player names and expand controls", async () => {
       for (const [width, theme] of [[390, "default"], [768, "shadow"], [1440, "tap_god"]]) await withPage("staff", width, async page => {
         const rows = page.locator('details[data-ui="recruitment-application"]');
@@ -224,19 +370,39 @@ test("recruitment forms, staff access, themes and compact public cards work acro
         assert.equal(payload.get("returnPage"), "2");
       }, "admin", "default", "reduce", { name: "Queue applicant", status: "reviewing", page: "2" });
     });
-    await t.test("lone staff roles stay centered with clear action, standing and five-kind commendation panels", async () => {
+    await t.test("founders stay expanded beside the role sidebar with their equipped theme and complete statistics", async () => {
       for (const [width, theme] of [[390, "default"], [768, "shadow"], [1440, "tap_god"]]) await withPage("closed", width, async page => {
-        const founderGroup = page.locator('section[data-single="true"]').first();
+        const founderGroup = page.locator('section[aria-labelledby="staff-group-founder"]');
         const card = founderGroup.locator('article[data-ui="player-owned-container"]');
-        const rosterBounds = await founderGroup.locator("..").boundingBox();
         const groupBounds = await founderGroup.boundingBox();
         const cardBounds = await card.boundingBox();
-        assert.ok(Math.abs((groupBounds.x + groupBounds.width / 2) - (rosterBounds.x + rosterBounds.width / 2)) <= 1, "a lone staff role is centered within the roster");
-        assert.ok(Math.abs((cardBounds.x + cardBounds.width / 2) - (groupBounds.x + groupBounds.width / 2)) <= 1, "a lone staff member is centered within their role");
+        assert.equal(await card.getAttribute("data-staff-card"), "featured");
+        assert.equal(await card.locator("details").count(), 0, "the founder's full statistics remain expanded");
+        assert.ok(cardBounds.x >= groupBounds.x - 1 && cardBounds.x + cardBounds.width <= groupBounds.x + groupBounds.width + 1, "the featured card stays inside its role");
+        assert.ok(cardBounds.width >= groupBounds.width * .95, "the featured member fills the directory width");
+        const sidebar = page.getByRole("navigation", { name: "Staff roles", exact: true });
+        const sidebarBounds = await sidebar.boundingBox();
+        const directoryBounds = await page.locator("#staff-directory").boundingBox();
+        if (width >= 1100) {
+          assert.ok(sidebarBounds.x + sidebarBounds.width <= directoryBounds.x + 1, "role navigation sits to the left of the directory");
+          assert.ok(cardBounds.width > 600, "the founder has room for identity and full statistics on desktop");
+        } else {
+          assert.ok(sidebarBounds.y < directoryBounds.y, "role navigation stacks above the directory on smaller screens");
+        }
+        assert.equal(await page.locator('a[href="#recruitment"]').first().isVisible(), true);
+        for (const [id, equippedTheme] of [[steamId, "tap_god"], ["76561198000000002", "shadow"], ["76561198000000003", "beta_tester"]]) {
+          const player = page.locator(`article[data-player-owner="${id}"]`);
+          assert.equal(await player.getAttribute("data-theme"), equippedTheme, "the represented player's equipped theme survives a different page theme");
+          assert.equal(await player.getAttribute("data-theme-owner"), "player");
+          assert.equal(await player.getAttribute("data-theme-surface"), "player-container");
+        }
+        assert.equal(await card.getByRole("link", { name: "View Founder name's profile", exact: true }).last().getAttribute("href"), `/players/${steamId}`);
         const actions = card.locator('dl[aria-label="Admin actions taken"]');
         assert.equal(await actions.isVisible(), true);
         assert.deepEqual(await actions.locator("dt").allTextContents(), ["Bans", "Kicks · portal", "Warns"]);
         assert.deepEqual(await actions.locator("dd").allTextContents(), ["42", "23", "17"]);
+        assert.deepEqual(await card.locator('dl[aria-label="Communication restrictions issued"] dt').allTextContents(), ["Gags", "Mutes", "Silences"]);
+        assert.deepEqual(await card.locator('dl[aria-label="Communication restrictions issued"] dd').allTextContents(), ["15", "8", "6"]);
         const standing = card.locator('dl[aria-label="Player standing"]');
         assert.equal(await standing.isVisible(), true);
         assert.deepEqual(await standing.locator("dt").allTextContents(), ["Hours played", "Reputation"]);
@@ -252,12 +418,6 @@ test("recruitment forms, staff access, themes and compact public cards work acro
         assert.match(await commends.innerText(), /51/);
         await mkdir(".cache/recruitment-previews", { recursive: true });
         await card.screenshot({ path: `.cache/recruitment-previews/member-redesign-${width}.png`, style: ".portal-navigation { visibility: hidden !important; }" });
-        await page.getByRole("searchbox", { name: "Search staff by name, group or Steam ID", exact: true }).fill("Guardian one");
-        await page.waitForFunction(() => document.querySelectorAll('article[data-ui="player-owned-container"]').length === 1);
-        const filteredGroup = page.locator('section[data-single="true"]');
-        const filteredBounds = await filteredGroup.boundingBox();
-        const filteredRosterBounds = await filteredGroup.locator("..").boundingBox();
-        assert.ok(Math.abs((filteredBounds.x + filteredBounds.width / 2) - (filteredRosterBounds.x + filteredRosterBounds.width / 2)) <= 1, "a role with one search result is centered too");
       }, "public", theme);
     });
     await t.test("unavailable staff statistics and commendation categories stay honest instead of becoming zero", async () => {
@@ -270,21 +430,42 @@ test("recruitment forms, staff access, themes and compact public cards work acro
         const commends = card.locator('section[aria-label="Commendation breakdown"]');
         assert.deepEqual(await commends.locator("[data-commendation] dd").allTextContents(), Array(5).fill("—"));
         assert.equal(await commends.getByText("0", { exact: true }).count(), 0);
+        const compact = page.locator('article[data-staff-card="compact"]').first();
+        const summary = compact.locator("details[data-staff-details] > summary");
+        assert.deepEqual(await summary.locator('dl[aria-label="Member overview"] dd > strong').allTextContents(), ["—", "—", "—"], "compact hours, reputation and commend totals all stay unavailable");
+        await summary.click();
+        assert.deepEqual(await compact.locator('dl[aria-label="Admin actions taken"] dd').allTextContents(), ["—", "—", "—"]);
+        assert.deepEqual(await compact.locator('dl[aria-label="Communication restrictions issued"] dd').allTextContents(), ["—", "—", "—"]);
+        assert.deepEqual(await compact.locator('[data-commendation] dd').allTextContents(), Array(5).fill("—"));
       }, "public", "default", "reduce", { metrics: "missing" });
     });
-    await t.test("an odd-sized role centers its last staff card without stretching it", async () => {
-      await withPage("closed", 1440, async page => {
+    await t.test("compact staff rows preserve member order and stay inside their role at every breakpoint", async () => {
+      for (const width of [390, 1440, 1700]) await withPage("closed", width, async page => {
         const group = page.locator('section[aria-labelledby="staff-group-guardian"]');
         const cards = group.locator('article[data-ui="player-owned-container"]');
         assert.equal(await cards.count(), 3);
+        assert.deepEqual(await cards.locator("h4").allTextContents(), ["Guardian one", "Guardian two", "Guardian three"]);
+        assert.equal(await cards.locator('details[data-staff-details]:not([open])').count(), 3);
         const first = await cards.nth(0).boundingBox();
         const second = await cards.nth(1).boundingBox();
         const last = await cards.nth(2).boundingBox();
         const groupBounds = await group.boundingBox();
-        assert.ok(Math.abs(first.y - second.y) <= 1, "the first two cards share one row");
-        assert.ok(last.y > first.y + first.height, "the last card moves to its own row");
-        assert.ok(Math.abs(last.width - first.width) <= 1, "the last card keeps the same width");
-        assert.ok(Math.abs((last.x + last.width / 2) - (groupBounds.x + groupBounds.width / 2)) <= 1, "the last card is centered in the role");
+        assert.ok(Math.abs(last.width - first.width) <= 1, "the final staff row keeps the same width");
+        for (const card of await cards.all()) {
+          const bounds = await card.boundingBox();
+          assert.equal(await card.getAttribute("data-staff-card"), "compact");
+          assert.ok(bounds.x >= groupBounds.x - 1 && bounds.x + bounds.width <= groupBounds.x + groupBounds.width + 1, "compact rows stay inside their role");
+          assert.ok(bounds.height < 260, "collapsed staff rows remain quick to scan");
+        }
+        await mkdir(".cache/recruitment-previews", { recursive: true });
+        await group.screenshot({ path: `.cache/recruitment-previews/compact-rows-${width}.png` });
+        const bounds = [first, second, last];
+        for (let i = 0; i < bounds.length; i++) for (let j = i + 1; j < bounds.length; j++) {
+          const a = bounds[i], b = bounds[j];
+          assert.ok(a.x + a.width <= b.x + 1 || b.x + b.width <= a.x + 1 || a.y + a.height <= b.y + 1 || b.y + b.height <= a.y + 1, `staff cards do not overlap at ${width}px`);
+        }
+        if (width === 390) assert.ok(second.y >= first.y + first.height - 1, "phone layouts stack compact staff into separate rows");
+        if (width === 1700) assert.ok(Math.abs(first.y - second.y) <= 1 && last.y >= first.y + first.height - 1, "wide screens use two compact columns");
       }, "public", "default", "reduce", { odd: "1" });
     });
     await t.test("closed and guest states expose no application form", async () => {
@@ -317,28 +498,16 @@ test("recruitment forms, staff access, themes and compact public cards work acro
         assert.ok(Math.abs(shell.width - recruitment.width) < 1, `recruitment must fill the public shell at ${width}`);
         const navigation = await page.locator('.portal-navigation').boundingBox();
         assert.ok(Math.abs(navigation.width - recruitment.width) < 1, `public navigation and recruitment must align at ${width}`);
-        assert.equal(await page.locator('dl[aria-label="Admin actions taken"] dt').filter({ hasText: /^Bans$/ }).count(), 3);
-        assert.equal(await page.getByText('Kicks · portal', { exact: true }).count(), 3);
-        assert.equal(await page.getByText('Commends', { exact: true }).count(), 3);
-        assert.equal(await page.getByText('+28', { exact: true }).count(), 3);
-        assert.equal(await page.getByText('Silences', { exact: true }).count(), 3);
         await mkdir(".cache/recruitment-previews", { recursive: true });
         await page.locator("#recruitment").screenshot({ path: `.cache/recruitment-previews/criteria-${width}.png`, style: ".portal-navigation { visibility: hidden !important; }" });
-        const communicationLabels = await page.locator('dl[aria-label="Communication restrictions issued"] > div:first-child > span').allInnerTexts();
-        assert.deepEqual(communicationLabels.map(text => text.replace(/\s+/g, ' ').trim()), Array(3).fill('Communication restrictions issued'), 'visible restriction labels keep their word spacing at every breakpoint');
         const cards = await page.locator('article[data-ui="player-owned-container"]').all();
+        const directory = await page.locator("#staff-directory").boundingBox();
         for (const card of cards) {
           const size = await card.boundingBox();
-          assert.ok(size.width <= 541, `member cards stay capped at ${width}px; got ${size.width}px`);
+          assert.ok(size.x >= directory.x - 1 && size.x + size.width <= directory.x + directory.width + 1, `staff cards stay inside the public directory at ${width}px`);
         }
         const portrait = await cards[0].locator('a').first().boundingBox();
         assert.ok(portrait.width >= (width <= 640 ? 71 : 91), `staff portraits should be larger at ${width}px; got ${portrait.width}px`);
-        if (width >= 1000) {
-          const founder = await cards[0].boundingBox();
-          const teammate = await cards[1].boundingBox();
-          assert.ok(Math.abs(founder.width - teammate.width) < 1, 'a singleton uses the same card width as other members');
-          assert.ok(founder.width < shell.width * .6, 'a lone member must not stretch across the page');
-        }
         await page.getByText('Apply to join staff', { exact: true }).click();
         await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));

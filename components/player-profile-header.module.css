@@ -1,0 +1,163 @@
+/* Keep the profile's identity layout consistent across its equipped themes. */
+:global(main.player-profile-page)[data-theme-owner="profile"] .hero {
+  grid-template-columns: minmax(0, 1fr) 222px;
+  align-items: center;
+  gap: 28px;
+  padding: 28px clamp(18px, 2vw, 28px);
+}
+
+:global(main.player-profile-page)[data-theme-owner="profile"] .copy { width: 100%; min-width: 0; }
+.copy :global(.back-link) { margin-bottom: 24px; }
+
+:global(main.player-profile-page)[data-theme-owner="profile"] .hero .identity {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 24px;
+}
+
+:global(main.player-profile-page)[data-theme-owner="profile"] .identity .avatarShell,
+:global(main.player-profile-page)[data-theme-owner="profile"] .avatarShell > :global(.public-player-avatar) { width: 88px; height: 88px; }
+.heading { min-width: 0; }
+
+:global(main.player-profile-page)[data-theme-owner="profile"] .hero .heading :global(.tapped-kicker) {
+  margin: 0 0 9px;
+  gap: 7px;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+:global(main.player-profile-page)[data-theme-owner="profile"] .hero .heading h1 {
+  max-width: 100%;
+  margin: 0;
+  font-size: clamp(27px, 2.6vw, 40px);
+  line-height: 1.12;
+  letter-spacing: -.04em;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.status { min-width: 0; }
+
+:global(main.player-profile-page)[data-theme-owner="profile"] .hero .metadata {
+  display: flex;
+  width: 100%;
+  max-width: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  margin: 0;
+}
+
+.steamIdentity, .themeIdentity { display: inline-flex; max-width: 100%; min-height: 34px; align-items: center; gap: 9px; }
+.rowLabel { flex: 0 0 auto; color: var(--theme-text-muted, var(--muted)); font-size: 9px; font-weight: 750; letter-spacing: .08em; line-height: 1.5; text-transform: uppercase; }
+
+:global(main.player-profile-page)[data-theme-owner="profile"] .metadata :global(.public-player-steam-identity) {
+  min-height: 30px;
+  margin: 0;
+  padding: 5px 0;
+  border: 0;
+  color: var(--theme-text-muted, var(--muted));
+  background: none;
+  box-shadow: none;
+  font-size: 11px;
+  letter-spacing: .02em;
+}
+.metadata :global(.public-player-steam-identity)::before { display: none; }
+
+:global(main.player-profile-page)[data-theme-owner="profile"] .metadata .copyButton {
+  width: 32px;
+  min-height: 32px;
+  border-color: var(--theme-border, var(--border));
+  background: var(--theme-control-bg, var(--surface));
+  opacity: 1;
+}
+
+:global(main.player-profile-page)[data-theme-owner="profile"] .metadata :global(.profile-theme-surface-badge) {
+  width: max-content;
+  max-width: 100%;
+  min-height: 26px;
+  margin: 0;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 9px;
+  line-height: 1.3;
+}
+.metadata :global(.profile-theme-surface-badge) > small { display: none; }
+
+:global(main.player-profile-page)[data-theme-owner="profile"] .hero .groups {
+  display: flex;
+  width: 100%;
+  max-width: none;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 14px;
+  margin: 12px 0 0;
+}
+.groups > .rowLabel { padding-top: 7px; }
+.groups > :global(.identity-group-badge-list) { flex: 1 1 auto; min-width: 0; gap: 6px; }
+:global(main.player-profile-page)[data-theme-owner="profile"] .groups :global(.identity-group-badge) { max-width: 100%; min-height: 28px; font-size: 9px; }
+
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--theme-border, var(--border)); }
+.actions > a {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 11px;
+  border: 1px solid var(--theme-border, var(--border));
+  border-radius: 5px;
+  color: var(--theme-text-muted, var(--muted));
+  background: var(--theme-control-bg, var(--surface));
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.4;
+  text-decoration: none;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+.actions > a > svg { flex: 0 0 auto; width: 14px; height: 14px; color: var(--theme-accent-soft, var(--accent)); }
+.actions strong { margin-left: 6px; color: var(--theme-text, var(--text)); font-size: 12px; font-variant-numeric: tabular-nums; }
+.actions > .discord { color: var(--theme-text, var(--text)); }
+.actions > .discord > svg:last-child { width: 12px; height: 12px; margin-left: 2px; color: var(--theme-text-muted, var(--muted)); }
+.actions > a:hover { border-color: var(--theme-border-strong, var(--accent)); background: var(--theme-control-hover, var(--surface-strong)); }
+.copy a:focus-visible { outline: 2px solid var(--theme-focus-ring, var(--accent)); outline-offset: 3px; }
+
+:global(main.player-profile-page)[data-theme-owner="profile"] .settingsHero { grid-template-columns: minmax(0, 1fr); padding: 18px 16px; }
+:global(main.player-profile-page)[data-theme-owner="profile"] .settingsHero .identity { grid-template-columns: 48px minmax(0, 1fr); gap: 16px; margin: 0; }
+:global(main.player-profile-page)[data-theme-owner="profile"] .settingsHero .avatarShell,
+:global(main.player-profile-page)[data-theme-owner="profile"] .settingsHero .avatarShell > :global(.public-player-avatar) { width: 48px; height: 48px; }
+:global(main.player-profile-page)[data-theme-owner="profile"] .settingsHero .heading h1 { font-size: clamp(22px, 2.2vw, 28px); }
+
+@media (max-width: 1180px) {
+  :global(main.player-profile-page)[data-theme-owner="profile"] .hero .identity { grid-template-columns: 88px minmax(0, 1fr); }
+  .status { grid-column: 2; margin-top: -5px; }
+}
+@media (max-width: 860px) {
+  :global(main.player-profile-page)[data-theme-owner="profile"] .hero { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  :global(main.player-profile-page)[data-theme-owner="profile"] .hero > :global(.public-rank-card) { width: 100%; max-width: none; }
+  :global(main.player-profile-page)[data-theme-owner="profile"] .hero .identity { grid-template-columns: 88px minmax(0, 1fr) auto; }
+  .status { grid-column: auto; margin: 0; }
+}
+@media (max-width: 600px) {
+  :global(main.player-profile-page)[data-theme-owner="profile"] .hero { padding: 22px 18px; }
+  :global(main.player-profile-page)[data-theme-owner="profile"] .hero .identity { grid-template-columns: 64px minmax(0, 1fr); gap: 15px; margin-bottom: 16px; }
+  :global(main.player-profile-page)[data-theme-owner="profile"] .identity .avatarShell,
+  :global(main.player-profile-page)[data-theme-owner="profile"] .avatarShell > :global(.public-player-avatar) { width: 64px; height: 64px; }
+  .status { grid-column: 1 / -1; margin-top: 9px; }
+  :global(main.player-profile-page)[data-theme-owner="profile"] .hero .heading h1 { font-size: 27px; }
+  :global(main.player-profile-page)[data-theme-owner="profile"] .hero .groups { flex-direction: column; gap: 7px; }
+  .groups > .rowLabel { padding-top: 0; }
+  .groups > :global(.identity-group-badge-list) { width: 100%; }
+  :global(main.player-profile-page)[data-theme-owner="profile"] .settingsHero .identity { grid-template-columns: 48px minmax(0, 1fr); margin-bottom: 0; }
+  :global(main.player-profile-page)[data-theme-owner="profile"] .settingsHero .avatarShell,
+  :global(main.player-profile-page)[data-theme-owner="profile"] .settingsHero .avatarShell > :global(.public-player-avatar) { width: 48px; height: 48px; }
+  :global(main.player-profile-page)[data-theme-owner="profile"] .settingsHero .heading h1 { font-size: 22px; }
+}
+@media (prefers-reduced-motion: reduce) { .actions > a { transition: none; } }
+:global(html[data-visual-motion="paused"]) .actions > a { transition: none; }

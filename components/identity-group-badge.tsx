@@ -1,17 +1,7 @@
-import {
-  BadgeCheck,
-  Crown,
-  ShieldCheck,
-  Sparkles,
-  Star,
-  UsersRound,
-} from "lucide-react";
 import type { CSSProperties } from "react";
 
-import {
-  IDENTITY_GROUP_BADGE_ICON_OPTIONS,
-  isIdentityGroupBadgeIconKey,
-} from "@/lib/content/identity-group-badges";
+import { IdentityGroupIcon } from "@/components/identity-group-icon";
+import { IDENTITY_GROUP_BADGE_ICON_OPTIONS } from "@/lib/content/identity-group-badges";
 import type { IdentityGroupBadgeData } from "@/lib/data/identity-groups";
 
 type IdentityGroupBadgeProps = {
@@ -28,15 +18,6 @@ type IdentityGroupBadgeListProps = {
   label?: string;
 };
 
-const icons = {
-  badge: BadgeCheck,
-  crown: Crown,
-  shield: ShieldCheck,
-  sparkles: Sparkles,
-  star: Star,
-  users: UsersRound,
-} as const;
-
 export const identityGroupBadgeIconOptions =
   IDENTITY_GROUP_BADGE_ICON_OPTIONS;
 
@@ -46,9 +27,6 @@ export function IdentityGroupBadge({
   className = "",
   listItem = false,
 }: IdentityGroupBadgeProps) {
-  const Icon = isIdentityGroupBadgeIconKey(group.badgeIconKey)
-    ? icons[group.badgeIconKey]
-    : BadgeCheck;
   const sourceLabel =
     group.sourceType === "admins_core"
       ? "Admins.Core"
@@ -69,7 +47,7 @@ export function IdentityGroupBadge({
       aria-label={`${group.badgeLabel}, ${group.displayName}, ${sourceLabel} group`}
       role={listItem ? "listitem" : undefined}
     >
-      <Icon aria-hidden="true" />
+      <IdentityGroupIcon icon={group.badgeIconKey} />
       <span>{group.badgeLabel}</span>
     </span>
   );
