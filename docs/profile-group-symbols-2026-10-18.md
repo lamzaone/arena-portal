@@ -1,6 +1,6 @@
 # Profile groups and custom badge symbols
 
-Additional group badges now sit directly below the player name, before server status and account metadata. Compact, color-matched icon frames keep the row readable across profile themes and phone widths. The primary group remains attached to the avatar.
+Additional group badges now sit directly below the player name, before server status and account metadata. Compact, color-matched symbols keep the row readable across profile themes and phone widths. The primary group remains attached to the avatar.
 
 The shared catalogue has 42 symbols, including owner, leadership, headquarters, secretary, administrator, senior staff, trial staff, moderator, mentor, helper and player options. Profiles and staff cards use the same renderer.
 

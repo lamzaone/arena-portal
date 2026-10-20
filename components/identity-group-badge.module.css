@@ -1,7 +1,5 @@
 .symbol {
-  display: inline-grid; place-items: center; flex: 0 0 20px; width: 20px; height: 20px;
-  overflow: visible !important; border-radius: 3px; color: var(--identity-badge-color);
-  background: color-mix(in srgb, var(--identity-badge-color) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--identity-badge-color) 15%, transparent);
+  display: inline-grid; place-items: center; flex: 0 0 13px; width: 13px; height: 13px;
+  overflow: visible !important; color: var(--identity-badge-color);
 }
 .symbol > svg, .symbol > img { width: 13px; height: 13px; object-fit: contain; color: inherit; filter: none; stroke-width: 1.8; }
