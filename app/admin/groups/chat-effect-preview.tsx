@@ -29,7 +29,7 @@ export function ChatEffectPreview({ value, color, text }: { value: string; color
   const glow = getChatEffectOptions(value, "glow");
   const elements = Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text), (part) => part.segment);
   const count = effect && effect !== "cycle" ? Math.max(1, Math.min(6, elements.length)) : 1;
-  const className = ["bold", "italic", "underline"].filter((flag) => flags.has(flag)).map((flag) => styles[`effect_${flag}`]).join(" ");
+  const className = ["bold", "italic", "underline", "strikethrough"].filter((flag) => flags.has(flag)).map((flag) => styles[`effect_${flag}`]).join(" ");
   let light = 0;
   if (flags.has("pulse")) {
     const pulse = getChatEffectOptions(value, "pulse");
@@ -54,7 +54,8 @@ export function ChatEffectPreview({ value, color, text }: { value: string; color
         sampled = mix(palette[index], palette[(index + 1) % palette.length], effect === "cycle" && options.mode === "steps" ? 0 : scaled - index);
         if (effect === "wave") sampled = mix(sampled, "#FFFFFF", (1 + Math.sin((phase - position) * Math.PI * 2)) * .1 * options.intensity);
       }
-      const shadow = flags.has("glow") ? `0 0 ${glow.radius + 1}px ${glow.colors[0] ?? sampled}${["99", "BB", "DD"][glow.intensity - 1]}` : undefined;
+      const shadow = [flags.has("glow") ? `0 0 ${glow.radius + 1}px ${glow.colors[0] ?? sampled}${["99", "BB", "DD"][glow.intensity - 1]}` : "",
+        flags.has("shadow") ? "2px 2px 3px #000000" : ""].filter(Boolean).join(", ") || undefined;
       return <span key={i} className={styles.previewRun} style={{ color: sampled, textShadow: shadow, filter: `brightness(${brightness})`,
         transition: options?.mode === "steps" && effect === "cycle" ? "filter .12s linear" : undefined }}>
         {elements.slice(Math.floor(i * elements.length / count), Math.floor((i + 1) * elements.length / count)).join("")}

@@ -33,7 +33,7 @@ export function ChatEffectEditor({ label, name, value, color, onChange }: {
     <legend>{label}</legend>
     <input type="hidden" name={name} value={value} />
     <div className={styles.styleButtons}>
-      {chatStyles.slice(0, 3).map((style) => <button key={style} type="button" aria-pressed={selected.has(style)}
+      {chatStyles.filter((style) => !chatEffectNames.includes(style as ChatEffectName)).map((style) => <button key={style} type="button" aria-pressed={selected.has(style)}
         onClick={() => onChange(toggleChatStyle(value, style))}>{style}</button>)}
     </div>
     <p className={styles.effectHelp}>Each effect keeps its own settings. Choose one color effect; combine it with glow, pulse or sparkle.</p>

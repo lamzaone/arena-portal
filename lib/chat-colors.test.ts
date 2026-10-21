@@ -2,6 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { chatColors, chatColorPreview, normalizeChatColor, normalizeChatStyle, normalizeChatBadge, withChatEffectOptions, chatEffectOptions, getChatEffectOptions, updateChatEffect, toggleChatStyle, chatEffectNames } from "./chat-colors.ts";
 
+test("decorations can be added to existing custom palettes without changing effect settings", () => {
+  const before = "bold glow shimmer shimmer.c=FF0000,0000FF shimmer.f=0.25";
+  const after = normalizeChatStyle(before + " strikethrough shadow");
+  assert.ok(after.split(" ").includes("strikethrough"));
+  assert.ok(after.split(" ").includes("shadow"));
+  assert.deepEqual(getChatEffectOptions(after, "shimmer"), getChatEffectOptions(before, "shimmer"));
+});
+
 // Named Workshop chat tokens; teamcolor is resolved for names by GlobalChatTags.
 const supported = ["[default]", "[/]", "[white]", "[darkred]", "[lightpurple]", "[green]",
   "[olive]", "[lime]", "[red]", "[gray]", "[grey]", "[lightyellow]", "[yellow]",

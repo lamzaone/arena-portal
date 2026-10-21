@@ -57,7 +57,7 @@ export function chatColorPreview(token: string, fallback = "#ffffff"): string {
   return chatColors.find((color) => color.token === token)?.preview ?? fallback;
 }
 
-export const chatStyles = ["bold", "italic", "underline", "glow", "gradient", "shimmer", "pulse", "cycle", "wave", "sparkle"] as const;
+export const chatStyles = ["bold", "italic", "underline", "strikethrough", "shadow", "glow", "gradient", "shimmer", "pulse", "cycle", "wave", "sparkle"] as const;
 export const paletteEffects = ["gradient", "shimmer", "cycle", "wave"] as const;
 export const chatEffectNames = ["glow", "gradient", "shimmer", "pulse", "cycle", "wave", "sparkle"] as const;
 export type ChatEffectName = typeof chatEffectNames[number];

@@ -102,6 +102,8 @@
 .effect_bold { font-weight: 800; }
 .effect_italic { font-style: italic; }
 .effect_underline { text-decoration: underline; text-underline-offset: 3px; }
+.effect_strikethrough { text-decoration: line-through; }
+.effect_underline.effect_strikethrough { text-decoration: underline line-through; }
 .previewRun { transition: color .12s linear, filter .12s linear; }
 @media (prefers-reduced-motion: reduce) {
   .preview span { animation: none !important; }
