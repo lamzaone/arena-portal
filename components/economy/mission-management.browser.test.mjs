@@ -15,6 +15,24 @@ test('mission editor preserves exact rewards, confirms disable, and follows defa
  await page.getByRole('button',{name:'Edit Precision'}).click();assert.equal(await page.getByLabel('Token reward',{exact:true}).inputValue(),'18446744073709551615');await page.getByLabel('Quantity for Arena Case').fill('3');await page.getByRole('button',{name:'Add Arena Sticker'}).click();await page.getByRole('button',{name:'Publish next period'}).click();await page.waitForFunction(()=>window.refreshes===1);assert.equal(requests[0].expectedVersion,'2');assert.equal(requests[0].definition.tokens,'18446744073709551615');assert.deepEqual(requests[0].definition.rewards,[{catalogueKey:'case:1',quantity:3},{catalogueKey:'sticker:1',quantity:1}]);
  const before=await page.locator('.mission-card').first().evaluate(el=>getComputedStyle(el).backgroundColor);await page.evaluate(()=>{document.body.style.setProperty('--theme-surface','#e9eff5');document.body.style.setProperty('--theme-text','#182130');document.body.style.setProperty('--theme-accent','#157a6e');});await page.waitForTimeout(300);const after=await page.locator('.mission-card').first().evaluate(el=>getComputedStyle(el).backgroundColor);assert.notEqual(before,after);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
  await page.getByRole('button',{name:'Disable Precision now'}).click();await page.getByRole('dialog').waitFor();assert.equal(requests.length,1);await page.getByRole('button',{name:'Disable immediately',exact:true}).click();await page.waitForFunction(()=>window.refreshes===2);assert.equal(requests[1].action,'disable-immediately');
- const effectRequests=[];await page.route('**/api/admin/hud-effects',route=>{effectRequests.push(route.request().postDataJSON());return route.fulfill({json:{ok:true,result:{version:'8'}}});});await page.getByLabel('Style',{exact:true}).selectOption('pulse');await page.getByLabel('Speed',{exact:true}).selectOption('1.5');await page.getByLabel('Reduced motion',{exact:true}).selectOption('always');assert.equal(await page.locator('.mission-effects-preview').evaluate(el=>getComputedStyle(el).animationName),'none');await page.getByRole('button',{name:'Save effects',exact:true}).click();await page.waitForFunction(()=>window.refreshes===3);assert.equal(effectRequests[0].expectedVersion,'7');assert.equal(effectRequests[0].config.styleId,'pulse');assert.equal(effectRequests[0].config.speed,1.5);assert.equal(effectRequests[0].config.reducedMotion,'always');await page.close();}}
+ const effectRequests=[];await page.route('**/api/admin/hud-effects',route=>{effectRequests.push(route.request().postDataJSON());return route.fulfill({json:{ok:true,result:{version:'8'}}});});await page.getByLabel('Style',{exact:true}).selectOption('pulse');await page.getByLabel('Speed',{exact:true}).selectOption('1.5');await page.getByLabel('Reduced motion',{exact:true}).selectOption('always');assert.equal(await page.locator('.mission-effects-preview').evaluate(el=>getComputedStyle(el).animationName),'none');await page.getByRole('button',{name:'Save effects',exact:true}).click();await page.waitForFunction(()=>window.refreshes===3);assert.equal(effectRequests[0].expectedVersion,'7');assert.equal(effectRequests[0].config.styleId,'pulse');assert.equal(effectRequests[0].config.speed,1.5);assert.equal(effectRequests[0].config.reducedMotion,'always');
+ for(const [index,metric] of ['knife_round_wins','grenade_round_wins','decoy_round_wins'].entries()){
+  await page.getByRole('button',{name:'New mission',exact:true}).click();
+  await page.getByLabel('Title',{exact:true}).fill(`Win a ${metric.split('_')[0]} round`);
+  await page.getByLabel('Stable ID',{exact:true}).fill(`arena_d_browser_${index}`);
+  await page.getByLabel(/^Objective/).selectOption(metric);
+  await page.getByLabel('Target',{exact:true}).fill('1');
+  await page.getByLabel('Token reward',{exact:true}).fill('30');
+  await page.getByRole('button',{name:'Add Arena Case'}).click();
+  await page.getByLabel('Quantity for Arena Case').fill('2');
+  await page.getByRole('button',{name:'Add Arena Sticker'}).click();
+  await page.getByRole('button',{name:'Publish next period'}).click();
+  await page.waitForFunction(expected=>window.refreshes===expected,4+index);
+  assert.equal(requests[2+index].definition.metric,metric);
+  assert.equal(requests[2+index].definition.target,1);
+  assert.deepEqual(requests[2+index].definition.rewards,[{catalogueKey:'case:1',quantity:2},{catalogueKey:'sticker:1',quantity:1}]);
+ }
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ await page.close();}}
  finally{await browser?.close();await new Promise(done=>server.close(done));}
 });

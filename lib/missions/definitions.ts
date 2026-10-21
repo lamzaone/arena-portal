@@ -1,7 +1,7 @@
 import { tokenAmountField } from '../economy/token-amount.ts';
 export const missionPeriods = ['daily', 'weekly', 'monthly'] as const;
 export type MissionPeriod = typeof missionPeriods[number];
-export const missionMetrics = ['kills', 'headshots', 'arena_wins', 'duel_wins', 'killstreak', 'knife_kills', 'weapon_kills', 'playtime_minutes', 'playtime_seconds', 'completions'] as const;
+export const missionMetrics = ['kills', 'headshots', 'arena_wins', 'duel_wins', 'killstreak', 'knife_kills', 'knife_round_wins', 'grenade_round_wins', 'decoy_round_wins', 'weapon_kills', 'playtime_minutes', 'playtime_seconds', 'completions'] as const;
 export const missionWeapons = ['ak47', 'm4a1', 'm4a1_silencer', 'awp', 'ssg08', 'aug', 'sg556', 'famas', 'galilar', 'glock', 'hkp2000', 'usp_silencer', 'p250', 'deagle', 'revolver', 'elite', 'fiveseven', 'tec9', 'cz75a', 'mac10', 'mp9', 'mp7', 'mp5sd', 'ump45', 'p90', 'bizon', 'nova', 'xm1014', 'mag7', 'sawedoff', 'm249', 'negev', 'g3sg1', 'scar20', 'taser', 'knife'] as const;
 export type MissionDefinition = {
     period: MissionPeriod;

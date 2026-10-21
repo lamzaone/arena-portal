@@ -7,8 +7,9 @@ import mysql from 'mysql2/promise';
 
 nextEnv.loadEnvConfig(fileURLToPath(new URL('../', import.meta.url)), false, { info() {}, error() {} });
 const apply = process.argv.includes('--apply');
-const migrations = ['046_mission_definitions.sql', '047_hud_effect_settings.sql', '048_persistent_reports.sql'];
+const migrations = ['046_mission_definitions.sql', '047_hud_effect_settings.sql', '048_persistent_reports.sql', '049_random_mission_assignments.sql'];
 const expected = {
+  tapped_mission_assignments: ['steam_id','period_kind','period_start','slot','mission_id','assigned_at'],
   portal_mission_definitions: ['period_kind','mission_id','disabled_immediately','disabled_until_period_start','created_at','updated_at'],
   portal_mission_definition_versions: ['period_kind','mission_id','version','effective_period_start','enabled','definition','actor_steam_id','created_at'],
   portal_hud_effect_settings: ['id','version','config_json','updated_by','updated_at'],

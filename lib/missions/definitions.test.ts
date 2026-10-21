@@ -13,6 +13,10 @@ test('objective and weapon allowlists reject arbitrary conditions', () => {
     for (const change of [{ metric: 'eval' }, { metric: 'weapon_kills', weapon: 'weapon_ak47' }, { metric: 'weapon_kills', weapon: '../ak47' }, { target: 0 }, { period: 'rolling' }, { metric: 'completions' }])
         assert.throws(() => validateMission({ ...mission, ...change }));
 });
+test('special arena rounds are selectable validated win objectives', () => {
+    for (const metric of ['knife_round_wins', 'grenade_round_wins', 'decoy_round_wins'])
+        assert.equal(validateMission({ ...mission, metric, target: 1 }).metric, metric);
+});
 test('publication uses UTC calendar boundaries including Monday, leap year and year rollover', () => {
     assert.equal(nextPeriodStart('daily', new Date('2028-02-28T23:59:59Z')), '2028-02-29');
     assert.equal(nextPeriodStart('weekly', new Date('2026-10-25T23:59:59Z')), '2026-10-26');

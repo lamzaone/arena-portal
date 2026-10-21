@@ -7,7 +7,7 @@ import { PortalDialog } from '@/components/ui/portal-dialog';
 import { missionPeriods, missionMetrics, missionWeapons, nextPeriodStart, validateMission, type ManagedMission, type MissionDefinition } from '@/lib/missions/definitions';
 import type { EconomyCatalogueItem } from '@/lib/data/portal-repository';
 import './mission-management.css';
-const labels: Record<string, string> = { kills: 'Kills', headshots: 'Headshots', arena_wins: 'Arena wins', duel_wins: 'Duel wins', killstreak: 'Kills without dying', knife_kills: 'Knife kills', weapon_kills: 'Selected weapon kills', playtime_minutes: 'Active playtime (minutes)', playtime_seconds: 'Active playtime (seconds, legacy)', completions: 'Completed missions' };
+const labels: Record<string, string> = { kills: 'Kills', headshots: 'Headshots', arena_wins: 'Arena wins', duel_wins: 'Duel wins', killstreak: 'Kills without dying', knife_kills: 'Knife kills', knife_round_wins: 'Knife arena round wins', grenade_round_wins: 'Grenade arena round wins', decoy_round_wins: 'Decoy arena round wins', weapon_kills: 'Selected weapon kills', playtime_minutes: 'Active playtime (minutes)', playtime_seconds: 'Active playtime (seconds, legacy)', completions: 'Completed missions' };
 const empty: MissionDefinition = { period: 'daily', id: '', title: '', metric: 'kills', target: 25, tokens: '0', enabled: true, rewards: [] };
 export function MissionManagement({ csrf, missions, catalogue }: {
     csrf: string;
@@ -76,7 +76,7 @@ export function MissionManagement({ csrf, missions, catalogue }: {
     return <div className="mission-workspace">
   {notice ? <p role="status" className="mission-notice">{notice}</p> : null}{error ? <p role="alert" className="mission-error">{error}</p> : null}
   <section className="mission-card mission-library" aria-labelledby="mission-library-title"><div className="mission-heading"><div><p className="mission-kicker">UTC calendar</p><h2 id="mission-library-title">Mission library</h2></div><button className="button button-secondary" onClick={() => edit()} disabled={pending}><Plus size={16}/>New mission</button></div>
-   <p>Daily resets at midnight, weekly on Monday, monthly on the 1st. Existing server-configured missions remain active until you manage the same schedule and ID here.</p>
+   <p>This library is the candidate pool. Each player receives three random daily, three weekly and three monthly missions. Assignments and progress stay saved through reconnects until their reset: daily at midnight UTC, weekly on Monday, monthly on the 1st. Changes publish at the next reset; disabling stops progress and claims immediately.</p>
    <label className="mission-filter">Schedule<select value={filter} onChange={e => setFilter(e.target.value)}><option value="all">All schedules</option>{missionPeriods.map(p => <option key={p}>{p}</option>)}</select></label>
    <div className="mission-library-list" tabIndex={0} aria-label="Managed missions">{missions.filter(m => filter === 'all' || m.period === filter).map(m => {
             const suppressed = m.disabledImmediately && (!m.disabledUntilPeriodStart || m.disabledUntilPeriodStart > new Date().toISOString().slice(0, 10));
