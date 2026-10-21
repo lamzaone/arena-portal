@@ -10,6 +10,8 @@ import {
   ShieldCheck,
   VolumeX,
   UserRoundPlus,
+  Target,
+  SlidersHorizontal,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -32,6 +34,8 @@ export type StaffSection =
   | "items"
   | "inventories"
   | "redeem"
+  | "missions"
+  | "hud-effects"
   | "recruitment";
 
 type StaffSubmenuAccess = Pick<
@@ -67,6 +71,8 @@ export function StaffSubmenu({
   }
   if (access.canManageEconomy) {
     economy.push({ key: "redeem", href: "/admin/redeem", label: "Redeem codes", icon: KeyRound, scroll: true });
+    economy.push({ key: "missions", href: "/admin/missions", label: "Missions", icon: Target, scroll: true });
+    economy.push({ key: "hud-effects", href: "/admin/hud-effects", label: "HUD appearance", icon: SlidersHorizontal, scroll: true });
   }
 
   return (

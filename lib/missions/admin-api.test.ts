@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { createConfigurationHandlers } from './admin-api.ts';
+test('every staff read and mutation enforces session and manage permission, writes also require CSRF', async () => {
+    const state = { session: true, access: true, csrf: true, writes: 0 };
+    const handlers = createConfigurationHandlers({ getSession: async () => state.session ? { steamId: '76561198000000001' } : null, canManage: async () => state.access, verify: () => state.csrf, repository: () => ({ list: async () => [], effects: async () => ({}), publish: async () => { state.writes++; return { version: '1' }; }, disable: async () => ({}), saveEffects: async () => { state.writes++; return {}; } }) } as never);
+    const request = (body: unknown) => new Request('https://portal.test/api/admin/missions', { method: 'POST', body: JSON.stringify(body) });
+    state.session = false;
+    assert.equal((await handlers.getMissions(new Request('https://portal.test'))).status, 401);
+    assert.equal((await handlers.postMissions(request({}))).status, 401);
+    state.session = true;
+    state.access = false;
+    assert.equal((await handlers.getEffects()).status, 403);
+    assert.equal((await handlers.postEffects(request({}))).status, 403);
+    state.access = true;
+    state.csrf = false;
+    assert.equal((await handlers.postMissions(request({ csrf: 'forged' }))).status, 403);
+    state.csrf = true;
+    assert.equal((await handlers.postEffects(request({ csrf: 'valid', expectedVersion: '0', idempotencyKey: 'operation-key-0001', config: { styleId: 'eval' } }))).status, 400);
+    assert.equal(state.writes, 0);
+    assert.equal((await handlers.postEffects(request({ csrf: 'valid', expectedVersion: '0', idempotencyKey: 'operation-key-0001', config: { styleId: 'pulse', palette: 'gold', speed: 1, intensity: .5, reducedMotion: 'respect' } }))).status, 200);
+    assert.equal(state.writes, 1);
+});
